@@ -8,18 +8,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.11' # تحديث لتجنب رسائل التحذير
-
+          python-version: '3.11'
       - name: Install dependencies
         run: pip install google-api-python-client google-auth-oauthlib google-auth-httplib2
-
       - name: Create Zip File
         run: zip -r backup_2026.zip . -x "*.git*" "node_modules/*"
-
       - name: Upload to Google Drive
         env:
           CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
@@ -33,28 +29,40 @@ jobs:
           from googleapiclient.discovery import build
           from googleapiclient.http import MediaFileUpload
 
+          def clean(key): return os.environ.get(key, '').strip()
+
           try:
-              # استخدام strip() لإزالة أي مسافات أو أسطر زائدة قد تنتج عن النسخ واللصق
+              cid = clean('CLIENT_ID')
+              sec = clean('CLIENT_SECRET')
+              tok = clean('REFRESH_TOKEN')
+              fid = clean('FOLDER_ID')
+
+              # تشخيص آمن: التأكد من وصول البيانات من GitHub
+              print(f"Diagnostic: ID length={len(cid)}, Secret length={len(sec)}, Token length={len(tok)}")
+              
+              if len(tok) < 10:
+                  raise Exception("Refresh Token seems too short or missing!")
+
               info = {
-                  "client_id": os.environ['CLIENT_ID'].strip(),
-                  "client_secret": os.environ['CLIENT_SECRET'].strip(),
-                  "refresh_token": os.environ['REFRESH_TOKEN'].strip(),
+                  "client_id": cid,
+                  "client_secret": sec,
+                  "refresh_token": tok,
                   "token_uri": "https://oauth2.googleapis.com/token",
               }
               creds = Credentials.from_authorized_user_info(info)
               service = build('drive', 'v3', credentials=creds)
 
               file_metadata = {
-                  'name': f"Finance_Backup_{os.environ.get('GITHUB_RUN_NUMBER')}.zip",
-                  'parents': [os.environ['FOLDER_ID'].strip()] if os.environ.get('FOLDER_ID') else []
+                  'name': f"Finance_Backup_v{os.environ.get('GITHUB_RUN_NUMBER')}.zip",
+                  'parents': [fid] if fid else []
               }
               media = MediaFileUpload('backup_2026.zip', mimetype='application/zip')
               
-              print("Attempting final upload...")
+              print("Connecting to Google Drive API...")
               file = service.files().create(body=file_metadata, media_body=media, fields='id').execute()
-              print(f"✅ Success! Backup saved with ID: {file.get('id')}")
+              print(f"✅ SUCCESS! Backup saved. File ID: {file.get('id')}")
 
           except Exception as e:
-              print(f"❌ Critical Error: {str(e)}")
+              print(f"❌ ERROR: {str(e)}")
               sys.exit(1)
           EOF
