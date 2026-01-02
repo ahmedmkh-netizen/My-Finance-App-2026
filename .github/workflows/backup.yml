@@ -1,24 +1,27 @@
-name: Drive Auto Backup
+name: Drive Auto Backup 2026
 on:
   push:
-    branches: [ main ]
+    # سيتم التشغيل عند الرفع على فرع main أو master لضمان العمل
+    branches: [ main, master ]
 
 jobs:
   backup:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout Code
+        uses: actions/checkout@v3
 
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.10' # نسخة أكثر استقراراً للمكتبات
+          python-version: '3.10'
 
       - name: Install dependencies
         run: pip install google-api-python-client google-auth-oauthlib google-auth-httplib2
 
       - name: Create Zip File
-        run: zip backup_2026.zip index.html
+        # سيقوم بضغط كل ملفات مشروع React/Tailwind الخاصة بك
+        run: zip -r backup_2026.zip . -x "*.git*" "node_modules/*"
 
       - name: Upload to Google Drive
         env:
@@ -34,6 +37,7 @@ jobs:
           from googleapiclient.http import MediaFileUpload
 
           try:
+              # تنظيف المفاتيح من أي مسافات زائدة قد تحدث أثناء اللصق
               info = {
                   "client_id": os.environ['CLIENT_ID'].strip(),
                   "client_secret": os.environ['CLIENT_SECRET'].strip(),
@@ -43,13 +47,21 @@ jobs:
               creds = Credentials.from_authorized_user_info(info)
               service = build('drive', 'v3', credentials=creds)
 
+              # تسمية الملف بتاريخ اليوم لسهولة الرجوع لميزانية العائلة
+              from datetime import datetime
+              date_str = datetime.now().strftime("%Y-%m-%d_%H-%M")
+              file_name = f"Finance_Backup_{date_str}.zip"
+
               file_metadata = {
-                  'name': 'Finance_App_Backup_2026.zip',
+                  'name': file_name,
                   'parents': [os.environ['FOLDER_ID'].strip()] if os.environ.get('FOLDER_ID') else []
               }
-              media = MediaFileUpload('backup_2026.zip', mimetype='application/zip')
+              media = MediaFileUpload('backup_2026.zip', mimetype='application/zip', resumable=True)
+              
+              print(f"Uploading {file_name} to Google Drive...")
               file = service.files().create(body=file_metadata, media_body=media, fields='id').execute()
-              print(f"✅ Success! Backup File ID: {file.get('id')}")
+              print(f"✅ Success! File ID: {file.get('id')}")
+
           except Exception as e:
               print(f"❌ Error: {str(e)}")
               sys.exit(1)
