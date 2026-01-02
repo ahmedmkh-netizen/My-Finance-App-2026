@@ -9,15 +9,49 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      - name: Install dependencies
+        run: pip install google-api-python-client google-auth-oauthlib google-auth-httplib2
+
       - name: Create Zip File
         run: zip backup_2026.zip index.html
 
-      - name: Upload to Google Drive
-        uses: JiteshGaikwad/google-drive-upload-action@v1.1
-        with:
-          file_path: ./backup_2026.zip
-          drive_folder_id: ${{ secrets.GOOGLE_FOLDER_ID }}
-          client_id: ${{ secrets.GOOGLE_CLIENT_ID }}
-          client_secret: ${{ secrets.GOOGLE_CLIENT_SECRET }}
-          refresh_token: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
-          overwrite: true
+      - name: Upload to Google Drive (Python Script)
+        env:
+          CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
+          FOLDER_ID: ${{ secrets.GOOGLE_FOLDER_ID }}
+        run: |
+          python - <<EOF
+          import os
+          import json
+          from google.oauth2.credentials import Credentials
+          from googleapiclient.discovery import build
+          from googleapiclient.http import MediaFileUpload
+
+          # إعداد البيانات
+          creds_data = {
+              "client_id": os.environ['CLIENT_ID'],
+              "client_secret": os.environ['CLIENT_SECRET'],
+              "refresh_token": os.environ['REFRESH_TOKEN'],
+              "token_uri": "https://oauth2.googleapis.com/token",
+          }
+          creds = Credentials.from_authorized_user_info(creds_data)
+          service = build('drive', 'v3', credentials=creds)
+
+          # إعداد ملف الرفع
+          file_metadata = {
+              'name': 'backup_2026.zip',
+              'parents': [os.environ['FOLDER_ID']] if os.environ['FOLDER_ID'] else []
+          }
+          media = MediaFileUpload('backup_2026.zip', mimetype='application/zip', resumable=True)
+          
+          # الرفع (سيقوم بإنشاء ملف جديد في كل مرة لضمان التاريخ)
+          file = service.files().create(body=file_metadata, media_body=media, fields='id').execute()
+          print(f"✅ Success! File ID: {file.get('id')}")
+          EOF
