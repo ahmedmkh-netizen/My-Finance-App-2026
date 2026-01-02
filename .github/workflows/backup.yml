@@ -2,31 +2,29 @@ name: Drive Auto Backup 2026
 on:
   push:
     branches: [ main ]
-  # إضافة المزامنة التلقائية بناءً على الوقت
   schedule:
-    # سيقوم بالعمل تلقائياً كل يوم الساعة 12 ليلاً بتوقيت جرينتش
-    # يمكنك تغيير الوقت بتعديل أرقام الـ cron
+    # تحديث تلقائي يومي الساعة 12 ليلاً
     - cron: '0 0 * * *'
-  # للسماح بالتشغيل اليدوي في أي وقت
   workflow_dispatch:
-
-jobs:
-  backup:
-    # باقي كود الـ Job يبقى كما هو دون تغيير...
 
 jobs:
   backup:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
+
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.11'
+
       - name: Install dependencies
         run: pip install google-api-python-client google-auth-oauthlib google-auth-httplib2
+
       - name: Create Zip File
+        # سيقوم بضغط كل الملفات بما فيها ملف JSON الجديد الخاص بالبيانات
         run: zip -r backup_2026.zip . -x "*.git*" "node_modules/*"
+
       - name: Upload to Google Drive
         env:
           CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
@@ -40,24 +38,11 @@ jobs:
           from googleapiclient.discovery import build
           from googleapiclient.http import MediaFileUpload
 
-          def clean(key): return os.environ.get(key, '').strip()
-
           try:
-              cid = clean('CLIENT_ID')
-              sec = clean('CLIENT_SECRET')
-              tok = clean('REFRESH_TOKEN')
-              fid = clean('FOLDER_ID')
-
-              # تشخيص آمن: التأكد من وصول البيانات من GitHub
-              print(f"Diagnostic: ID length={len(cid)}, Secret length={len(sec)}, Token length={len(tok)}")
-              
-              if len(tok) < 10:
-                  raise Exception("Refresh Token seems too short or missing!")
-
               info = {
-                  "client_id": cid,
-                  "client_secret": sec,
-                  "refresh_token": tok,
+                  "client_id": os.environ['CLIENT_ID'].strip(),
+                  "client_secret": os.environ['CLIENT_SECRET'].strip(),
+                  "refresh_token": os.environ['REFRESH_TOKEN'].strip(),
                   "token_uri": "https://oauth2.googleapis.com/token",
               }
               creds = Credentials.from_authorized_user_info(info)
@@ -65,15 +50,15 @@ jobs:
 
               file_metadata = {
                   'name': f"Finance_Backup_v{os.environ.get('GITHUB_RUN_NUMBER')}.zip",
-                  'parents': [fid] if fid else []
+                  'parents': [os.environ['FOLDER_ID'].strip()] if os.environ.get('FOLDER_ID') else []
               }
               media = MediaFileUpload('backup_2026.zip', mimetype='application/zip')
               
-              print("Connecting to Google Drive API...")
+              print("Uploading synchronized backup...")
               file = service.files().create(body=file_metadata, media_body=media, fields='id').execute()
-              print(f"✅ SUCCESS! Backup saved. File ID: {file.get('id')}")
+              print(f"✅ Success! File ID: {file.get('id')}")
 
           except Exception as e:
-              print(f"❌ ERROR: {str(e)}")
+              print(f"❌ Error: {str(e)}")
               sys.exit(1)
           EOF
