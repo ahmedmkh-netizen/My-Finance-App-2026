@@ -7,7 +7,8 @@ jobs:
   backup:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout Code
+        uses: actions/checkout@v3
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -18,9 +19,10 @@ jobs:
         run: pip install google-api-python-client google-auth-oauthlib google-auth-httplib2
 
       - name: Create Zip File
+        # سيقوم بضغط ملف index.html وأي ملفات CSS/JS مرتبطة به
         run: zip backup_2026.zip index.html
 
-      - name: Upload to Google Drive (Python Script)
+      - name: Upload to Google Drive
         env:
           CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
@@ -29,29 +31,34 @@ jobs:
         run: |
           python - <<EOF
           import os
-          import json
+          import sys
           from google.oauth2.credentials import Credentials
           from googleapiclient.discovery import build
           from googleapiclient.http import MediaFileUpload
 
-          # إعداد البيانات
-          creds_data = {
-              "client_id": os.environ['CLIENT_ID'],
-              "client_secret": os.environ['CLIENT_SECRET'],
-              "refresh_token": os.environ['REFRESH_TOKEN'],
-              "token_uri": "https://oauth2.googleapis.com/token",
-          }
-          creds = Credentials.from_authorized_user_info(creds_data)
-          service = build('drive', 'v3', credentials=creds)
+          try:
+              # إعداد بيانات الاعتماد باستخدام المفاتيح الجديدة
+              creds_data = {
+                  "client_id": os.environ['CLIENT_ID'],
+                  "client_secret": os.environ['CLIENT_SECRET'],
+                  "refresh_token": os.environ['REFRESH_TOKEN'],
+                  "token_uri": "https://oauth2.googleapis.com/token",
+              }
+              creds = Credentials.from_authorized_user_info(creds_data)
+              service = build('drive', 'v3', credentials=creds)
 
-          # إعداد ملف الرفع
-          file_metadata = {
-              'name': 'backup_2026.zip',
-              'parents': [os.environ['FOLDER_ID']] if os.environ['FOLDER_ID'] else []
-          }
-          media = MediaFileUpload('backup_2026.zip', mimetype='application/zip', resumable=True)
-          
-          # الرفع (سيقوم بإنشاء ملف جديد في كل مرة لضمان التاريخ)
-          file = service.files().create(body=file_metadata, media_body=media, fields='id').execute()
-          print(f"✅ Success! File ID: {file.get('id')}")
+              # إعداد تفاصيل الملف المرفوع
+              file_metadata = {
+                  'name': f"Finance_Backup_{os.environ.get('GITHUB_RUN_NUMBER')}.zip",
+                  'parents': [os.environ['FOLDER_ID']] if os.environ.get('FOLDER_ID') else []
+              }
+              media = MediaFileUpload('backup_2026.zip', mimetype='application/zip', resumable=True)
+              
+              print("Connecting to Google Drive...")
+              file = service.files().create(body=file_metadata, media_body=media, fields='id').execute()
+              print(f"✅ Success! File uploaded with ID: {file.get('id')}")
+
+          except Exception as e:
+              print(f"❌ Error during upload: {str(e)}")
+              sys.exit(1)
           EOF
