@@ -1806,7 +1806,7 @@
                                                             </div>
                                                             <div className="flex gap-4 items-center relative z-10">
                                                                 <div className="w-12 h-9 credit-card-chip shadow-inner"></div>
-                                                                <div className="text-xl font-mono tracking-[0.2em] font-bold opacity-90">•••• •••• •••• {card.last4}</div>
+                                                                <div className="text-xl font-mono tracking-[0.2em] font-bold opacity-90">••••• •••• •••• {card.last4}</div>
                                                             </div>
                                                             <div className="flex justify-between items-end font-bold relative z-10 mt-4">
                                                                 <div className="flex flex-col"><span className="text-[9px] uppercase opacity-70 mb-1 tracking-[0.2em]">Card Holder</span><span className="font-bold text-sm tracking-widest leading-tight">{card.holderName}</span></div>
@@ -1968,16 +1968,47 @@
                                 </summary>
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                     {paidArchive.map(t => (
-                                        <div key={t.id} className="glass p-4 rounded-2xl flex justify-between items-center border-r-4 border-emerald-500 group transition-all bg-slate-50/50 dark:bg-slate-900/20 hover:shadow-md">
+                                        <div key={t.id} className={`glass p-4 rounded-2xl flex justify-between items-center border-r-4 group transition-all ${t.type === 'income' ? 'border-emerald-500' : 'border-red-500'} bg-white/50 dark:bg-slate-900/40 hover:shadow-md`}>
                                             <div className="min-w-0 flex-1 pl-4">
-                                                <p className="font-bold text-sm text-slate-800 dark:text-white truncate">{t.description || t.category}</p>
-                                                <p className="text-[10px] text-slate-400 font-bold">{t.date}</p>
+                                                <p className="font-bold text-sm text-slate-800 dark:text-white truncate">
+                                                    {t.type === 'income' ? '💰 ' : '💸 '}{t.description || t.category}
+                                                </p>
+                                                <div className="flex items-center gap-2 mt-1">
+                                                    <span className="text-[10px] text-slate-400 font-bold">{t.date}</span>
+                                                    <span className={`text-[9px] px-2 py-0.5 rounded-full font-black ${t.type === 'income' ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'}`}>
+                                                        {t.type === 'income' ? 'دخل محقق' : 'مصروف مدفوع'}
+                                                    </span>
+                                                </div>
                                             </div>
                                             <div className="flex items-center gap-3">
-                                                <p className="font-black text-emerald-600 text-sm whitespace-nowrap">{isPrivate ? '****' : Number(t.amount).toLocaleString()} ج.م</p>
+                                                <p className={`font-black text-sm whitespace-nowrap ${t.type === 'income' ? 'text-emerald-600' : 'text-slate-700 dark:text-white'}`}>
+                                                    {isPrivate ? '****' : Number(t.amount).toLocaleString()} ج.م
+                                                </p>
+                                                
+                                                {/* ✅ مفاتيح التحكم في الأرشيف */}
                                                 <div className="flex gap-1 no-print opacity-0 group-hover:opacity-100 transition-opacity">
-                                                    <button onClick={() => { dispatch({ type: 'SET_FORM_MODE', payload: 'edit' }); dispatch({ type: 'SET_FORM_DATA', payload: t }); dispatch({ type: 'SET_FORM_OPEN', payload: true }); }} className="p-1.5 text-blue-500 hover:bg-blue-50 rounded-lg"><Edit size={14}/></button>
-                                                    <button onClick={() => handleDelete(t.id)} className="p-1.5 text-rose-400 hover:bg-rose-50 rounded-lg"><Trash2 size={14}/></button>
+                                                    {/* مفتاح الإعادة للوضع المعلق */}
+                                                    <button 
+                                                        onClick={() => {
+                                                            const newTrans = transactions.map(tr => tr.id === t.id ? { ...tr, status: 'pending' } : tr);
+                                                            dispatch({ type: 'UPDATE_TRANSACTIONS', payload: newTrans });
+                                                            addNotification({ 
+                                                                type: 'warning', 
+                                                                title: 'إعادة للوضع المعلق', 
+                                                                message: t.type === 'income' ? 'تم سحب المبلغ من الكاش وإعادته للدخل المنتظر' : 'تم إعادة المصروف لقائمة الالتزامات' 
+                                                            });
+                                                        }} 
+                                                        className="p-2 text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/20 rounded-xl transition-all active:scale-90"
+                                                        title="إعادة للوضع المعلق"
+                                                    >
+                                                        <Undo2 size={18}/>
+                                                    </button>
+                                                    
+                                                    {/* زر التعديل */}
+                                                    <button onClick={() => { dispatch({ type: 'SET_FORM_MODE', payload: 'edit' }); dispatch({ type: 'SET_FORM_DATA', payload: t }); dispatch({ type: 'SET_FORM_OPEN', payload: true }); }} className="p-2 text-blue-500 hover:bg-blue-50 rounded-xl transition-all"><Edit size={16}/></button>
+                                                    
+                                                    {/* زر الحذف */}
+                                                    <button onClick={() => handleDelete(t.id)} className="p-2 text-rose-400 hover:bg-rose-50 rounded-xl transition-all"><Trash2 size={16}/></button>
                                                 </div>
                                             </div>
                                         </div>
@@ -2139,7 +2170,7 @@
 
                     <NotificationCenter notifications={notifications} removeNotification={removeNotification} />
                     
-                    {isProcessing && (<div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center z-[9999] animate-fadeIn no-print"><div className="text-center"><div className="loading-spinner mx-auto mb-6"></div><p className="text-white text-xl font-bold animate-pulse">جاري المعالجة...</p></div></div>)}
+                    {isProcessing && (<div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center z-[9999] animate-fadeIn no-print"><div className="text-center"><div className="loading-spinner mx-auto mb-6"></div><p className="text-white text-xl font-black animate-pulse">جاري المعالجة...</p></div></div>)}
                     
                     <ConfirmDialog />
 
