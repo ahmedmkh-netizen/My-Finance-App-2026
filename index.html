@@ -44,7 +44,7 @@ animation: {
 'pulse-slow': 'pulse 3s ease-in-out infinite',
 'float': 'float 6s ease-in-out infinite',
 'shimmer': 'shimmer 2s linear infinite',
-'ticker-move-ltr': 'ticker-move-ltr 50s linear infinite',
+'ticker-scroll': 'ticker-scroll 50s linear infinite',
 },
 keyframes: {
 fadeIn: { '0%': { opacity: '0', transform: 'scale(0.99)' }, '100%': { opacity: '1', transform: 'scale(1)' } },
@@ -54,7 +54,7 @@ slideInBottom: { '0%': { opacity: '0', transform: 'translateY(50px)' }, '100%': 
 'bounce-slight': { '0%, 100%': { transform: 'translateY(0)' }, '50%': { transform: 'translateY(-5px)' } },
 'float': { '0%, 100%': { transform: 'translateY(0)' }, '50%': { transform: 'translateY(-10px)' } },
 'shimmer': { 'from': { backgroundPosition: '0 0' }, 'to': { backgroundPosition: '-200% 0' } },
-'ticker-move-ltr': { '0%': { transform: 'translateX(0)' }, '100%': { transform: 'translateX(50%)' } }
+'ticker-scroll': { '0%': { transform: 'translateX(0)' }, '100%': { transform: 'translateX(-50%)' } } // Fixed: Moves -50% to create infinite loop
 },
 boxShadow: {
 'classic': '0 -4px 25px rgba(0,0,0,0.1)',
@@ -179,11 +179,6 @@ z-index: 50;
 animation: slideInBottom 0.4s ease-out;
 backdrop-filter: blur(20px);
 -webkit-backdrop-filter: blur(20px);
-}
-
-.ticker-mask {
-mask-image: linear-gradient(to left, transparent, black 5%, black 95%, transparent);
--webkit-mask-image: linear-gradient(to left, transparent, black 5%, black 95%, transparent);
 }
 
 /* Print Optimization */
@@ -392,58 +387,47 @@ return this.props.children;
 }
 }
 
-// Helper for Bank Logos
+// Helper for Bank Logos - Now using External Images
 const BankLogo = ({ type, size = 40, className = "" }) => {
-  switch(type) {
-    case 'cib_card':
-    case 'cib_savings':
-      return (
-        <div className={`flex items-center justify-center ${className}`} style={{width: size, height: size}}>
-          <svg viewBox="0 0 100 50" className="w-full h-full">
-            <rect width="100" height="50" fill="white" />
-            <path d="M10,10 H30 V40 H10 Z" fill="#004996" />
-            <circle cx="20" cy="25" r="5" fill="white" />
-            <path d="M35,10 H55 V40 H35 Z" fill="#004996" />
-            <rect x="40" y="20" width="10" height="10" fill="white" />
-            <path d="M60,10 H90 V40 H60 Z" fill="#004996" />
-             <text x="75" y="35" fill="white" fontSize="14" textAnchor="middle" fontWeight="bold" fontFamily="Arial">CIB</text>
-          </svg>
-        </div>
-      );
-    case 'aaib_card':
-    case 'aaib_savings':
-      return (
-        <div className={`flex items-center justify-center ${className}`} style={{width: size, height: size}}>
-          <svg viewBox="0 0 100 50" className="w-full h-full">
-             <rect width="100" height="50" fill="#A6192E" rx="5"/>
-             <path d="M20,10 L40,10 L30,40 Z" fill="white" opacity="0.2"/>
-             <text x="50" y="32" fill="white" fontSize="20" textAnchor="middle" fontWeight="bold" fontFamily="Arial">AAIB</text>
-             <circle cx="70" cy="25" r="8" stroke="white" strokeWidth="2" fill="none"/>
-          </svg>
-        </div>
-      );
-    case 'fawry':
-       return (
-        <div className={`flex items-center justify-center ${className}`} style={{width: size, height: size}}>
-          <svg viewBox="0 0 100 100" className="w-full h-full">
-             <circle cx="50" cy="50" r="45" fill="#005CB9" />
-             <text x="50" y="60" fill="#FFD200" fontSize="24" textAnchor="middle" fontWeight="900" fontFamily="Arial">f</text>
-          </svg>
-        </div>
-      );
-    case 'etisalat':
-      return (
-        <div className={`flex items-center justify-center ${className}`} style={{width: size, height: size}}>
-          <svg viewBox="0 0 100 50" className="w-full h-full">
-             <path d="M10,40 Q30,10 50,40 T90,40" stroke="#709E34" strokeWidth="8" fill="none" strokeLinecap="round"/>
-             <circle cx="25" cy="25" r="4" fill="#E60000"/>
-             <circle cx="75" cy="25" r="4" fill="#E60000"/>
-          </svg>
-        </div>
-      );
-    default:
-      return null;
-  }
+  const getLogoSrc = () => {
+    switch(type) {
+      case 'cib_card':
+      case 'cib_savings':
+        return "https://upload.wikimedia.org/wikipedia/commons/e/e0/Commercial_International_Bank_%28CIB%29_Logo.svg";
+      case 'aaib_card':
+      case 'aaib_savings':
+        return "https://upload.wikimedia.org/wikipedia/commons/2/22/Arab_African_International_Bank_logo.svg";
+      case 'fawry':
+       return "https://upload.wikimedia.org/wikipedia/commons/5/59/Fawry_logo.svg";
+      case 'etisalat':
+      return "https://upload.wikimedia.org/wikipedia/commons/e/e4/Etisalat_logo.svg";
+      default:
+        return null;
+    }
+  };
+
+  const src = getLogoSrc();
+  const altText = type.replace('_', ' ');
+
+  // If online image fails, fall back to text
+  const [error, setError] = useState(false);
+
+  return (
+    <div className={`flex items-center justify-center ${className}`} style={{width: size, height: size}}>
+      {src && !error ? (
+        <img 
+          src={src} 
+          alt={altText}
+          className="w-full h-full object-contain"
+          onError={() => setError(true)}
+        />
+      ) : (
+        <span className="text-[10px] font-bold text-center leading-tight opacity-50">
+          {altText}
+        </span>
+      )}
+    </div>
+  );
 };
 
 const WALLET_CONFIGS = {
@@ -1346,7 +1330,7 @@ if (sessionStorage.getItem(sessionKey)) return;
 
 const currentDay = today.getDate();
 cards.forEach(card => {
-const dueDay = parseInt(card.dueDate) || 1;
+const dueDay = parseInt(card.dueDate) ||1;
 if ((currentDay === dueDay - 1 || currentDay === dueDay)) {
 addNotification({ type: 'warning', title: '📅 تذكير بالسداد', message: `موعد سداد بطاقة ${card.bank}`, persistent: true });
 }
@@ -1377,23 +1361,29 @@ return (
 <div className="bg-gradient-to-br from-blue-600 to-indigo-600 h-full w-9 flex items-center justify-center z-10 shadow-lg relative flex-shrink-0">
 <Zap size={16} className="text-white animate-pulse" />
 </div>
-<div className="ticker-wrap flex-1 h-full flex items-center ticker-mask overflow-hidden">
-<div className="ticker-content text-[11px] sm:text-xs font-bold tracking-wide flex items-center h-full whitespace-nowrap pl-4 animate-ticker-move-ltr">
-<span className="ticker-item text-emerald-400 flex items-center gap-2">💰 سيولة جيبك: {isPrivate ? '****' : tickerData.totalCashAvailable}</span>
-<span className="text-white/10 mx-2">|</span>
-<span className="ticker-item text-rose-400 flex items-center gap-2">⚠️ ديون: {isPrivate ? '****' : tickerData.totalDebtRemaining}</span>
-<span className="text-white/10 mx-2">|</span>
-<span className="ticker-item text-blue-300 flex items-center gap-2">📅 {tickerData.gregDate}</span>
-<span className="text-white/10 mx-2">|</span>
-<span className="ticker-item text-amber-300 flex items-center gap-2">💎 {quote}</span>
+<div className="ticker-wrap flex-1 h-full flex items-center overflow-hidden">
+<div className="ticker-content flex-1 h-full flex items-center whitespace-nowrap animate-ticker-scroll">
+{/* Content duplicated twice for infinite scroll */}
+{[
+<span className="ticker-item text-emerald-400 flex items-center gap-2 px-4">💰 سيولة جيبك: {isPrivate ? '****' : tickerData.totalCashAvailable}</span>,
+<span className="text-white/10 mx-2">|</span>,
+<span className="ticker-item text-rose-400 flex items-center gap-2">⚠️ ديون: {isPrivate ? '****' : tickerData.totalDebtRemaining}</span>,
+<span className="text-white/10 mx-2">|</span>,
+<span className="ticker-item text-blue-300 flex items-center gap-2">📅 {tickerData.gregDate}</span>,
+<span className="text-white/10 mx-2">|</span>,
+<span className="ticker-item text-amber-300 flex items-center gap-2">💎 {quote}</span>,
 <span className="text-white/10 mx-4">✦</span>
-<span className="ticker-item text-emerald-400 flex items-center gap-2">💰 سيولة جيبك: {isPrivate ? '****' : tickerData.totalCashAvailable}</span>
-<span className="text-white/10 mx-2">|</span>
-<span className="ticker-item text-rose-400 flex items-center gap-2">⚠️ ديون: {isPrivate ? '****' : tickerData.totalDebtRemaining}</span>
-<span className="text-white/10 mx-2">|</span>
-<span className="ticker-item text-blue-300 flex items-center gap-2">📅 {tickerData.gregDate}</span>
-<span className="text-white/10 mx-2">|</span>
-<span className="ticker-item text-amber-300 flex items-center gap-2">💎 {quote}</span>
+].map((item, i) => <React.Fragment key={`part1-${i}`}>{item}</React.Fragment>)}
+{[
+<span className="ticker-item text-emerald-400 flex items-center gap-2 px-4">💰 سيولة جيبك: {isPrivate ? '****' : tickerData.totalCashAvailable}</span>,
+<span className="text-white/10 mx-2">|</span>,
+<span className="ticker-item text-rose-400 flex items-center gap-2">⚠️ ديون: {isPrivate ? '****' : tickerData.totalDebtRemaining}</span>,
+<span className="text-white/10 mx-2">|</span>,
+<span className="ticker-item text-blue-300 flex items-center gap-2">📅 {tickerData.gregDate}</span>,
+<span className="text-white/10 mx-2">|</span>,
+<span className="ticker-item text-amber-300 flex items-center gap-2">💎 {quote}</span>,
+<span className="text-white/10 mx-4">✦</span>
+].map((item, i) => <React.Fragment key={`part2-${i}`}>{item}</React.Fragment>)}
 </div>
 </div>
 </div>
