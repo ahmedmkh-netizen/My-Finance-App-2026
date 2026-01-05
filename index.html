@@ -823,6 +823,7 @@
                 const projectedClosingBalance = actualCashInHand + currentPendingIncome - currentPendingCash;
 
                 return { 
+                    actualCarryover: actualCarryover, // ✅ أضفنا هذا السطر
                     income: currentActualIncome, 
                     actualIncome: currentActualIncome, 
                     cashExpenses: currentPaidCash,
@@ -910,8 +911,12 @@
             }, [transactions]);
             const currentEtisalatBalance = (Number(etisalatData.openingBalance) || 0) + etisalatStats.deposits - etisalatStats.withdrawals;
 
+            // ✅ 2. تعديل سجل حسابات التوفير (CIB / AAIB)
             const getSavingsLedger = useCallback((methodId) => {
-                const accTransactions = transactions.filter(t => t.method === methodId).sort((a, b) => new Date(a.date) - new Date(b.date));
+                const accTransactions = transactions
+                    .filter(t => t.method === methodId && t.status === 'paid') // ✅ فلترة: المحقق فقط
+                    .sort((a, b) => new Date(a.date) - new Date(b.date));
+                
                 let runningBalance = 0;
                 return accTransactions.map(t => {
                     const amount = Number(t.amount);
@@ -922,25 +927,31 @@
                 }).reverse(); 
             }, [transactions]);
 
+            // ✅ 3. تعديل سجل فوري
             const fawryLedger = useMemo(() => {
-                const accTransactions = transactions.filter(t => t.method === 'fawry').sort((a, b) => new Date(a.date) - new Date(b.date));
+                const accTransactions = transactions
+                    .filter(t => t.method === 'fawry' && t.status === 'paid') // ✅ فلترة: المحقق فقط
+                    .sort((a, b) => new Date(a.date) - new Date(b.date));
+                
                 let runningBalance = fawryData.openingBalance || 0;
                 return accTransactions.map(t => {
                     const amount = Number(t.amount);
-                    const isDeposit = t.subType === 'deposit';
-                    if (isDeposit) runningBalance += amount;
+                    if (t.subType === 'deposit') runningBalance += amount;
                     else runningBalance -= amount;
                     return { ...t, runningBalance };
                 }).reverse(); 
             }, [transactions, fawryData]);
 
+            // ✅ 4. تعديل سجل اتصالات كاش
             const etisalatLedger = useMemo(() => {
-                const accTransactions = transactions.filter(t => t.method === 'etisalat').sort((a, b) => new Date(a.date) - new Date(b.date));
+                const accTransactions = transactions
+                    .filter(t => t.method === 'etisalat' && t.status === 'paid') // ✅ فلترة: المحقق فقط
+                    .sort((a, b) => new Date(a.date) - new Date(b.date));
+                
                 let runningBalance = etisalatData.openingBalance || 0;
                 return accTransactions.map(t => {
                     const amount = Number(t.amount);
-                    const isDeposit = t.subType === 'deposit';
-                    if (isDeposit) runningBalance += amount;
+                    if (t.subType === 'deposit') runningBalance += amount;
                     else runningBalance -= amount;
                     return { ...t, runningBalance };
                 }).reverse();
@@ -1495,7 +1506,16 @@
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        <OptimizedSummaryCard title="سيولة جيبك الآن" amount={financeSnapshot.actualCashInHand} subtitle="كاش حقيقي متاح للصرف" icon={Wallet} color="text-emerald-600" bgColor="bg-emerald-50" isPrivate={isPrivate} />
+                        <OptimizedSummaryCard 
+                            title="سيولة جيبك الآن" 
+                            amount={financeSnapshot.actualCashInHand} 
+                            // ✅ التعديل هنا: إظهار الرصيد المُرحل بوضوح
+                            subtitle={`رصيد مُرّحل: ${isPrivate ? '****' : financeSnapshot.actualCarryover.toLocaleString()} ج.م`} 
+                            icon={Wallet} 
+                            color="text-emerald-600" 
+                            bgColor="bg-emerald-50" 
+                            isPrivate={isPrivate} 
+                        />
                         <OptimizedSummaryCard title="دخل قيد الانتظار" amount={financeSnapshot.pendingIncome} subtitle="مبالغ متوقعة لم تستلم بعد" icon={PendingCircle} color="text-blue-500" bgColor="bg-blue-50" isPrivate={isPrivate} />
                         <div className="glass p-6 rounded-[2rem] flex flex-col justify-between hover-lift border-r-4 border-blue-500 cursor-pointer transition-all active:scale-[0.98]" onClick={()=>dispatch({type:'SET_ACTIVE_TAB', payload:'planner'})}>
                             <div className="flex justify-between items-start">
