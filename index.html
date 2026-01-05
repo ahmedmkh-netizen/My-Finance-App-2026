@@ -3,10 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>المحفظة المالية - V49 Secure Google Auth</title>
+    <title>المحفظة المالية - V50 Secure</title>
     
     <!-- SEO Meta Tags -->
-    <meta name="description" content="تطبيق محفظة مالية شخصية متكامل وأداة تخطيط ذكية للديون - نسخة آمنة">
+    <meta name="description" content="تطبيق محفظة مالية شخصية متكامل وأداة تخطيط ذكية للديون - نسخة آمنة ومحسنة">
     <meta name="theme-color" content="#0f172a">
     
     <!-- Fonts -->
@@ -74,7 +74,6 @@
     <!-- Firebase SDKs -->
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
-    <!-- ✅ Added Auth Library -->
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
     
     <!-- ES Modules Import Map -->
@@ -123,8 +122,8 @@
             backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); 
             @apply bg-white/90 dark:bg-slate-900/90 border-t border-slate-200/60 dark:border-slate-800/60 shadow-classic pb-2 pt-3; 
         }
-        .scrollable-nav { display: flex; align-items: center; gap: 6px; overflow-x: auto; padding: 0 12px; -webkit-overflow-scrolling: touch; }
-        .nav-btn { @apply flex flex-col items-center justify-center min-w-[64px] h-[56px] rounded-2xl text-slate-400 dark:text-slate-500 transition-all duration-200 relative; }
+        .scrollable-nav { display: flex; align-items: center; gap: 6px; overflow-x: auto; padding: 0 12px; -webkit-overflow-scrolling: touch; scroll-snap-type: x mandatory; }
+        .nav-btn { @apply flex flex-col items-center justify-center min-w-[64px] h-[56px] rounded-2xl text-slate-400 dark:text-slate-500 transition-all duration-200 relative scroll-snap-center; }
         .nav-btn:hover { @apply bg-slate-100 dark:bg-slate-800/50 text-slate-600 dark:text-slate-300; }
         .nav-btn.active { @apply text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-slate-800 shadow-sm scale-105; }
         .nav-btn span { font-size: 11px; margin-top: 2px; font-weight: 700; white-space: nowrap; }
@@ -317,7 +316,7 @@
           return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
         };
 
-        const STORAGE_KEY = 'finance_tracker_V49_SECURE';
+        const STORAGE_KEY = 'finance_tracker_V50_SECURE';
         const MONTHS = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
         const OPENING_SAVINGS_JAN = 0; 
 
@@ -384,7 +383,6 @@
                             <p className="mb-6 max-w-md text-sm dark:text-slate-300">يبدو أن هناك مشكلة في تحميل التطبيق.</p>
                             <div className="flex gap-4">
                                 <button onClick={() => window.location.reload()} className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-4 rounded-2xl font-bold transition-all shadow-lg hover:shadow-blue-500/30 flex items-center gap-2"><RefreshCcw size={20}/> إعادة التحميل</button>
-                                <button onClick={() => { localStorage.removeItem(STORAGE_KEY); window.location.reload(); }} className="bg-red-600 hover:bg-red-700 text-white px-8 py-4 rounded-2xl font-bold transition-all shadow-lg hover:shadow-red-500/30 flex items-center gap-2"><Trash2 size={20}/> إعادة تعيين</button>
                             </div>
                         </div>
                     );
@@ -458,8 +456,8 @@
                                             </td>
                                             <td className="p-4 text-center">
                                                 <div className="flex gap-2 justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                                    <button type="button" onClick={() => onEditTransaction(t)} className="text-blue-500 hover:bg-blue-50 p-2 rounded-lg transition-colors"><Edit size={14} /></button>
-                                                    <button type="button" onClick={() => onDelete(t.id)} className="text-red-400 hover:bg-red-50 p-2 rounded-lg transition-colors"><Trash2 size={14} /></button>
+                                                    <button type="button" onClick={() => onEditTransaction(t)} className="text-blue-500 hover:bg-blue-50 p-2 rounded-lg transition-colors" title="تعديل"><Edit size={14} /></button>
+                                                    <button type="button" onClick={() => onDelete(t.id)} className="text-red-400 hover:bg-red-50 p-2 rounded-lg transition-colors" title="حذف"><Trash2 size={14} /></button>
                                                 </div>
                                             </td>
                                         </tr>
@@ -492,18 +490,24 @@
             }, [transactions, duplicateThreshold, selectedMonth]);
 
             const handleDeleteAll = () => {
-                if (window.confirm(`هل تريد حذف العمليات المكررة؟ سيتم الاحتفاظ بنسخة واحدة فقط لكل مجموعة.`)) {
-                    const idsToDelete = detectDuplicates.flatMap(d => d.items.slice(1).map(i => i.id));
-                    dispatch({ type: 'UPDATE_TRANSACTIONS', payload: transactions.filter(t => !idsToDelete.includes(t.id)) });
-                    addNotification({ type: 'success', title: 'تم التنظيف', message: `حذف ${idsToDelete.length} عملية مكررة` });
-                }
+                // Use Custom Confirm Dialog instead of window.confirm
+                dispatch({
+                    type: 'SHOW_CONFIRM',
+                    title: 'تأكيد الحذف الجماعي',
+                    message: `هل أنت متأكد من حذف العمليات المكررة؟ سيتم الاحتفاظ بنسخة واحدة فقط لكل مجموعة (${detectDuplicates.length} مجموعة).`,
+                    onConfirm: () => {
+                        const idsToDelete = detectDuplicates.flatMap(d => d.items.slice(1).map(i => i.id));
+                        dispatch({ type: 'UPDATE_TRANSACTIONS', payload: transactions.filter(t => !idsToDelete.includes(t.id)) });
+                        addNotification({ type: 'success', title: 'تم التنظيف', message: `حذف ${idsToDelete.length} عملية مكررة` });
+                    }
+                });
             };
 
             return (
                 <div className="space-y-8 animate-fadeIn pb-20">
                     <div className="glass p-8 rounded-[2.5rem] flex justify-between items-center border-r-8 border-blue-500 bg-gradient-to-l from-blue-50 to-transparent dark:from-blue-900/20">
                         <div><h2 className="text-2xl font-black flex items-center gap-3"><Filter className="text-blue-500" /> كاشف التكرار الذكي</h2><p className="text-slate-500 mt-1 text-sm font-bold">تحليل ذكي لاكتشاف المبالغ التي قد تكون سجلت مرتين بالخطأ</p></div>
-                        <button onClick={handleDeleteAll} disabled={detectDuplicates.length === 0} className={`px-6 py-3 rounded-2xl font-bold transition-all flex items-center gap-2 ${detectDuplicates.length === 0 ? 'bg-slate-100 text-slate-400' : 'bg-red-600 text-white shadow-lg hover:scale-105'}`}><Trash2 size={18} /> تنظيف السجل</button>
+                        <button onClick={handleDeleteAll} disabled={detectDuplicates.length === 0} className={`px-6 py-3 rounded-2xl font-bold transition-all flex items-center gap-2 ${detectDuplicates.length === 0 ? 'bg-slate-100 text-slate-400' : 'bg-red-600 text-white shadow-lg hover:scale-105'}`} title="حذف جميع المكررات"><Trash2 size={18} /> تنظيف السجل</button>
                     </div>
                     <div className="glass p-6 rounded-[2.5rem] grid grid-cols-1 md:grid-cols-2 gap-8">
                         <div><label className="block text-xs font-black mb-3 opacity-50 uppercase tracking-widest">نطاق البحث</label><select className="input-field" value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)}><option value="كل الشهور">جميع الشهور</option>{MONTHS.map(m => <option key={m} value={m}>{m}</option>)}</select></div>
@@ -521,7 +525,7 @@
                                         {dup.items.map((item, idx) => (
                                             <div key={item.id} className="py-4 flex justify-between items-center px-4">
                                                 <div className="text-sm font-bold">📅 {item.date} <span className="mx-2 text-slate-300">|</span> 📝 {item.description || 'بدون وصف'}</div>
-                                                {idx !== 0 && <button onClick={() => dispatch({ type: 'UPDATE_TRANSACTIONS', payload: transactions.filter(t => t.id !== item.id) })} className="text-red-500 hover:bg-red-50 p-2 rounded-xl transition-all"><Trash2 size={16} /></button>}
+                                                {idx !== 0 && <button onClick={() => dispatch({ type: 'UPDATE_TRANSACTIONS', payload: transactions.filter(t => t.id !== item.id) })} className="text-red-500 hover:bg-red-50 p-2 rounded-xl transition-all" title="حذف هذه المكررة"><Trash2 size={16} /></button>}
                                             </div>
                                         ))}
                                     </div>
@@ -674,7 +678,7 @@
             }
         }
 
-        // ✅ Updated Login Screen with Google Auth
+        // Login Screen with Google Auth
         const LoginScreen = ({ onLogin }) => {
             const handleGoogleLogin = () => {
                 const provider = new firebase.auth.GoogleAuthProvider();
@@ -728,11 +732,12 @@
             const [visibleTransactions, setVisibleTransactions] = useState(15);
             const [isPrivate, setIsPrivate] = useState(false);
             const mainContentRef = useRef(null);
+            const saveTimeoutRef = useRef(null);
 
             const { data, activeTab, selectedMonth, transViewMode, catViewType, isFormOpen, formMode, formData, activeCategoryDetail, repeatMonths, isLocked, isDarkMode, expandedGroup, budgets, editingCard, editingLoan, editingTransaction, searchTerm, editingBudgetCategory, budgetAmount, editingFawry, editingEtisalat, isRecurringModalOpen, recurringFormData, filterType, hidePast, notifications, isAiModalOpen, aiTab, aiQuery, aiResponse, isAiLoading, fawryData, etisalatData, history, future, expandedLedgers, expandedCardsSection, statusFilter, confirmDialog, isQuickTransferModalOpen, quickTransferData, isBackupReminderOpen } = state;
             const { transactions = [], loans = [], cards = [], recurringItems = [], savingsGoals = [] } = data || {};
 
-            // ✅ Auth Observer
+            // Auth Observer
             useEffect(() => {
                 const unsubscribe = firebase.auth().onAuthStateChanged((user) => {
                     if (user && user.email === "ahmedmkh@gmail.com") { 
@@ -756,18 +761,20 @@
                 return () => unsubscribe();
             }, [isAuthenticated]);
 
+            // Debounced Save
             useEffect(() => {
                 if (isAuthenticated && data && data.transactions) {
-                    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch(e) {}
-                    const timer = setTimeout(() => {
+                    clearTimeout(saveTimeoutRef.current);
+                    saveTimeoutRef.current = setTimeout(() => {
+                        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch(e) {}
                         db.collection("finance_2026").doc("user_ahmed_data").set(data)
                             .catch(err => console.error("❌ فشل الحفظ في السحابة:", err));
                     }, 1500); 
-                    return () => clearTimeout(timer);
                 }
+                return () => clearTimeout(saveTimeoutRef.current);
             }, [data, isAuthenticated]);
 
-            // ✅ Enhanced Finance Snapshot Logic
+            // Enhanced Finance Snapshot Logic
             const financeSnapshot = useMemo(() => {
                 let actualCarryover = Number(OPENING_SAVINGS_JAN || 0);
                 const selectedMonthIdx = getMonthIndex(selectedMonth);
@@ -787,7 +794,7 @@
 
                 const currentMonthTrans = transactions.filter(t => t.month === selectedMonth);
 
-                // ✅ Income Logic Updated
+                // Income Logic
                 const currentActualIncome = currentMonthTrans
                     .filter(t => t.type === 'income' && t.status === 'paid')
                     .reduce((s, t) => s + Number(t.amount || 0), 0);
@@ -812,7 +819,7 @@
                     .filter(t => t.type === 'expense' && ['cib_card', 'aaib_card'].includes(t.method))
                     .reduce((s, t) => s + Number(t.amount || 0), 0);
 
-                // ✅ Calculations Updated
+                // Calculations
                 const actualCashInHand = actualCarryover + currentActualIncome - currentPaidCash;
                 const projectedClosingBalance = actualCashInHand + currentPendingIncome - currentPendingCash;
 
@@ -1038,13 +1045,26 @@
                         else if (formData.method === 'etisalat') balance = currentEtisalatBalance;
                         
                         if (Number(formData.amount) > balance) {
-                            if (!window.confirm(`⚠️ الرصيد الحالي (${balance.toLocaleString()}) غير كافٍ. هل تريد الاستمرار؟`)) {
-                                setIsProcessing(false);
-                                return; 
-                            }
+                            // Use Custom Confirm Dialog
+                            dispatch({
+                                type: 'SHOW_CONFIRM',
+                                title: 'رصيد غير كافٍ',
+                                message: `الرصيد الحالي (${balance.toLocaleString()}) غير كافٍ. هل تريد الاستمرار وترحيل الرصيد بالسالب؟`,
+                                onConfirm: () => {
+                                    // Logic to proceed with negative balance
+                                    finalizeTransaction(finalSubType);
+                                }
+                            });
+                            setIsProcessing(false);
+                            return; 
                         }
                     }
+                    
+                    finalizeTransaction(finalSubType);
 
+                }, 500);
+
+                const finalizeTransaction = (finalSubType) => {
                     const selectedDay = formData.date.split('-')[2] || '01'; 
 
                     const processTransaction = (m, idOverride) => {
@@ -1087,14 +1107,14 @@
                     setVisibleTransactions(15);
                     addNotification({ type: 'success', title: formMode === 'add' ? 'تمت الإضافة بنجاح' : 'تم التعديل بنجاح' });
                     setIsProcessing(false);
-                }, 500);
+                }
             }, [formData, formMode, selectedMonth, repeatMonths, transactions, saveHistory, addNotification, currentFawryBalance, currentEtisalatBalance, loans, dispatch]);
 
             const handleDelete = useCallback((id) => {
                 dispatch({ 
                     type: 'SHOW_CONFIRM', 
                     title: 'تأكيد الحذف', 
-                    message: 'هل أنت متأكد من حذف هذه العملية؟', 
+                    message: 'هل أنت متأكد من حذف هذه العملية نهائياً؟', 
                     onConfirm: () => { 
                         const newTransactions = transactions.filter(t => t.id !== id);
                         dispatch({ type: 'UPDATE_TRANSACTIONS', payload: newTransactions }); 
@@ -1219,7 +1239,17 @@
                 w.document.write(`<html dir="rtl"><head><title>${escapeHtml(title)}</title><link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet"><style>body{font-family:'Cairo',sans-serif;padding:40px;direction:rtl;color:#1e293b}table{width:100%;border-collapse:collapse;margin-top:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1)}th,td{border:1px solid #e2e8f0;padding:12px 16px;text-align:right}th{background:#f1f5f9;color:#475569;font-weight:700}tr:nth-child(even){background-color:#f8fafc}.header{text-align:center;margin-bottom:40px;border-bottom:2px solid #e2e8f0;padding-bottom:20px}.total{font-size:1.4em;font-weight:bold;margin-top:30px;text-align:left;padding:15px;background:#f1f5f9;border-radius:12px;color:#0f172a}</style></head><body><div class="header"><h1>${escapeHtml(title)}</h1><p>تاريخ التقرير: ${new Date().toLocaleDateString('ar-EG')}</p></div><table><thead><tr><th>التاريخ</th><th>البند</th><th>الوصف</th><th>طريقة الدفع</th><th>المبلغ</th></tr></thead><tbody>${items.map(i => `<tr><td>${i.date}</td><td>${escapeHtml(i.category)}</td><td>${escapeHtml(i.description||'-')}</td><td>${escapeHtml(PAYMENT_METHODS.find(p=>p.id===i.method)?.label||i.method)}</td><td>${Number(i.amount).toLocaleString()} ج.م</td></tr>`).join('')}</tbody></table><div class="total">الإجمالي: ${total.toLocaleString()} ج.م</div><script>window.print();window.close();<\/script></body></html>`); w.document.close();
             }, []);
 
-            const resetData = useCallback(() => { if(window.confirm("تحذير: هل أنت متأكد من مسح جميع البيانات؟ لا يمكن التراجع.")) { localStorage.removeItem(STORAGE_KEY); window.location.reload(); } }, []);
+            const resetData = useCallback(() => {
+                dispatch({
+                    type: 'SHOW_CONFIRM',
+                    title: 'تحذير هام',
+                    message: 'هل أنت متأكد تماماً من مسح جميع البيانات؟ لا يمكن التراجع عن هذا الإجراء.',
+                    onConfirm: () => {
+                        localStorage.removeItem(STORAGE_KEY);
+                        window.location.reload();
+                    }
+                });
+            }, []);
 
             const handleAnalyzeFinances = useCallback(async () => { dispatch({ type: 'SET_AI_LOADING', payload: true }); setTimeout(() => { const totalIncome = transactions.reduce((a,c)=>c.type==='income'?a+Number(c.amount):a, 0); const totalExp = transactions.reduce((a,c)=>c.type==='expense'?a+Number(c.amount):a, 0); const ratio = Math.round((totalExp/totalIncome)*100); dispatch({ type: 'SET_AI_RESPONSE', payload: `تحليل سريع: إجمالي دخلك المسجل ${totalIncome.toLocaleString()} ومصروفاتك ${totalExp.toLocaleString()} (${ratio}%). وضعك المالي ${ratio > 90 ? 'حرج، تحتاج لتقليل النفقات' : 'جيد ومستقر'}.` }); dispatch({ type: 'SET_AI_LOADING', payload: false }); }, 1500); }, [transactions]);
             const handleSmartAdd = useCallback(async () => { dispatch({ type: 'SET_AI_LOADING', payload: true }); setTimeout(() => { const txt = aiQuery.toLowerCase(); let amount = txt.match(/\d+/)?.[0]; let type = (txt.includes('قبضت') || txt.includes('اخدت') || txt.includes('تحويل لي')) ? 'income' : 'expense'; let category = 'أخرى'; if (txt.includes('اكل') || txt.includes('غدا') || txt.includes('سوبر')) category = 'مصروفات المعيشة اليومية'; else if (txt.includes('رصيد') || txt.includes('شحن')) category = 'الاتصالات وشحن الهواتف المحمولة'; else if (txt.includes('بنزين') || txt.includes('مواصلات')) category = 'المواصلات والانتقالات'; else if (txt.includes('درس') || txt.includes('مدرسة')) category = 'التعليم والدروس والأنشطة'; if (amount) { dispatch({ type: 'SET_FORM_MODE', payload: 'add' }); dispatch({ type: 'SET_FORM_DATA', payload: { type, category, amount: Number(amount), description: aiQuery, date: getLocalISODate(), month: selectedMonth, method: 'cash', quantity:1, unitPrice: Number(amount), subType: type === 'income' ? 'deposit' : 'withdrawal' } }); dispatch({ type: 'SET_FORM_OPEN', payload: true }); dispatch({ type: 'SET_AI_MODAL_OPEN', payload: false }); dispatch({ type: 'SET_AI_QUERY', payload: '' }); } else { dispatch({ type: 'SET_AI_RESPONSE', payload: "لم أتمكن من استخراج المبلغ. يرجى كتابة الرقم بوضوح (مثال: 500)" }); } dispatch({ type: 'SET_AI_LOADING', payload: false }); }, 1000); }, [aiQuery, selectedMonth]);
@@ -1361,7 +1391,7 @@
                                     }} 
                                     className="flex-1 bg-red-500 text-white py-4 rounded-2xl font-bold shadow-lg shadow-red-500/30 hover:bg-red-600 hover:shadow-red-500/40 transition-all active:scale-95"
                                 >
-                                    نعم، احذف
+                                    نعم، تابع
                                 </button>
                             </div>
                         </div>
@@ -1502,8 +1532,8 @@
                                         <div className="flex justify-between mb-6">
                                             <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-700/50 shadow-inner" style={{ color: CATEGORY_COLORS[cat] }}><Layers size={24} /></div>
                                             <div className="flex gap-2 no-print">
-                                                <button type="button" onClick={(e) => { e.stopPropagation(); dispatch({ type: 'SET_ACTIVE_CATEGORY_DETAIL', payload: cat }); }} className="p-2 text-slate-300 hover:text-blue-500 transition-colors"><FileText size={20} /></button>
-                                                <button type="button" onClick={(e) => { e.stopPropagation(); dispatch({ type: 'SET_EDITING_BUDGET_CATEGORY', payload: cat }); dispatch({ type: 'SET_BUDGET_AMOUNT', payload: budgets[cat] || '' }); }} className="p-2 text-slate-300 hover:text-blue-500 transition-colors"><Settings size={20} /></button>
+                                                <button type="button" onClick={(e) => { e.stopPropagation(); dispatch({ type: 'SET_ACTIVE_CATEGORY_DETAIL', payload: cat }); }} className="p-2 text-slate-300 hover:text-blue-500 transition-colors" title="تفاصيل"><FileText size={20} /></button>
+                                                <button type="button" onClick={(e) => { e.stopPropagation(); dispatch({ type: 'SET_EDITING_BUDGET_CATEGORY', payload: cat }); dispatch({ type: 'SET_BUDGET_AMOUNT', payload: budgets[cat] || '' }); }} className="p-2 text-slate-300 hover:text-blue-500 transition-colors" title="تعديل الميزانية"><Settings size={20} /></button>
                                             </div>
                                         </div>
                                         <h3 className="font-bold text-lg mb-1 dark:text-white">{cat}</h3>
@@ -1549,8 +1579,8 @@
                                                             </td>
                                                             <td className="px-6 py-4 text-center border-b border-slate-100 dark:border-slate-800/50">
                                                                 <div className="flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                                    <button type="button" onClick={(e) => { e.stopPropagation(); dispatch({ type: 'SET_FORM_MODE', payload: 'edit' }); dispatch({ type: 'SET_FORM_DATA', payload: t }); dispatch({ type: 'SET_FORM_OPEN', payload: true }); }} className="p-2 text-blue-500 hover:bg-blue-100 rounded-lg transition-colors"><Edit size={16} /></button>
-                                                                    <button type="button" onClick={(e) => { e.stopPropagation(); handleDelete(t.id) }} className="p-2 text-red-500 hover:bg-red-100 rounded-lg transition-colors"><Trash2 size={16} /></button>
+                                                                    <button type="button" onClick={(e) => { e.stopPropagation(); dispatch({ type: 'SET_FORM_MODE', payload: 'edit' }); dispatch({ type: 'SET_FORM_DATA', payload: t }); dispatch({ type: 'SET_FORM_OPEN', payload: true }); }} className="p-2 text-blue-500 hover:bg-blue-100 rounded-lg transition-colors" title="تعديل"><Edit size={16} /></button>
+                                                                    <button type="button" onClick={(e) => { e.stopPropagation(); handleDelete(t.id) }} className="p-2 text-red-500 hover:bg-red-100 rounded-lg transition-colors" title="حذف"><Trash2 size={16} /></button>
                                                                 </div>
                                                             </td>
                                                         </tr>
@@ -1567,7 +1597,7 @@
                 );
             };
 
-            // ✅ Unified Loans View
+            // Unified Loans View
             const renderLoansView = () => {
                 const getMonthlyProjection = () => {
                     const projection = {};
@@ -1855,9 +1885,9 @@
                         <div className="glass p-4 rounded-3xl overflow-x-auto no-print"><div className="flex gap-3 pb-2 scroll-hide snap-x">{MONTHS.map(m => (<button key={m} type="button" onClick={() => dispatch({ type: 'SET_SELECTED_MONTH', payload: m })} className={`flex-shrink-0 px-8 py-3 rounded-2xl text-sm font-bold transition-all duration-300 snap-center ${selectedMonth === m ? 'bg-slate-900 text-white shadow-lg scale-105' : 'bg-slate-50 text-slate-500 hover:bg-slate-200'}`}>{m}</button>))}</div></div>
                         
                         <div className="flex gap-2 justify-center flex-wrap px-2 mb-4 no-print">
-                            <button type="button" onClick={() => dispatch({ type: 'SET_STATUS_FILTER', payload: 'all' })} className={`px-3 py-1.5 rounded-xl text-[11px] font-bold transition-all border border-slate-200 dark:border-slate-700 flex items-center gap-1 ${statusFilter === 'all' ? 'bg-slate-800 text-white shadow-md' : 'bg-white dark:bg-slate-800 text-slate-500'}`}><Filter size={12}/> الكل</button>
-                            <button type="button" onClick={() => dispatch({ type: 'SET_STATUS_FILTER', payload: 'pending' })} className={`px-3 py-1.5 rounded-xl text-[11px] font-bold transition-all border border-slate-200 dark:border-slate-700 flex items-center gap-1 ${statusFilter === 'pending' ? 'bg-amber-500 text-white shadow-md' : 'bg-white dark:bg-slate-800 text-slate-500'}`}><Clock size={12}/> معلق</button>
-                            <button type="button" onClick={() => dispatch({ type: 'SET_STATUS_FILTER', payload: 'paid' })} className={`px-3 py-1.5 rounded-xl text-[11px] font-bold transition-all border border-slate-200 dark:border-slate-700 flex items-center gap-1 ${statusFilter === 'paid' ? 'bg-emerald-500 text-white shadow-md' : 'bg-white dark:bg-slate-800 text-slate-500'}`}><CheckCircle2 size={12}/> مدفوع</button>
+                            <button type="button" onClick={() => dispatch({ type: 'SET_STATUS_FILTER', payload: 'all' })} className={`px-3 py-1.5 rounded-xl text-[11px] font-bold transition-all border border-slate-200 dark:border-slate-700 flex items-center gap-1 ${statusFilter === 'all' ? 'bg-slate-800 text-white shadow-md' : 'bg-white dark:bg-slate-800 text-slate-500'}`} title="عرض الكل"><Filter size={12}/> الكل</button>
+                            <button type="button" onClick={() => dispatch({ type: 'SET_STATUS_FILTER', payload: 'pending' })} className={`px-3 py-1.5 rounded-xl text-[11px] font-bold transition-all border border-slate-200 dark:border-slate-700 flex items-center gap-1 ${statusFilter === 'pending' ? 'bg-amber-500 text-white shadow-md' : 'bg-white dark:bg-slate-800 text-slate-500'}`} title="المعلق فقط"><Clock size={12}/> معلق</button>
+                            <button type="button" onClick={() => dispatch({ type: 'SET_STATUS_FILTER', payload: 'paid' })} className={`px-3 py-1.5 rounded-xl text-[11px] font-bold transition-all border border-slate-200 dark:border-slate-700 flex items-center gap-1 ${statusFilter === 'paid' ? 'bg-emerald-500 text-white shadow-md' : 'bg-white dark:bg-slate-800 text-slate-500'}`} title="المدفوع فقط"><CheckCircle2 size={12}/> مدفوع</button>
                         </div>
 
                         <div className="flex gap-2 flex-wrap justify-center px-2 mb-6 no-print">
@@ -1903,6 +1933,7 @@
                                                                     addNotification({ type: 'success', title: nextStatus === 'paid' ? 'تم تأكيد استلام الدخل ✅' : 'تمت الإعادة للمعلق' });
                                                                 }} 
                                                                 className="transition-transform active:scale-95 hover:scale-110 no-print"
+                                                                title={t.status === 'paid' ? "تعيين كمعلق" : "تعيين كمدفوع"}
                                                                 >
                                                                     {t.status === 'paid' ? <CheckCircle2 className="text-emerald-500 w-6 h-6" /> : <Clock className="text-amber-500 w-6 h-6" />}
                                                                 </button>
@@ -1910,7 +1941,7 @@
                                                             <td className="pr-20 py-4 text-slate-500 font-bold leading-relaxed"><div className="font-bold text-slate-800 dark:text-slate-200 text-base mb-1">{t.description || 'بدون وصف'}</div><div className="flex gap-3 items-center opacity-80"><span className="bg-white dark:bg-slate-800 px-3 py-1 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm">{t.date}</span><span className="bg-blue-50 text-blue-600 px-3 py-1 rounded-lg font-bold">{PAYMENT_METHODS.find(p=>p.id===t.method)?.label}</span></div></td>
                                                             <td className="py-4 text-center text-slate-400 font-bold">{t.quantity > 1 ? `${t.quantity} × ${t.unitPrice}` : '-'}</td>
                                                             <td className="py-4 font-black text-left text-base dark:text-slate-200">{isPrivate ? '****' : Number(t.amount).toLocaleString()}</td>
-                                                            <td className="py-4 text-center"><div className="flex gap-2 justify-center no-print"><button type="button" onClick={() => { dispatch({ type: 'SET_FORM_MODE', payload: 'edit' }); dispatch({ type: 'SET_FORM_DATA', payload: t }); dispatch({ type: 'SET_FORM_OPEN', payload: true }); }} className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"><Edit size={16} /></button><button type="button" onClick={() => handleDelete(t.id)} className="p-2 text-red-400 hover:bg-red-50 rounded-lg transition-colors"><Trash2 size={16} /></button></div></td>
+                                                            <td className="py-4 text-center"><div className="flex gap-2 justify-center no-print"><button type="button" onClick={() => { dispatch({ type: 'SET_FORM_MODE', payload: 'edit' }); dispatch({ type: 'SET_FORM_DATA', payload: t }); dispatch({ type: 'SET_FORM_OPEN', payload: true }); }} className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg transition-colors" title="تعديل"><Edit size={16} /></button><button type="button" onClick={() => handleDelete(t.id)} className="p-2 text-red-400 hover:bg-red-50 rounded-lg transition-colors" title="حذف"><Trash2 size={16} /></button></div></td>
                                                         </tr>
                                                     ))}
                                                 </React.Fragment>
@@ -1943,7 +1974,7 @@
                                                     <p className={`font-black text-base ${t.type === 'income' ? 'text-emerald-600' : 'text-slate-800 dark:text-white'}`}>
                                                         {isPrivate ? '****' : Number(t.amount).toLocaleString()}
                                                     </p>
-                                                    <button onClick={() => handleDelete(t.id)} className="text-rose-400 mt-1 hover:text-rose-600 transition-colors no-print"><Trash2 size={12}/></button>
+                                                    <button onClick={() => handleDelete(t.id)} className="text-rose-400 mt-1 hover:text-rose-600 transition-colors no-print" title="حذف"><Trash2 size={12}/></button>
                                                 </div>
                                             </div>
                                         ))}
@@ -1985,7 +2016,7 @@
                                                     {isPrivate ? '****' : Number(t.amount).toLocaleString()} ج.م
                                                 </p>
                                                 
-                                                {/* ✅ مفاتيح التحكم في الأرشيف */}
+                                                {/* مفاتيح التحكم في الأرشيف */}
                                                 <div className="flex gap-1 no-print opacity-0 group-hover:opacity-100 transition-opacity">
                                                     {/* مفتاح الإعادة للوضع المعلق */}
                                                     <button 
@@ -2005,10 +2036,10 @@
                                                     </button>
                                                     
                                                     {/* زر التعديل */}
-                                                    <button onClick={() => { dispatch({ type: 'SET_FORM_MODE', payload: 'edit' }); dispatch({ type: 'SET_FORM_DATA', payload: t }); dispatch({ type: 'SET_FORM_OPEN', payload: true }); }} className="p-2 text-blue-500 hover:bg-blue-50 rounded-xl transition-all"><Edit size={16}/></button>
+                                                    <button onClick={() => { dispatch({ type: 'SET_FORM_MODE', payload: 'edit' }); dispatch({ type: 'SET_FORM_DATA', payload: t }); dispatch({ type: 'SET_FORM_OPEN', payload: true }); }} className="p-2 text-blue-500 hover:bg-blue-50 rounded-xl transition-all" title="تعديل"><Edit size={16}/></button>
                                                     
                                                     {/* زر الحذف */}
-                                                    <button onClick={() => handleDelete(t.id)} className="p-2 text-rose-400 hover:bg-rose-50 rounded-xl transition-all"><Trash2 size={16}/></button>
+                                                    <button onClick={() => handleDelete(t.id)} className="p-2 text-rose-400 hover:bg-rose-50 rounded-xl transition-all" title="حذف"><Trash2 size={16}/></button>
                                                 </div>
                                             </div>
                                         </div>
