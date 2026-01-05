@@ -3,13 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>المحفظة المالية - V51 Secure + Smart Insights</title>
+    <title>المحفظة المالية - V49 Secure Google Auth</title>
     
     <!-- SEO Meta Tags -->
-    <meta name="description" content="تطبيق محفظة مالية شخصية متكامل وأداة تخطيط ذكية للديون - نسخة آمنة مع ملخص شهري ذكي">
+    <meta name="description" content="تطبيق محفظة مالية شخصية متكامل وأداة تخطيط ذكية للديون - نسخة آمنة">
     <meta name="theme-color" content="#0f172a">
     
-    <!-- Fonts (Cairo for Arabic) -->
+    <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@200;300;400;500;600;700;800;900&display=swap" rel="stylesheet">
@@ -74,9 +74,10 @@
     <!-- Firebase SDKs -->
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    <!-- ✅ Added Auth Library -->
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
     
-    <!-- ES Modules Import Map for React and Libraries -->
+    <!-- ES Modules Import Map -->
     <script type="importmap">
     {
         "imports": {
@@ -89,8 +90,6 @@
         }
     }
     </script>
-    
-    <!-- Babel for JSX Transformation in Browser -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     
     <!-- Custom Styles -->
@@ -104,14 +103,11 @@
             @apply text-slate-100; 
             background: linear-gradient(135deg, #020617 0%, #0f172a 100%);
         }
-        
-        /* Scrollbar Styling */
         ::-webkit-scrollbar { width: 6px; height: 6px; }
         ::-webkit-scrollbar-track { @apply bg-transparent; }
         ::-webkit-scrollbar-thumb { @apply bg-slate-300/50 dark:bg-slate-700/50 rounded-full hover:bg-slate-400 dark:hover:bg-slate-600 transition-colors; }
         .scroll-hide::-webkit-scrollbar { display: none; }
         
-        /* Glassmorphism Utilities */
         .glass { 
             backdrop-filter: blur(20px) saturate(180%); 
             -webkit-backdrop-filter: blur(20px) saturate(180%); 
@@ -121,21 +117,19 @@
         .text-gradient { @apply bg-gradient-to-r from-blue-600 to-cyan-500 bg-clip-text text-transparent; }
         .hover-lift { @apply transition-all duration-300 hover:-translate-y-1.5 hover:shadow-2xl active:scale-[0.98]; }
         
-        /* Navigation Bar */
         .bottom-nav-container { 
             position: fixed; bottom: 0; left: 0; right: 0; z-index: 1000; 
             padding-bottom: env(safe-area-inset-bottom); 
             backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); 
             @apply bg-white/90 dark:bg-slate-900/90 border-t border-slate-200/60 dark:border-slate-800/60 shadow-classic pb-2 pt-3; 
         }
-        .scrollable-nav { display: flex; align-items: center; gap: 6px; overflow-x: auto; padding: 0 12px; -webkit-overflow-scrolling: touch; scroll-snap-type: x mandatory; }
-        .nav-btn { @apply flex flex-col items-center justify-center min-w-[64px] h-[56px] rounded-2xl text-slate-400 dark:text-slate-500 transition-all duration-200 relative scroll-snap-center; }
+        .scrollable-nav { display: flex; align-items: center; gap: 6px; overflow-x: auto; padding: 0 12px; -webkit-overflow-scrolling: touch; }
+        .nav-btn { @apply flex flex-col items-center justify-center min-w-[64px] h-[56px] rounded-2xl text-slate-400 dark:text-slate-500 transition-all duration-200 relative; }
         .nav-btn:hover { @apply bg-slate-100 dark:bg-slate-800/50 text-slate-600 dark:text-slate-300; }
         .nav-btn.active { @apply text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-slate-800 shadow-sm scale-105; }
         .nav-btn span { font-size: 11px; margin-top: 2px; font-weight: 700; white-space: nowrap; }
         .v-line { @apply w-px h-8 bg-slate-200 dark:bg-slate-700/50 flex-shrink-0; }
         
-        /* Floating Action Button */
         .fab { 
             position: fixed; bottom: 90px; left: 20px; z-index: 1100; 
             @apply w-16 h-16 bg-gradient-to-br from-blue-600 to-indigo-600 text-white rounded-3xl shadow-2xl shadow-blue-500/40 flex items-center justify-center border-4 border-white dark:border-slate-900 transition-all duration-300; 
@@ -143,24 +137,23 @@
         .fab:hover { @apply scale-110 rotate-90 shadow-neon; }
         .fab:active { @apply scale-90; }
         
-        /* Lock Screen */
         .lock-screen { position: fixed; inset: 0; @apply bg-slate-950; z-index: 2000; display: flex; flex-direction: column; align-items: center; justify-content: center; color: white; }
         
-        /* Form Elements */
         .input-field { 
             @apply w-full p-4 border border-slate-200 dark:border-slate-700 rounded-2xl outline-none transition-all duration-300;
             @apply bg-white/80 dark:bg-slate-800/80 text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500; 
             @apply focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 dark:focus:ring-blue-500/20; 
         }
         
-        /* Select Overrides */
-        .dark select option { background-color: #1e293b !important; color: #f8fafc !important; }
+        .dark select option { 
+            background-color: #1e293b !important; 
+            color: #f8fafc !important; 
+        }
+
         select.input-field { appearance: none; background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e"); background-repeat: no-repeat; background-position: left 1rem center; background-size: 1em; }
         
-        /* Loading Spinner */
         .loading-spinner { @apply w-8 h-8 border-4 border-blue-500/30 border-t-blue-600 rounded-full animate-spin; }
         
-        /* Credit Card Chip */
         .credit-card-chip {
             background: linear-gradient(135deg, #d4af37 0%, #f9e295 50%, #d4af37 100%);
             border-radius: 6px;
@@ -225,15 +218,7 @@
     </style>
 </head>
 <body class="selection:bg-blue-500/30">
-    <div id="root">
-        <!-- Initial Loading State -->
-        <div class="flex h-screen items-center justify-center bg-slate-50 dark:bg-slate-900">
-            <div class="text-center">
-                <div class="loading-spinner mx-auto mb-4 w-12 h-12"></div>
-                <p class="text-slate-500 font-bold animate-pulse">جاري تحميل التطبيق...</p>
-            </div>
-        </div>
-    </div>
+    <div id="root"></div>
 
     <script type="text/babel" data-type="module">
         import React, { useState, useMemo, useEffect, useCallback, useReducer, useRef } from 'react';
@@ -252,7 +237,6 @@
 
         const CURRENT_YEAR = new Date().getFullYear();
 
-        // Firebase Configuration
         const firebaseConfig = {
           apiKey: "AIzaSyCEq-Trf1oFsvPF5tlMvqU83ea_J2DLZjs",
           authDomain: "finance-app-2026-3e318.firebaseapp.com",
@@ -262,7 +246,6 @@
           appId: "1:855414629770:web:8bb07198b8245b63781473"
         };
 
-        // Initialize Firebase
         if (!firebase.apps.length) {
             firebase.initializeApp(firebaseConfig);
         }
@@ -334,7 +317,7 @@
           return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
         };
 
-        const STORAGE_KEY = 'finance_tracker_V51_SECURE';
+        const STORAGE_KEY = 'finance_tracker_V49_SECURE';
         const MONTHS = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
         const OPENING_SAVINGS_JAN = 0; 
 
@@ -388,7 +371,6 @@
             expense: [ 'الالتزامات البنكية والتمويلية', 'مصروفات المعيشة اليومية', 'مسحوبات محل هاني', 'الملابس والمستلزمات الشخصية', 'الزكاة والتبرعات', 'التعليم والدروس والأنشطة', 'المصروفات النقدية الشهرية', 'شحن رصيد فوري', 'المرافق والخدمات – بولاق', 'المرافق والخدمات – العبور', 'الاتصالات وشحن الهواتف المحمولة', 'الصحة والرعاية الطبية', 'المستلزمات المنزلية والتموين', 'اللحوم والدواجن والأسماك', 'الطوارئ والاحتياطي النقدي', 'الصيانة والإصلاحات المنزلية', 'المواصلات والانتقالات', 'الترفيه والمناسبات الاجتماعية', 'مصاريف موسمية وسنوية', 'شحن محفظة', 'تحويلات', 'أخرى' ]
         };
 
-        // Error Boundary
         class ErrorBoundary extends React.Component {
             constructor(props) { super(props); this.state = { hasError: false, error: null }; }
             static getDerivedStateFromError(error) { return { hasError: true, error }; }
@@ -402,6 +384,7 @@
                             <p className="mb-6 max-w-md text-sm dark:text-slate-300">يبدو أن هناك مشكلة في تحميل التطبيق.</p>
                             <div className="flex gap-4">
                                 <button onClick={() => window.location.reload()} className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-4 rounded-2xl font-bold transition-all shadow-lg hover:shadow-blue-500/30 flex items-center gap-2"><RefreshCcw size={20}/> إعادة التحميل</button>
+                                <button onClick={() => { localStorage.removeItem(STORAGE_KEY); window.location.reload(); }} className="bg-red-600 hover:bg-red-700 text-white px-8 py-4 rounded-2xl font-bold transition-all shadow-lg hover:shadow-red-500/30 flex items-center gap-2"><Trash2 size={20}/> إعادة تعيين</button>
                             </div>
                         </div>
                     );
@@ -475,8 +458,8 @@
                                             </td>
                                             <td className="p-4 text-center">
                                                 <div className="flex gap-2 justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                                    <button type="button" onClick={() => onEditTransaction(t)} className="text-blue-500 hover:bg-blue-50 p-2 rounded-lg transition-colors" title="تعديل"><Edit size={14} /></button>
-                                                    <button type="button" onClick={() => onDelete(t.id)} className="text-red-400 hover:bg-red-50 p-2 rounded-lg transition-colors" title="حذف"><Trash2 size={14} /></button>
+                                                    <button type="button" onClick={() => onEditTransaction(t)} className="text-blue-500 hover:bg-blue-50 p-2 rounded-lg transition-colors"><Edit size={14} /></button>
+                                                    <button type="button" onClick={() => onDelete(t.id)} className="text-red-400 hover:bg-red-50 p-2 rounded-lg transition-colors"><Trash2 size={14} /></button>
                                                 </div>
                                             </td>
                                         </tr>
@@ -509,23 +492,18 @@
             }, [transactions, duplicateThreshold, selectedMonth]);
 
             const handleDeleteAll = () => {
-                dispatch({
-                    type: 'SHOW_CONFIRM',
-                    title: 'تأكيد الحذف الجماعي',
-                    message: `هل أنت متأكد من حذف العمليات المكررة؟ سيتم الاحتفاظ بنسخة واحدة فقط لكل مجموعة (${detectDuplicates.length} مجموعة).`,
-                    onConfirm: () => {
-                        const idsToDelete = detectDuplicates.flatMap(d => d.items.slice(1).map(i => i.id));
-                        dispatch({ type: 'UPDATE_TRANSACTIONS', payload: transactions.filter(t => !idsToDelete.includes(t.id)) });
-                        addNotification({ type: 'success', title: 'تم التنظيف', message: `حذف ${idsToDelete.length} عملية مكررة` });
-                    }
-                });
+                if (window.confirm(`هل تريد حذف العمليات المكررة؟ سيتم الاحتفاظ بنسخة واحدة فقط لكل مجموعة.`)) {
+                    const idsToDelete = detectDuplicates.flatMap(d => d.items.slice(1).map(i => i.id));
+                    dispatch({ type: 'UPDATE_TRANSACTIONS', payload: transactions.filter(t => !idsToDelete.includes(t.id)) });
+                    addNotification({ type: 'success', title: 'تم التنظيف', message: `حذف ${idsToDelete.length} عملية مكررة` });
+                }
             };
 
             return (
                 <div className="space-y-8 animate-fadeIn pb-20">
                     <div className="glass p-8 rounded-[2.5rem] flex justify-between items-center border-r-8 border-blue-500 bg-gradient-to-l from-blue-50 to-transparent dark:from-blue-900/20">
                         <div><h2 className="text-2xl font-black flex items-center gap-3"><Filter className="text-blue-500" /> كاشف التكرار الذكي</h2><p className="text-slate-500 mt-1 text-sm font-bold">تحليل ذكي لاكتشاف المبالغ التي قد تكون سجلت مرتين بالخطأ</p></div>
-                        <button onClick={handleDeleteAll} disabled={detectDuplicates.length === 0} className={`px-6 py-3 rounded-2xl font-bold transition-all flex items-center gap-2 ${detectDuplicates.length === 0 ? 'bg-slate-100 text-slate-400' : 'bg-red-600 text-white shadow-lg hover:scale-105'}`} title="حذف جميع المكررات"><Trash2 size={18} /> تنظيف السجل</button>
+                        <button onClick={handleDeleteAll} disabled={detectDuplicates.length === 0} className={`px-6 py-3 rounded-2xl font-bold transition-all flex items-center gap-2 ${detectDuplicates.length === 0 ? 'bg-slate-100 text-slate-400' : 'bg-red-600 text-white shadow-lg hover:scale-105'}`}><Trash2 size={18} /> تنظيف السجل</button>
                     </div>
                     <div className="glass p-6 rounded-[2.5rem] grid grid-cols-1 md:grid-cols-2 gap-8">
                         <div><label className="block text-xs font-black mb-3 opacity-50 uppercase tracking-widest">نطاق البحث</label><select className="input-field" value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)}><option value="كل الشهور">جميع الشهور</option>{MONTHS.map(m => <option key={m} value={m}>{m}</option>)}</select></div>
@@ -543,7 +521,7 @@
                                         {dup.items.map((item, idx) => (
                                             <div key={item.id} className="py-4 flex justify-between items-center px-4">
                                                 <div className="text-sm font-bold">📅 {item.date} <span className="mx-2 text-slate-300">|</span> 📝 {item.description || 'بدون وصف'}</div>
-                                                {idx !== 0 && <button onClick={() => dispatch({ type: 'UPDATE_TRANSACTIONS', payload: transactions.filter(t => t.id !== item.id) })} className="text-red-500 hover:bg-red-50 p-2 rounded-xl transition-all" title="حذف هذه المكررة"><Trash2 size={16} /></button>}
+                                                {idx !== 0 && <button onClick={() => dispatch({ type: 'UPDATE_TRANSACTIONS', payload: transactions.filter(t => t.id !== item.id) })} className="text-red-500 hover:bg-red-50 p-2 rounded-xl transition-all"><Trash2 size={16} /></button>}
                                             </div>
                                         ))}
                                     </div>
@@ -696,7 +674,7 @@
             }
         }
 
-        // Login Screen with Google Auth
+        // ✅ Updated Login Screen with Google Auth
         const LoginScreen = ({ onLogin }) => {
             const handleGoogleLogin = () => {
                 const provider = new firebase.auth.GoogleAuthProvider();
@@ -750,12 +728,11 @@
             const [visibleTransactions, setVisibleTransactions] = useState(15);
             const [isPrivate, setIsPrivate] = useState(false);
             const mainContentRef = useRef(null);
-            const saveTimeoutRef = useRef(null);
 
             const { data, activeTab, selectedMonth, transViewMode, catViewType, isFormOpen, formMode, formData, activeCategoryDetail, repeatMonths, isLocked, isDarkMode, expandedGroup, budgets, editingCard, editingLoan, editingTransaction, searchTerm, editingBudgetCategory, budgetAmount, editingFawry, editingEtisalat, isRecurringModalOpen, recurringFormData, filterType, hidePast, notifications, isAiModalOpen, aiTab, aiQuery, aiResponse, isAiLoading, fawryData, etisalatData, history, future, expandedLedgers, expandedCardsSection, statusFilter, confirmDialog, isQuickTransferModalOpen, quickTransferData, isBackupReminderOpen } = state;
             const { transactions = [], loans = [], cards = [], recurringItems = [], savingsGoals = [] } = data || {};
 
-            // Auth Observer
+            // ✅ Auth Observer
             useEffect(() => {
                 const unsubscribe = firebase.auth().onAuthStateChanged((user) => {
                     if (user && user.email === "ahmedmkh@gmail.com") { 
@@ -779,20 +756,18 @@
                 return () => unsubscribe();
             }, [isAuthenticated]);
 
-            // Debounced Save
             useEffect(() => {
                 if (isAuthenticated && data && data.transactions) {
-                    clearTimeout(saveTimeoutRef.current);
-                    saveTimeoutRef.current = setTimeout(() => {
-                        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch(e) {}
+                    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch(e) {}
+                    const timer = setTimeout(() => {
                         db.collection("finance_2026").doc("user_ahmed_data").set(data)
                             .catch(err => console.error("❌ فشل الحفظ في السحابة:", err));
                     }, 1500); 
+                    return () => clearTimeout(timer);
                 }
-                return () => clearTimeout(saveTimeoutRef.current);
             }, [data, isAuthenticated]);
 
-            // Enhanced Finance Snapshot Logic
+            // ✅ Enhanced Finance Snapshot Logic
             const financeSnapshot = useMemo(() => {
                 let actualCarryover = Number(OPENING_SAVINGS_JAN || 0);
                 const selectedMonthIdx = getMonthIndex(selectedMonth);
@@ -812,7 +787,7 @@
 
                 const currentMonthTrans = transactions.filter(t => t.month === selectedMonth);
 
-                // Income Logic
+                // ✅ Income Logic Updated
                 const currentActualIncome = currentMonthTrans
                     .filter(t => t.type === 'income' && t.status === 'paid')
                     .reduce((s, t) => s + Number(t.amount || 0), 0);
@@ -837,12 +812,11 @@
                     .filter(t => t.type === 'expense' && ['cib_card', 'aaib_card'].includes(t.method))
                     .reduce((s, t) => s + Number(t.amount || 0), 0);
 
-                // Calculations
+                // ✅ Calculations Updated
                 const actualCashInHand = actualCarryover + currentActualIncome - currentPaidCash;
                 const projectedClosingBalance = actualCashInHand + currentPendingIncome - currentPendingCash;
 
                 return { 
-                    actualCarryover: actualCarryover, 
                     income: currentActualIncome, 
                     actualIncome: currentActualIncome, 
                     cashExpenses: currentPaidCash,
@@ -867,15 +841,6 @@
                 }, {});
                 return loans.map(l => ({ ...l, totalPaid: (Number(l.prePaidAmount) || 0) + (map[l.id] || 0), remaining: Math.max(0, Number(l.totalAmount) - ((Number(l.prePaidAmount) || 0) + (map[l.id] || 0))) }));
             }, [transactions, loans]);
-
-            const monthInsights = useMemo(() => {
-                const monthTrans = transactions.filter(t => t.month === selectedMonth);
-                const inc = monthTrans.filter(t => t.type === 'income' && t.status === 'paid').reduce((s, t) => s + Number(t.amount), 0);
-                const exp = monthTrans.filter(t => t.type === 'expense' && t.status === 'paid').reduce((s, t) => s + Number(t.amount), 0);
-                const pendInc = monthTrans.filter(t => t.type === 'income' && t.status !== 'paid').reduce((s, t) => s + Number(t.amount), 0);
-                const pendExp = monthTrans.filter(t => t.type === 'expense' && t.status !== 'paid').reduce((s, t) => s + Number(t.amount), 0);
-                return { inc, exp, pendInc, pendExp, net: inc - exp };
-            }, [transactions, selectedMonth]);
 
             const groupedTransactions = useMemo(() => { 
                 const groups = {}; 
@@ -930,10 +895,7 @@
             const currentEtisalatBalance = (Number(etisalatData.openingBalance) || 0) + etisalatStats.deposits - etisalatStats.withdrawals;
 
             const getSavingsLedger = useCallback((methodId) => {
-                const accTransactions = transactions
-                    .filter(t => t.method === methodId && t.status === 'paid') 
-                    .sort((a, b) => new Date(a.date) - new Date(b.date));
-                
+                const accTransactions = transactions.filter(t => t.method === methodId).sort((a, b) => new Date(a.date) - new Date(b.date));
                 let runningBalance = 0;
                 return accTransactions.map(t => {
                     const amount = Number(t.amount);
@@ -945,28 +907,24 @@
             }, [transactions]);
 
             const fawryLedger = useMemo(() => {
-                const accTransactions = transactions
-                    .filter(t => t.method === 'fawry' && t.status === 'paid') 
-                    .sort((a, b) => new Date(a.date) - new Date(b.date));
-                
+                const accTransactions = transactions.filter(t => t.method === 'fawry').sort((a, b) => new Date(a.date) - new Date(b.date));
                 let runningBalance = fawryData.openingBalance || 0;
                 return accTransactions.map(t => {
                     const amount = Number(t.amount);
-                    if (t.subType === 'deposit') runningBalance += amount;
+                    const isDeposit = t.subType === 'deposit';
+                    if (isDeposit) runningBalance += amount;
                     else runningBalance -= amount;
                     return { ...t, runningBalance };
                 }).reverse(); 
             }, [transactions, fawryData]);
 
             const etisalatLedger = useMemo(() => {
-                const accTransactions = transactions
-                    .filter(t => t.method === 'etisalat' && t.status === 'paid') 
-                    .sort((a, b) => new Date(a.date) - new Date(b.date));
-                
+                const accTransactions = transactions.filter(t => t.method === 'etisalat').sort((a, b) => new Date(a.date) - new Date(b.date));
                 let runningBalance = etisalatData.openingBalance || 0;
                 return accTransactions.map(t => {
                     const amount = Number(t.amount);
-                    if (t.subType === 'deposit') runningBalance += amount;
+                    const isDeposit = t.subType === 'deposit';
+                    if (isDeposit) runningBalance += amount;
                     else runningBalance -= amount;
                     return { ...t, runningBalance };
                 }).reverse();
@@ -1011,7 +969,7 @@
                     const items = [];
                     if (Array.isArray(cards)) {
                         cards.forEach(card => {
-                            const dueDay = parseInt(card.dueDate) || 5; 
+                            const dueDay = parseInt(card.dueDate) || 5;
                             let targetMonth = currentMonth; 
                             let targetYear = currentYear;
                             if (dueDay < currentDay) { targetMonth++; if (targetMonth > 11) { targetMonth = 0; targetYear++; } }
@@ -1080,24 +1038,13 @@
                         else if (formData.method === 'etisalat') balance = currentEtisalatBalance;
                         
                         if (Number(formData.amount) > balance) {
-                            dispatch({
-                                type: 'SHOW_CONFIRM',
-                                title: 'رصيد غير كافٍ',
-                                message: `الرصيد الحالي (${balance.toLocaleString()}) غير كافٍ. هل تريد الاستمرار وترحيل الرصيد بالسالب؟`,
-                                onConfirm: () => {
-                                    finalizeTransaction(finalSubType);
-                                }
-                            });
-                            setIsProcessing(false);
-                            return; 
+                            if (!window.confirm(`⚠️ الرصيد الحالي (${balance.toLocaleString()}) غير كافٍ. هل تريد الاستمرار؟`)) {
+                                setIsProcessing(false);
+                                return; 
+                            }
                         }
                     }
-                    
-                    finalizeTransaction(finalSubType);
 
-                }, 500);
-
-                const finalizeTransaction = (finalSubType) => {
                     const selectedDay = formData.date.split('-')[2] || '01'; 
 
                     const processTransaction = (m, idOverride) => {
@@ -1140,14 +1087,14 @@
                     setVisibleTransactions(15);
                     addNotification({ type: 'success', title: formMode === 'add' ? 'تمت الإضافة بنجاح' : 'تم التعديل بنجاح' });
                     setIsProcessing(false);
-                }
+                }, 500);
             }, [formData, formMode, selectedMonth, repeatMonths, transactions, saveHistory, addNotification, currentFawryBalance, currentEtisalatBalance, loans, dispatch]);
 
             const handleDelete = useCallback((id) => {
                 dispatch({ 
                     type: 'SHOW_CONFIRM', 
                     title: 'تأكيد الحذف', 
-                    message: 'هل أنت متأكد من حذف هذه العملية نهائياً؟', 
+                    message: 'هل أنت متأكد من حذف هذه العملية؟', 
                     onConfirm: () => { 
                         const newTransactions = transactions.filter(t => t.id !== id);
                         dispatch({ type: 'UPDATE_TRANSACTIONS', payload: newTransactions }); 
@@ -1272,17 +1219,7 @@
                 w.document.write(`<html dir="rtl"><head><title>${escapeHtml(title)}</title><link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet"><style>body{font-family:'Cairo',sans-serif;padding:40px;direction:rtl;color:#1e293b}table{width:100%;border-collapse:collapse;margin-top:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1)}th,td{border:1px solid #e2e8f0;padding:12px 16px;text-align:right}th{background:#f1f5f9;color:#475569;font-weight:700}tr:nth-child(even){background-color:#f8fafc}.header{text-align:center;margin-bottom:40px;border-bottom:2px solid #e2e8f0;padding-bottom:20px}.total{font-size:1.4em;font-weight:bold;margin-top:30px;text-align:left;padding:15px;background:#f1f5f9;border-radius:12px;color:#0f172a}</style></head><body><div class="header"><h1>${escapeHtml(title)}</h1><p>تاريخ التقرير: ${new Date().toLocaleDateString('ar-EG')}</p></div><table><thead><tr><th>التاريخ</th><th>البند</th><th>الوصف</th><th>طريقة الدفع</th><th>المبلغ</th></tr></thead><tbody>${items.map(i => `<tr><td>${i.date}</td><td>${escapeHtml(i.category)}</td><td>${escapeHtml(i.description||'-')}</td><td>${escapeHtml(PAYMENT_METHODS.find(p=>p.id===i.method)?.label||i.method)}</td><td>${Number(i.amount).toLocaleString()} ج.م</td></tr>`).join('')}</tbody></table><div class="total">الإجمالي: ${total.toLocaleString()} ج.م</div><script>window.print();window.close();<\/script></body></html>`); w.document.close();
             }, []);
 
-            const resetData = useCallback(() => {
-                dispatch({
-                    type: 'SHOW_CONFIRM',
-                    title: 'تحذير هام',
-                    message: 'هل أنت متأكد تماماً من مسح جميع البيانات؟ لا يمكن التراجع عن هذا الإجراء.',
-                    onConfirm: () => {
-                        localStorage.removeItem(STORAGE_KEY);
-                        window.location.reload();
-                    }
-                });
-            }, []);
+            const resetData = useCallback(() => { if(window.confirm("تحذير: هل أنت متأكد من مسح جميع البيانات؟ لا يمكن التراجع.")) { localStorage.removeItem(STORAGE_KEY); window.location.reload(); } }, []);
 
             const handleAnalyzeFinances = useCallback(async () => { dispatch({ type: 'SET_AI_LOADING', payload: true }); setTimeout(() => { const totalIncome = transactions.reduce((a,c)=>c.type==='income'?a+Number(c.amount):a, 0); const totalExp = transactions.reduce((a,c)=>c.type==='expense'?a+Number(c.amount):a, 0); const ratio = Math.round((totalExp/totalIncome)*100); dispatch({ type: 'SET_AI_RESPONSE', payload: `تحليل سريع: إجمالي دخلك المسجل ${totalIncome.toLocaleString()} ومصروفاتك ${totalExp.toLocaleString()} (${ratio}%). وضعك المالي ${ratio > 90 ? 'حرج، تحتاج لتقليل النفقات' : 'جيد ومستقر'}.` }); dispatch({ type: 'SET_AI_LOADING', payload: false }); }, 1500); }, [transactions]);
             const handleSmartAdd = useCallback(async () => { dispatch({ type: 'SET_AI_LOADING', payload: true }); setTimeout(() => { const txt = aiQuery.toLowerCase(); let amount = txt.match(/\d+/)?.[0]; let type = (txt.includes('قبضت') || txt.includes('اخدت') || txt.includes('تحويل لي')) ? 'income' : 'expense'; let category = 'أخرى'; if (txt.includes('اكل') || txt.includes('غدا') || txt.includes('سوبر')) category = 'مصروفات المعيشة اليومية'; else if (txt.includes('رصيد') || txt.includes('شحن')) category = 'الاتصالات وشحن الهواتف المحمولة'; else if (txt.includes('بنزين') || txt.includes('مواصلات')) category = 'المواصلات والانتقالات'; else if (txt.includes('درس') || txt.includes('مدرسة')) category = 'التعليم والدروس والأنشطة'; if (amount) { dispatch({ type: 'SET_FORM_MODE', payload: 'add' }); dispatch({ type: 'SET_FORM_DATA', payload: { type, category, amount: Number(amount), description: aiQuery, date: getLocalISODate(), month: selectedMonth, method: 'cash', quantity:1, unitPrice: Number(amount), subType: type === 'income' ? 'deposit' : 'withdrawal' } }); dispatch({ type: 'SET_FORM_OPEN', payload: true }); dispatch({ type: 'SET_AI_MODAL_OPEN', payload: false }); dispatch({ type: 'SET_AI_QUERY', payload: '' }); } else { dispatch({ type: 'SET_AI_RESPONSE', payload: "لم أتمكن من استخراج المبلغ. يرجى كتابة الرقم بوضوح (مثال: 500)" }); } dispatch({ type: 'SET_AI_LOADING', payload: false }); }, 1000); }, [aiQuery, selectedMonth]);
@@ -1424,7 +1361,7 @@
                                     }} 
                                     className="flex-1 bg-red-500 text-white py-4 rounded-2xl font-bold shadow-lg shadow-red-500/30 hover:bg-red-600 hover:shadow-red-500/40 transition-all active:scale-95"
                                 >
-                                    نعم، تابع
+                                    نعم، احذف
                                 </button>
                             </div>
                         </div>
@@ -1496,125 +1433,48 @@
 
             const renderDashboard = () => (
                 <div className="space-y-8 animate-fadeIn">
-                    {/* ✅ أولاً: شريط أزرار شهور العام (Navigation Bar) */}
-                    <div className="glass p-4 rounded-3xl overflow-x-auto no-print mb-6">
-                        <div className="flex gap-3 pb-2 scroll-hide snap-x">
-                            {MONTHS.map(m => (
-                                <button key={m} type="button" 
-                                    onClick={() => dispatch({ type: 'SET_SELECTED_MONTH', payload: m })} 
-                                    className={`flex-shrink-0 px-8 py-3 rounded-2xl text-sm font-bold transition-all duration-300 snap-center ${selectedMonth === m ? 'bg-slate-900 text-white shadow-lg scale-105' : 'bg-white dark:bg-slate-800 text-slate-500 hover:bg-slate-100'}`}>
-                                    {m}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-
-                    {/* أزرار الإضافة السريعة والتحويل */}
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 no-print">
                         <button 
                             onClick={() => dispatch({ type: 'SET_QUICK_TRANSFER_MODAL_OPEN', payload: true })}
-                            className="col-span-2 md:col-span-4 glass p-5 rounded-3xl flex items-center justify-center gap-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-700 hover:to-indigo-700 transition-all active:scale-[0.98] shadow-lg group"
+                            className="col-span-2 md:col-span-4 glass p-5 rounded-3xl flex items-center justify-center gap-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-700 hover:to-indigo-700 transition-all active:scale-[0.98] shadow-lg shadow-blue-500/20 group"
                         >
                             <div className="bg-white/20 p-3 rounded-2xl group-hover:rotate-12 transition-transform duration-300"><ArrowRightLeft size={24} /></div>
                             <span className="font-bold text-lg tracking-wide">تحويل فوري بين المحافظ</span>
                         </button>
+                        <button 
+                             onClick={() => { dispatch({ type: 'SET_FORM_MODE', payload: 'add' }); dispatch({ type: 'SET_FORM_DATA', payload: { type: 'income', amount: '', date: getLocalISODate(), month: selectedMonth, method: 'cash', subType: 'deposit' } }); dispatch({ type: 'SET_FORM_OPEN', payload: true }); }}
+                             className="glass p-5 rounded-3xl flex flex-col items-center justify-center gap-3 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 transition-all active:scale-95 group"
+                        >
+                            <div className="bg-emerald-500 text-white p-3 rounded-full group-hover:scale-110 transition-transform shadow-lg shadow-emerald-500/30"><TrendingUp size={24} /></div>
+                            <span className="text-xs font-bold text-slate-700 dark:text-slate-300">تسجيل دخل</span>
+                        </button>
+                        <button 
+                             onClick={() => { dispatch({ type: 'SET_FORM_MODE', payload: 'add' }); dispatch({ type: 'SET_FORM_DATA', payload: { type: 'expense', amount: '', date: getLocalISODate(), month: selectedMonth, method: 'cash', subType: 'withdrawal' } }); dispatch({ type: 'SET_FORM_OPEN', payload: true }); }}
+                             className="glass p-5 rounded-3xl flex flex-col items-center justify-center gap-3 hover:bg-red-50 dark:hover:bg-red-900/20 border border-red-200 dark:border-red-800 transition-all active:scale-95 group"
+                        >
+                            <div className="bg-red-500 text-white p-3 rounded-full group-hover:scale-110 transition-transform shadow-lg shadow-red-500/30"><TrendingDown size={24} /></div>
+                            <span className="text-xs font-bold text-slate-700 dark:text-slate-300">تسجيل مصروف</span>
+                        </button>
                     </div>
 
-                    {/* ✅ ثانياً: كروت الملخص مع إظهار الرصيد المُرّحل */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        <OptimizedSummaryCard 
-                            title="سيولة جيبك الآن" 
-                            amount={financeSnapshot.actualCashInHand} 
-                            // ✅ التعديل البرمجي: عرض الرصيد المُرّحل بوضوح
-                            subtitle={selectedMonth === 'يناير' ? "بداية السنة المالية" : `مُرّحل من الشهر السابق: ${isPrivate ? '****' : financeSnapshot.actualCarryover.toLocaleString()} ج.م`} 
-                            icon={Wallet} 
-                            color="text-emerald-600" 
-                            bgColor="bg-emerald-50" 
-                            isPrivate={isPrivate} 
-                        />
-                        
-                        <OptimizedSummaryCard 
-                            title="دخل قيد الانتظار" 
-                            amount={financeSnapshot.pendingIncome} 
-                            subtitle={`توقعات تحصيل شهر ${selectedMonth}`} 
-                            icon={PendingCircle} 
-                            color="text-blue-500" 
-                            bgColor="bg-blue-50" 
-                            isPrivate={isPrivate} 
-                        />
-
+                        <OptimizedSummaryCard title="سيولة جيبك الآن" amount={financeSnapshot.actualCashInHand} subtitle="كاش حقيقي متاح للصرف" icon={Wallet} color="text-emerald-600" bgColor="bg-emerald-50" isPrivate={isPrivate} />
+                        <OptimizedSummaryCard title="دخل قيد الانتظار" amount={financeSnapshot.pendingIncome} subtitle="مبالغ متوقعة لم تستلم بعد" icon={PendingCircle} color="text-blue-500" bgColor="bg-blue-50" isPrivate={isPrivate} />
                         <div className="glass p-6 rounded-[2rem] flex flex-col justify-between hover-lift border-r-4 border-blue-500 cursor-pointer transition-all active:scale-[0.98]" onClick={()=>dispatch({type:'SET_ACTIVE_TAB', payload:'planner'})}>
                             <div className="flex justify-between items-start">
-                                <div>
-                                    <p className="text-slate-500 dark:text-slate-400 text-xs mb-2 font-bold uppercase tracking-widest">الرصيد الختامي المتوقع</p>
-                                    <h3 className={`text-3xl font-black tracking-tight ${financeSnapshot.projectedClosingBalance >= 0 ? 'text-blue-600' : 'text-red-500'}`}>
-                                        {isPrivate ? '****' : Math.round(financeSnapshot.projectedClosingBalance).toLocaleString()}
-                                        <span className="text-sm text-slate-400 font-medium mr-2">ج.م</span>
-                                    </h3>
-                                </div>
-                                <div className="p-4 bg-blue-500/10 rounded-2xl text-blue-600 shadow-inner-glow hover-glow transition-transform hover:scale-110 duration-300">
-                                    <TrendingUp size={28} />
-                                </div>
+                                <div><p className="text-slate-500 dark:text-slate-400 text-xs mb-2 font-bold uppercase tracking-widest">الرصيد الختامي المتوقع</p><h3 className={`text-3xl font-black tracking-tight ${financeSnapshot.projectedClosingBalance >= 0 ? 'text-blue-600' : 'text-red-500'}`}>{isPrivate ? '****' : Math.round(financeSnapshot.projectedClosingBalance).toLocaleString()}<span className="text-sm text-slate-400 font-medium mr-2">ج.م</span></h3></div>
+                                <div className="p-4 bg-blue-500/10 rounded-2xl text-blue-600 shadow-inner-glow hover-glow transition-transform hover:scale-110 duration-300"><TrendingUp size={28} /></div>
                             </div>
                         </div>
                     </div>
-
-                    {/* الرسوم البيانية */}
                     <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
                         <div className="glass p-8 rounded-[2.5rem] h-[450px] relative overflow-hidden hover-lift bg-white/40 dark:bg-slate-900/40">
-                            <div className="flex justify-between items-center mb-8">
-                                <h3 className="text-xl font-bold dark:text-white flex items-center gap-3">
-                                    <BarChart3 className="text-blue-500" /> التدفق النقدي الشهري
-                                </h3>
-                                <div className="flex gap-2">
-                                    <button className="text-xs font-bold bg-blue-100 text-blue-600 px-3 py-1 rounded-lg">{CURRENT_YEAR}</button>
-                                </div>
-                            </div>
-                            <div className="h-[300px]">
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <BarChart data={chartData}>
-                                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" opacity={0.5} />
-                                        <XAxis dataKey="name" stroke="#94a3b8" fontSize={12} axisLine={false} tickLine={false} dy={10} />
-                                        <YAxis stroke="#94a3b8" fontSize={12} axisLine={false} tickLine={false} />
-                                        <Tooltip cursor={{ fill: 'transparent' }} contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 30px -5px rgba(0,0,0,0.1)', backgroundColor: isDarkMode ? '#1e293b' : 'white' }} formatter={(value) => `${Number(value).toLocaleString()} ج.م`} />
-                                        <Legend wrapperStyle={{ paddingTop: '20px' }} />
-                                        <Bar dataKey="دخل" fill="#10b981" radius={[8, 8, 8, 8]} barSize={12} />
-                                        <Bar dataKey="مصروف" fill="#ef4444" radius={[8, 8, 8, 8]} barSize={12} />
-                                    </BarChart>
-                                </ResponsiveContainer>
-                            </div>
+                            <div className="flex justify-between items-center mb-8"><h3 className="text-xl font-bold dark:text-white flex items-center gap-3"><BarChart3 className="text-blue-500" /> التدفق النقدي الشهري</h3><div className="flex gap-2"><button className="text-xs font-bold bg-blue-100 text-blue-600 px-3 py-1 rounded-lg">{CURRENT_YEAR}</button></div></div>
+                            <div className="h-[300px]"><ResponsiveContainer width="100%" height="100%"><BarChart data={chartData}><CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" opacity={0.5} /><XAxis dataKey="name" stroke="#94a3b8" fontSize={12} axisLine={false} tickLine={false} dy={10} /><YAxis stroke="#94a3b8" fontSize={12} axisLine={false} tickLine={false} /><Tooltip cursor={{ fill: 'transparent' }} contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 30px -5px rgba(0,0,0,0.1)', backgroundColor: isDarkMode ? '#1e293b' : 'white' }} formatter={(value) => `${Number(value).toLocaleString()} ج.م`} /><Legend wrapperStyle={{ paddingTop: '20px' }} /><Bar dataKey="دخل" fill="#10b981" radius={[8, 8, 8, 8]} barSize={12} /><Bar dataKey="مصروف" fill="#ef4444" radius={[8, 8, 8, 8]} barSize={12} /></BarChart></ResponsiveContainer></div>
                         </div>
                         <div className="glass p-8 rounded-[2.5rem] h-[450px] relative overflow-hidden hover-lift bg-white/40 dark:bg-slate-900/40">
-                            <div className="flex justify-between items-center mb-8">
-                                <h3 className="text-xl font-bold dark:text-white flex items-center gap-3">
-                                    <PieChart className="text-purple-500" /> توزيع المصروفات 
-                                    <span className="text-sm font-normal text-slate-500">({selectedMonth})</span>
-                                </h3>
-                            </div>
-                            <div className="h-[300px]">
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <PieChart>
-                                        <Pie 
-                                            data={transactions.filter(t => t.type === 'expense' && t.month === selectedMonth).map((t, i, arr) => { 
-                                                const name = t.category; 
-                                                const value = arr.filter(x => x.category === name).reduce((a, b) => a + Number(b.amount), 0); 
-                                                return { name, value }; 
-                                            }).filter((v, i, a) => a.findIndex(x => x.name === v.name) === i).sort((a, b) => b.value - a.value).slice(0, 5)} 
-                                            cx="50%" cy="45%" innerRadius={80} outerRadius={120} paddingAngle={4} dataKey="value" cornerRadius={6}
-                                        >
-                                            {transactions.filter(t => t.type === 'expense' && t.month === selectedMonth).map((t, i, arr) => { 
-                                                const name = t.category; 
-                                                const value = arr.filter(x => x.category === name).reduce((a, b) => a + Number(b.amount), 0); 
-                                                return { name, value }; 
-                                            }).filter((v, i, a) => a.findIndex(x => x.name === v.name) === i).sort((a, b) => b.value - a.value).slice(0, 5).map((entry, index) => (
-                                                <Cell key={`cell-${index}`} fill={CATEGORY_COLORS[entry.name] || '#9ca3af'} stroke="none" /> 
-                                            ))}
-                                        </Pie>
-                                        <Tooltip contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 30px -5px rgba(0,0,0,0.1)', backgroundColor: isDarkMode ? '#1e293b' : 'white' }} formatter={(value) => `${Number(value).toLocaleString()} ج.م`} />
-                                        <Legend layout="vertical" verticalAlign="middle" align="right" iconType="circle" />
-                                    </PieChart>
-                                </ResponsiveContainer>
-                            </div>
+                            <div className="flex justify-between items-center mb-8"><h3 className="text-xl font-bold dark:text-white flex items-center gap-3"><PieChart className="text-purple-500" /> توزيع المصروفات <span className="text-sm font-normal text-slate-500">({selectedMonth})</span></h3></div>
+                            <div className="h-[300px]"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={transactions.filter(t => t.type === 'expense' && t.month === selectedMonth).map((t, i, arr) => { const name = t.category; const value = arr.filter(x => x.category === name).reduce((a, b) => a + Number(b.amount), 0); return { name, value }; }).filter((v, i, a) => a.findIndex(x => x.name === v.name) === i).sort((a, b) => b.value - a.value).slice(0, 5)} cx="50%" cy="45%" innerRadius={80} outerRadius={120} paddingAngle={4} dataKey="value" cornerRadius={6}>{transactions.filter(t => t.type === 'expense' && t.month === selectedMonth).map((t, i, arr) => { const name = t.category; const value = arr.filter(x => x.category === name).reduce((a, b) => a + Number(b.amount), 0); return { name, value }; }).filter((v, i, a) => a.findIndex(x => x.name === v.name) === i).sort((a, b) => b.value - a.value).slice(0, 5).map((entry, index) => (<Cell key={`cell-${index}`} fill={CATEGORY_COLORS[entry.name] || '#9ca3af'} stroke="none" />))}</Pie><Tooltip contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 30px -5px rgba(0,0,0,0.1)', backgroundColor: isDarkMode ? '#1e293b' : 'white' }} formatter={(value) => `${Number(value).toLocaleString()} ج.م`} /><Legend layout="vertical" verticalAlign="middle" align="right" iconType="circle" /></PieChart></ResponsiveContainer></div>
                         </div>
                     </div>
                 </div>
@@ -1642,8 +1502,8 @@
                                         <div className="flex justify-between mb-6">
                                             <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-700/50 shadow-inner" style={{ color: CATEGORY_COLORS[cat] }}><Layers size={24} /></div>
                                             <div className="flex gap-2 no-print">
-                                                <button type="button" onClick={(e) => { e.stopPropagation(); dispatch({ type: 'SET_ACTIVE_CATEGORY_DETAIL', payload: cat }); }} className="p-2 text-slate-300 hover:text-blue-500 transition-colors" title="تفاصيل"><FileText size={20} /></button>
-                                                <button type="button" onClick={(e) => { e.stopPropagation(); dispatch({ type: 'SET_EDITING_BUDGET_CATEGORY', payload: cat }); dispatch({ type: 'SET_BUDGET_AMOUNT', payload: budgets[cat] || '' }); }} className="p-2 text-slate-300 hover:text-blue-500 transition-colors" title="تعديل الميزانية"><Settings size={20} /></button>
+                                                <button type="button" onClick={(e) => { e.stopPropagation(); dispatch({ type: 'SET_ACTIVE_CATEGORY_DETAIL', payload: cat }); }} className="p-2 text-slate-300 hover:text-blue-500 transition-colors"><FileText size={20} /></button>
+                                                <button type="button" onClick={(e) => { e.stopPropagation(); dispatch({ type: 'SET_EDITING_BUDGET_CATEGORY', payload: cat }); dispatch({ type: 'SET_BUDGET_AMOUNT', payload: budgets[cat] || '' }); }} className="p-2 text-slate-300 hover:text-blue-500 transition-colors"><Settings size={20} /></button>
                                             </div>
                                         </div>
                                         <h3 className="font-bold text-lg mb-1 dark:text-white">{cat}</h3>
@@ -1689,8 +1549,8 @@
                                                             </td>
                                                             <td className="px-6 py-4 text-center border-b border-slate-100 dark:border-slate-800/50">
                                                                 <div className="flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                                    <button type="button" onClick={(e) => { e.stopPropagation(); dispatch({ type: 'SET_FORM_MODE', payload: 'edit' }); dispatch({ type: 'SET_FORM_DATA', payload: t }); dispatch({ type: 'SET_FORM_OPEN', payload: true }); }} className="p-2 text-blue-500 hover:bg-blue-100 rounded-lg transition-colors" title="تعديل"><Edit size={16} /></button>
-                                                                    <button type="button" onClick={(e) => { e.stopPropagation(); handleDelete(t.id) }} className="p-2 text-red-500 hover:bg-red-100 rounded-lg transition-colors" title="حذف"><Trash2 size={16} /></button>
+                                                                    <button type="button" onClick={(e) => { e.stopPropagation(); dispatch({ type: 'SET_FORM_MODE', payload: 'edit' }); dispatch({ type: 'SET_FORM_DATA', payload: t }); dispatch({ type: 'SET_FORM_OPEN', payload: true }); }} className="p-2 text-blue-500 hover:bg-blue-100 rounded-lg transition-colors"><Edit size={16} /></button>
+                                                                    <button type="button" onClick={(e) => { e.stopPropagation(); handleDelete(t.id) }} className="p-2 text-red-500 hover:bg-red-100 rounded-lg transition-colors"><Trash2 size={16} /></button>
                                                                 </div>
                                                             </td>
                                                         </tr>
@@ -1707,6 +1567,7 @@
                 );
             };
 
+            // ✅ Unified Loans View
             const renderLoansView = () => {
                 const getMonthlyProjection = () => {
                     const projection = {};
@@ -1738,6 +1599,7 @@
 
                 return (
                     <div className="space-y-8 animate-fadeIn pb-24">
+                        {/* كارت المديونية الشاملة */}
                         <div className="glass p-8 rounded-[2.5rem] bg-slate-900 text-white border-r-8 border-slate-700 shadow-pro-card relative overflow-hidden">
                             <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-[80px] -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
                             
@@ -1758,6 +1620,7 @@
                             </div>
                         </div>
 
+                        {/* الجدول المنسدل لخطة السداد */}
                         <details className="group glass rounded-[2rem] overflow-hidden border border-slate-200 dark:border-slate-700 shadow-sm">
                             <summary className="p-6 cursor-pointer list-none flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-700/50 transition-colors">
                                 <h3 className="font-black text-lg flex items-center gap-2 text-slate-800 dark:text-white">
@@ -1788,6 +1651,7 @@
                             </div>
                         </details>
 
+                        {/* List of Loans */}
                         <div className="grid grid-cols-1 gap-6">
                             {updatedLoans.map(loan => {
                                 const isPaid = loan.remaining <= 0;
@@ -1931,20 +1795,7 @@
                                             return (
                                                 <div key={card.id} className="flex flex-col gap-8 w-full max-w-md">
                                                     <div className="relative group perspective-1000 transition-transform hover:-translate-y-2 duration-500">
-                                                        {/* ✅ تعديل: تم وضع الزرين في حاوية مرنة لتجنب التداخل */}
-                                                        <div className="absolute -top-4 -right-4 z-20 flex gap-2">
-                                                            <button 
-                                                                onClick={() => { 
-                                                                    dispatch({ type: 'SET_ACTIVE_TAB', payload: 'transactions' }); 
-                                                                    dispatch({ type: 'SET_FILTER_TYPE', payload: card.id === 1 ? 'cib_card' : 'aaib_card' }); 
-                                                                }}
-                                                                className="text-[10px] bg-blue-600 text-white px-3 py-1 rounded-lg font-bold hover:bg-blue-700 transition-all shadow-lg"
-                                                            >
-                                                                عرض كشف الحساب 🔍
-                                                            </button>
-                                                            <button type="button" onClick={() => dispatch({ type: 'SET_EDITING_CARD', payload: card })} className="bg-white/80 hover:bg-white dark:bg-slate-800 hover:bg-slate-700 text-slate-600 hover:text-blue-600 p-3 rounded-2xl shadow-xl shadow-blue-500/10 transition-all hover:scale-110 hover:rotate-12 border border-slate-200/50 dark:border-slate-600/50 backdrop-blur-md no-print"><Edit size={18} /></button>
-                                                        </div>
-                                                        
+                                                        <button type="button" onClick={() => dispatch({ type: 'SET_EDITING_CARD', payload: card })} className="absolute -top-4 -right-4 z-20 bg-white/80 hover:bg-white dark:bg-slate-800 hover:bg-slate-700 text-slate-600 hover:text-blue-600 p-3 rounded-2xl shadow-xl shadow-blue-500/10 transition-all hover:scale-110 hover:rotate-12 border border-slate-200/50 dark:border-slate-600/50 backdrop-blur-md no-print"><Edit size={18} /></button>
                                                         <div dir="ltr" className={`p-8 rounded-[2rem] relative overflow-hidden shadow-2xl min-h-[260px] flex flex-col justify-between ${themeClass} border`}>
                                                             <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-[50px] -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
                                                             <div className="flex justify-between items-start relative z-10">
@@ -1971,11 +1822,9 @@
                                 </div>
                             )}
                         </div>
-                        
-                        {/* باقي المكونات (محافظ فوري، اتصالات، إلخ) تبقى كما هي */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                             <div className="relative group no-print"><button type="button" onClick={() => dispatch({ type: 'SET_EDITING_FAWRY', payload: fawryData })} className="absolute -top-3 -right-3 z-20 bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-2xl shadow-xl shadow-blue-500/30 transition-all hover:scale-110 active:scale-95 font-bold"><Edit size={18} /></button><div className="bg-gradient-to-br from-yellow-100 to-yellow-200 border border-yellow-300 p-8 rounded-[2.5rem] flex flex-col justify-between shadow-lg h-full text-yellow-900 hover-lift cursor-pointer transition-transform" onClick={() => dispatch({ type: 'SET_EDITING_FAWRY', payload: fawryData })}><div className="flex justify-between items-start mb-6"><div className="flex items-center gap-4"><div className="bg-white p-3 rounded-2xl shadow-sm"><Store size={32} className="text-yellow-600" /></div><div><h3 className="font-black text-2xl">محفظة فوري</h3><p className="text-sm font-bold opacity-80">مدفوعات إلكترونية</p></div></div><div className="text-left flex flex-col items-end"><span className="block text-xs uppercase font-bold mb-1 tracking-widest opacity-60">الرصيد</span><span className="font-black text-4xl group-hover:scale-105 transition-transform">{isPrivate ? '****' : currentFawryBalance.toLocaleString()}</span></div></div><div className="grid grid-cols-2 gap-3 w-full font-bold mt-auto"><div className="bg-white/60 backdrop-blur-sm p-3 rounded-xl border border-white/40 text-center shadow-inner"><span className="block text-[10px] mb-1">إيداع</span><span className="font-bold text-lg">+{fawryStats.deposits.toLocaleString()}</span></div><div className="bg-white/60 backdrop-blur-sm p-3 rounded-xl border border-white/40 text-center shadow-inner"><span className="block text-[10px] mb-1">سحب</span><span className="font-bold text-lg">-{fawryStats.withdrawals.toLocaleString()}</span></div></div></div></div>
-                            <div className="relative group no-print"><button type="button" onClick={() => dispatch({ type: 'SET_EDITING_ETISALAT', payload: etisalatData })} className="absolute -top-3 -right-3 z-20 bg-white hover:bg-slate-100 text-etisalatGreen p-3 rounded-2xl shadow-xl transition-all hover:scale-110 active:scale-95 font-bold border border-slate-200"><Edit size={18} /></button><div className="bg-gradient-to-br from-emerald-100 to-emerald-200 border border-emerald-300 p-8 rounded-[2.5rem] flex flex-col justify-between shadow-lg h-full text-emerald-900 relative overflow-hidden hover-lift cursor-pointer transition-transform" onClick={() => dispatch({ type: 'SET_EDITING_ETISALAT', payload: etisalatData })}><div className="absolute top-0 right-0 bg-etisalatRed w-24 h-24 rounded-bl-[4rem] z-0 shadow-lg"></div><div className="flex justify-between items-start mb-6 z-10 relative"><div className="flex items-center gap-4"><div className="bg-white p-3 rounded-2xl shadow-lg"><Signal size={32} className="text-etisalatGreen" /></div><div><h3 className="font-black text-2xl">اتصالات كاش</h3><p className="text-sm font-bold opacity-80">e& wallet</p></div></div><div className="text-left flex flex-col items-end z-10 relative"><span className="block text-xs uppercase font-bold mb-1 tracking-widest opacity-80">الرصيد</span><span className="font-black text-4xl group-hover:scale-105 transition-transform">{isPrivate ? '****' : currentEtisalatBalance.toLocaleString()}</span></div></div><div className="grid grid-cols-2 gap-3 w-full font-bold mt-auto z-10 relative"><div className="bg-white/40 backdrop-blur-md p-3 rounded-xl border border-white/40 text-center shadow-sm"><span className="block text-[10px] mb-1 opacity-80">إيداع</span><span className="font-bold text-lg">+{etisalatStats.deposits.toLocaleString()}</span></div><div className="bg-white/40 backdrop-blur-md p-3 rounded-xl border border-white/40 text-center shadow-sm"><span className="block text-[10px] mb-1 opacity-80">سحب</span><span className="font-bold text-lg">-{etisalatStats.withdrawals.toLocaleString()}</span></div></div></div>
+                            <div className="relative group no-print"><button type="button" onClick={() => dispatch({ type: 'SET_EDITING_ETISALAT', payload: etisalatData })} className="absolute -top-3 -right-3 z-20 bg-white hover:bg-slate-100 text-etisalatGreen p-3 rounded-2xl shadow-xl transition-all hover:scale-110 active:scale-95 font-bold border border-slate-200"><Edit size={18} /></button><div className="bg-gradient-to-br from-emerald-100 to-emerald-200 border border-emerald-300 p-8 rounded-[2.5rem] flex flex-col justify-between shadow-lg h-full text-emerald-900 relative overflow-hidden hover-lift cursor-pointer transition-transform" onClick={() => dispatch({ type: 'SET_EDITING_ETISALAT', payload: etisalatData })}><div className="absolute top-0 right-0 bg-etisalatRed w-24 h-24 rounded-bl-[4rem] z-0 shadow-lg"></div><div className="flex justify-between items-start mb-6 z-10 relative"><div className="flex items-center gap-4"><div className="bg-white p-3 rounded-2xl shadow-lg"><Signal size={32} className="text-etisalatGreen" /></div><div><h3 className="font-black text-2xl">اتصالات كاش</h3><p className="text-sm font-bold opacity-80">e& wallet</p></div></div><div className="text-left flex flex-col items-end z-10 relative"><span className="block text-xs uppercase font-bold mb-1 tracking-widest opacity-80">الرصيد</span><span className="font-black text-4xl group-hover:scale-105 transition-transform">{isPrivate ? '****' : currentEtisalatBalance.toLocaleString()}</span></div></div><div className="grid grid-cols-2 gap-3 w-full font-bold mt-auto z-10 relative"><div className="bg-white/40 backdrop-blur-md p-3 rounded-xl border border-white/40 text-center shadow-sm"><span className="block text-[10px] mb-1 opacity-80">إيداع</span><span className="font-bold text-lg">+{etisalatStats.deposits.toLocaleString()}</span></div><div className="bg-white/40 backdrop-blur-md p-3 rounded-xl border border-white/40 text-center shadow-sm"><span className="block text-[10px] mb-1 opacity-80">سحب</span><span className="font-bold text-lg">-{etisalatStats.withdrawals.toLocaleString()}</span></div></div></div></div>
                         </div>
 
                         <GenericLedgerComponent {...ledgerProps('fawry')} isPrivate={isPrivate}/>
@@ -1985,34 +1834,6 @@
                     </div>
                 );
             };
-
-            const renderMonthlyInsight = () => (
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8 animate-fadeIn">
-                    <div className="glass p-5 rounded-3xl border-b-4 border-emerald-500 bg-emerald-50/10">
-                        <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">دخل محصل ({selectedMonth})</p>
-                        <p className="text-xl font-black text-emerald-600">{isPrivate ? '****' : monthInsights.inc.toLocaleString()} ج.م</p>
-                        {monthInsights.pendInc > 0 && <p className="text-[9px] text-amber-500 mt-1 font-bold">⚠️ +{monthInsights.pendInc.toLocaleString()} منتظر</p>}
-                    </div>
-                    <div className="glass p-5 rounded-3xl border-b-4 border-rose-500 bg-rose-50/10">
-                        <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">مصاريف مدفوعة</p>
-                        <p className="text-xl font-black text-rose-600">{isPrivate ? '****' : monthInsights.exp.toLocaleString()} ج.م</p>
-                        {monthInsights.pendExp > 0 && <p className="text-[9px] text-amber-500 mt-1 font-bold">⚠️ +{monthInsights.pendExp.toLocaleString()} معلق</p>}
-                    </div>
-                    <div className="glass p-5 rounded-3xl border-b-4 border-blue-500 bg-blue-50/10">
-                        <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">صافي التدفق المالي</p>
-                        <p className={`text-xl font-black ${monthInsights.net >= 0 ? 'text-blue-600' : 'text-rose-500'}`}>
-                            {isPrivate ? '****' : monthInsights.net.toLocaleString()} ج.م
-                        </p>
-                        <p className="text-[9px] text-slate-400 mt-1">سيولة الشهر الفعلية</p>
-                    </div>
-                    <div className="glass p-5 rounded-3xl border-b-4 border-purple-500 bg-purple-50/10 flex items-center justify-center cursor-pointer hover:bg-purple-100 transition-all" onClick={() => printReport(`تقرير شهر ${selectedMonth}`, transactions.filter(t => t.month === selectedMonth))}>
-                        <div className="text-center">
-                            <Printer size={20} className="mx-auto text-purple-600 mb-1" />
-                            <p className="text-[10px] font-black text-purple-600">طباعة سجل {selectedMonth}</p>
-                        </div>
-                    </div>
-                </div>
-            );
 
             const renderTransactionsViewFull = () => {
                 const pendingGroups = groupedTransactions.map(g => ({
@@ -2031,18 +1852,12 @@
                             <button type="button" onClick={() => dispatch({ type: 'SET_TRANS_VIEW_MODE', payload: 'income' })} className={`px-12 py-4 rounded-xl text-lg font-bold transition-all duration-300 flex items-center gap-3 ${transViewMode === 'income' ? 'bg-emerald-50 text-emerald-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}><TrendingUp size={24} /> الدخل</button>
                         </div>
                         
-                        <div className="glass p-4 rounded-3xl overflow-x-auto no-print mb-6">
-                            <div className="flex gap-3 pb-2 scroll-hide snap-x">
-                                {MONTHS.map(m => (<button key={m} type="button" onClick={() => dispatch({ type: 'SET_SELECTED_MONTH', payload: m })} className={`flex-shrink-0 px-8 py-3 rounded-2xl text-sm font-bold transition-all duration-300 snap-center ${selectedMonth === m ? 'bg-slate-900 text-white shadow-lg scale-105' : 'bg-slate-50 text-slate-500 hover:bg-slate-200'}`}>{m}</button>))}
-                            </div>
-                        </div>
-
-                        {renderMonthlyInsight()}
+                        <div className="glass p-4 rounded-3xl overflow-x-auto no-print"><div className="flex gap-3 pb-2 scroll-hide snap-x">{MONTHS.map(m => (<button key={m} type="button" onClick={() => dispatch({ type: 'SET_SELECTED_MONTH', payload: m })} className={`flex-shrink-0 px-8 py-3 rounded-2xl text-sm font-bold transition-all duration-300 snap-center ${selectedMonth === m ? 'bg-slate-900 text-white shadow-lg scale-105' : 'bg-slate-50 text-slate-500 hover:bg-slate-200'}`}>{m}</button>))}</div></div>
                         
                         <div className="flex gap-2 justify-center flex-wrap px-2 mb-4 no-print">
-                            <button type="button" onClick={() => dispatch({ type: 'SET_STATUS_FILTER', payload: 'all' })} className={`px-3 py-1.5 rounded-xl text-[11px] font-bold transition-all border border-slate-200 dark:border-slate-700 flex items-center gap-1 ${statusFilter === 'all' ? 'bg-slate-800 text-white shadow-md' : 'bg-white dark:bg-slate-800 text-slate-500'}`} title="عرض الكل"><Filter size={12}/> الكل</button>
-                            <button type="button" onClick={() => dispatch({ type: 'SET_STATUS_FILTER', payload: 'pending' })} className={`px-3 py-1.5 rounded-xl text-[11px] font-bold transition-all border border-slate-200 dark:border-slate-700 flex items-center gap-1 ${statusFilter === 'pending' ? 'bg-amber-500 text-white shadow-md' : 'bg-white dark:bg-slate-800 text-slate-500'}`} title="المعلق فقط"><Clock size={12}/> معلق</button>
-                            <button type="button" onClick={() => dispatch({ type: 'SET_STATUS_FILTER', payload: 'paid' })} className={`px-3 py-1.5 rounded-xl text-[11px] font-bold transition-all border border-slate-200 dark:border-slate-700 flex items-center gap-1 ${statusFilter === 'paid' ? 'bg-emerald-500 text-white shadow-md' : 'bg-white dark:bg-slate-800 text-slate-500'}`} title="المدفوع فقط"><CheckCircle2 size={12}/> مدفوع</button>
+                            <button type="button" onClick={() => dispatch({ type: 'SET_STATUS_FILTER', payload: 'all' })} className={`px-3 py-1.5 rounded-xl text-[11px] font-bold transition-all border border-slate-200 dark:border-slate-700 flex items-center gap-1 ${statusFilter === 'all' ? 'bg-slate-800 text-white shadow-md' : 'bg-white dark:bg-slate-800 text-slate-500'}`}><Filter size={12}/> الكل</button>
+                            <button type="button" onClick={() => dispatch({ type: 'SET_STATUS_FILTER', payload: 'pending' })} className={`px-3 py-1.5 rounded-xl text-[11px] font-bold transition-all border border-slate-200 dark:border-slate-700 flex items-center gap-1 ${statusFilter === 'pending' ? 'bg-amber-500 text-white shadow-md' : 'bg-white dark:bg-slate-800 text-slate-500'}`}><Clock size={12}/> معلق</button>
+                            <button type="button" onClick={() => dispatch({ type: 'SET_STATUS_FILTER', payload: 'paid' })} className={`px-3 py-1.5 rounded-xl text-[11px] font-bold transition-all border border-slate-200 dark:border-slate-700 flex items-center gap-1 ${statusFilter === 'paid' ? 'bg-emerald-500 text-white shadow-md' : 'bg-white dark:bg-slate-800 text-slate-500'}`}><CheckCircle2 size={12}/> مدفوع</button>
                         </div>
 
                         <div className="flex gap-2 flex-wrap justify-center px-2 mb-6 no-print">
@@ -2088,7 +1903,6 @@
                                                                     addNotification({ type: 'success', title: nextStatus === 'paid' ? 'تم تأكيد استلام الدخل ✅' : 'تمت الإعادة للمعلق' });
                                                                 }} 
                                                                 className="transition-transform active:scale-95 hover:scale-110 no-print"
-                                                                title={t.status === 'paid' ? "تعيين كمعلق" : "تعيين كمدفوع"}
                                                                 >
                                                                     {t.status === 'paid' ? <CheckCircle2 className="text-emerald-500 w-6 h-6" /> : <Clock className="text-amber-500 w-6 h-6" />}
                                                                 </button>
@@ -2096,7 +1910,7 @@
                                                             <td className="pr-20 py-4 text-slate-500 font-bold leading-relaxed"><div className="font-bold text-slate-800 dark:text-slate-200 text-base mb-1">{t.description || 'بدون وصف'}</div><div className="flex gap-3 items-center opacity-80"><span className="bg-white dark:bg-slate-800 px-3 py-1 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm">{t.date}</span><span className="bg-blue-50 text-blue-600 px-3 py-1 rounded-lg font-bold">{PAYMENT_METHODS.find(p=>p.id===t.method)?.label}</span></div></td>
                                                             <td className="py-4 text-center text-slate-400 font-bold">{t.quantity > 1 ? `${t.quantity} × ${t.unitPrice}` : '-'}</td>
                                                             <td className="py-4 font-black text-left text-base dark:text-slate-200">{isPrivate ? '****' : Number(t.amount).toLocaleString()}</td>
-                                                            <td className="py-4 text-center"><div className="flex gap-2 justify-center no-print"><button type="button" onClick={() => { dispatch({ type: 'SET_FORM_MODE', payload: 'edit' }); dispatch({ type: 'SET_FORM_DATA', payload: t }); dispatch({ type: 'SET_FORM_OPEN', payload: true }); }} className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg transition-colors" title="تعديل"><Edit size={16} /></button><button type="button" onClick={() => handleDelete(t.id)} className="p-2 text-red-400 hover:bg-red-50 rounded-lg transition-colors" title="حذف"><Trash2 size={16} /></button></div></td>
+                                                            <td className="py-4 text-center"><div className="flex gap-2 justify-center no-print"><button type="button" onClick={() => { dispatch({ type: 'SET_FORM_MODE', payload: 'edit' }); dispatch({ type: 'SET_FORM_DATA', payload: t }); dispatch({ type: 'SET_FORM_OPEN', payload: true }); }} className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"><Edit size={16} /></button><button type="button" onClick={() => handleDelete(t.id)} className="p-2 text-red-400 hover:bg-red-50 rounded-lg transition-colors"><Trash2 size={16} /></button></div></td>
                                                         </tr>
                                                     ))}
                                                 </React.Fragment>
@@ -2129,7 +1943,7 @@
                                                     <p className={`font-black text-base ${t.type === 'income' ? 'text-emerald-600' : 'text-slate-800 dark:text-white'}`}>
                                                         {isPrivate ? '****' : Number(t.amount).toLocaleString()}
                                                     </p>
-                                                    <button onClick={() => handleDelete(t.id)} className="text-rose-400 mt-1 hover:text-rose-600 transition-colors no-print" title="حذف"><Trash2 size={12}/></button>
+                                                    <button onClick={() => handleDelete(t.id)} className="text-rose-400 mt-1 hover:text-rose-600 transition-colors no-print"><Trash2 size={12}/></button>
                                                 </div>
                                             </div>
                                         ))}
@@ -2171,7 +1985,9 @@
                                                     {isPrivate ? '****' : Number(t.amount).toLocaleString()} ج.م
                                                 </p>
                                                 
+                                                {/* ✅ مفاتيح التحكم في الأرشيف */}
                                                 <div className="flex gap-1 no-print opacity-0 group-hover:opacity-100 transition-opacity">
+                                                    {/* مفتاح الإعادة للوضع المعلق */}
                                                     <button 
                                                         onClick={() => {
                                                             const newTrans = transactions.map(tr => tr.id === t.id ? { ...tr, status: 'pending' } : tr);
@@ -2187,8 +2003,12 @@
                                                     >
                                                         <Undo2 size={18}/>
                                                     </button>
-                                                    <button onClick={() => { dispatch({ type: 'SET_FORM_MODE', payload: 'edit' }); dispatch({ type: 'SET_FORM_DATA', payload: t }); dispatch({ type: 'SET_FORM_OPEN', payload: true }); }} className="p-2 text-blue-500 hover:bg-blue-50 rounded-xl transition-all" title="تعديل"><Edit size={16}/></button>
-                                                    <button onClick={() => handleDelete(t.id)} className="p-2 text-rose-400 hover:bg-red-50 rounded-xl transition-all" title="حذف"><Trash2 size={16}/></button>
+                                                    
+                                                    {/* زر التعديل */}
+                                                    <button onClick={() => { dispatch({ type: 'SET_FORM_MODE', payload: 'edit' }); dispatch({ type: 'SET_FORM_DATA', payload: t }); dispatch({ type: 'SET_FORM_OPEN', payload: true }); }} className="p-2 text-blue-500 hover:bg-blue-50 rounded-xl transition-all"><Edit size={16}/></button>
+                                                    
+                                                    {/* زر الحذف */}
+                                                    <button onClick={() => handleDelete(t.id)} className="p-2 text-rose-400 hover:bg-rose-50 rounded-xl transition-all"><Trash2 size={16}/></button>
                                                 </div>
                                             </div>
                                         </div>
@@ -2497,7 +2317,7 @@
                                     )}
 
                                     <div><label className="block text-sm font-bold mb-3 text-slate-400 uppercase mb-2 block tracking-wider">الوصف</label><input type="text" id="form-desc" className="input-field font-bold" value={formData.description} onChange={e => dispatch({ type: 'SET_FORM_DATA', payload: { ...formData, description: e.target.value } })} placeholder="تفاصيل إضافية..." /></div>
-                                    {formMode === 'add' && (<details className="group border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden bg-white dark:bg-slate-800"><summary className="p-4 cursor-pointer text-xs font-bold text-slate-500 flex items-center justify-between select-none hover:bg-slate-50 transition-colors"><span className="flex items-center gap-2"><Repeat size={16} className="text-blue-500" /> تكرار العملية في المستقبل</span><ChevronDown size={16} className="group-open:rotate-180 transition-transform" /></summary><div className="p-4 border-t border-slate-100 dark:border-slate-700 flex flex flex-wrap gap-2">{MONTHS.map((m, idx) => { if (idx <= MONTHS.indexOf(selectedMonth)) return null; return (<label key={m} className="inline-flex items-center gap-2 bg-slate-50 dark:bg-slate-700 px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-600 cursor-pointer select-none text-xs font-bold hover:border-blue-300 transition-colors"><input type="checkbox" className="rounded text-blue-600 focus:rope-0 w-4 h-4" onChange={(e) => { if (e.target.checked) { dispatch({ type: 'SET_REPEAT_MONTHS', payload: [...repeatMonths, m] }); } else { dispatch({ type: 'SET_REPEAT_MONTHS', payload: repeatMonths.filter(rm => rm !== m) }); } }} />{m}</label>); })}</div></details>)}
+                                    {formMode === 'add' && (<details className="group border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden bg-white dark:bg-slate-800"><summary className="p-4 cursor-pointer text-xs font-bold text-slate-500 flex items-center justify-between select-none hover:bg-slate-50 transition-colors"><span className="flex items-center gap-2"><Repeat size={16} className="text-blue-500" /> تكرار العملية في المستقبل</span><ChevronDown size={16} className="group-open:rotate-180 transition-transform" /></summary><div className="p-4 border-t border-slate-100 dark:border-slate-700 flex flex-wrap gap-2">{MONTHS.map((m, idx) => { if (idx <= MONTHS.indexOf(selectedMonth)) return null; return (<label key={m} className="inline-flex items-center gap-2 bg-slate-50 dark:bg-slate-700 px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-600 cursor-pointer select-none text-xs font-bold hover:border-blue-300 transition-colors"><input type="checkbox" className="rounded text-blue-600 focus:rope-0 w-4 h-4" onChange={(e) => { if (e.target.checked) { dispatch({ type: 'SET_REPEAT_MONTHS', payload: [...repeatMonths, m] }); } else { dispatch({ type: 'SET_REPEAT_MONTHS', payload: repeatMonths.filter(rm => rm !== m) }); } }} />{m}</label>); })}</div></details>)}
                                     <button type="submit" className="w-full bg-gradient-to-r from-blue-600 to-blue-500 text-white py-4 rounded-2xl font-black text-lg shadow-xl shadow-blue-500/30 hover:shadow-blue-500/50 hover:scale-[1.02] active:scale-95 transition-all mt-4" disabled={isProcessing}>{isProcessing ? (<span className="flex items-center justify-center gap-2"><div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div> جاري الحفظ...</span>) : 'حفظ العملية'}</button>
                                 </form>
                             </div>
@@ -2506,7 +2326,7 @@
 
                     {isAiModalOpen && (
                         <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md flex items-center justify-center z-[3500] p-4 animate-fadeIn no-print">
-                            <div className="bg-white dark:bg-slate-900 w-full max-w-2xl rounded-[2.5rem] shadow-2xl overflow-hidden animate-fadeIn border border-purple-500/20 flex flex flex-col max-h-[90vh]">
+                            <div className="bg-white dark:bg-slate-900 w-full max-w-2xl rounded-[2.5rem] shadow-2xl overflow-hidden animate-fadeIn border border-purple-500/20 flex flex-col max-h-[90vh]">
                                 <div className="p-8 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-gradient-to-r from-purple-50 to-indigo-50 dark:bg-purple-900/20">
                                     <h3 className="text-2xl font-black text-slate-800 dark:text-white flex items-center gap-3"><div className="bg-purple-500 p-2 rounded-xl text-white shadow-lg shadow-purple-500/30"><Bot size={20} /></div>المساعد المالي الذكي</h3>
                                     <button type="button" onClick={() => dispatch({ type: 'SET_AI_MODAL_OPEN', payload: false })} className="text-slate-400 hover:text-red-500 p-2 hover:bg-red-50 rounded-xl transition-colors"><X size={24} /></button>
@@ -2622,11 +2442,11 @@
                                             <span>إلى</span>
                                         </div>
                                         <div className="flex justify-between items-center gap-4">
-                                            <select className="input-field text-sm" value={quickTransferData.from} onChange={e => dispatch({ type: 'SET_QUICK_TRANSFER_DATA', payload: { from: e.target.value } }) }}>
+                                            <select className="input-field text-sm" value={quickTransferData.from} onChange={e => dispatch({ type: 'SET_QUICK_TRANSFER_DATA', payload: { from: e.target.value } })}>
                                                 {PAYMENT_METHODS.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
                                             </select>
                                             <div className="text-blue-300"><ArrowRightLeft size={20} /></div>
-                                            <select className="input-field text-sm" value={quickTransferData.to} onChange={e => dispatch({ type: 'SET_QUICK_TRANSFER_DATA', payload: { to: e.target.value } }) }>
+                                            <select className="input-field text-sm" value={quickTransferData.to} onChange={e => dispatch({ type: 'SET_QUICK_TRANSFER_DATA', payload: { to: e.target.value } })}>
                                                 {PAYMENT_METHODS.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
                                             </select>
                                         </div>
