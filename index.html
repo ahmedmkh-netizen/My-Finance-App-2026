@@ -369,6 +369,16 @@
             { id: 'fawry', name: 'Fawry', label: 'فوري' },
         ];
 
+        // ✅ 1. تحديث قاموس الشعارات (Logo Mapping)
+        const LOGO_URLS = {
+            cib: "assets/CIB LOGO.png",
+            aaib: "assets/AAIB Logo.jpg", 
+            etisalat: "assets/etisalat logo.jpg", 
+            fawry: "assets/Fawry Logo.png",
+            instapay: "https://www.instapay.eg/assets/img/logo.svg", // رابط خارجي
+            cash: "💰" // يمكنك وضع أيقونة نقدية لاحقاً في المجلد
+        };
+
         const CATEGORY_GROUPS = {
             'income': {
                 'مصادر الدخل': ['راتب شهري', 'عمل حر', 'استثمارات'],
@@ -417,6 +427,7 @@
             aaib_savings: { id: 'aaib_savings', title: 'سجل حساب توفير AAIB', subtitle: 'تتبع المعاملات والأرصدة الجارية', themeColor: 'text-emerald-700', bgColor: 'bg-emerald-50/50 dark:bg-emerald-900/10', icon: PiggyBank, headerClass: 'bg-emerald-50/50 dark:bg-emerald-900/10 text-emerald-900 dark:text-emerald-100' }
         };
 
+        // ✅ 3. تحديث رؤوس سجلات الحسابات والمحافظ (GenericLedgerComponent)
         const GenericLedgerComponent = React.memo(({ 
             walletKey, 
             ledgerData, 
@@ -431,7 +442,20 @@
                 return (
                     <div className={`glass rounded-[2rem] overflow-hidden border border-slate-200/60 dark:border-slate-700/60 ${theme.bgClass}`}>
                         <div className={`collapsible-header p-6 flex justify-between items-center border-b border-slate-100/50 dark:border-slate-800/50 ${theme.headerClass}`} onClick={onToggle}>
-                            <div className="flex items-center gap-3"><theme.icon size={28} className={theme.color} /><div><h3 className="text-xl font-black">{theme.title}</h3><p className="text-xs text-slate-500 font-bold mt-1">{theme.subtitle}</p></div></div>
+                            <div className="flex items-center gap-4">
+                                {/* لوحة اللوجو الدائرية */}
+                                <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center shadow-lg p-2 border border-slate-100 group-hover:scale-110 transition-transform duration-300">
+                                    <img 
+                                        src={LOGO_URLS[walletKey.split('_')[0]]} 
+                                        className="w-full h-full object-contain" 
+                                        alt="provider-logo"
+                                    />
+                                </div>
+                                <div>
+                                    <h3 className="text-xl font-black">{theme.title}</h3>
+                                    <p className="text-xs text-slate-500 font-bold mt-1 tracking-wide">{theme.subtitle}</p>
+                                </div>
+                            </div>
                             <ChevronDown size={24} className={`text-slate-400 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`} />
                         </div>
                     </div>
@@ -441,7 +465,20 @@
             return (
                 <div className={`glass rounded-[2rem] overflow-hidden border border-slate-200/60 dark:border-slate-700/60 mb-6 ${theme.bgClass}`}>
                     <div className={`collapsible-header p-6 flex justify-between items-center border-b border-slate-100/50 dark:border-slate-800/50 ${theme.headerClass}`} onClick={onToggle}>
-                        <div className="flex items-center gap-3"><theme.icon size={28} className={theme.color} /><div><h3 className="text-xl font-black">{theme.title}</h3><p className="text-xs text-slate-500 font-bold mt-1">{theme.subtitle}</p></div></div>
+                        <div className="flex items-center gap-4">
+                            {/* لوحة اللوجو الدائرية */}
+                            <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center shadow-lg p-2 border border-slate-100 group-hover:scale-110 transition-transform duration-300">
+                                <img 
+                                    src={LOGO_URLS[walletKey.split('_')[0]]} 
+                                    className="w-full h-full object-contain" 
+                                    alt="provider-logo"
+                                />
+                            </div>
+                            <div>
+                                <h3 className="text-xl font-black">{theme.title}</h3>
+                                <p className="text-xs text-slate-500 font-bold mt-1 tracking-wide">{theme.subtitle}</p>
+                            </div>
+                        </div>
                         <ChevronDown size={24} className={`text-slate-400 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`} />
                     </div>
                     {isExpanded && (
@@ -1931,7 +1968,6 @@
                                             return (
                                                 <div key={card.id} className="flex flex-col gap-8 w-full max-w-md">
                                                     <div className="relative group perspective-1000 transition-transform hover:-translate-y-2 duration-500">
-                                                        {/* ✅ تعديل: تم وضع الزرين في حاوية مرنة لتجنب التداخل */}
                                                         <div className="absolute -top-4 -right-4 z-20 flex gap-2">
                                                             <button 
                                                                 onClick={() => { 
@@ -1945,12 +1981,21 @@
                                                             <button type="button" onClick={() => dispatch({ type: 'SET_EDITING_CARD', payload: card })} className="bg-white/80 hover:bg-white dark:bg-slate-800 hover:bg-slate-700 text-slate-600 hover:text-blue-600 p-3 rounded-2xl shadow-xl shadow-blue-500/10 transition-all hover:scale-110 hover:rotate-12 border border-slate-200/50 dark:border-slate-600/50 backdrop-blur-md no-print"><Edit size={18} /></button>
                                                         </div>
                                                         
+                                                        {/* ✅ 2. تحديث واجهة كروت الائتمان (Cards UI) */}
                                                         <div dir="ltr" className={`p-8 rounded-[2rem] relative overflow-hidden shadow-2xl min-h-[260px] flex flex-col justify-between ${themeClass} border`}>
                                                             <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-[50px] -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
                                                             <div className="flex justify-between items-start relative z-10">
-                                                                <span className="font-black text-2xl tracking-tighter opacity-90 uppercase">{card.bank}</span>
+                                                                <div className="flex items-center gap-3 bg-white/30 p-2 rounded-2xl backdrop-blur-md border border-white/20 shadow-sm">
+                                                                    <img 
+                                                                        src={card.bank === 'CIB' ? LOGO_URLS.cib : LOGO_URLS.aaib} 
+                                                                        className="h-7 w-auto object-contain rounded-md" 
+                                                                        alt="bank-logo"
+                                                                        onError={(e) => e.target.style.display = 'none'}
+                                                                    />
+                                                                    <span className="font-black text-lg tracking-tighter opacity-90 uppercase">{card.bank}</span>
+                                                                </div>
                                                                 <div className="bg-white/20 backdrop-blur-md p-2.5 rounded-xl border border-white/20 shadow-inner">
-                                                                    <Wifi size={20} className="rotate-90" />
+                                                                    <Wifi size={20} className="rotate-90 text-white" />
                                                                 </div>
                                                             </div>
                                                             <div className="flex gap-4 items-center relative z-10">
@@ -2093,7 +2138,23 @@
                                                                     {t.status === 'paid' ? <CheckCircle2 className="text-emerald-500 w-6 h-6" /> : <Clock className="text-amber-500 w-6 h-6" />}
                                                                 </button>
                                                             </td>
-                                                            <td className="pr-20 py-4 text-slate-500 font-bold leading-relaxed"><div className="font-bold text-slate-800 dark:text-slate-200 text-base mb-1">{t.description || 'بدون وصف'}</div><div className="flex gap-3 items-center opacity-80"><span className="bg-white dark:bg-slate-800 px-3 py-1 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm">{t.date}</span><span className="bg-blue-50 text-blue-600 px-3 py-1 rounded-lg font-bold">{PAYMENT_METHODS.find(p=>p.id===t.method)?.label}</span></div></td>
+                                                            <td className="pr-20 py-4 text-slate-500 font-bold leading-relaxed"><div className="font-bold text-slate-800 dark:text-slate-200 text-base mb-1">{t.description || 'بدون وصف'}</div><div className="flex gap-3 items-center opacity-80">
+                                                                {/* ✅ 4. اللمسة النهائية في سجل المعاملات (Transaction Rows) */}
+                                                                <div className="flex gap-2 items-center">
+                                                                    <div className="w-7 h-7 bg-white dark:bg-slate-800 rounded-lg flex items-center justify-center p-1.5 shadow-sm border border-slate-100 dark:border-slate-700">
+                                                                        {t.method === 'cash' ? <span>{LOGO_URLS.cash}</span> : (
+                                                                            <img 
+                                                                                src={LOGO_URLS[t.method.split('_')[0]]} 
+                                                                                className="w-full h-full object-contain" 
+                                                                                alt="" 
+                                                                            />
+                                                                        )}
+                                                                    </div>
+                                                                    <span className="bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 px-3 py-1 rounded-lg font-bold text-[10px] whitespace-nowrap">
+                                                                        {PAYMENT_METHODS.find(p=>p.id===t.method)?.label}
+                                                                    </span>
+                                                                </div>
+                                                                <span className="bg-white dark:bg-slate-800 px-3 py-1 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm">{t.date}</span></div></td>
                                                             <td className="py-4 text-center text-slate-400 font-bold">{t.quantity > 1 ? `${t.quantity} × ${t.unitPrice}` : '-'}</td>
                                                             <td className="py-4 font-black text-left text-base dark:text-slate-200">{isPrivate ? '****' : Number(t.amount).toLocaleString()}</td>
                                                             <td className="py-4 text-center"><div className="flex gap-2 justify-center no-print"><button type="button" onClick={() => { dispatch({ type: 'SET_FORM_MODE', payload: 'edit' }); dispatch({ type: 'SET_FORM_DATA', payload: t }); dispatch({ type: 'SET_FORM_OPEN', payload: true }); }} className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg transition-colors" title="تعديل"><Edit size={16} /></button><button type="button" onClick={() => handleDelete(t.id)} className="p-2 text-red-400 hover:bg-red-50 rounded-lg transition-colors" title="حذف"><Trash2 size={16} /></button></div></td>
@@ -2122,7 +2183,18 @@
                                                     </div>
                                                     <div className="flex-1">
                                                         <p className="font-bold text-sm text-slate-800 dark:text-white leading-tight truncate">{t.description || 'بدون وصف'}</p>
-                                                        <p className="text-[9px] text-slate-400 font-bold mt-0.5">{t.date} • {PAYMENT_METHODS.find(p=>p.id===t.method)?.label}</p>
+                                                        {/* ✅ 4. Mobile View Logo */}
+                                                        <div className="flex items-center gap-2 mt-1">
+                                                             <div className="w-5 h-5 bg-white dark:bg-slate-800 rounded flex items-center justify-center p-1 shadow-sm border border-slate-100 dark:border-slate-700">
+                                                                {t.method === 'cash' ? <span>{LOGO_URLS.cash}</span> : (
+                                                                    <img src={LOGO_URLS[t.method.split('_')[0]]} className="w-full h-full object-contain" alt="" />
+                                                                )}
+                                                            </div>
+                                                            <p className="text-[9px] text-slate-400 font-bold">{t.date}</p>
+                                                            <span className={`text-[9px] px-2 py-0.5 rounded-full font-black ${t.type === 'income' ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'}`}>
+                                                                {PAYMENT_METHODS.find(p=>p.id===t.method)?.label}
+                                                            </span>
+                                                        </div>
                                                     </div>
                                                 </div>
                                                 <div className="text-left">
@@ -2161,6 +2233,12 @@
                                                 </p>
                                                 <div className="flex items-center gap-2 mt-1">
                                                     <span className="text-[10px] text-slate-400 font-bold">{t.date}</span>
+                                                    {/* ✅ 4. Archive View Logo */}
+                                                    <div className="w-5 h-5 bg-white dark:bg-slate-800 rounded flex items-center justify-center p-1 shadow-sm border border-slate-100 dark:border-slate-700">
+                                                        {t.method === 'cash' ? <span>{LOGO_URLS.cash}</span> : (
+                                                            <img src={LOGO_URLS[t.method.split('_')[0]]} className="w-full h-full object-contain" alt="" />
+                                                        )}
+                                                    </div>
                                                     <span className={`text-[9px] px-2 py-0.5 rounded-full font-black ${t.type === 'income' ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'}`}>
                                                         {t.type === 'income' ? 'دخل محقق' : 'مصروف مدفوع'}
                                                     </span>
@@ -2497,7 +2575,7 @@
                                     )}
 
                                     <div><label className="block text-sm font-bold mb-3 text-slate-400 uppercase mb-2 block tracking-wider">الوصف</label><input type="text" id="form-desc" className="input-field font-bold" value={formData.description} onChange={e => dispatch({ type: 'SET_FORM_DATA', payload: { ...formData, description: e.target.value } })} placeholder="تفاصيل إضافية..." /></div>
-                                    {formMode === 'add' && (<details className="group border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden bg-white dark:bg-slate-800"><summary className="p-4 cursor-pointer text-xs font-bold text-slate-500 flex items-center justify-between select-none hover:bg-slate-50 transition-colors"><span className="flex items-center gap-2"><Repeat size={16} className="text-blue-500" /> تكرار العملية في المستقبل</span><ChevronDown size={16} className="group-open:rotate-180 transition-transform" /></summary><div className="p-4 border-t border-slate-100 dark:border-slate-700 flex flex flex-wrap gap-2">{MONTHS.map((m, idx) => { if (idx <= MONTHS.indexOf(selectedMonth)) return null; return (<label key={m} className="inline-flex items-center gap-2 bg-slate-50 dark:bg-slate-700 px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-600 cursor-pointer select-none text-xs font-bold hover:border-blue-300 transition-colors"><input type="checkbox" className="rounded text-blue-600 focus:rope-0 w-4 h-4" onChange={(e) => { if (e.target.checked) { dispatch({ type: 'SET_REPEAT_MONTHS', payload: [...repeatMonths, m] }); } else { dispatch({ type: 'SET_REPEAT_MONTHS', payload: repeatMonths.filter(rm => rm !== m) }); } }} />{m}</label>); })}</div></details>)}
+                                    {formMode === 'add' && (<details className="group border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden bg-white dark:bg-slate-800"><summary className="p-4 cursor-pointer text-xs font-bold text-slate-500 flex items-center justify-between select-none hover:bg-slate-50 transition-colors"><span className="flex items-center gap-2"><Repeat size={16} className="text-blue-500" /> تكرار العملية في المستقبل</span><ChevronDown size={16} className="group-open:rotate-180 transition-transform" /></summary><div className="p-4 border-t border-slate-100 dark:border-slate-700 flex flex-wrap gap-2">{MONTHS.map((m, idx) => { if (idx <= MONTHS.indexOf(selectedMonth)) return null; return (<label key={m} className="inline-flex items-center gap-2 bg-slate-50 dark:bg-slate-700 px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-600 cursor-pointer select-none text-xs font-bold hover:border-blue-300 transition-colors"><input type="checkbox" className="rounded text-blue-600 focus:rope-0 w-4 h-4" onChange={(e) => { if (e.target.checked) { dispatch({ type: 'SET_REPEAT_MONTHS', payload: [...repeatMonths, m] }); } else { dispatch({ type: 'SET_REPEAT_MONTHS', payload: repeatMonths.filter(rm => rm !== m) }); } }} />{m}</label>); })}</div></details>)}
                                     <button type="submit" className="w-full bg-gradient-to-r from-blue-600 to-blue-500 text-white py-4 rounded-2xl font-black text-lg shadow-xl shadow-blue-500/30 hover:shadow-blue-500/50 hover:scale-[1.02] active:scale-95 transition-all mt-4" disabled={isProcessing}>{isProcessing ? (<span className="flex items-center justify-center gap-2"><div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div> جاري الحفظ...</span>) : 'حفظ العملية'}</button>
                                 </form>
                             </div>
@@ -2506,7 +2584,7 @@
 
                     {isAiModalOpen && (
                         <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md flex items-center justify-center z-[3500] p-4 animate-fadeIn no-print">
-                            <div className="bg-white dark:bg-slate-900 w-full max-w-2xl rounded-[2.5rem] shadow-2xl overflow-hidden animate-fadeIn border border-purple-500/20 flex flex flex-col max-h-[90vh]">
+                            <div className="bg-white dark:bg-slate-900 w-full max-w-2xl rounded-[2.5rem] shadow-2xl overflow-hidden animate-fadeIn border border-purple-500/20 flex flex-col max-h-[90vh]">
                                 <div className="p-8 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-gradient-to-r from-purple-50 to-indigo-50 dark:bg-purple-900/20">
                                     <h3 className="text-2xl font-black text-slate-800 dark:text-white flex items-center gap-3"><div className="bg-purple-500 p-2 rounded-xl text-white shadow-lg shadow-purple-500/30"><Bot size={20} /></div>المساعد المالي الذكي</h3>
                                     <button type="button" onClick={() => dispatch({ type: 'SET_AI_MODAL_OPEN', payload: false })} className="text-slate-400 hover:text-red-500 p-2 hover:bg-red-50 rounded-xl transition-colors"><X size={24} /></button>
@@ -2608,40 +2686,35 @@
                         </div>
                     )}
 
-{isQuickTransferModalOpen && (
-    <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md flex items-center justify-center z-[3500] p-4 animate-fadeIn no-print">
-        <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-[2.5rem] shadow-2xl overflow-hidden animate-fadeIn border border-blue-500/50">
-            <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-blue-50 dark:bg-blue-900/10">
-                <h3 className="text-xl font-black text-slate-800 dark:text-white flex items-center gap-2"><ArrowRightLeft size={20} className="text-blue-600"/> تحويل سريع</h3>
-                <button type="button" onClick={() => dispatch({ type: 'SET_QUICK_TRANSFER_MODAL_OPEN', payload: false })} className="p-2 hover:bg-red-50 hover:text-red-500 rounded-xl transition-colors"><X size={24} /></button>
-            </div>
-            <form onSubmit={handleQuickTransfer} className="p-6 space-y-6">
-                <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-2xl">
-                    <div className="flex justify-between items-center text-sm font-bold text-blue-700 dark:text-blue-300 mb-2">
-                        <span>من</span>
-                        <span>إلى</span>
-                    </div>
-                    <div className="flex justify-between items-center gap-4">
-                        {/* ✅ تم تصحيح الأقواس هنا */}
-                        <select className="input-field text-sm" value={quickTransferData.from} onChange={e => dispatch({ type: 'SET_QUICK_TRANSFER_DATA', payload: { from: e.target.value } })}>
-                            {PAYMENT_METHODS.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
-                        </select>
-                        <div className="text-blue-300"><ArrowRightLeft size={20} /></div>
-                        {/* ✅ تم تصحيح الأقواس هنا */}
-                        <select className="input-field text-sm" value={quickTransferData.to} onChange={e => dispatch({ type: 'SET_QUICK_TRANSFER_DATA', payload: { to: e.target.value } })}>
-                            {PAYMENT_METHODS.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
-                        </select>
-                    </div>
-                </div>
-                <div>
-                    <label className="block text-sm font-bold mb-3 text-slate-500 uppercase">المبلغ</label>
-                    <input type="number" required step="0.01" className="input-field text-xl font-black text-blue-600" value={quickTransferData.amount} onChange={e => dispatch({ type: 'SET_QUICK_TRANSFER_DATA', payload: { amount: e.target.value } })} placeholder="0.00" />
-                </div>
-                <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-2xl font-bold shadow-lg shadow-blue-500/30 transition-all active:scale-95">تنفيذ التحويل</button>
-            </form>
-        </div>
-    </div>
-)}
+                    {isQuickTransferModalOpen && (
+                        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md flex items-center justify-center z-[3500] p-4 animate-fadeIn no-print">
+                            <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-[2.5rem] shadow-2xl overflow-hidden animate-fadeIn border border-blue-500/50">
+                                <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-blue-50 dark:bg-blue-900/10">
+                                    <h3 className="text-xl font-black text-slate-800 dark:text-white flex items-center gap-2"><ArrowRightLeft size={20} className="text-blue-600"/> تحويل سريع</h3>
+                                    <button type="button" onClick={() => dispatch({ type: 'SET_QUICK_TRANSFER_MODAL_OPEN', payload: false })} className="p-2 hover:bg-red-50 hover:text-red-500 rounded-xl transition-colors"><X size={24} /></button>
+                                </div>
+                                <form onSubmit={handleQuickTransfer} className="p-6 space-y-6">
+                                    <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-2xl">
+                                        <div className="flex justify-between items-center text-sm font-bold text-blue-700 dark:text-blue-300 mb-2">
+                                            <span>من</span>
+                                            <span>إلى</span>
+                                        </div>
+                                        <div className="flex justify-between items-center gap-4">
+                                            <select className="input-field text-sm" value={quickTransferData.from} onChange={e => dispatch({ type: 'SET_QUICK_TRANSFER_DATA', payload: { from: e.target.value } }) }>
+                                                {PAYMENT_METHODS.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+                                            </select>
+                                            <div className="text-blue-300"><ArrowRightLeft size={20} /></div>
+                                            <select className="input-field text-sm" value={quickTransferData.to} onChange={e => dispatch({ type: 'SET_QUICK_TRANSFER_DATA', payload: { to: e.target.value } }) }>
+                                                {PAYMENT_METHODS.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div><label className="block text-sm font-bold mb-3 text-slate-500 uppercase">المبلغ</label><input type="number" required step="0.01" className="input-field text-xl font-black text-blue-600" value={quickTransferData.amount} onChange={e => dispatch({ type: 'SET_QUICK_TRANSFER_DATA', payload: { amount: e.target.value } })} placeholder="0.00" /></div>
+                                    <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-2xl font-bold shadow-lg shadow-blue-500/30 transition-all active:scale-95">تنفيذ التحويل</button>
+                                </form>
+                            </div>
+                        </div>
+                    )}
                 </div>
             );
         }
