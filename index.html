@@ -256,7 +256,7 @@ const DAILY_DHIKR = [
 "اللَّهُمَّ بِكَ أَصْبَحْنَا وَبِكَ أَمْسَيْنَا وَبِكَ نَحْيَا وَبِكَ نَمُوتُ وَإِلَيْكَ النُّشُورُ",
 "رَضِيتُ بِاللَّهِ رَبًّا وَبِالإِسْلَامِ دِينًا وَبِمُحَمَّدٍ صَلَّى اللَّهُ عَلَيْهِ وَسَلَّمَ نَبِيًّا",
 "يَا حَيُّ يَا قَيُّومُ بِرَحْمَتِكَ أَسْتَغِيثُ أَصْلِحْ لِي شَأْنِي كُلَّهُ",
-"اللَّهُمَّ إِنِّي أَسْأَلُكَ عِلْمًا نَافِعًا وَرِزْقًا طَيِّبًا وَعَمَلًا مُتَقَبَّلًا"
+"اللَّهُمَّ إِنِّي أَسْأَلُكَ عِلْمًا نَافِعًا وَرِزقًا طَيِّبًا وَعَمَلًا مُتَقَبَّلًا"
 ];
 
 const escapeHtml = (unsafe) => {
@@ -509,7 +509,7 @@ return (
 );
 });
 
-const DuplicateDetectionSystem = ({ transactions, dispatch, addNotification, MONTHS }) => {
+const DuplicateDetectionSystem = ({ transactions, dispatch, addNotification, MONTHS, closedMonths }) => {
 const [duplicateThreshold, setDuplicateThreshold] = useState(2);
 const [selectedMonth, setSelectedMonth] = useState('كل الشهور');
 const [expandedGroups, setExpandedGroups] = useState({});
@@ -529,16 +529,44 @@ risk: items.length >= 5 ? 'high' : items.length >= 3 ? 'medium' : 'low'
 }, [transactions, duplicateThreshold, selectedMonth]);
 
 const handleDeleteAll = () => {
-dispatch({
-type: 'SHOW_CONFIRM',
-title: 'تأكيد الحذف الجماعي',
-message: `هل أنت متأكد من حذف العمليات المكررة؟ سيتم الاحتفاظ بنسخة واحدة فقط لكل مجموعة (${detectDuplicates.length} مجموعة).`,
-onConfirm: () => {
-const idsToDelete = detectDuplicates.flatMap(d => d.items.slice(1).map(i => i.id));
-dispatch({ type: 'UPDATE_TRANSACTIONS', payload: transactions.filter(t => !idsToDelete.includes(t.id)) });
-addNotification({ type: 'success', title: 'تم التنظيف', message: `حذف ${idsToDelete.length} عملية مكررة` });
-}
-});
+    let idsToDelete = [];
+    let protectedCount = 0;
+
+    detectDuplicates.forEach(d => {
+        // Keep the first item (original), try to delete the rest
+        const itemsToDelete = d.items.slice(1);
+        
+        itemsToDelete.forEach(item => {
+            if (closedMonths?.includes(item.month)) {
+                protectedCount++;
+            } else {
+                idsToDelete.push(item.id);
+            }
+        });
+    });
+
+    if (idsToDelete.length === 0 && protectedCount > 0) {
+        addNotification({ 
+            type: 'error', 
+            title: 'محظور', 
+            message: 'جميع العمليات المكررة المكتشفة تخص أشهراً مغلقة ولا يمكن حذفها.' 
+        });
+        return;
+    }
+
+    const message = protectedCount > 0
+        ? `سيتم حذف ${idsToDelete.length} عملية مكررة. ${protectedCount} عمليات تم تجاهلها لأنها في أشهر مغلقة.`
+        : `هل أنت متأكد من حذف العمليات المكررة؟ سيتم الاحتفاظ بنسخة واحدة فقط لكل مجموعة (${detectDuplicates.length} مجموعة).`;
+
+    dispatch({
+        type: 'SHOW_CONFIRM',
+        title: protectedCount > 0 ? 'تأكيد الحذف (جزئي)' : 'تأكيد الحذف الجماعي',
+        message: message,
+        onConfirm: () => {
+            dispatch({ type: 'UPDATE_TRANSACTIONS', payload: transactions.filter(t => !idsToDelete.includes(t.id)) });
+            addNotification({ type: 'success', title: 'تم التنظيف', message: `تم حذف ${idsToDelete.length} عملية مكررة${protectedCount > 0 ? ` (تم تجاهل ${protectedCount})` : ''}` });
+        }
+    });
 };
 
 return (
@@ -562,8 +590,8 @@ return (
 <div className="p-4 bg-white/50 dark:bg-black/20 divide-y dark:divide-slate-800 animate-fadeIn">
 {dup.items.map((item, idx) => (
 <div key={item.id} className="py-4 flex justify-between items-center px-4">
-<div className="text-sm font-bold">📅 {item.date} <span className="mx-2 text-slate-300">|</span> 📝 {item.description || 'بدون وصف'}</div>
-{idx !== 0 && <button onClick={() => dispatch({ type: 'UPDATE_TRANSACTIONS', payload: transactions.filter(t => t.id !== item.id) })} className="text-red-500 hover:bg-red-50 p-2 rounded-xl transition-all" title="حذف هذه المكررة"><Trash2 size={16} /></button>}
+<div className="text-sm font-bold">📅 {item.date} <span className="mx-2 text-slate-300">|</span> 📝 {item.description || 'بدون وصف'} {closedMonths?.includes(item.month) && <span className="text-red-500 text-xs mr-2 font-bold">(مغلق)</span>}</div>
+{idx !== 0 && !closedMonths?.includes(item.month) && <button onClick={() => dispatch({ type: 'UPDATE_TRANSACTIONS', payload: transactions.filter(t => t.id !== item.id) })} className="text-red-500 hover:bg-red-50 p-2 rounded-xl transition-all" title="حذف هذه المكررة"><Trash2 size={16} /></button>}
 </div>
 ))}
 </div>
@@ -591,34 +619,35 @@ const defaultCards = [
 ];
 
 try {
-const cached = localStorage.getItem(STORAGE_KEY);
-if (cached) {
-const parsed = JSON.parse(cached);
-return {
-...parsed,
-loans: parsed.loans || defaultLoans,
-cards: parsed.cards || defaultCards,
-fawryAccount: parsed.fawryAccount || { id: 'f1', name: 'فوري', openingBalance: 0 },
-etisalatAccount: parsed.etisalatAccount || { id: 'e1', name: 'محفظة اتصالات', openingBalance: 0 },
-recurringItems: parsed.recurringItems || []
-};
-}
+  const cached = localStorage.getItem(STORAGE_KEY);
+  if (cached) {
+    const parsed = JSON.parse(cached);
+    return {
+      ...parsed,
+      loans: parsed.loans || defaultLoans,
+      cards: parsed.cards || defaultCards,
+      fawryAccount: parsed.fawryAccount || { id: 'f1', name: 'فوري', openingBalance: 0 },
+      etisalatAccount: parsed.etisalatAccount || { id: 'e1', name: 'محفظة اتصالات', openingBalance: 0 },
+      recurringItems: parsed.recurringItems || [],
+      // ضمان وجود الحقول الجديدة حتى في البيانات القديمة
+      closedMonths: parsed.closedMonths || [],
+      monthlySnapshots: parsed.monthlySnapshots || {}
+    };
+  }
 } catch (e) {
-console.warn("Could not load from local storage", e);
+  console.warn("Could not load from local storage", e);
 }
 
 return {
-transactions: [],
-loans: defaultLoans,
-cards: defaultCards,
-fawryAccount: { id: 'f1', name: 'فوري', openingBalance: 0 },
-etisalatAccount: { id: 'e1', name: 'محفظة اتصالات', openingBalance: 0 },
-savingsGoals: [],
-recurringItems: [],
-
-// --- NEW: أضف هذين السطرين هنا ---
-closedMonths: [],       // لتخزين أسماء الأشهر المغلقة (مثلاً: ['يناير'])
-monthlySnapshots: {}    // لتخزين الرصيد الختامي لكل شهر مغلق (مثلاً: { 'يناير': 15000 })
+  transactions: [],
+  loans: defaultLoans,
+  cards: defaultCards,
+  fawryAccount: { id: 'f1', name: 'فوري', openingBalance: 0 },
+  etisalatAccount: { id: 'e1', name: 'محفظة اتصالات', openingBalance: 0 },
+  savingsGoals: [],
+  recurringItems: [],
+  closedMonths: [],
+  monthlySnapshots: {}
 };
 };
 
@@ -1235,6 +1264,12 @@ addNotification({ type: 'success', title: 'تم الحذف نهائياً' });
 
 const handleQuickTransfer = useCallback((e) => {
 e.preventDefault();
+// حماية الشهر المغلق
+if (data.closedMonths?.includes(selectedMonth)) {
+addNotification({ type: 'error', title: 'تنبيه', message: 'هذا الشهر مغلق محاسبياً، لا يمكن إجراء تحويلات فيه.' });
+return;
+}
+
 setIsProcessing(true);
 setTimeout(() => {
 saveHistory();
@@ -1311,7 +1346,7 @@ dispatch({ type: 'SET_QUICK_TRANSFER_DATA', payload: { from: 'cash', to: 'fawry'
 addNotification({ type: 'success', title: 'تم التحويل بنجاح', message: `تم تحويل ${amount.toLocaleString()} ج.م` });
 setIsProcessing(false);
 }, 600);
-}, [quickTransferData, selectedMonth, transactions, saveHistory, dispatch, addNotification, currentFawryBalance, currentEtisalatBalance, financeSnapshot, getSavingsLedger]);
+}, [quickTransferData, selectedMonth, transactions, saveHistory, dispatch, addNotification, currentFawryBalance, currentEtisalatBalance, financeSnapshot, getSavingsLedger, data.closedMonths]);
 
 const handleUpdateLoan = useCallback((e) => { e.preventDefault(); saveHistory(); dispatch({ type: 'UPDATE_LOANS', payload: loans.map(l => l.id === editingLoan.id ? editingLoan : l) }); dispatch({ type: 'SET_EDITING_LOAN', payload: null }); }, [loans, editingLoan, saveHistory]);
 const handleUpdateCard = useCallback((e) => { e.preventDefault(); saveHistory(); dispatch({ type: 'UPDATE_CARDS', payload: cards.map(c => c.id === editingCard.id ? editingCard : c) }); dispatch({ type: 'SET_EDITING_CARD', payload: null }); }, [cards, editingCard, saveHistory]);
@@ -2266,8 +2301,13 @@ title="إعادة للوضع المعلق"
 >
 <Undo2 size={18}/>
 </button>
+{/* NEW: حماية الأزرار للأرشيف */}
+{!data.closedMonths?.includes(t.month) && (
+<>
 <button onClick={() => { dispatch({ type: 'SET_FORM_MODE', payload: 'edit' }); dispatch({ type: 'SET_FORM_DATA', payload: t }); dispatch({ type: 'SET_FORM_OPEN', payload: true }); }} className="p-2 text-blue-500 hover:bg-blue-50 rounded-xl transition-all" title="تعديل"><Edit size={16}/></button>
 <button onClick={() => handleDelete(t.id)} className="p-2 text-rose-400 hover:bg-rose-50 rounded-xl transition-all" title="حذف"><Trash2 size={16}/></button>
+</>
+)}
 </div>
 </div>
 </div>
@@ -2412,7 +2452,7 @@ case 'loans': return renderLoansView();
 case 'cards': return renderWalletsAndCardsView();
 case 'calendar': return renderCalendarView();
 case 'planner': return renderStrategicPlanner();
-case 'duplicates': return <DuplicateDetectionSystem transactions={transactions} dispatch={dispatch} addNotification={addNotification} MONTHS={MONTHS} />;
+case 'duplicates': return <DuplicateDetectionSystem transactions={transactions} dispatch={dispatch} addNotification={addNotification} MONTHS={MONTHS} closedMonths={data.closedMonths} />;
 default: return renderDashboard();
 }
 };
