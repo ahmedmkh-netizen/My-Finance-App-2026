@@ -3,10 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>المحفظة المالية - V50 Secure</title>
+    <title>المحفظة المالية - V51 Secure + Smart Insights</title>
     
     <!-- SEO Meta Tags -->
-    <meta name="description" content="تطبيق محفظة مالية شخصية متكامل وأداة تخطيط ذكية للديون - نسخة آمنة ومحسنة">
+    <meta name="description" content="تطبيق محفظة مالية شخصية متكامل وأداة تخطيط ذكية للديون - نسخة آمنة مع ملخص شهري ذكي">
     <meta name="theme-color" content="#0f172a">
     
     <!-- Fonts -->
@@ -316,7 +316,7 @@
           return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
         };
 
-        const STORAGE_KEY = 'finance_tracker_V50_SECURE';
+        const STORAGE_KEY = 'finance_tracker_V51_SECURE';
         const MONTHS = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
         const OPENING_SAVINGS_JAN = 0; 
 
@@ -490,7 +490,6 @@
             }, [transactions, duplicateThreshold, selectedMonth]);
 
             const handleDeleteAll = () => {
-                // Use Custom Confirm Dialog instead of window.confirm
                 dispatch({
                     type: 'SHOW_CONFIRM',
                     title: 'تأكيد الحذف الجماعي',
@@ -849,6 +848,16 @@
                 return loans.map(l => ({ ...l, totalPaid: (Number(l.prePaidAmount) || 0) + (map[l.id] || 0), remaining: Math.max(0, Number(l.totalAmount) - ((Number(l.prePaidAmount) || 0) + (map[l.id] || 0))) }));
             }, [transactions, loans]);
 
+            // ✅ 1. استخراج إحصائيات الشهر المختار حصراً
+            const monthInsights = useMemo(() => {
+                const monthTrans = transactions.filter(t => t.month === selectedMonth);
+                const inc = monthTrans.filter(t => t.type === 'income' && t.status === 'paid').reduce((s, t) => s + Number(t.amount), 0);
+                const exp = monthTrans.filter(t => t.type === 'expense' && t.status === 'paid').reduce((s, t) => s + Number(t.amount), 0);
+                const pendInc = monthTrans.filter(t => t.type === 'income' && t.status !== 'paid').reduce((s, t) => s + Number(t.amount), 0);
+                const pendExp = monthTrans.filter(t => t.type === 'expense' && t.status !== 'paid').reduce((s, t) => s + Number(t.amount), 0);
+                return { inc, exp, pendInc, pendExp, net: inc - exp };
+            }, [transactions, selectedMonth]);
+
             const groupedTransactions = useMemo(() => { 
                 const groups = {}; 
                 const term = normalizeText(searchTerm);
@@ -1045,13 +1054,11 @@
                         else if (formData.method === 'etisalat') balance = currentEtisalatBalance;
                         
                         if (Number(formData.amount) > balance) {
-                            // Use Custom Confirm Dialog
                             dispatch({
                                 type: 'SHOW_CONFIRM',
                                 title: 'رصيد غير كافٍ',
                                 message: `الرصيد الحالي (${balance.toLocaleString()}) غير كافٍ. هل تريد الاستمرار وترحيل الرصيد بالسالب؟`,
                                 onConfirm: () => {
-                                    // Logic to proceed with negative balance
                                     finalizeTransaction(finalSubType);
                                 }
                             });
@@ -1865,6 +1872,35 @@
                 );
             };
 
+            // ✅ 2. واجهة الملخص السريع (Monthly Spotlight)
+            const renderMonthlyInsight = () => (
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8 animate-fadeIn">
+                    <div className="glass p-5 rounded-3xl border-b-4 border-emerald-500 bg-emerald-50/10">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">دخل محصل ({selectedMonth})</p>
+                        <p className="text-xl font-black text-emerald-600">{isPrivate ? '****' : monthInsights.inc.toLocaleString()} ج.م</p>
+                        {monthInsights.pendInc > 0 && <p className="text-[9px] text-amber-500 mt-1 font-bold">⚠️ +{monthInsights.pendInc.toLocaleString()} منتظر</p>}
+                    </div>
+                    <div className="glass p-5 rounded-3xl border-b-4 border-rose-500 bg-rose-50/10">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">مصاريف مدفوعة</p>
+                        <p className="text-xl font-black text-rose-600">{isPrivate ? '****' : monthInsights.exp.toLocaleString()} ج.م</p>
+                        {monthInsights.pendExp > 0 && <p className="text-[9px] text-amber-500 mt-1 font-bold">⚠️ +{monthInsights.pendExp.toLocaleString()} معلق</p>}
+                    </div>
+                    <div className="glass p-5 rounded-3xl border-b-4 border-blue-500 bg-blue-50/10">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">صافي التدفق المالي</p>
+                        <p className={`text-xl font-black ${monthInsights.net >= 0 ? 'text-blue-600' : 'text-rose-500'}`}>
+                            {isPrivate ? '****' : monthInsights.net.toLocaleString()} ج.م
+                        </p>
+                        <p className="text-[9px] text-slate-400 mt-1">سيولة الشهر الفعلية</p>
+                    </div>
+                    <div className="glass p-5 rounded-3xl border-b-4 border-purple-500 bg-purple-50/10 flex items-center justify-center cursor-pointer hover:bg-purple-100 transition-all" onClick={() => printReport(`تقرير شهر ${selectedMonth}`, transactions.filter(t => t.month === selectedMonth))}>
+                        <div className="text-center">
+                            <Printer size={20} className="mx-auto text-purple-600 mb-1" />
+                            <p className="text-[10px] font-black text-purple-600">طباعة سجل {selectedMonth}</p>
+                        </div>
+                    </div>
+                </div>
+            );
+
             const renderTransactionsViewFull = () => {
                 const pendingGroups = groupedTransactions.map(g => ({
                     ...g,
@@ -1882,7 +1918,14 @@
                             <button type="button" onClick={() => dispatch({ type: 'SET_TRANS_VIEW_MODE', payload: 'income' })} className={`px-12 py-4 rounded-xl text-lg font-bold transition-all duration-300 flex items-center gap-3 ${transViewMode === 'income' ? 'bg-emerald-50 text-emerald-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}><TrendingUp size={24} /> الدخل</button>
                         </div>
                         
-                        <div className="glass p-4 rounded-3xl overflow-x-auto no-print"><div className="flex gap-3 pb-2 scroll-hide snap-x">{MONTHS.map(m => (<button key={m} type="button" onClick={() => dispatch({ type: 'SET_SELECTED_MONTH', payload: m })} className={`flex-shrink-0 px-8 py-3 rounded-2xl text-sm font-bold transition-all duration-300 snap-center ${selectedMonth === m ? 'bg-slate-900 text-white shadow-lg scale-105' : 'bg-slate-50 text-slate-500 hover:bg-slate-200'}`}>{m}</button>))}</div></div>
+                        <div className="glass p-4 rounded-3xl overflow-x-auto no-print mb-6">
+                            <div className="flex gap-3 pb-2 scroll-hide snap-x">
+                                {MONTHS.map(m => (<button key={m} type="button" onClick={() => dispatch({ type: 'SET_SELECTED_MONTH', payload: m })} className={`flex-shrink-0 px-8 py-3 rounded-2xl text-sm font-bold transition-all duration-300 snap-center ${selectedMonth === m ? 'bg-slate-900 text-white shadow-lg scale-105' : 'bg-slate-50 text-slate-500 hover:bg-slate-200'}`}>{m}</button>))}
+                            </div>
+                        </div>
+
+                        {/* ✅ استدعاء لوحة التركيز الشهري الجديدة هنا */}
+                        {renderMonthlyInsight()}
                         
                         <div className="flex gap-2 justify-center flex-wrap px-2 mb-4 no-print">
                             <button type="button" onClick={() => dispatch({ type: 'SET_STATUS_FILTER', payload: 'all' })} className={`px-3 py-1.5 rounded-xl text-[11px] font-bold transition-all border border-slate-200 dark:border-slate-700 flex items-center gap-1 ${statusFilter === 'all' ? 'bg-slate-800 text-white shadow-md' : 'bg-white dark:bg-slate-800 text-slate-500'}`} title="عرض الكل"><Filter size={12}/> الكل</button>
