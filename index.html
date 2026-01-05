@@ -3,10 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<title>المحفظة المالية - V51 Secure + Smart Goals</title>
+<title>المحفظة المالية - V51 Secure + Smart Insights</title>
 
 <!-- SEO Meta Tags -->
-<meta name="description" content="تطبيق محفظة مالية شخصية متكامل مع أداة تخطيط ذكية للأهداف والديون - نسخة آمنة مع ملخص شهري">
+<meta name="description" content="تطبيق محفظة مالية شخصية متكامل وأداة تخطيط ذكية للديون - نسخة آمنة مع ملخص شهري ذكي">
 <meta name="theme-color" content="#0f172a">
 
 <!-- Fonts -->
@@ -44,7 +44,7 @@ animation: {
 'pulse-slow': 'pulse 3s ease-in-out infinite',
 'float': 'float 6s ease-in-out infinite',
 'shimmer': 'shimmer 2s linear infinite',
-'ticker-scroll': 'ticker-scroll 25s linear infinite',
+'ticker-scroll': 'ticker-scroll 50s linear infinite',
 },
 keyframes: {
 fadeIn: { '0%': { opacity: '0', transform: 'scale(0.99)' }, '100%': { opacity: '1', transform: 'scale(1)' } },
@@ -54,7 +54,7 @@ slideInBottom: { '0%': { opacity: '0', transform: 'translateY(50px)' }, '100%': 
 'bounce-slight': { '0%, 100%': { transform: 'translateY(0)' }, '50%': { transform: 'translateY(-5px)' } },
 'float': { '0%, 100%': { transform: 'translateY(0)' }, '50%': { transform: 'translateY(-10px)' } },
 'shimmer': { 'from': { backgroundPosition: '0 0' }, 'to': { backgroundPosition: '-200% 0' } },
-'ticker-scroll': { '0%': { transform: 'translateX(0)' }, '100%': { transform: 'translateX(-50%)' } }
+'ticker-scroll': { '0%': { transform: 'translateX(0)' }, '100%': { transform: 'translateX(-50%)' } } // Fixed: Moves -50% to create infinite loop
 },
 boxShadow: {
 'classic': '0 -4px 25px rgba(0,0,0,0.1)',
@@ -173,7 +173,7 @@ border-radius: 3px;
 .collapsible-header:active { background-color: rgba(0,0,0,0.03); }
 
 .floating-stats {
-position: sticky,
+position: sticky;
 bottom: 2rem;
 z-index: 50;
 animation: slideInBottom 0.4s ease-out;
@@ -183,7 +183,7 @@ backdrop-filter: blur(20px);
 
 /* Print Optimization */
 @media print {
-.no-print, .bottom-nav-container, .fab, .lock-screen, button, input[type="date"], input[type="text"], input[type="password"], select {
+.no-print, .bottom-nav-container, .fab, .lock-screen, button, input[type="date"], input[type="text"], select {
 display: none !important;
 }
 body, .glass {
@@ -641,8 +641,7 @@ showProjectedDebt: false,
 confirmDialog: { isOpen: false, title: '', message: '', onConfirm: null },
 isQuickTransferModalOpen: false, quickTransferData: { from: 'cash', to: 'fawry', amount: 0 },
 isBackupReminderOpen: false,
-viewingCardStatement: null,
-closedMonths: [] // PHASE 3: Add state for closed months
+viewingCardStatement: null // NEW: For Statement View
 };
 
 function dataReducer(state, action) {
@@ -716,9 +715,6 @@ case 'SET_BACKUP_REMINDER_OPEN':
 return { ...state, isBackupReminderOpen: action.payload };
 case 'SET_VIEWING_CARD_STATEMENT':
 return { ...state, viewingCardStatement: action.payload };
-case 'CLOSE_MONTH': // PHASE 3: Action for closing month
-if (state.closedMonths.includes(action.payload)) return state;
-return { ...state, closedMonths: [...state.closedMonths, action.payload] };
 default: return state;
 }
 }
@@ -779,7 +775,7 @@ const [isPrivate, setIsPrivate] = useState(false);
 const mainContentRef = useRef(null);
 const saveTimeoutRef = useRef(null);
 
-const { data, activeTab, selectedMonth, transViewMode, catViewType, isFormOpen, formMode, formData, activeCategoryDetail, repeatMonths, isLocked, isDarkMode, expandedGroup, budgets, editingCard, editingLoan, editingTransaction, searchTerm, editingBudgetCategory, budgetAmount, editingFawry, editingEtisalat, isRecurringModalOpen, recurringFormData, filterType, hidePast, notifications, isAiModalOpen, aiTab, aiQuery, aiResponse, isAiLoading, fawryData, etisalatData, history, future, expandedLedgers, expandedCardsSection, statusFilter, confirmDialog, isQuickTransferModalOpen, quickTransferData, isBackupReminderOpen, viewingCardStatement, closedMonths } = state;
+const { data, activeTab, selectedMonth, transViewMode, catViewType, isFormOpen, formMode, formData, activeCategoryDetail, repeatMonths, isLocked, isDarkMode, expandedGroup, budgets, editingCard, editingLoan, editingTransaction, searchTerm, editingBudgetCategory, budgetAmount, editingFawry, editingEtisalat, isRecurringModalOpen, recurringFormData, filterType, hidePast, notifications, isAiModalOpen, aiTab, aiQuery, aiResponse, isAiLoading, fawryData, etisalatData, history, future, expandedLedgers, expandedCardsSection, statusFilter, confirmDialog, isQuickTransferModalOpen, quickTransferData, isBackupReminderOpen, viewingCardStatement } = state;
 const { transactions = [], loans = [], cards = [], recurringItems = [], savingsGoals = [] } = data || {};
 
 // Auth Observer
@@ -1170,29 +1166,7 @@ setIsProcessing(false);
 }
 }, [formData, formMode, selectedMonth, repeatMonths, transactions, saveHistory, addNotification, currentFawryBalance, currentEtisalatBalance, loans, dispatch]);
 
-// PHASE 2: Linked Transfers Logic - Modified handleDelete
 const handleDelete = useCallback((id) => {
-const targetTrans = transactions.find(t => t.id === id);
-if (!targetTrans) return;
-
-// Check if transaction is part of a linked transfer
-if (targetTrans.transferGroupId) {
-dispatch({
-type: 'SHOW_CONFIRM',
-title: 'حذف تحويل مرتبط',
-message: 'هذه العملية جزء من تحويل متبادل. هل تريد حذف طرفي التحويل معاً لضمان دقة الرصيد؟',
-onConfirm: () => {
-const newTransactions = transactions.filter(t => t.transferGroupId !== targetTrans.transferGroupId);
-dispatch({ type: 'UPDATE_TRANSACTIONS', payload: newTransactions });
-db.collection("finance_2026").doc("user_ahmed_data").update({
-"transactions": newTransactions
-}).then(() => {
-addNotification({ type: 'success', title: 'تم حذف التحويل كاملاً' });
-});
-}
-});
-} else {
-// Normal delete logic
 dispatch({
 type: 'SHOW_CONFIRM',
 title: 'تأكيد الحذف',
@@ -1207,10 +1181,8 @@ addNotification({ type: 'success', title: 'تم الحذف نهائياً' });
 });
 }
 });
-}
 }, [transactions, dispatch, addNotification]);
 
-// PHASE 2: Linked Transfers Logic - Modified handleQuickTransfer
 const handleQuickTransfer = useCallback((e) => {
 e.preventDefault();
 setIsProcessing(true);
@@ -1254,9 +1226,6 @@ return;
 const fromLabel = PAYMENT_METHODS.find(p => p.id === quickTransferData.from)?.label || quickTransferData.from;
 const toLabel = PAYMENT_METHODS.find(p => p.id === quickTransferData.to)?.label || quickTransferData.to;
 
-// PHASE 2: Generate common group ID
-const transferGroupId = `group-${Date.now()}`;
-
 const fromTransaction = {
 id: 'qt-withdraw-' + getSafeId(),
 type: 'expense',
@@ -1267,8 +1236,7 @@ method: quickTransferData.from,
 date: getLocalISODate(),
 month: selectedMonth,
 monthIndex: getMonthIndex(selectedMonth),
-subType: 'withdrawal',
-transferGroupId: transferGroupId // Link ID
+subType: 'withdrawal'
 };
 
 const toTransaction = {
@@ -1281,8 +1249,7 @@ method: quickTransferData.to,
 date: getLocalISODate(),
 month: selectedMonth,
 monthIndex: getMonthIndex(selectedMonth),
-subType: 'deposit',
-transferGroupId: transferGroupId // Link ID
+subType: 'deposit'
 };
 
 const newTransactions = [...transactions, fromTransaction, toTransaction];
@@ -1341,7 +1308,7 @@ window.location.reload();
 }, []);
 
 const handleAnalyzeFinances = useCallback(async () => { dispatch({ type: 'SET_AI_LOADING', payload: true }); setTimeout(() => { const totalIncome = transactions.reduce((a,c)=>c.type==='income'?a+Number(c.amount):a, 0); const totalExp = transactions.reduce((a,c)=>c.type==='expense'?a+Number(c.amount):a, 0); const ratio = Math.round((totalExp/totalIncome)*100); dispatch({ type: 'SET_AI_RESPONSE', payload: `تحليل سريع: إجمالي دخلك المسجل ${totalIncome.toLocaleString()} ومصروفاتك ${totalExp.toLocaleString()} (${ratio}%). وضعك المالي ${ratio > 90 ? 'حرج، تحتاج لتقليل النفقات' : 'جيد ومستقر'}.` }); dispatch({ type: 'SET_AI_LOADING', payload: false }); }, 1500); }, [transactions]);
-const handleSmartAdd = useCallback(async () => { dispatch({ type: 'SET_AI_LOADING', payload: true }); setTimeout(() => { const txt = aiQuery.toLowerCase(); let amount = txt.match(/\d+/)?.[0]; let type = (txt.includes('قبضت') || txt.includes('اخدت') || txt.includes('تحويل لي')) ? 'income' : 'expense'; let category = 'أخرى'; if (txt.includes('اكل') || txt.includes('غدا') || txt.includes('سوبر')) category = 'مصروفات المعيشة اليومية'; else if (txt.includes('رصيد') || txt.includes('شحن')) category = 'الاتصالات وشحن الهواتف المحمولة'; else if (txt.includes('بنزين') || txt.includes('مواصلات')) category = 'المواصلات والانتقالات'; else if (txt.includes('درس') || txt.includes('مدرسة')) category = 'التعليم والدروس والأنشطة'; if (amount) { dispatch({ type: 'SET_FORM_MODE', payload: 'add' }); dispatch({ type: 'SET_FORM_DATA', payload: { type, category, amount: Number(amount), description: aiQuery, date: getLocalISODate(), month: selectedMonth, method: 'cash', quantity:1, unitPrice: Number(amount), subType: type === 'income' ? 'deposit' : 'withdrawal' } }); dispatch({ type: 'SET_FORM_OPEN', payload: true }); dispatch({ type: 'SET_AI_MODAL_OPEN', payload: false }); dispatch({ type: 'SET_AI_QUERY', payload: '' }); } else { dispatch({ type: 'SET_AI_RESPONSE', payload: "لم أتمكن من استخراج المبلغ. يرجى كتابة الرقم بوضوح (مثال: 500)" ); } dispatch({ type: 'SET_AI_LOADING', payload: false }); }, 1000); }, [aiQuery, selectedMonth]);
+const handleSmartAdd = useCallback(async () => { dispatch({ type: 'SET_AI_LOADING', payload: true }); setTimeout(() => { const txt = aiQuery.toLowerCase(); let amount = txt.match(/\d+/)?.[0]; let type = (txt.includes('قبضت') || txt.includes('اخدت') || txt.includes('تحويل لي')) ? 'income' : 'expense'; let category = 'أخرى'; if (txt.includes('اكل') || txt.includes('غدا') || txt.includes('سوبر')) category = 'مصروفات المعيشة اليومية'; else if (txt.includes('رصيد') || txt.includes('شحن')) category = 'الاتصالات وشحن الهواتف المحمولة'; else if (txt.includes('بنزين') || txt.includes('مواصلات')) category = 'المواصلات والانتقالات'; else if (txt.includes('درس') || txt.includes('مدرسة')) category = 'التعليم والدروس والأنشطة'; if (amount) { dispatch({ type: 'SET_FORM_MODE', payload: 'add' }); dispatch({ type: 'SET_FORM_DATA', payload: { type, category, amount: Number(amount), description: aiQuery, date: getLocalISODate(), month: selectedMonth, method: 'cash', quantity:1, unitPrice: Number(amount), subType: type === 'income' ? 'deposit' : 'withdrawal' } }); dispatch({ type: 'SET_FORM_OPEN', payload: true }); dispatch({ type: 'SET_AI_MODAL_OPEN', payload: false }); dispatch({ type: 'SET_AI_QUERY', payload: '' }); } else { dispatch({ type: 'SET_AI_RESPONSE', payload: "لم أتمكن من استخراج المبلغ. يرجى كتابة الرقم بوضوح (مثال: 500)" }); } dispatch({ type: 'SET_AI_LOADING', payload: false }); }, 1000); }, [aiQuery, selectedMonth]);
 
 useEffect(() => {
 const lastBackup = localStorage.getItem('last_backup');
@@ -1555,11 +1522,7 @@ title="دفع سريع"
 );
 };
 
-const renderDashboard = () => {
-// PHASE 3: Check if month is closed
-const isMonthClosed = closedMonths.includes(selectedMonth);
-
-return (
+const renderDashboard = () => (
 <div className="space-y-8 animate-fadeIn">
 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 no-print">
 <button
@@ -1569,22 +1532,6 @@ className="col-span-2 md:col-span-4 glass p-5 rounded-3xl flex items-center just
 <div className="bg-white/20 p-3 rounded-2xl group-hover:rotate-12 transition-transform duration-300"><ArrowRightLeft size={24} /></div>
 <span className="font-bold text-lg tracking-wide">تحويل فوري بين المحافظ</span>
 </button>
-
-{/* PHASE 3: Month Closure Button */}
-<button 
-    onClick={() => {
-        if(window.confirm(`هل أنت متأكد من إغلاق شهر ${selectedMonth}؟ لا يمكن تعديل بياناته لاحقاً.`)) {
-            dispatch({ type: 'CLOSE_MONTH', payload: selectedMonth });
-            addNotification({ type: 'success', title: 'تم الإغلاق', message: `تم إغلاق شهر ${selectedMonth} مالياً بنجاح.` });
-        }
-    }}
-    className={`col-span-1 md:col-span-2 glass p-5 rounded-3xl flex items-center justify-center gap-3 transition-all active:scale-[0.98] shadow-lg ${isMonthClosed ? 'bg-slate-200 text-slate-500 cursor-not-allowed' : 'bg-amber-100 text-amber-700 hover:bg-amber-200'}`}
-    disabled={isMonthClosed}
->
-    {isMonthClosed ? <Lock size={24} /> : <Unlock size={24} />}
-    <span className="font-bold text-lg tracking-wide">{isMonthClosed ? 'الشهر مغلق' : 'إغلاق الشهر مالياً'}</span>
-</button>
-
 <button
 onClick={() => { dispatch({ type: 'SET_FORM_MODE', payload: 'add' }); dispatch({ type: 'SET_FORM_DATA', payload: { type: 'income', amount: '', date: getLocalISODate(), month: selectedMonth, method: 'cash', subType: 'deposit' } }); dispatch({ type: 'SET_FORM_OPEN', payload: true }); }}
 className="glass p-5 rounded-3xl flex flex-col items-center justify-center gap-3 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 transition-all active:scale-95 group"
@@ -1601,6 +1548,7 @@ className="glass p-5 rounded-3xl flex flex-col items-center justify-center gap-3
 </button>
 </div>
 
+{/* NEW: Month Bar in Dashboard */}
 <div className="glass p-4 rounded-3xl overflow-x-auto no-print mb-6">
 <div className="flex gap-3 pb-2 scroll-hide snap-x">
 {MONTHS.map(m => (<button key={m} type="button" onClick={() => dispatch({ type: 'SET_SELECTED_MONTH', payload: m })} className={`flex-shrink-0 px-8 py-3 rounded-2xl text-sm font-bold transition-all duration-300 snap-center ${selectedMonth === m ? 'bg-slate-900 text-white shadow-lg scale-105' : 'bg-slate-50 text-slate-500 hover:bg-slate-200'}`}>{m}</button>))}
@@ -1636,7 +1584,7 @@ isPrivate={isPrivate}
 </div>
 </div>
 </div>
-)};
+);
 
 const renderCategoriesView = () => {
 const catTotals = transactions.filter(t => t.type === catViewType && t.month === selectedMonth).reduce((acc, t) => { acc[t.category] = (acc[t.category] || 0) + Number(t.amount); return acc; }, {});
@@ -1949,7 +1897,7 @@ return (
 <div key={card.id} className="flex flex-col gap-8 w-full max-w-md">
 <div className="relative group perspective-1000 transition-transform hover:-translate-y-2 duration-500">
 <div className="absolute top-2 right-2 z-20 flex gap-2">
-{/* PHASE 1: Statement Button */}
+{/* NEW: Statement Button */}
 <button type="button" onClick={() => dispatch({ type: 'SET_VIEWING_CARD_STATEMENT', payload: card })} className="bg-white/90 hover:bg-white dark:bg-slate-800 hover:bg-slate-700 text-indigo-600 dark:text-indigo-400 p-2.5 rounded-xl shadow-lg shadow-blue-500/10 transition-all hover:scale-110 border border-slate-200/50 dark:border-slate-600/50 backdrop-blur-md no-print" title="كشف الحساب">
 <FileText size={18} />
 </button>
@@ -1963,7 +1911,7 @@ return (
 <Wifi size={20} className="rotate-90" />
 </div>
 </div>
-{/* Bank Logo on Card */}
+{/* NEW: Bank Logo on Card */}
 <div className="absolute top-4 left-4 z-20 opacity-80">
 <BankLogo type={`${card.bank.toLowerCase()}_card`} size={40} />
 </div>
@@ -2366,41 +2314,48 @@ return (
 
 <ConfirmDialog />
 
-{/* PHASE 1: New Statement Modal */}
+{/* NEW: Statement Modal with Balance Calculation */}
 {viewingCardStatement && (() => {
-    // حساب بيانات الكارت لهذا الشهر تحديداً
     const history = calculateCardHistory(viewingCardStatement);
     const monthData = history.find(h => h.month === selectedMonth);
-    
+
     return (
         <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md flex items-center justify-center z-[3500] p-4 animate-fadeIn no-print">
-            <div className="bg-white dark:bg-slate-900 w-full max-w-4xl rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-fadeIn border border-slate-200 dark:border-slate-700">
+            <div className="bg-white dark:bg-slate-900 w-full max-w-4xl rounded-[2.5rem] shadow-2xl overflow-hidden animate-fadeIn border border-slate-200 dark:border-slate-700 flex flex-col max-h-[90vh]">
                 {/* الرأس المطور مع الأرصدة */}
-                <div className="p-8 border-b dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30">
+                <div className="p-8 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30">
                     <div className="flex justify-between items-start mb-6">
-                        <div>
-                            <h3 className="text-2xl font-black flex items-center gap-3 text-slate-800 dark:text-white">
-                                <BankLogo type={`${viewingCardStatement.bank.toLowerCase()}_card`} size={32} />
-                                كشف حساب: {viewingCardStatement.bank}
-                            </h3>
-                            <p className="text-sm text-slate-500 font-bold mt-1">عن شهر {selectedMonth}</p>
+                        <div className="flex items-center gap-3">
+                            <BankLogo type={`${viewingCardStatement.bank.toLowerCase()}_card`} size={40} />
+                            <div>
+                                <h3 className="text-2xl font-black text-slate-800 dark:text-white">
+                                    كشف حساب: {viewingCardStatement.bank}
+                                </h3>
+                                <p className="text-sm text-slate-500 font-bold mt-1">عن شهر {selectedMonth}</p>
+                            </div>
                         </div>
-                        <button onClick={() => dispatch({ type: 'SET_VIEWING_CARD_STATEMENT', payload: null })} className="p-2 hover:bg-red-50 text-slate-400 rounded-xl transition-colors"><X size={24} /></button>
+                        <div className="flex items-center gap-2">
+                             <button type="button" onClick={() => {
+                                const cardTrans = transactions.filter(t => t.method === (viewingCardStatement.bank === 'CIB' ? 'cib_card' : 'aaib_card') && t.month === selectedMonth && t.status === 'paid').sort((a,b)=>new Date(b.date)-new Date(a.date));
+                                printReport(`كشف حساب ${viewingCardStatement.bank} - ${selectedMonth}`, cardTrans);
+                            }} className="bg-blue-50 dark:bg-blue-900/20 text-blue-600 hover:bg-blue-100 dark:hover:bg-blue-900/40 px-4 py-2 rounded-xl transition-all text-sm font-bold flex items-center gap-2"><Printer size={18} /> طباعة</button>
+                            <button type="button" onClick={() => dispatch({ type: 'SET_VIEWING_CARD_STATEMENT', payload: null })} className="p-2 hover:bg-red-50 dark:hover:bg-red-900/20 text-slate-400 hover:text-red-500 rounded-xl transition-colors"><X size={24} /></button>
+                        </div>
                     </div>
-                    
+
                     {/* لوحة الأرصدة السريعة */}
                     <div className="grid grid-cols-2 gap-4">
                         <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl border-r-4 border-amber-500 shadow-sm">
                             <p className="text-[10px] font-bold text-slate-400 uppercase">رصيد بداية المدة (دين)</p>
-                            <p className="text-lg font-black text-slate-700 dark:text-white">{isPrivate ? '****' : (monthData ? monthData.openingDebt.toLocaleString() : 0)} ج.م</p>
+                            <p className="text-lg font-black text-slate-700 dark:text-white">{isPrivate ? '****' : Math.round(monthData?.openingDebt || 0).toLocaleString()} ج.م</p>
                         </div>
                         <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl border-r-4 border-blue-500 shadow-sm">
                             <p className="text-[10px] font-bold text-slate-400 uppercase">رصيد نهاية المدة (دين)</p>
-                            <p className="text-lg font-black text-blue-600">{isPrivate ? '****' : (monthData ? monthData.closingDebt.toLocaleString() : 0)} ج.م</p>
+                            <p className="text-lg font-black text-blue-600">{isPrivate ? '****' : Math.round(monthData?.closingDebt || 0).toLocaleString()} ج.م</p>
                         </div>
                     </div>
                 </div>
-                {/* جدول العمليات */}
+
                 <div className="flex-1 overflow-y-auto p-8 scroll-hide bg-white/50 dark:bg-slate-900/50">
                     <table className="w-full text-right border-collapse">
                         <thead className="bg-slate-50/80 dark:bg-slate-800/50 text-slate-400 text-xs font-bold uppercase sticky top-0 backdrop-blur-sm z-10">
@@ -2433,12 +2388,6 @@ return (
                             )}
                         </tbody>
                     </table>
-                </div>
-                <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 flex justify-end no-print">
-                    <button type="button" onClick={() => {
-                        const cardTrans = transactions.filter(t => t.method === (viewingCardStatement.bank === 'CIB' ? 'cib_card' : 'aaib_card') && t.month === selectedMonth && t.status === 'paid').sort((a,b)=>new Date(b.date)-new Date(a.date));
-                        printReport(`كشف حساب ${viewingCardStatement.bank} - ${selectedMonth}`, cardTrans);
-                    }} className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-2xl flex items-center gap-2 font-bold shadow-lg shadow-blue-500/30 active:scale-95 transition-all"><Printer size={18} /> طباعة</button>
                 </div>
             </div>
         </div>
@@ -2498,44 +2447,7 @@ return (
 
 <main ref={mainContentRef} className="flex-1 overflow-y-auto p-6 md:p-12 relative scroll-smooth pt-16">
 {isLocked ? (
-<div className="lock-screen backdrop-blur-3xl animate-fadeIn no-print bg-slate-900/95">
-    <Lock size={80} className="mb-8 text-blue-500 animate-bounce-slight" />
-    <h2 className="text-4xl font-black mb-4 tracking-tight text-white">التطبيق مقفل</h2>
-    <p className="text-slate-400 mb-8 font-bold">يرجى إدخال الرقم السري للوصول للبيانات</p>
-    
-    <div className="flex flex-col items-center gap-4 w-full max-w-xs">
-        <input 
-            type="password" 
-            id="unlock-pass"
-            placeholder="****"
-            className="w-full p-4 rounded-2xl bg-white/10 border border-white/20 text-center text-3xl tracking-[1em] text-white focus:outline-none focus:border-blue-500 transition-all"
-            onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                    if (e.target.value === '1234') { 
-                        dispatch({ type: 'SET_IS_LOCKED', payload: false });
-                    } else {
-                        alert('الرقم السري خطأ!');
-                        e.target.value = '';
-                    }
-                }
-            }}
-        />
-        <button 
-            type="button" 
-            onClick={() => {
-                const pass = document.getElementById('unlock-pass').value;
-                if (pass === '1234') { // Password is 1234
-                    dispatch({ type: 'SET_IS_LOCKED', payload: false });
-                } else {
-                    alert('الرقم السري غير صحيح');
-                }
-            }} 
-            className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black shadow-2xl hover:bg-blue-700 transition-all active:scale-95 uppercase tracking-widest"
-        >
-            <Unlock size={24} className="inline ml-2" /> فتح التطبيق
-        </button>
-    </div>
-</div>
+<div className="lock-screen backdrop-blur-3xl animate-fadeIn no-print"><Lock size={80} className="mb-8 text-blue-500 animate-bounce-slight" /><h2 className="text-4xl font-black mb-8 tracking-tight">التطبيق مقفل</h2><button type="button" onClick={() => dispatch({ type: 'SET_IS_LOCKED', payload: false })} className="bg-white text-slate-900 px-16 py-5 rounded-full font-bold shadow-2xl flex items-center gap-3 transition-all hover:scale-105 active:scale-95 uppercase tracking-widest"><Unlock size={24} /> فتح التطبيق</button></div>
 ) : (
 <div className="max-w-7xl mx-auto space-y-12 animate-fadeIn pb-24">
 <header className="flex flex-col md:flex-row justify-between items-end bg-transparent pb-4 gap-6 no-print">
