@@ -9,12 +9,12 @@
     <meta name="description" content="تطبيق محفظة مالية شخصية متكامل وأداة تخطيط ذكية للديون - نسخة آمنة مع ملخص شهري ذكي">
     <meta name="theme-color" content="#0f172a">
     
-    <!-- Fonts -->
+    <!-- Fonts (Cairo for Arabic) -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@200;300;400;500;600;700;800;900&display=swap" rel="stylesheet">
 
-    <!-- Tailwind CSS -->
+    <!-- Tailwind CSS (Configured for Dark Mode) -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -76,7 +76,7 @@
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
     
-    <!-- ES Modules Import Map -->
+    <!-- ES Modules Import Map for React and Libraries -->
     <script type="importmap">
     {
         "imports": {
@@ -89,6 +89,8 @@
         }
     }
     </script>
+    
+    <!-- Babel for JSX Transformation in Browser -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     
     <!-- Custom Styles -->
@@ -102,11 +104,14 @@
             @apply text-slate-100; 
             background: linear-gradient(135deg, #020617 0%, #0f172a 100%);
         }
+        
+        /* Scrollbar Styling */
         ::-webkit-scrollbar { width: 6px; height: 6px; }
         ::-webkit-scrollbar-track { @apply bg-transparent; }
         ::-webkit-scrollbar-thumb { @apply bg-slate-300/50 dark:bg-slate-700/50 rounded-full hover:bg-slate-400 dark:hover:bg-slate-600 transition-colors; }
         .scroll-hide::-webkit-scrollbar { display: none; }
         
+        /* Glassmorphism Utilities */
         .glass { 
             backdrop-filter: blur(20px) saturate(180%); 
             -webkit-backdrop-filter: blur(20px) saturate(180%); 
@@ -116,6 +121,7 @@
         .text-gradient { @apply bg-gradient-to-r from-blue-600 to-cyan-500 bg-clip-text text-transparent; }
         .hover-lift { @apply transition-all duration-300 hover:-translate-y-1.5 hover:shadow-2xl active:scale-[0.98]; }
         
+        /* Navigation Bar */
         .bottom-nav-container { 
             position: fixed; bottom: 0; left: 0; right: 0; z-index: 1000; 
             padding-bottom: env(safe-area-inset-bottom); 
@@ -129,6 +135,7 @@
         .nav-btn span { font-size: 11px; margin-top: 2px; font-weight: 700; white-space: nowrap; }
         .v-line { @apply w-px h-8 bg-slate-200 dark:bg-slate-700/50 flex-shrink-0; }
         
+        /* Floating Action Button */
         .fab { 
             position: fixed; bottom: 90px; left: 20px; z-index: 1100; 
             @apply w-16 h-16 bg-gradient-to-br from-blue-600 to-indigo-600 text-white rounded-3xl shadow-2xl shadow-blue-500/40 flex items-center justify-center border-4 border-white dark:border-slate-900 transition-all duration-300; 
@@ -136,23 +143,24 @@
         .fab:hover { @apply scale-110 rotate-90 shadow-neon; }
         .fab:active { @apply scale-90; }
         
+        /* Lock Screen */
         .lock-screen { position: fixed; inset: 0; @apply bg-slate-950; z-index: 2000; display: flex; flex-direction: column; align-items: center; justify-content: center; color: white; }
         
+        /* Form Elements */
         .input-field { 
             @apply w-full p-4 border border-slate-200 dark:border-slate-700 rounded-2xl outline-none transition-all duration-300;
             @apply bg-white/80 dark:bg-slate-800/80 text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500; 
             @apply focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 dark:focus:ring-blue-500/20; 
         }
         
-        .dark select option { 
-            background-color: #1e293b !important; 
-            color: #f8fafc !important; 
-        }
-
+        /* Select Overrides */
+        .dark select option { background-color: #1e293b !important; color: #f8fafc !important; }
         select.input-field { appearance: none; background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e"); background-repeat: no-repeat; background-position: left 1rem center; background-size: 1em; }
         
+        /* Loading Spinner */
         .loading-spinner { @apply w-8 h-8 border-4 border-blue-500/30 border-t-blue-600 rounded-full animate-spin; }
         
+        /* Credit Card Chip */
         .credit-card-chip {
             background: linear-gradient(135deg, #d4af37 0%, #f9e295 50%, #d4af37 100%);
             border-radius: 6px;
@@ -217,7 +225,15 @@
     </style>
 </head>
 <body class="selection:bg-blue-500/30">
-    <div id="root"></div>
+    <div id="root">
+        <!-- Initial Loading State -->
+        <div class="flex h-screen items-center justify-center bg-slate-50 dark:bg-slate-900">
+            <div class="text-center">
+                <div class="loading-spinner mx-auto mb-4 w-12 h-12"></div>
+                <p class="text-slate-500 font-bold animate-pulse">جاري تحميل التطبيق...</p>
+            </div>
+        </div>
+    </div>
 
     <script type="text/babel" data-type="module">
         import React, { useState, useMemo, useEffect, useCallback, useReducer, useRef } from 'react';
@@ -236,6 +252,7 @@
 
         const CURRENT_YEAR = new Date().getFullYear();
 
+        // Firebase Configuration
         const firebaseConfig = {
           apiKey: "AIzaSyCEq-Trf1oFsvPF5tlMvqU83ea_J2DLZjs",
           authDomain: "finance-app-2026-3e318.firebaseapp.com",
@@ -245,6 +262,7 @@
           appId: "1:855414629770:web:8bb07198b8245b63781473"
         };
 
+        // Initialize Firebase
         if (!firebase.apps.length) {
             firebase.initializeApp(firebaseConfig);
         }
@@ -370,6 +388,7 @@
             expense: [ 'الالتزامات البنكية والتمويلية', 'مصروفات المعيشة اليومية', 'مسحوبات محل هاني', 'الملابس والمستلزمات الشخصية', 'الزكاة والتبرعات', 'التعليم والدروس والأنشطة', 'المصروفات النقدية الشهرية', 'شحن رصيد فوري', 'المرافق والخدمات – بولاق', 'المرافق والخدمات – العبور', 'الاتصالات وشحن الهواتف المحمولة', 'الصحة والرعاية الطبية', 'المستلزمات المنزلية والتموين', 'اللحوم والدواجن والأسماك', 'الطوارئ والاحتياطي النقدي', 'الصيانة والإصلاحات المنزلية', 'المواصلات والانتقالات', 'الترفيه والمناسبات الاجتماعية', 'مصاريف موسمية وسنوية', 'شحن محفظة', 'تحويلات', 'أخرى' ]
         };
 
+        // Error Boundary
         class ErrorBoundary extends React.Component {
             constructor(props) { super(props); this.state = { hasError: false, error: null }; }
             static getDerivedStateFromError(error) { return { hasError: true, error }; }
@@ -992,7 +1011,7 @@
                     const items = [];
                     if (Array.isArray(cards)) {
                         cards.forEach(card => {
-                            const dueDay = parseInt(card.dueDate) || 5;
+                            const dueDay = parseInt(card.dueDate) || 5; 
                             let targetMonth = currentMonth; 
                             let targetYear = currentYear;
                             if (dueDay < currentDay) { targetMonth++; if (targetMonth > 11) { targetMonth = 0; targetYear++; } }
