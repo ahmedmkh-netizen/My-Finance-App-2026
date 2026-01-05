@@ -823,7 +823,7 @@
                 const projectedClosingBalance = actualCashInHand + currentPendingIncome - currentPendingCash;
 
                 return { 
-                    actualCarryover: actualCarryover, // ✅ أضفنا هذا السطر
+                    actualCarryover: actualCarryover, 
                     income: currentActualIncome, 
                     actualIncome: currentActualIncome, 
                     cashExpenses: currentPaidCash,
@@ -849,7 +849,6 @@
                 return loans.map(l => ({ ...l, totalPaid: (Number(l.prePaidAmount) || 0) + (map[l.id] || 0), remaining: Math.max(0, Number(l.totalAmount) - ((Number(l.prePaidAmount) || 0) + (map[l.id] || 0))) }));
             }, [transactions, loans]);
 
-            // ✅ 1. استخراج إحصائيات الشهر المختار حصراً
             const monthInsights = useMemo(() => {
                 const monthTrans = transactions.filter(t => t.month === selectedMonth);
                 const inc = monthTrans.filter(t => t.type === 'income' && t.status === 'paid').reduce((s, t) => s + Number(t.amount), 0);
@@ -911,10 +910,9 @@
             }, [transactions]);
             const currentEtisalatBalance = (Number(etisalatData.openingBalance) || 0) + etisalatStats.deposits - etisalatStats.withdrawals;
 
-            // ✅ 2. تعديل سجل حسابات التوفير (CIB / AAIB)
             const getSavingsLedger = useCallback((methodId) => {
                 const accTransactions = transactions
-                    .filter(t => t.method === methodId && t.status === 'paid') // ✅ فلترة: المحقق فقط
+                    .filter(t => t.method === methodId && t.status === 'paid') 
                     .sort((a, b) => new Date(a.date) - new Date(b.date));
                 
                 let runningBalance = 0;
@@ -927,10 +925,9 @@
                 }).reverse(); 
             }, [transactions]);
 
-            // ✅ 3. تعديل سجل فوري
             const fawryLedger = useMemo(() => {
                 const accTransactions = transactions
-                    .filter(t => t.method === 'fawry' && t.status === 'paid') // ✅ فلترة: المحقق فقط
+                    .filter(t => t.method === 'fawry' && t.status === 'paid') 
                     .sort((a, b) => new Date(a.date) - new Date(b.date));
                 
                 let runningBalance = fawryData.openingBalance || 0;
@@ -942,10 +939,9 @@
                 }).reverse(); 
             }, [transactions, fawryData]);
 
-            // ✅ 4. تعديل سجل اتصالات كاش
             const etisalatLedger = useMemo(() => {
                 const accTransactions = transactions
-                    .filter(t => t.method === 'etisalat' && t.status === 'paid') // ✅ فلترة: المحقق فقط
+                    .filter(t => t.method === 'etisalat' && t.status === 'paid') 
                     .sort((a, b) => new Date(a.date) - new Date(b.date));
                 
                 let runningBalance = etisalatData.openingBalance || 0;
@@ -1509,7 +1505,6 @@
                         <OptimizedSummaryCard 
                             title="سيولة جيبك الآن" 
                             amount={financeSnapshot.actualCashInHand} 
-                            // ✅ التعديل هنا: إظهار الرصيد المُرحل بوضوح
                             subtitle={`رصيد مُرّحل: ${isPrivate ? '****' : financeSnapshot.actualCarryover.toLocaleString()} ج.م`} 
                             icon={Wallet} 
                             color="text-emerald-600" 
@@ -1624,7 +1619,6 @@
                 );
             };
 
-            // Unified Loans View
             const renderLoansView = () => {
                 const getMonthlyProjection = () => {
                     const projection = {};
@@ -1656,7 +1650,6 @@
 
                 return (
                     <div className="space-y-8 animate-fadeIn pb-24">
-                        {/* كارت المديونية الشاملة */}
                         <div className="glass p-8 rounded-[2.5rem] bg-slate-900 text-white border-r-8 border-slate-700 shadow-pro-card relative overflow-hidden">
                             <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-[80px] -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
                             
@@ -1677,7 +1670,6 @@
                             </div>
                         </div>
 
-                        {/* الجدول المنسدل لخطة السداد */}
                         <details className="group glass rounded-[2rem] overflow-hidden border border-slate-200 dark:border-slate-700 shadow-sm">
                             <summary className="p-6 cursor-pointer list-none flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-700/50 transition-colors">
                                 <h3 className="font-black text-lg flex items-center gap-2 text-slate-800 dark:text-white">
@@ -1708,7 +1700,6 @@
                             </div>
                         </details>
 
-                        {/* List of Loans */}
                         <div className="grid grid-cols-1 gap-6">
                             {updatedLoans.map(loan => {
                                 const isPaid = loan.remaining <= 0;
@@ -1892,7 +1883,6 @@
                 );
             };
 
-            // ✅ 2. واجهة الملخص السريع (Monthly Spotlight)
             const renderMonthlyInsight = () => (
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8 animate-fadeIn">
                     <div className="glass p-5 rounded-3xl border-b-4 border-emerald-500 bg-emerald-50/10">
@@ -1944,7 +1934,6 @@
                             </div>
                         </div>
 
-                        {/* ✅ استدعاء لوحة التركيز الشهري الجديدة هنا */}
                         {renderMonthlyInsight()}
                         
                         <div className="flex gap-2 justify-center flex-wrap px-2 mb-4 no-print">
@@ -2079,9 +2068,7 @@
                                                     {isPrivate ? '****' : Number(t.amount).toLocaleString()} ج.م
                                                 </p>
                                                 
-                                                {/* مفاتيح التحكم في الأرشيف */}
                                                 <div className="flex gap-1 no-print opacity-0 group-hover:opacity-100 transition-opacity">
-                                                    {/* مفتاح الإعادة للوضع المعلق */}
                                                     <button 
                                                         onClick={() => {
                                                             const newTrans = transactions.map(tr => tr.id === t.id ? { ...tr, status: 'pending' } : tr);
@@ -2097,11 +2084,7 @@
                                                     >
                                                         <Undo2 size={18}/>
                                                     </button>
-                                                    
-                                                    {/* زر التعديل */}
                                                     <button onClick={() => { dispatch({ type: 'SET_FORM_MODE', payload: 'edit' }); dispatch({ type: 'SET_FORM_DATA', payload: t }); dispatch({ type: 'SET_FORM_OPEN', payload: true }); }} className="p-2 text-blue-500 hover:bg-blue-50 rounded-xl transition-all" title="تعديل"><Edit size={16}/></button>
-                                                    
-                                                    {/* زر الحذف */}
                                                     <button onClick={() => handleDelete(t.id)} className="p-2 text-rose-400 hover:bg-rose-50 rounded-xl transition-all" title="حذف"><Trash2 size={16}/></button>
                                                 </div>
                                             </div>
