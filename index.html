@@ -54,7 +54,7 @@ slideInBottom: { '0%': { opacity: '0', transform: 'translateY(50px)' }, '100%': 
 'bounce-slight': { '0%, 100%': { transform: 'translateY(0)' }, '50%': { transform: 'translateY(-5px)' } },
 'float': { '0%, 100%': { transform: 'translateY(0)' }, '50%': { transform: 'translateY(-10px)' } },
 'shimmer': { 'from': { backgroundPosition: '0 0' }, 'to': { backgroundPosition: '-200% 0' } },
-'ticker-scroll': { '0%': { transform: 'translateX(0)' }, '100%': { transform: 'translateX(-50%)' } } // Fixed: Moves -50% to create infinite loop
+'ticker-scroll': { '0%': { transform: 'translateX(0)' }, '100%': { transform: 'translateX(-50%)' } }
 },
 boxShadow: {
 'classic': '0 -4px 25px rgba(0,0,0,0.1)',
@@ -614,7 +614,11 @@ cards: defaultCards,
 fawryAccount: { id: 'f1', name: 'فوري', openingBalance: 0 },
 etisalatAccount: { id: 'e1', name: 'محفظة اتصالات', openingBalance: 0 },
 savingsGoals: [],
-recurringItems: []
+recurringItems: [],
+
+// --- NEW: أضف هذين السطرين هنا ---
+closedMonths: [],       // لتخزين أسماء الأشهر المغلقة (مثلاً: ['يناير'])
+monthlySnapshots: {}    // لتخزين الرصيد الختامي لكل شهر مغلق (مثلاً: { 'يناير': 15000 })
 };
 };
 
@@ -641,7 +645,7 @@ showProjectedDebt: false,
 confirmDialog: { isOpen: false, title: '', message: '', onConfirm: null },
 isQuickTransferModalOpen: false, quickTransferData: { from: 'cash', to: 'fawry', amount: 0 },
 isBackupReminderOpen: false,
-viewingCardStatement: null // NEW: For Statement View
+viewingCardStatement: null
 };
 
 function dataReducer(state, action) {
@@ -715,6 +719,24 @@ case 'SET_BACKUP_REMINDER_OPEN':
 return { ...state, isBackupReminderOpen: action.payload };
 case 'SET_VIEWING_CARD_STATEMENT':
 return { ...state, viewingCardStatement: action.payload };
+
+// --- NEW: أضف هذا Case ---
+case 'CLOSE_MONTH':
+  return {
+    ...state,
+    data: {
+      ...state.data,
+      // إضافة الشهر الحالي لقائمة المغلقات
+      closedMonths: [...(state.data.closedMonths || []), action.payload.month],
+      // حفظ الرصيد النهائي للشهر كـ Snapshot ثابت
+      monthlySnapshots: { 
+        ...(state.data.monthlySnapshots || {}), 
+        [action.payload.month]: action.payload.balance 
+      }
+    }
+  };
+// -----------------------------
+
 default: return state;
 }
 }
@@ -821,7 +843,15 @@ let actualCarryover = Number(OPENING_SAVINGS_JAN || 0);
 const selectedMonthIdx = getMonthIndex(selectedMonth);
 const transferCats = ['شحن محفظة', 'تحويلات', 'شحن رصيد فوري', 'شحن رصيد', 'إيداع'];
 
-// 1. Carryover calculation
+// --- NEW: منطق التحقق من الشهر السابق ---
+const prevMonthName = MONTHS[selectedMonthIdx - 1];
+
+if (prevMonthName && data.closedMonths?.includes(prevMonthName)) {
+// 1. حالة الثبات (Snapshot): إذا كان الشهر السابق مغلقاً
+// نأخذ الرصيد النهائي المسجل له كرصيد بداية ثابت للشهر الحالي
+actualCarryover = Number(data.monthlySnapshots[prevMonthName] || 0);
+} else {
+// 2. حالة الديناميكية (Dynamic): إذا لم يكن مغلقاً، نحسب من بداية السنة (حتى لا نخسر التاريخ)
 transactions.filter(t => getMonthIndex(t.month) < selectedMonthIdx).forEach(t => {
 const amt = Number(t.amount || 0);
 if (t.type === 'income' && t.status === 'paid') {
@@ -832,6 +862,8 @@ actualCarryover -= amt;
 }
 }
 });
+}
+// -------------------------------------------
 
 const currentMonthTrans = transactions.filter(t => t.month === selectedMonth);
 
@@ -875,7 +907,7 @@ actualCashInHand,
 projectedClosingBalance,
 pendingAmount: currentPendingCash
 };
-}, [transactions, selectedMonth]);
+}, [transactions, selectedMonth, data.closedMonths, data.monthlySnapshots]); // تم تحديث الاعتمادات
 
 const chartData = useMemo(() => MONTHS.map(m => ({
 name: m,
@@ -1086,7 +1118,17 @@ if (!notification.persistent) setTimeout(() => removeNotification(id), 6000);
 const saveHistory = useCallback(() => { dispatch({ type: 'ADD_TO_HISTORY', payload: JSON.parse(JSON.stringify(data)) }); }, [data]);
 
 const handleSaveTransaction = useCallback((e) => {
-e.preventDefault(); setIsProcessing(true);
+e.preventDefault();
+
+// --- NEW: Guard منع الإضافة/التعديل لشهر مغلق ---
+if (data.closedMonths?.includes(formData.month)) {
+addNotification({ type: 'error', title: 'تنبيه', message: `شهر ${formData.month} مغلق، لا يمكن إضافة أو تعديل عمليات فيه.` });
+setIsProcessing(false);
+return;
+}
+// -----------------------------------
+
+setIsProcessing(true);
 setTimeout(() => {
 saveHistory();
 let finalSubType = formData.subType;
@@ -1164,9 +1206,17 @@ setVisibleTransactions(15);
 addNotification({ type: 'success', title: formMode === 'add' ? 'تمت الإضافة بنجاح' : 'تم التعديل بنجاح' });
 setIsProcessing(false);
 }
-}, [formData, formMode, selectedMonth, repeatMonths, transactions, saveHistory, addNotification, currentFawryBalance, currentEtisalatBalance, loans, dispatch]);
+}, [formData, formMode, selectedMonth, repeatMonths, transactions, saveHistory, addNotification, currentFawryBalance, currentEtisalatBalance, loans, dispatch, data.closedMonths]);
 
 const handleDelete = useCallback((id) => {
+// --- NEW: Guard منع الحذف من شهر مغلق ---
+const targetTransaction = transactions.find(t => t.id === id);
+if (data.closedMonths?.includes(targetTransaction?.month)) {
+addNotification({ type: 'error', title: 'خطأ', message: 'لا يمكن حذف عملية من شهر مغلق محاسبياً' });
+return;
+}
+// ------------------------------------
+
 dispatch({
 type: 'SHOW_CONFIRM',
 title: 'تأكيد الحذف',
@@ -1181,7 +1231,7 @@ addNotification({ type: 'success', title: 'تم الحذف نهائياً' });
 });
 }
 });
-}, [transactions, dispatch, addNotification]);
+}, [transactions, dispatch, addNotification, data.closedMonths]);
 
 const handleQuickTransfer = useCallback((e) => {
 e.preventDefault();
@@ -1966,7 +2016,48 @@ return (
 };
 
 const renderMonthlyInsight = () => (
-<div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8 animate-fadeIn">
+<div className="space-y-8 animate-fadeIn">
+  {/* --- NEW: شريط حالة الشهر --- */}
+  <div className="glass p-3 rounded-2xl flex justify-between items-center bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm">
+    <div className="flex items-center gap-2 text-xs font-bold text-slate-500">
+      <CalendarDays size={16} />
+      <span>حالة شهر: {selectedMonth}</span>
+    </div>
+    
+    <div>
+      {data.closedMonths?.includes(selectedMonth) ? (
+        // حالة: الشهر مغلق
+        <div className="bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2 border border-emerald-200 dark:border-emerald-800">
+          <ShieldCheck size={14} />
+          الشهر مغلق محاسبياً
+        </div>
+      ) : (
+        // حالة: الشهر مفتوح (زر الإقفال)
+        <button 
+          onClick={() => {
+            dispatch({
+              type: 'SHOW_CONFIRM',
+              title: `اعتماد وإقفال شهر ${selectedMonth}`,
+              message: `سيتم اعتماد مبلغ (${financeSnapshot.actualCashInHand.toLocaleString()}) ج.م كرصيد مرحل نهائي لهذا الشهر. لن تتمكن من إضافة أو تعديل عمليات في هذا الشهر بعد الإقفال. هل أنت متأكد؟`,
+              onConfirm: () => { 
+                dispatch({ 
+                  type: 'CLOSE_MONTH', 
+                  payload: { month: selectedMonth, balance: financeSnapshot.actualCashInHand } 
+                });
+                addNotification({ type: 'success', title: 'تم الإقفال', message: `تم إغلاق شهر ${selectedMonth} واعتماد الرصيد.` });
+              }
+            });
+          }}
+          className="bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2 transition-all shadow-lg shadow-amber-500/20 active:scale-95"
+        >
+          <Lock size={14} /> اعتماد وإقفال الشهر
+        </button>
+      )}
+    </div>
+  </div>
+  {/* ----------------------------- */}
+
+  <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8 animate-fadeIn">
 <div className="glass p-5 rounded-3xl border-b-4 border-emerald-500 bg-emerald-50/10">
 <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">دخل محصل ({selectedMonth})</p>
 <p className="text-xl font-black text-emerald-600">{isPrivate ? '****' : monthInsights.inc.toLocaleString()} ج.م</p>
@@ -1988,6 +2079,7 @@ const renderMonthlyInsight = () => (
 <div className="text-center">
 <Printer size={20} className="mx-auto text-purple-600 mb-1" />
 <p className="text-[10px] font-black text-purple-600">طباعة سجل {selectedMonth}</p>
+</div>
 </div>
 </div>
 </div>
@@ -2075,7 +2167,15 @@ title={t.status === 'paid' ? "تعيين كمعلق" : "تعيين كمدفوع"
 <td className="pr-20 py-4 text-slate-500 font-bold leading-relaxed"><div className="font-bold text-slate-800 dark:text-slate-200 text-base mb-1">{t.description || 'بدون وصف'}</div><div className="flex gap-3 items-center opacity-80"><span className="bg-white dark:bg-slate-800 px-3 py-1 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm">{t.date}</span><span className="bg-blue-50 text-blue-600 px-3 py-1 rounded-lg font-bold">{PAYMENT_METHODS.find(p=>p.id===t.method)?.label}</span></div></td>
 <td className="py-4 text-center text-slate-400 font-bold">{t.quantity > 1 ? `${t.quantity} × ${t.unitPrice}` : '-'}</td>
 <td className="py-4 font-black text-left text-base dark:text-slate-200">{isPrivate ? '****' : Number(t.amount).toLocaleString()}</td>
-<td className="py-4 text-center"><div className="flex gap-2 justify-center no-print"><button type="button" onClick={() => { dispatch({ type: 'SET_FORM_MODE', payload: 'edit' }); dispatch({ type: 'SET_FORM_DATA', payload: t }); dispatch({ type: 'SET_FORM_OPEN', payload: true }); }} className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg transition-colors" title="تعديل"><Edit size={16} /></button><button type="button" onClick={() => handleDelete(t.id)} className="p-2 text-red-400 hover:bg-red-50 rounded-lg transition-colors" title="حذف"><Trash2 size={16} /></button></div></td>
+<td className="py-4 text-center">
+{/* NEW: صمامات الأمان (Guards) لإخفاء أزرار التعديل */}
+{!data.closedMonths?.includes(t.month) && (
+<div className="flex gap-2 justify-center no-print">
+<button type="button" onClick={() => { dispatch({ type: 'SET_FORM_MODE', payload: 'edit' }); dispatch({ type: 'SET_FORM_DATA', payload: t }); dispatch({ type: 'SET_FORM_OPEN', payload: true }); }} className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg transition-colors" title="تعديل"><Edit size={16} /></button>
+<button type="button" onClick={() => handleDelete(t.id)} className="p-2 text-red-400 hover:bg-red-50 rounded-lg transition-colors" title="حذف"><Trash2 size={16} /></button>
+</div>
+)}
+</td>
 </tr>
 ))}
 </React.Fragment>
