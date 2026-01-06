@@ -1168,25 +1168,55 @@ finalSubType = 'deposit';
 finalSubType = formData.subType || (formData.type === 'income' ? 'deposit' : 'withdrawal');
 }
 
+// داخل handleSaveTransaction
+
+// تحقق مما إذا كانت العملية سحب (Withdrawal)
 if (formData.type === 'expense' && finalSubType === 'withdrawal') {
-let balance = Infinity;
-if (formData.method === 'fawry') balance = currentFawryBalance;
-else if (formData.method === 'etisalat') balance = currentEtisalatBalance;
+    
+    // 1. تحديد الرصيد المتاح
+    let balance = Infinity;
+    let walletName = '';
+    
+    if (formData.method === 'fawry') {
+        balance = currentFawryBalance;
+        walletName = 'محفظة فوري';
+    } else if (formData.method === 'etisalat') {
+        balance = currentEtisalatBalance;
+        walletName = 'محفظة اتصالات';
+    } else if (formData.method === 'cash') {
+        balance = financeSnapshot.actualCashInHand;
+        walletName = 'النقدية باليد';
+    }
 
-if (Number(formData.amount) > balance) {
-dispatch({
-type: 'SHOW_CONFIRM',
-title: 'رصيد غير كافٍ',
-message: `الرصيد الحالي (${balance.toLocaleString()}) غير كافٍ. هل تريد الاستمرار وترحيل الرصيد بالسالب؟`,
-onConfirm: () => {
-finalizeTransaction(finalSubType);
-}
-});
-setIsProcessing(false);
-return;
-}
-}
+    // 2. المنطق المحسن: صارم للمحافظ الإلكترونية، متساهل للكاش
+    if (Number(formData.amount) > balance) {
+        
+        const isElectronicWallet = ['fawry', 'etisalat'].includes(formData.method);
 
+        if (isElectronicWallet) {
+            // حالة محفظة إلكترونية: منع الترحيل بالسالب (مثل التحويل السريع)
+            addNotification({ 
+                type: 'error', 
+                title: 'رصيد غير كافٍ', 
+                message: `رصيد ${walletName} (${balance.toLocaleString()}) لا يكفي لإتمام العملية.` 
+            });
+            setIsProcessing(false);
+            return;
+        } else {
+            // حالة النقدية: السماح بالترحيل (دين نقدي) مع التأكيد
+            dispatch({
+                type: 'SHOW_CONFIRM',
+                title: 'رصيد غير كافٍ (النقدية)',
+                message: `الرصيد الحالي (${balance.toLocaleString()}) غير كافٍ. هل تريد الاستمرار وتسجيل هذا كمديونية نقدية (رصيد بالسالب)؟`,
+                onConfirm: () => {
+                    finalizeTransaction(finalSubType);
+                }
+            });
+            setIsProcessing(false);
+            return;
+        }
+    }
+}
 finalizeTransaction(finalSubType);
 
 }, 500);
@@ -1494,7 +1524,7 @@ const OptimizedSummaryCard = React.memo(({ title, amount, icon: Icon, color, bgC
 const NotificationCenter = React.memo(({ notifications, removeNotification }) => {
 if (!notifications || notifications.length === 0) return null;
 return (
-<div className="fixed top-16 left-6 z-[3000] max-w-sm w-full space-y-3 animate-fadeInUp pointer-events-none no-print">
+<div className="fixed top-16 left-6 z-[10000] max-w-sm w-full space-y-3 animate-fadeInUp pointer-events-none no-print">
 {notifications.map(n => (
 <div key={n.id} className={`relative flex items-start p-4 text-white rounded-2xl shadow-xl shadow-black/10 border border-white/10 backdrop-blur-md animate-slideInRight pointer-events-auto ${n.type === 'success' ? 'bg-gradient-to-r from-emerald-500 to-emerald-600' : n.type === 'warning' ? 'bg-gradient-to-r from-amber-500 to-orange-500' : 'bg-gradient-to-r from-blue-500 to-blue-600'}`}>
 <div className="ml-3 text-sm font-bold pr-6">
