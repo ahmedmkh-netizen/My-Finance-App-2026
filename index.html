@@ -1422,6 +1422,7 @@ return { deposits, withdrawals };
 }, [transactions]);
 const currentEtisalatBalance = (Number(etisalatData.openingBalance) || 0) + etisalatStats.deposits - etisalatStats.withdrawals;
 
+// --- NEW: Bank Savings Calculation ---
 const getSavingsLedger = useCallback((methodId) => {
 const accTransactions = transactions
 .filter(t => t.method === methodId && t.status === 'paid')
@@ -1436,6 +1437,13 @@ else runningBalance -= amount;
 return { ...t, runningBalance };
 }).reverse();
 }, [transactions]);
+
+const cibLedger = useMemo(() => getSavingsLedger('cib_savings'), [getSavingsLedger]);
+const aaibLedger = useMemo(() => getSavingsLedger('aaib_savings'), [getSavingsLedger]);
+
+const currentCIBBalance = cibLedger.length > 0 ? cibLedger[0].runningBalance : 0;
+const currentAAIBBalance = aaibLedger.length > 0 ? aaibLedger[0].runningBalance : 0;
+// --- END NEW ---
 
 const fawryLedger = useMemo(() => {
 const accTransactions = transactions
@@ -1617,69 +1625,77 @@ a.click();
 }, [fawryLedger, etisalatLedger]);
 
 const handleSaveTransaction = useCallback((e) => {
-e.preventDefault();
+  e.preventDefault();
 
-if (data.closedMonths?.includes(formData.month)) {
-addNotification({ type: 'error', title: 'تنبيه', message: `شهر ${formData.month} مغلق، لا يمكن إضافة أو تعديل عمليات فيه.` });
-setIsProcessing(false);
-return;
-}
+  if (data.closedMonths?.includes(formData.month)) {
+    addNotification({ type: 'error', title: 'تنبيه', message: `شهر ${formData.month} مغلق، لا يمكن إضافة أو تعديل عمليات فيه.` });
+    setIsProcessing(false);
+    return;
+  }
 
-setIsProcessing(true);
-setTimeout(() => {
-saveHistory();
-let finalSubType = formData.subType;
-if (['شحن رصيد فوري', 'شحن رصيد', 'إيداع', 'شحن محفظة'].includes(formData.category) &&
-['fawry', 'etisalat', 'cib_savings', 'aaib_savings'].includes(formData.method)) {
-finalSubType = 'deposit';
-} else {
-finalSubType = formData.subType || (formData.type === 'income' ? 'deposit' : 'withdrawal');
-}
+  setIsProcessing(true);
+  setTimeout(() => {
+    try {
+      saveHistory();
+      let finalSubType = formData.subType;
+      if (['شحن رصيد فوري', 'شحن رصيد', 'إيداع', 'شحن محفظة'].includes(formData.category) &&
+        ['fawry', 'etisalat', 'cib_savings', 'aaib_savings'].includes(formData.method)) {
+        finalSubType = 'deposit';
+      } else {
+        finalSubType = formData.subType || (formData.type === 'income' ? 'deposit' : 'withdrawal');
+      }
 
-if (formData.type === 'expense' && finalSubType === 'withdrawal') {
-    let balance = Infinity;
-    let walletName = '';
-    
-    if (formData.method === 'fawry') {
-        balance = currentFawryBalance;
-        walletName = 'محفظة فوري';
-    } else if (formData.method === 'etisalat') {
-        balance = currentEtisalatBalance;
-        walletName = 'محفظة اتصالات';
-    } else if (formData.method === 'cash') {
-        balance = financeSnapshot.actualCashInHand;
-        walletName = 'النقدية باليد';
-    }
-
-    if (Number(formData.amount) > balance) {
+      if (formData.type === 'expense' && finalSubType === 'withdrawal') {
+        let balance = Infinity;
+        let walletName = '';
         
-        const isElectronicWallet = ['fawry', 'etisalat'].includes(formData.method);
-
-        if (isElectronicWallet) {
-            addNotification({ 
-                type: 'error', 
-                title: 'رصيد غير كافٍ', 
-                message: `رصيد ${walletName} (${balance.toLocaleString()}) لا يكفي لإتمام العملية.` 
-            });
-            setIsProcessing(false);
-            return;
-        } else {
-            dispatch({
-                type: 'SHOW_CONFIRM',
-                title: 'رصيد غير كافٍ (النقدية)',
-                message: `الرصيد الحالي (${balance.toLocaleString()}) غير كافٍ. هل تريد الاستمرار وتسجيل هذا كمديونية نقدية (رصيد بالسالب)؟`,
-                onConfirm: () => {
-                    finalizeTransaction(finalSubType);
-                }
-            });
-            setIsProcessing(false);
-            return;
+        if (formData.method === 'fawry') {
+          balance = currentFawryBalance;
+          walletName = 'محفظة فوري';
+        } else if (formData.method === 'etisalat') {
+          balance = currentEtisalatBalance;
+          walletName = 'محفظة اتصالات';
+        } else if (formData.method === 'cash') {
+          balance = financeSnapshot.actualCashInHand;
+          walletName = 'النقدية باليد';
         }
-    }
-}
-finalizeTransaction(finalSubType);
 
-}, 500);
+        if (Number(formData.amount) > balance) {
+          
+          const isElectronicWallet = ['fawry', 'etisalat'].includes(formData.method);
+
+          if (isElectronicWallet) {
+            addNotification({ 
+              type: 'error', 
+              title: 'رصيد غير كافٍ', 
+              message: `رصيد ${walletName} (${balance.toLocaleString()}) لا يكفي لإتمام العملية.` 
+            });
+            setIsProcessing(false);
+            return;
+          } else {
+            dispatch({
+              type: 'SHOW_CONFIRM',
+              title: 'رصيد غير كافٍ (النقدية)',
+              message: `الرصيد الحالي (${balance.toLocaleString()}) غير كافٍ. هل تريد الاستمرار وتسجيل هذا كمديونية نقدية (رصيد بالسالب)؟`,
+              onConfirm: () => {
+                finalizeTransaction(finalSubType);
+              }
+            });
+            setIsProcessing(false);
+            return;
+          }
+        }
+      }
+      finalizeTransaction(finalSubType);
+    } catch (error) {
+      console.error("Error saving transaction:", error);
+      addNotification({ type: 'error', title: 'خطأ تقني', message: 'حدث خطأ أثناء الحفظ، يرجى المحاولة مرة أخرى.' });
+    } finally {
+      // ضمان إيقاف التحميل دائماً في النهاية سواء نجحت العملية أو فشلت
+      setIsProcessing(false);
+    }
+  }, 500);
+}, [formData, formMode, selectedMonth, repeatMonths, transactions, saveHistory, addNotification, currentFawryBalance, currentEtisalatBalance, loans, dispatch, data.closedMonths, financeSnapshot]);
 
 const finalizeTransaction = (finalSubType) => {
 const selectedDay = formData.date.split('-')[2] || '01';
@@ -1725,7 +1741,6 @@ setVisibleTransactions(15);
 addNotification({ type: 'success', title: formMode === 'add' ? 'تمت الإضافة بنجاح' : 'تم التعديل بنجاح' });
 setIsProcessing(false);
 }
-}, [formData, formMode, selectedMonth, repeatMonths, transactions, saveHistory, addNotification, currentFawryBalance, currentEtisalatBalance, loans, dispatch, data.closedMonths]);
 
 const handleDelete = useCallback((id) => {
 const targetTransaction = transactions.find(t => t.id === id);
@@ -1880,7 +1895,7 @@ window.location.reload();
 }, []);
 
 const handleAnalyzeFinances = useCallback(async () => { dispatch({ type: 'SET_AI_LOADING', payload: true }); setTimeout(() => { const totalIncome = transactions.reduce((a,c)=>c.type==='income'?a+Number(c.amount):a, 0); const totalExp = transactions.reduce((a,c)=>c.type==='expense'?a+Number(c.amount):a, 0); const ratio = Math.round((totalExp/totalIncome)*100); dispatch({ type: 'SET_AI_RESPONSE', payload: `تحليل سريع: إجمالي دخلك المسجل ${totalIncome.toLocaleString()} ومصروفاتك ${totalExp.toLocaleString()} (${ratio}%). وضعك المالي ${ratio > 90 ? 'حرج، تحتاج لتقليل النفقات' : 'جيد ومستقر'}.` }); dispatch({ type: 'SET_AI_LOADING', payload: false }); }, 1500); }, [transactions]);
-const handleSmartAdd = useCallback(async () => { dispatch({ type: 'SET_AI_LOADING', payload: true }); setTimeout(() => { const txt = aiQuery.toLowerCase(); let amount = txt.match(/\d+/)?.[0]; let type = (txt.includes('قبضت') || txt.includes('اخدت') || txt.includes('تحويل لي')) ? 'income' : 'expense'; let category = 'أخرى'; if (txt.includes('اكل') || txt.includes('غدا') || txt.includes('سوبر')) category = 'مصروفات المعيشة اليومية'; else if (txt.includes('رصيد') || txt.includes('شحن')) category = 'الاتصالات وشحن الهواتف المحمولة'; else if (txt.includes('بنزين') || txt.includes('مواصلات')) category = 'المواصلات والانتقالات'; else if (txt.includes('درس') || txt.includes('مدرسة')) category = 'التعليم والدروس والأنشطة'; if (amount) { dispatch({ type: 'SET_FORM_MODE', payload: 'add' }); dispatch({ type: 'SET_FORM_DATA', payload: { type, category, amount: Number(amount), description: aiQuery, date: getLocalISODate(), month: selectedMonth, method: 'cash', quantity:1, unitPrice: Number(amount), subType: type === 'income' ? 'deposit' : 'withdrawal' } }); dispatch({ type: 'SET_FORM_OPEN', payload: true }); dispatch({ type: 'SET_AI_MODAL_OPEN', payload: false }); dispatch({ type: 'SET_AI_QUERY', payload: '' }); } else { dispatch({ type: 'SET_AI_RESPONSE', payload: "لم أتمكن من استخراج المبلغ. يرجى كتابة الرقم بوضوح (مثال: 500)" }); } dispatch({ type: 'SET_AI_LOADING', payload: false }); }, 1000); }, [aiQuery, selectedMonth]);
+const handleSmartAdd = useCallback(async () => { dispatch({ type: 'SET_AI_LOADING', payload: true }); setTimeout(() => { const txt = aiQuery.toLowerCase(); let amount = txt.match(/\d+/)?.[0]; let type = (txt.includes('قبضت') || txt.includes('اخدت') || txt.includes('تحويل لي')) ? 'income' : 'expense'; let category = 'أخرى'; if (txt.includes('اكل') || txt.includes('غدا') || txt.includes('سوبر')) category = 'مصروفات المعيشة اليومية'; else if (txt.includes('رصيد') || txt.includes('شحن')) category = 'الاتصالات وشحن الهواتف المحمولة'; else if (txt.includes('بنزين') || txt.includes('مواصلات')) category = 'المواصلات والانتقالات'; else if (txt.includes('درس') || txt.includes('مدرسة')) category = 'التعليم والدروس والأنشطة'; if (amount) { dispatch({ type: 'SET_FORM_MODE', payload: 'add' }); dispatch({ type: 'SET_FORM_DATA', payload: { type, category, amount: Number(amount), description: aiQuery, date: getLocalISODate(), month: selectedMonth, method: 'cash', quantity:1, unitPrice: Number(amount), subType: type === 'income' ? 'deposit' : 'withdrawal' } }); dispatch({ type: 'SET_FORM_OPEN', payload: true }); dispatch({ type: 'SET_AI_MODAL_OPEN', payload: false }); dispatch({ type: 'SET_AI_QUERY', payload: '' }); } else { dispatch({ type: 'SET_AI_RESPONSE', payload: "لم أتمكن من استخراج المبلغ. يرجى كتابة الرقم بوضوح (مثال: 500)" ); } dispatch({ type: 'SET_AI_LOADING', payload: false }); }, 1000); }, [aiQuery, selectedMonth]);
 
 useEffect(() => {
 const lastBackup = localStorage.getItem('last_backup');
@@ -2125,6 +2140,50 @@ title="دفع سريع"
 
 const renderDashboard = () => (
 <div className="space-y-8 animate-fadeIn">
+{/* --- قسم تفصيل السيولة (جديد) --- */}
+<div className="glass bg-slate-50/50 dark:bg-slate-800/30 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm animate-fadeIn">
+  <div className="flex items-center gap-2 mb-4 text-slate-600 dark:text-slate-300 font-black uppercase tracking-wider text-xs">
+    <Wallet size={16} /> تفصيل الرصيد الفوري (الحسابات الجارية)
+  </div>
+  <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+    {/* الكاش باليد */}
+    <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm text-center group hover:border-blue-400 transition-colors">
+      <p className="text-[10px] text-slate-400 font-bold mb-1">النقدية باليد</p>
+      <p className="text-lg font-black text-blue-600 group-hover:scale-105 transition-transform">
+        {isPrivate ? '****' : financeSnapshot.actualCashInHand.toLocaleString()}
+      </p>
+    </div>
+    {/* فوري */}
+    <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm text-center group hover:border-yellow-400 transition-colors">
+      <p className="text-[10px] text-slate-400 font-bold mb-1">محفظة فوري</p>
+      <p className="text-lg font-black text-yellow-600 group-hover:scale-105 transition-transform">
+        {isPrivate ? '****' : currentFawryBalance.toLocaleString()}
+      </p>
+    </div>
+    {/* اتصالات */}
+    <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm text-center group hover:border-green-400 transition-colors">
+      <p className="text-[10px] text-slate-400 font-bold mb-1">اتصالات كاش</p>
+      <p className="text-lg font-black text-emerald-600 group-hover:scale-105 transition-transform">
+        {isPrivate ? '****' : currentEtisalatBalance.toLocaleString()}
+      </p>
+    </div>
+    {/* CIB Savings */}
+    <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm text-center group hover:border-indigo-400 transition-colors">
+      <p className="text-[10px] text-slate-400 font-bold mb-1">توفير CIB</p>
+      <p className="text-lg font-black text-indigo-600 group-hover:scale-105 transition-transform">
+        {isPrivate ? '****' : currentCIBBalance.toLocaleString()}
+      </p>
+    </div>
+    {/* AAIB Savings */}
+    <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm text-center group hover:border-red-400 transition-colors">
+      <p className="text-[10px] text-slate-400 font-bold mb-1">توفير AAIB</p>
+      <p className="text-lg font-black text-red-600 group-hover:scale-105 transition-transform">
+        {isPrivate ? '****' : currentAAIBBalance.toLocaleString()}
+      </p>
+    </div>
+  </div>
+</div>
+
 {/* مكون الرصيد الافتتاحي الجديد */}
 <div className="glass bg-blue-50/50 dark:bg-blue-900/10 p-6 rounded-2xl border border-blue-100 dark:border-blue-900/30 shadow-sm animate-fadeIn">
     <div className="flex flex-col md:flex-row items-center justify-between gap-4">
@@ -2200,7 +2259,7 @@ className="gradient-bg-danger text-white p-6 rounded-2xl flex flex-col items-cen
 
 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
 <EnhancedStatCard
-title="السيولة الحالية"
+title="السيولة الإجمالية"
 amount={financeSnapshot.actualCashInHand}
 icon={Wallet}
 subtitle={`رصيد مُرّحل: ${isPrivate ? '•••••' : financeSnapshot.actualCarryover.toLocaleString()} ج.م`}
