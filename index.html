@@ -53,7 +53,8 @@ animation: {
 'shimmer': 'shimmer 2s linear infinite',
 'ticker-scroll': 'ticker-scroll 50s linear infinite',
 'gradient': 'gradient 3s ease infinite',
-'card-float': 'card-float 8s ease-in-out infinite'
+'card-float': 'card-float 8s ease-in-out infinite',
+'spin': 'spin 1s linear infinite'
 },
 keyframes: {
 fadeIn: { '0%': { opacity: '0', transform: 'scale(0.99)' }, '100%': { opacity: '1', transform: 'scale(1)' } },
@@ -65,7 +66,8 @@ slideInBottom: { '0%': { opacity: '0', transform: 'translateY(50px)' }, '100%': 
 'shimmer': { 'from': { backgroundPosition: '0 0' }, 'to': { backgroundPosition: '-200% 0' } },
 'ticker-scroll': { '0%': { transform: 'translateX(0)' }, '100%': { transform: 'translateX(-50%)' } },
 'gradient': { '0%, 100%': { backgroundPosition: '0% 50%' }, '50%': { backgroundPosition: '100% 50%' } },
-'card-float': { '0%, 100%': { transform: 'translateY(0) rotate(0deg)' }, '50%': { transform: 'translateY(-20px) rotate(1deg)' } }
+'card-float': { '0%, 100%': { transform: 'translateY(0) rotate(0deg)' }, '50%': { transform: 'translateY(-20px) rotate(1deg)' } },
+'spin': { 'to': { transform: 'rotate(360deg)' } }
 },
 boxShadow: {
 'classic': '0 -4px 25px rgba(0,0,0,0.1)',
@@ -354,6 +356,41 @@ display: inline-flex;
 align-items: center;
 white-space: nowrap;
 }
+
+/* Processing Overlay */
+.processing-overlay {
+position: fixed;
+top: 0;
+left: 0;
+right: 0;
+bottom: 0;
+background: rgba(0, 0, 0, 0.7);
+backdrop-filter: blur(10px);
+z-index: 9999;
+display: flex;
+flex-direction: column;
+align-items: center;
+justify-content: center;
+color: white;
+animation: fadeIn 0.3s ease-out;
+}
+
+.processing-spinner {
+width: 60px;
+height: 60px;
+border: 4px solid rgba(255, 255, 255, 0.3);
+border-radius: 50%;
+border-top-color: #3B82F6;
+animation: spin 1s ease-in-out infinite;
+}
+
+/* Quick Balance Panel */
+.quick-balance-panel {
+@apply glass rounded-2xl p-4 mb-6 border border-blue-100 dark:border-blue-900/30;
+}
+.balance-account-card {
+@apply bg-white/50 dark:bg-slate-800/50 p-3 rounded-xl text-center transition-all duration-300 hover:scale-[1.02] hover:shadow-md;
+}
 </style>
 </head>
 <body class="selection:bg-primary/30">
@@ -632,7 +669,9 @@ theme,
 isPrivate,
 onAddDeposit,
 onAddWithdrawal,
-onExportCSV
+onExportCSV,
+walletVisibility,
+onToggleVisibility
 }) => {
 const [filter, setFilter] = useState('all');
 const [dateFilter, setDateFilter] = useState('');
@@ -717,6 +756,18 @@ return (
   <ArrowUpCircle size={20} />
 </button>
 
+<button 
+  type="button"
+  onClick={(e) => {
+    e.stopPropagation();
+    onToggleVisibility && onToggleVisibility(walletKey);
+  }}
+  className="p-2 bg-slate-500 text-white rounded-xl hover:bg-slate-600 transition-colors shadow-md"
+  title={walletVisibility?.[walletKey] ? 'إخفاء الرصيد' : 'إظهار الرصيد'}
+>
+  {walletVisibility?.[walletKey] ? <EyeOff size={20} /> : <Eye size={20} />}
+</button>
+
 <ChevronDown size={24} className={`text-slate-400 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`} />
 </div>
 </div>
@@ -766,6 +817,18 @@ return (
   type="button"
   onClick={(e) => {
     e.stopPropagation();
+    onToggleVisibility && onToggleVisibility(walletKey);
+  }}
+  className="p-2 bg-slate-500 text-white rounded-xl hover:bg-slate-600 transition-colors shadow-md"
+  title={walletVisibility?.[walletKey] ? 'إخفاء الرصيد' : 'إظهار الرصيد'}
+>
+  {walletVisibility?.[walletKey] ? <EyeOff size={20} /> : <Eye size={20} />}
+</button>
+
+<button 
+  type="button"
+  onClick={(e) => {
+    e.stopPropagation();
     onExportCSV && onExportCSV(walletKey);
   }}
   className="p-2 bg-blue-500 text-white rounded-xl hover:bg-blue-600 transition-colors shadow-md"
@@ -790,19 +853,19 @@ return (
   <div className="text-center">
     <div className="text-xs text-slate-500">إجمالي الإيداع</div>
     <div className="text-lg font-black text-emerald-600">
-      {isPrivate ? '****' : stats.deposits.toLocaleString()} ج.م
+      {isPrivate || !walletVisibility?.[walletKey] ? '•••••' : stats.deposits.toLocaleString()} ج.م
     </div>
   </div>
   <div className="text-center">
     <div className="text-xs text-slate-500">إجمالي السحب</div>
     <div className="text-lg font-black text-red-600">
-      {isPrivate ? '****' : stats.withdrawals.toLocaleString()} ج.م
+      {isPrivate || !walletVisibility?.[walletKey] ? '•••••' : stats.withdrawals.toLocaleString()} ج.م
     </div>
   </div>
   <div className="text-center">
     <div className="text-xs text-slate-500">الرصيد الحالي</div>
     <div className="text-lg font-black text-blue-600">
-      {isPrivate ? '****' : stats.currentBalance.toLocaleString()} ج.م
+      {isPrivate || !walletVisibility?.[walletKey] ? '•••••' : stats.currentBalance.toLocaleString()} ج.م
     </div>
   </div>
 </div>
@@ -881,11 +944,11 @@ return (
     : 'text-red-500'
 }`}>
 {t.subType === 'deposit' ? '+' : '-'}
-{isPrivate ? '****' : Number(t.amount).toLocaleString()} ج.م
+{isPrivate || !walletVisibility?.[walletKey] ? '•••••' : Number(t.amount).toLocaleString()} ج.م
 </td>
 <td className={`table-cell text-left font-black ${theme.color}`}>
 <div className="flex items-center gap-2">
-  {isPrivate ? '****' : t.runningBalance.toLocaleString()} ج.م
+  {isPrivate || !walletVisibility?.[walletKey] ? '•••••' : t.runningBalance.toLocaleString()} ج.م
   {t.runningBalance < 0 && (
     <span className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded-full">
       سالب
@@ -1095,7 +1158,15 @@ showProjectedDebt: false,
 confirmDialog: { isOpen: false, title: '', message: '', onConfirm: null },
 isQuickTransferModalOpen: false, quickTransferData: { from: 'cash', to: 'fawry', amount: 0 },
 isBackupReminderOpen: false,
-viewingCardStatement: null
+viewingCardStatement: null,
+walletVisibility: {
+  fawry: true,
+  etisalat: true,
+  cib_savings: true,
+  aaib_savings: true,
+  cash: true
+},
+isProcessing: false
 };
 
 function dataReducer(state, action) {
@@ -1182,6 +1253,16 @@ case 'CLOSE_MONTH':
       }
     }
   };
+case 'TOGGLE_WALLET_VISIBILITY':
+  return {
+    ...state,
+    walletVisibility: {
+      ...state.walletVisibility,
+      [action.payload]: !state.walletVisibility[action.payload]
+    }
+  };
+case 'SET_IS_PROCESSING':
+  return { ...state, isProcessing: action.payload };
 default: return state;
 }
 }
@@ -1233,16 +1314,92 @@ className="w-full bg-white text-slate-900 py-4 px-8 rounded-2xl font-black flex 
 );
 };
 
+// Quick Balance Overview Component
+const QuickBalanceOverview = React.memo(({ 
+  financeSnapshot, 
+  currentFawryBalance, 
+  currentEtisalatBalance,
+  getSavingsLedger,
+  isPrivate,
+  walletVisibility,
+  onToggleVisibility
+}) => {
+  const [isVisible, setIsVisible] = useState(true);
+  
+  const accounts = [
+    { name: 'النقدية', balance: financeSnapshot.actualCashInHand, color: 'text-green-600', icon: Wallet, key: 'cash' },
+    { name: 'فوري', balance: currentFawryBalance, color: 'text-yellow-600', icon: Store, key: 'fawry' },
+    { name: 'اتصالات', balance: currentEtisalatBalance, color: 'text-emerald-600', icon: Signal, key: 'etisalat' },
+    { name: 'CIB توفير', balance: getSavingsLedger('cib_savings')[0]?.runningBalance || 0, color: 'text-blue-600', icon: BuildingBank, key: 'cib_savings' },
+    { name: 'AAIB توفير', balance: getSavingsLedger('aaib_savings')[0]?.runningBalance || 0, color: 'text-red-600', icon: PiggyBank, key: 'aaib_savings' },
+  ];
+  
+  const total = accounts.reduce((sum, acc) => sum + acc.balance, 0);
+  
+  return (
+    <div className="quick-balance-panel">
+      <div className="flex justify-between items-center mb-4">
+        <h3 className="font-bold text-lg flex items-center gap-2">
+          <Coins className="text-blue-500" />
+          السيولة الفورية
+        </h3>
+        <button 
+          onClick={() => setIsVisible(!isVisible)}
+          className="text-sm text-blue-500 hover:text-blue-700 font-bold"
+        >
+          {isVisible ? 'إخفاء' : 'إظهار'}
+        </button>
+      </div>
+      
+      {isVisible && (
+        <>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
+            {accounts.map(account => (
+              <div key={account.name} className="balance-account-card">
+                <div className="flex justify-between items-center mb-2">
+                  <div className={`text-xs font-bold ${account.color} flex items-center gap-1`}>
+                    <account.icon size={14} />
+                    {account.name}
+                  </div>
+                  <button 
+                    type="button"
+                    onClick={() => onToggleVisibility && onToggleVisibility(account.key)}
+                    className="text-xs text-slate-400 hover:text-blue-500"
+                    title={walletVisibility?.[account.key] ? 'إخفاء الرصيد' : 'إظهار الرصيد'}
+                  >
+                    {walletVisibility?.[account.key] ? <EyeOff size={12} /> : <Eye size={12} />}
+                  </button>
+                </div>
+                <div className={`text-lg font-black ${isPrivate || !walletVisibility?.[account.key] ? 'text-slate-400' : account.color}`}>
+                  {isPrivate || !walletVisibility?.[account.key] ? '•••••' : Math.round(account.balance).toLocaleString()}
+                  <span className="text-xs"> ج.م</span>
+                </div>
+              </div>
+            ))}
+          </div>
+          
+          <div className="bg-gradient-to-r from-blue-500 to-purple-500 p-4 rounded-xl">
+            <div className="flex justify-between items-center text-white">
+              <span className="font-bold">إجمالي السيولة المتاحة</span>
+              <span className="text-2xl font-black">
+                {isPrivate ? '•••••' : Math.round(total).toLocaleString()}
+                <span className="text-sm"> ج.م</span>
+              </span>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+});
+
 function App() {
 const [state, dispatch] = useReducer(dataReducer, initialState);
 const [isAuthenticated, setIsAuthenticated] = useState(false);
-const [isProcessing, setIsProcessing] = useState(false);
-const [visibleTransactions, setVisibleTransactions] = useState(15);
-const [isPrivate, setIsPrivate] = useState(false);
 const mainContentRef = useRef(null);
 const saveTimeoutRef = useRef(null);
 
-const { data, activeTab, selectedMonth, transViewMode, catViewType, isFormOpen, formMode, formData, activeCategoryDetail, repeatMonths, isLocked, isDarkMode, expandedGroup, budgets, editingCard, editingLoan, editingTransaction, searchTerm, editingBudgetCategory, budgetAmount, editingFawry, editingEtisalat, isRecurringModalOpen, recurringFormData, filterType, hidePast, notifications, isAiModalOpen, aiTab, aiQuery, aiResponse, isAiLoading, fawryData, etisalatData, history, future, expandedLedgers, expandedCardsSection, statusFilter, confirmDialog, isQuickTransferModalOpen, quickTransferData, isBackupReminderOpen, viewingCardStatement } = state;
+const { data, activeTab, selectedMonth, transViewMode, catViewType, isFormOpen, formMode, formData, activeCategoryDetail, repeatMonths, isLocked, isDarkMode, expandedGroup, budgets, editingCard, editingLoan, editingTransaction, searchTerm, editingBudgetCategory, budgetAmount, editingFawry, editingEtisalat, isRecurringModalOpen, recurringFormData, filterType, hidePast, notifications, isAiModalOpen, aiTab, aiQuery, aiResponse, isAiLoading, fawryData, etisalatData, history, future, expandedLedgers, expandedCardsSection, statusFilter, confirmDialog, isQuickTransferModalOpen, quickTransferData, isBackupReminderOpen, viewingCardStatement, walletVisibility, isProcessing } = state;
 const { transactions = [], loans = [], cards = [], recurringItems = [], savingsGoals = [], openingBalance2026 } = data || {};
 
 // Auth Observer
@@ -1400,8 +1557,8 @@ groups[t.category].total += Number(t.amount);
 groups[t.category].count++;
 groups[t.category].items.push(t);
 });
-return Object.values(groups).sort((a, b) => b.total - a.total).slice(0, visibleTransactions);
-}, [transactions, selectedMonth, transViewMode, searchTerm, filterType, visibleTransactions, statusFilter]);
+return Object.values(groups).sort((a, b) => b.total - a.total);
+}, [transactions, selectedMonth, transViewMode, searchTerm, filterType, statusFilter]);
 
 const visibleStats = useMemo(() => {
 const flatItems = groupedTransactions.flatMap(g => g.items);
@@ -1422,7 +1579,6 @@ return { deposits, withdrawals };
 }, [transactions]);
 const currentEtisalatBalance = (Number(etisalatData.openingBalance) || 0) + etisalatStats.deposits - etisalatStats.withdrawals;
 
-// --- NEW: Bank Savings Calculation ---
 const getSavingsLedger = useCallback((methodId) => {
 const accTransactions = transactions
 .filter(t => t.method === methodId && t.status === 'paid')
@@ -1437,13 +1593,6 @@ else runningBalance -= amount;
 return { ...t, runningBalance };
 }).reverse();
 }, [transactions]);
-
-const cibLedger = useMemo(() => getSavingsLedger('cib_savings'), [getSavingsLedger]);
-const aaibLedger = useMemo(() => getSavingsLedger('aaib_savings'), [getSavingsLedger]);
-
-const currentCIBBalance = cibLedger.length > 0 ? cibLedger[0].runningBalance : 0;
-const currentAAIBBalance = aaibLedger.length > 0 ? aaibLedger[0].runningBalance : 0;
-// --- END NEW ---
 
 const fawryLedger = useMemo(() => {
 const accTransactions = transactions
@@ -1625,77 +1774,78 @@ a.click();
 }, [fawryLedger, etisalatLedger]);
 
 const handleSaveTransaction = useCallback((e) => {
-  e.preventDefault();
+e.preventDefault();
 
-  if (data.closedMonths?.includes(formData.month)) {
-    addNotification({ type: 'error', title: 'تنبيه', message: `شهر ${formData.month} مغلق، لا يمكن إضافة أو تعديل عمليات فيه.` });
-    setIsProcessing(false);
+// منع المعالجة المزدوجة
+if (isProcessing) {
+  addNotification({
+    type: 'warning',
+    title: 'جاري المعالجة',
+    message: 'يرجى الانتظار حتى تنتهي العملية الحالية'
+  });
+  return;
+}
+
+dispatch({ type: 'SET_IS_PROCESSING', payload: true });
+
+if (data.closedMonths?.includes(formData.month)) {
+addNotification({ type: 'error', title: 'تنبيه', message: `شهر ${formData.month} مغلق، لا يمكن إضافة أو تعديل عمليات فيه.` });
+dispatch({ type: 'SET_IS_PROCESSING', payload: false });
+return;
+}
+
+setTimeout(() => {
+saveHistory();
+let finalSubType = formData.subType;
+if (['شحن رصيد فوري', 'شحن رصيد', 'إيداع', 'شحن محفظة'].includes(formData.category) &&
+['fawry', 'etisalat', 'cib_savings', 'aaib_savings'].includes(formData.method)) {
+finalSubType = 'deposit';
+} else {
+finalSubType = formData.subType || (formData.type === 'income' ? 'deposit' : 'withdrawal');
+}
+
+// التحقق من الرصيد للعمليات الفورية على الحسابات الجارية
+const immediateAccounts = ['cash', 'fawry', 'etisalat', 'cib_savings', 'aaib_savings'];
+  
+if (immediateAccounts.includes(formData.method) && formData.type === 'expense') {
+  let availableBalance = 0;
+  
+  switch(formData.method) {
+    case 'cash':
+      availableBalance = financeSnapshot.actualCashInHand;
+      break;
+    case 'fawry':
+      availableBalance = currentFawryBalance;
+      break;
+    case 'etisalat':
+      availableBalance = currentEtisalatBalance;
+      break;
+    case 'cib_savings':
+      const cibLedger = getSavingsLedger('cib_savings');
+      availableBalance = cibLedger.length > 0 ? cibLedger[0].runningBalance : 0;
+      break;
+    case 'aaib_savings':
+      const aaibLedger = getSavingsLedger('aaib_savings');
+      availableBalance = aaibLedger.length > 0 ? aaibLedger[0].runningBalance : 0;
+      break;
+  }
+  
+  if (Number(formData.amount) > availableBalance) {
+    dispatch({
+      type: 'SHOW_CONFIRM',
+      title: 'رصيد غير كافٍ',
+      message: `الرصيد المتاح في ${PAYMENT_METHODS.find(p => p.id === formData.method)?.label} هو ${availableBalance.toLocaleString()} ج.م. هل تريد الاستمرار وتسجيل هذا كمديونية؟`,
+      onConfirm: () => {
+        finalizeTransaction(finalSubType);
+      }
+    });
+    dispatch({ type: 'SET_IS_PROCESSING', payload: false });
     return;
   }
+}
+finalizeTransaction(finalSubType);
 
-  setIsProcessing(true);
-  setTimeout(() => {
-    try {
-      saveHistory();
-      let finalSubType = formData.subType;
-      if (['شحن رصيد فوري', 'شحن رصيد', 'إيداع', 'شحن محفظة'].includes(formData.category) &&
-        ['fawry', 'etisalat', 'cib_savings', 'aaib_savings'].includes(formData.method)) {
-        finalSubType = 'deposit';
-      } else {
-        finalSubType = formData.subType || (formData.type === 'income' ? 'deposit' : 'withdrawal');
-      }
-
-      if (formData.type === 'expense' && finalSubType === 'withdrawal') {
-        let balance = Infinity;
-        let walletName = '';
-        
-        if (formData.method === 'fawry') {
-          balance = currentFawryBalance;
-          walletName = 'محفظة فوري';
-        } else if (formData.method === 'etisalat') {
-          balance = currentEtisalatBalance;
-          walletName = 'محفظة اتصالات';
-        } else if (formData.method === 'cash') {
-          balance = financeSnapshot.actualCashInHand;
-          walletName = 'النقدية باليد';
-        }
-
-        if (Number(formData.amount) > balance) {
-          
-          const isElectronicWallet = ['fawry', 'etisalat'].includes(formData.method);
-
-          if (isElectronicWallet) {
-            addNotification({ 
-              type: 'error', 
-              title: 'رصيد غير كافٍ', 
-              message: `رصيد ${walletName} (${balance.toLocaleString()}) لا يكفي لإتمام العملية.` 
-            });
-            setIsProcessing(false);
-            return;
-          } else {
-            dispatch({
-              type: 'SHOW_CONFIRM',
-              title: 'رصيد غير كافٍ (النقدية)',
-              message: `الرصيد الحالي (${balance.toLocaleString()}) غير كافٍ. هل تريد الاستمرار وتسجيل هذا كمديونية نقدية (رصيد بالسالب)؟`,
-              onConfirm: () => {
-                finalizeTransaction(finalSubType);
-              }
-            });
-            setIsProcessing(false);
-            return;
-          }
-        }
-      }
-      finalizeTransaction(finalSubType);
-    } catch (error) {
-      console.error("Error saving transaction:", error);
-      addNotification({ type: 'error', title: 'خطأ تقني', message: 'حدث خطأ أثناء الحفظ، يرجى المحاولة مرة أخرى.' });
-    } finally {
-      // ضمان إيقاف التحميل دائماً في النهاية سواء نجحت العملية أو فشلت
-      setIsProcessing(false);
-    }
-  }, 500);
-}, [formData, formMode, selectedMonth, repeatMonths, transactions, saveHistory, addNotification, currentFawryBalance, currentEtisalatBalance, loans, dispatch, data.closedMonths, financeSnapshot]);
+}, 500);
 
 const finalizeTransaction = (finalSubType) => {
 const selectedDay = formData.date.split('-')[2] || '01';
@@ -1737,10 +1887,16 @@ newTransactions.sort((a, b) => new Date(b.date) - new Date(a.date));
 dispatch({ type: 'UPDATE_TRANSACTIONS', payload: newTransactions });
 dispatch({ type: 'SET_FORM_OPEN', payload: false });
 dispatch({ type: 'SET_REPEAT_MONTHS', payload: [] });
-setVisibleTransactions(15);
-addNotification({ type: 'success', title: formMode === 'add' ? 'تمت الإضافة بنجاح' : 'تم التعديل بنجاح' });
-setIsProcessing(false);
+addNotification({ 
+  type: 'success', 
+  title: formMode === 'add' ? 'تمت الإضافة بنجاح' : 'تم التعديل بنجاح',
+  message: `تم ${formData.type === 'income' ? 'إضافة دخل' : 'خصم مصروف'} بقيمة ${formData.amount} ج.م`,
+  persistent: true,
+  duration: 5000
+});
+dispatch({ type: 'SET_IS_PROCESSING', payload: false });
 }
+}, [formData, formMode, selectedMonth, repeatMonths, transactions, saveHistory, addNotification, currentFawryBalance, currentEtisalatBalance, loans, dispatch, data.closedMonths, financeSnapshot, getSavingsLedger, isProcessing]);
 
 const handleDelete = useCallback((id) => {
 const targetTransaction = transactions.find(t => t.id === id);
@@ -1772,20 +1928,20 @@ addNotification({ type: 'error', title: 'تنبيه', message: 'هذا الشه�
 return;
 }
 
-setIsProcessing(true);
+dispatch({ type: 'SET_IS_PROCESSING', payload: true });
 setTimeout(() => {
 saveHistory();
 const amount = Number(quickTransferData.amount);
 
 if (amount <= 0 || isNaN(amount)) {
 addNotification({ type: 'error', title: 'خطأ', message: 'يرجى إدخال مبلغ صحيح أكبر من صفر' });
-setIsProcessing(false);
+dispatch({ type: 'SET_IS_PROCESSING', payload: false });
 return;
 }
 
 if (quickTransferData.from === quickTransferData.to) {
 addNotification({ type: 'error', title: 'خطأ', message: 'لا يمكن التحويل لنفس المحفظة' });
-setIsProcessing(false);
+dispatch({ type: 'SET_IS_PROCESSING', payload: false });
 return;
 }
 
@@ -1806,7 +1962,7 @@ sourceBalance = ledger.length > 0 ? ledger[0].runningBalance : 0;
 
 if (amount > sourceBalance) {
 addNotification({ type: 'error', title: 'رصيد غير كافٍ', message: `رصيد الحساب المصدر (${sourceBalance.toLocaleString()}) لا يكفي للتحويل.` });
-setIsProcessing(false);
+dispatch({ type: 'SET_IS_PROCESSING', payload: false });
 return;
 }
 
@@ -1846,7 +2002,7 @@ dispatch({ type: 'UPDATE_TRANSACTIONS', payload: newTransactions });
 dispatch({ type: 'SET_QUICK_TRANSFER_MODAL_OPEN', payload: false });
 dispatch({ type: 'SET_QUICK_TRANSFER_DATA', payload: { from: 'cash', to: 'fawry', amount: 0 } });
 addNotification({ type: 'success', title: 'تم التحويل بنجاح', message: `تم تحويل ${amount.toLocaleString()} ج.م` });
-setIsProcessing(false);
+dispatch({ type: 'SET_IS_PROCESSING', payload: false });
 }, 600);
 }, [quickTransferData, selectedMonth, transactions, saveHistory, dispatch, addNotification, currentFawryBalance, currentEtisalatBalance, financeSnapshot, getSavingsLedger, data.closedMonths]);
 
@@ -1895,7 +2051,7 @@ window.location.reload();
 }, []);
 
 const handleAnalyzeFinances = useCallback(async () => { dispatch({ type: 'SET_AI_LOADING', payload: true }); setTimeout(() => { const totalIncome = transactions.reduce((a,c)=>c.type==='income'?a+Number(c.amount):a, 0); const totalExp = transactions.reduce((a,c)=>c.type==='expense'?a+Number(c.amount):a, 0); const ratio = Math.round((totalExp/totalIncome)*100); dispatch({ type: 'SET_AI_RESPONSE', payload: `تحليل سريع: إجمالي دخلك المسجل ${totalIncome.toLocaleString()} ومصروفاتك ${totalExp.toLocaleString()} (${ratio}%). وضعك المالي ${ratio > 90 ? 'حرج، تحتاج لتقليل النفقات' : 'جيد ومستقر'}.` }); dispatch({ type: 'SET_AI_LOADING', payload: false }); }, 1500); }, [transactions]);
-const handleSmartAdd = useCallback(async () => { dispatch({ type: 'SET_AI_LOADING', payload: true }); setTimeout(() => { const txt = aiQuery.toLowerCase(); let amount = txt.match(/\d+/)?.[0]; let type = (txt.includes('قبضت') || txt.includes('اخدت') || txt.includes('تحويل لي')) ? 'income' : 'expense'; let category = 'أخرى'; if (txt.includes('اكل') || txt.includes('غدا') || txt.includes('سوبر')) category = 'مصروفات المعيشة اليومية'; else if (txt.includes('رصيد') || txt.includes('شحن')) category = 'الاتصالات وشحن الهواتف المحمولة'; else if (txt.includes('بنزين') || txt.includes('مواصلات')) category = 'المواصلات والانتقالات'; else if (txt.includes('درس') || txt.includes('مدرسة')) category = 'التعليم والدروس والأنشطة'; if (amount) { dispatch({ type: 'SET_FORM_MODE', payload: 'add' }); dispatch({ type: 'SET_FORM_DATA', payload: { type, category, amount: Number(amount), description: aiQuery, date: getLocalISODate(), month: selectedMonth, method: 'cash', quantity:1, unitPrice: Number(amount), subType: type === 'income' ? 'deposit' : 'withdrawal' } }); dispatch({ type: 'SET_FORM_OPEN', payload: true }); dispatch({ type: 'SET_AI_MODAL_OPEN', payload: false }); dispatch({ type: 'SET_AI_QUERY', payload: '' }); } else { dispatch({ type: 'SET_AI_RESPONSE', payload: "لم أتمكن من استخراج المبلغ. يرجى كتابة الرقم بوضوح (مثال: 500)" ); } dispatch({ type: 'SET_AI_LOADING', payload: false }); }, 1000); }, [aiQuery, selectedMonth]);
+const handleSmartAdd = useCallback(async () => { dispatch({ type: 'SET_AI_LOADING', payload: true }); setTimeout(() => { const txt = aiQuery.toLowerCase(); let amount = txt.match(/\d+/)?.[0]; let type = (txt.includes('قبضت') || txt.includes('اخدت') || txt.includes('تحويل لي')) ? 'income' : 'expense'; let category = 'أخرى'; if (txt.includes('اكل') || txt.includes('غدا') || txt.includes('سوبر')) category = 'مصروفات المعيشة اليومية'; else if (txt.includes('رصيد') || txt.includes('شحن')) category = 'الاتصالات وشحن الهواتف المحمولة'; else if (txt.includes('بنزين') || txt.includes('مواصلات')) category = 'المواصلات والانتقالات'; else if (txt.includes('درس') || txt.includes('مدرسة')) category = 'التعليم والدروس والأنشطة'; if (amount) { dispatch({ type: 'SET_FORM_MODE', payload: 'add' }); dispatch({ type: 'SET_FORM_DATA', payload: { type, category, amount: Number(amount), description: aiQuery, date: getLocalISODate(), month: selectedMonth, method: 'cash', quantity:1, unitPrice: Number(amount), subType: type === 'income' ? 'deposit' : 'withdrawal' } }); dispatch({ type: 'SET_FORM_OPEN', payload: true }); dispatch({ type: 'SET_AI_MODAL_OPEN', payload: false }); dispatch({ type: 'SET_AI_QUERY', payload: '' }); } else { dispatch({ type: 'SET_AI_RESPONSE', payload: "لم أتمكن من استخراج المبلغ. يرجى كتابة الرقم بوضوح (مثال: 500)" }); } dispatch({ type: 'SET_AI_LOADING', payload: false }); }, 1000); }, [aiQuery, selectedMonth]);
 
 useEffect(() => {
 const lastBackup = localStorage.getItem('last_backup');
@@ -1933,13 +2089,13 @@ sessionStorage.setItem(sessionKey, 'true');
 }, [isAuthenticated, transactions.length]);
 
 const tickerData = useMemo(() => {
-const totalCashAvailable = isPrivate ? '****' : financeSnapshot.actualCashInHand.toLocaleString();
-const totalDebtRemaining = isPrivate ? '****' : updatedLoans.reduce((acc, loan) => acc + loan.remaining, 0).toLocaleString();
+const totalCashAvailable = walletVisibility.cash ? financeSnapshot.actualCashInHand.toLocaleString() : '•••••';
+const totalDebtRemaining = updatedLoans.reduce((acc, loan) => acc + loan.remaining, 0).toLocaleString();
 const today = new Date();
 const gregDate = today.toLocaleDateString('ar-EG', { weekday: 'long', day: 'numeric', month: 'short' });
 const hijriDate = new Intl.DateTimeFormat('ar-SA-u-ca-islamic', { day: 'numeric', month: 'long', year: 'numeric' }).format(today);
 return { totalCashAvailable, totalDebtRemaining, gregDate, hijriDate };
-}, [financeSnapshot, updatedLoans, isPrivate]);
+}, [financeSnapshot, updatedLoans, walletVisibility]);
 
 const ProfessionalTicker = React.memo(() => {
 const [quote] = React.useState(() => DAILY_DHIKR[Math.floor(Math.random() * DAILY_DHIKR.length)]);
@@ -1951,9 +2107,9 @@ return (
 <div className="ticker-wrap flex-1 h-full flex items-center overflow-hidden">
 <div className="ticker-content flex-1 h-full flex items-center whitespace-nowrap animate-ticker-scroll">
 {[
-<span className="ticker-item text-emerald-300 flex items-center gap-3 px-6 font-bold">💰 الرصيد المتاح: {isPrivate ? '•••••' : financeSnapshot.actualCashInHand.toLocaleString()} ج.م</span>,
+<span className="ticker-item text-emerald-300 flex items-center gap-3 px-6 font-bold">💰 الرصيد المتاح: {walletVisibility.cash ? financeSnapshot.actualCashInHand.toLocaleString() : '•••••'} ج.م</span>,
 <span className="text-white/20 mx-2">•</span>,
-<span className="ticker-item text-amber-200 flex items-center gap-3">⚠️ إجمالي الديون: {isPrivate ? '•••••' : updatedLoans.reduce((acc, loan) => acc + loan.remaining, 0).toLocaleString()} ج.م</span>,
+<span className="ticker-item text-amber-200 flex items-center gap-3">⚠️ إجمالي الديون: {updatedLoans.reduce((acc, loan) => acc + loan.remaining, 0).toLocaleString()} ج.م</span>,
 <span className="text-white/20 mx-2">•</span>,
 <span className="ticker-item text-blue-200 flex items-center gap-3">📅 {new Date().toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>,
 <span className="text-white/20 mx-2">•</span>,
@@ -2109,7 +2265,7 @@ return (
 </div>
 </div>
 <div className="flex items-center gap-4">
-<div className="text-left font-black text-lg text-slate-800 dark:text-white">{isPrivate ? '****' : Number(item.amount).toLocaleString()} <span className="text-xs font-normal text-slate-400">ج.م</span></div>
+<div className="text-left font-black text-lg text-slate-800 dark:text-white">{Number(item.amount).toLocaleString()} <span className="text-xs font-normal text-slate-400">ج.م</span></div>
 <button
 onClick={() => {
 dispatch({ type: 'SET_FORM_MODE', payload: 'add' });
@@ -2140,50 +2296,6 @@ title="دفع سريع"
 
 const renderDashboard = () => (
 <div className="space-y-8 animate-fadeIn">
-{/* --- قسم تفصيل السيولة (جديد) --- */}
-<div className="glass bg-slate-50/50 dark:bg-slate-800/30 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm animate-fadeIn">
-  <div className="flex items-center gap-2 mb-4 text-slate-600 dark:text-slate-300 font-black uppercase tracking-wider text-xs">
-    <Wallet size={16} /> تفصيل الرصيد الفوري (الحسابات الجارية)
-  </div>
-  <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-    {/* الكاش باليد */}
-    <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm text-center group hover:border-blue-400 transition-colors">
-      <p className="text-[10px] text-slate-400 font-bold mb-1">النقدية باليد</p>
-      <p className="text-lg font-black text-blue-600 group-hover:scale-105 transition-transform">
-        {isPrivate ? '****' : financeSnapshot.actualCashInHand.toLocaleString()}
-      </p>
-    </div>
-    {/* فوري */}
-    <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm text-center group hover:border-yellow-400 transition-colors">
-      <p className="text-[10px] text-slate-400 font-bold mb-1">محفظة فوري</p>
-      <p className="text-lg font-black text-yellow-600 group-hover:scale-105 transition-transform">
-        {isPrivate ? '****' : currentFawryBalance.toLocaleString()}
-      </p>
-    </div>
-    {/* اتصالات */}
-    <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm text-center group hover:border-green-400 transition-colors">
-      <p className="text-[10px] text-slate-400 font-bold mb-1">اتصالات كاش</p>
-      <p className="text-lg font-black text-emerald-600 group-hover:scale-105 transition-transform">
-        {isPrivate ? '****' : currentEtisalatBalance.toLocaleString()}
-      </p>
-    </div>
-    {/* CIB Savings */}
-    <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm text-center group hover:border-indigo-400 transition-colors">
-      <p className="text-[10px] text-slate-400 font-bold mb-1">توفير CIB</p>
-      <p className="text-lg font-black text-indigo-600 group-hover:scale-105 transition-transform">
-        {isPrivate ? '****' : currentCIBBalance.toLocaleString()}
-      </p>
-    </div>
-    {/* AAIB Savings */}
-    <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm text-center group hover:border-red-400 transition-colors">
-      <p className="text-[10px] text-slate-400 font-bold mb-1">توفير AAIB</p>
-      <p className="text-lg font-black text-red-600 group-hover:scale-105 transition-transform">
-        {isPrivate ? '****' : currentAAIBBalance.toLocaleString()}
-      </p>
-    </div>
-  </div>
-</div>
-
 {/* مكون الرصيد الافتتاحي الجديد */}
 <div className="glass bg-blue-50/50 dark:bg-blue-900/10 p-6 rounded-2xl border border-blue-100 dark:border-blue-900/30 shadow-sm animate-fadeIn">
     <div className="flex flex-col md:flex-row items-center justify-between gap-4">
@@ -2214,6 +2326,17 @@ const renderDashboard = () => (
         </div>
     </div>
 </div>
+
+{/* لوحة السيولة الفورية */}
+<QuickBalanceOverview 
+  financeSnapshot={financeSnapshot}
+  currentFawryBalance={currentFawryBalance}
+  currentEtisalatBalance={currentEtisalatBalance}
+  getSavingsLedger={getSavingsLedger}
+  isPrivate={false}
+  walletVisibility={walletVisibility}
+  onToggleVisibility={(key) => dispatch({ type: 'TOGGLE_WALLET_VISIBILITY', payload: key })}
+/>
 
 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 no-print">
 <button
@@ -2259,11 +2382,11 @@ className="gradient-bg-danger text-white p-6 rounded-2xl flex flex-col items-cen
 
 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
 <EnhancedStatCard
-title="السيولة الإجمالية"
+title="السيولة الحالية"
 amount={financeSnapshot.actualCashInHand}
 icon={Wallet}
-subtitle={`رصيد مُرّحل: ${isPrivate ? '•••••' : financeSnapshot.actualCarryover.toLocaleString()} ج.م`}
-isPrivate={isPrivate}
+subtitle={`رصيد مُرّحل: ${financeSnapshot.actualCarryover.toLocaleString()} ج.م`}
+isPrivate={!walletVisibility.cash}
 />
 
 <EnhancedStatCard
@@ -2271,7 +2394,7 @@ title="الدخل المعلّق"
 amount={financeSnapshot.pendingIncome}
 icon={PendingCircle}
 subtitle="مبالغ متوقعة لم تستلم بعد"
-isPrivate={isPrivate}
+isPrivate={false}
 />
 
 <EnhancedStatCard
@@ -2279,7 +2402,7 @@ title="المصاريف المعلقة"
 amount={-financeSnapshot.pendingAmount}
 icon={Clock}
 subtitle="التزامات لم تسدد بعد"
-isPrivate={isPrivate}
+isPrivate={false}
 />
 
 <div 
@@ -2296,7 +2419,7 @@ financeSnapshot.projectedClosingBalance >= 0
 ? 'text-blue-600' 
 : 'text-red-600'
 }`}>
-{isPrivate ? '•••••' : Math.round(financeSnapshot.projectedClosingBalance).toLocaleString()}
+{Math.round(financeSnapshot.projectedClosingBalance).toLocaleString()}
 <span className="text-sm font-medium text-slate-400 mr-1">ج.م</span>
 </h3>
 </div>
@@ -2440,7 +2563,7 @@ return (
 </div>
 </div>
 <h3 className="font-bold text-lg mb-1 dark:text-white">{cat}</h3>
-<p className="text-3xl font-black text-slate-800 dark:text-slate-100 tracking-tight">{isPrivate ? '****' : spent.toLocaleString()}<span className="text-sm text-slate-400 font-medium"> ج.م</span></p>
+<p className="text-3xl font-black text-slate-800 dark:text-slate-100 tracking-tight">{spent.toLocaleString()}<span className="text-sm text-slate-400 font-medium"> ج.م</span></p>
 {catViewType === 'expense' && budget > 0 && (<div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-700/50"><div className="flex justify-between text-[10px] mb-2 font-bold uppercase tracking-tighter text-slate-400"><span>الميزانية: {budget.toLocaleString()}</span><span className={overBudget ? 'text-red-500' : 'text-emerald-500'}>{Math.round((spent / budget) * 100)}%</span></div><div className="h-2.5 bg-slate-100 dark:bg-slate-900 rounded-full overflow-hidden shadow-inner"><div style={{ width: `${Math.min(100, (spent / budget) * 100)}%` }} className={`h-full transition-all duration-1000 ${overBudget ? 'gradient-bg-danger' : 'gradient-bg-success'}`}></div></div></div>)}
 </div>
 );
@@ -2479,7 +2602,7 @@ return (
 </span>
 </td>
 <td className="px-6 py-4 text-left font-black text-slate-800 dark:text-white border-b border-slate-100 dark:border-slate-800/50">
-{isPrivate ? '****' : Number(t.amount).toLocaleString()}
+{Number(t.amount).toLocaleString()}
 </td>
 <td className="px-6 py-4 text-center border-b border-slate-100 dark:border-slate-800/50">
 <div className="flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -2493,7 +2616,7 @@ return (
 </table>
 )}
 </div>
-<div className="p-8 border-t border-slate-100 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-800/50 flex justify-between items-center backdrop-blur-md"><span className="text-slate-500 text-sm font-bold bg-white dark:bg-slate-700 px-4 py-2 rounded-xl shadow-sm">عدد العمليات: {detailedTransactions.length}</span><div className="text-2xl font-black text-slate-800 dark:text-white">الإجمالي: <span className="mr-2" style={{ color: CATEGORY_COLORS[activeCategoryDetail] }}>{isPrivate ? '****' : detailedTotal.toLocaleString()} ج.م</span></div></div>
+<div className="p-8 border-t border-slate-100 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-800/50 flex justify-between items-center backdrop-blur-md"><span className="text-slate-500 text-sm font-bold bg-white dark:bg-slate-700 px-4 py-2 rounded-xl shadow-sm">عدد العمليات: {detailedTransactions.length}</span><div className="text-2xl font-black text-slate-800 dark:text-white">الإجمالي: <span className="mr-2" style={{ color: CATEGORY_COLORS[activeCategoryDetail] }}>{detailedTotal.toLocaleString()} ج.م</span></div></div>
 </div>
 </div>
 )}
@@ -2537,7 +2660,7 @@ return (
 
 <p className="text-slate-400 text-xs font-bold uppercase tracking-widest relative z-10">إجمالي المديونية الشاملة (قروض + فيزا)</p>
 <h3 className="text-4xl font-black font-mono mt-2 text-gradient relative z-10">
-{isPrivate ? '****' : grandTotalDebt.toLocaleString()} <span className="text-2xl text-slate-500 font-normal">ج.م</span>
+{grandTotalDebt.toLocaleString()} <span className="text-2xl text-slate-500 font-normal">ج.م</span>
 </h3>
 
 <div className="grid grid-cols-2 gap-4 mt-6 bg-white/5 p-4 rounded-2xl backdrop-blur-sm border border-white/10 relative z-10">
@@ -2601,11 +2724,11 @@ return (
 <div className="flex items-center gap-6">
 <div className="text-center">
 <p className="text-[10px] text-slate-400 font-bold uppercase">المتبقي</p>
-<p className={`text-xl font-mono font-black ${isPaid ? 'text-emerald-600' : 'text-red-500'}`}>{isPrivate ? '****' : loan.remaining.toLocaleString()}</p>
+<p className={`text-xl font-mono font-black ${isPaid ? 'text-emerald-600' : 'text-red-500'}`}>{loan.remaining.toLocaleString()}</p>
 </div>
 <div className="text-center pl-4 border-l border-slate-200 dark:border-slate-700">
 <p className="text-[10px] text-slate-400 font-bold uppercase">القسط</p>
-<p className="text-xl font-mono font-black text-slate-800 dark:text-white">{isPrivate ? '****' : Number(loan.monthlyInstallment).toLocaleString()}</p>
+<p className="text-xl font-mono font-black text-slate-800 dark:text-white">{Number(loan.monthlyInstallment).toLocaleString()}</p>
 </div>
 <button type="button" onClick={() => dispatch({ type: 'SET_EDITING_LOAN', payload: loan })} className="p-2 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-blue-600 transition-colors no-print"><Edit size={18}/></button>
 </div>
@@ -2698,10 +2821,12 @@ onToggle: () => dispatch({ type: 'TOGGLE_LEDGER', payload: key }),
 onDelete: (id) => handleDelete(id),
 onEditTransaction: (t) => { dispatch({ type: 'SET_FORM_MODE', payload: 'edit' }); dispatch({ type: 'SET_FORM_DATA', payload: t }); dispatch({ type: 'SET_FORM_OPEN', payload: true }); },
 theme: WALLET_CONFIGS[key],
-isPrivate,
+isPrivate: false,
 onAddDeposit: handleAddWalletDeposit,
 onAddWithdrawal: handleAddWalletWithdrawal,
-onExportCSV: exportWalletCSV
+onExportCSV: exportWalletCSV,
+walletVisibility: walletVisibility,
+onToggleVisibility: (key) => dispatch({ type: 'TOGGLE_WALLET_VISIBILITY', payload: key })
 });
 
 return (
@@ -2764,9 +2889,9 @@ return (
 </div>
 
 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-<div className="relative group no-print"><button type="button" onClick={() => dispatch({ type: 'SET_EDITING_FAWRY', payload: fawryData })} className="absolute -top-3 -right-3 z-20 gradient-bg-primary text-white p-3 rounded-2xl shadow-xl hover:scale-110 active:scale-95 font-bold"><Edit size={18} /></button><div className="bg-gradient-to-br from-yellow-100 to-yellow-200 border border-yellow-300 p-8 rounded-2xl flex flex-col justify-between shadow-lg h-full text-yellow-900 hover-lift cursor-pointer transition-transform" onClick={() => dispatch({ type: 'SET_EDITING_FAWRY', payload: fawryData })}><div className="flex justify-between items-start mb-6"><div className="flex items-center gap-4"><div className="bg-white p-3 rounded-2xl shadow-sm"><BankLogo type="fawry" size={32}/></div><div><h3 className="font-black text-2xl">محفظة فوري</h3><p className="text-sm font-bold opacity-80">مدفوعات إلكترونية</p></div></div><div className="text-left flex flex-col items-end"><span className="block text-xs uppercase font-bold mb-1 tracking-widest opacity-60">الرصيد</span><span className="font-black text-4xl group-hover:scale-105 transition-transform">{isPrivate ? '****' : currentFawryBalance.toLocaleString()}</span></div></div><div className="grid grid-cols-2 gap-3 w-full font-bold mt-auto"><div className="bg-white/60 backdrop-blur-sm p-3 rounded-xl border border-white/40 text-center shadow-inner"><span className="block text-[10px] mb-1">إيداع</span><span className="font-bold text-lg">+{fawryStats.deposits.toLocaleString()}</span></div><div className="bg-white/60 backdrop-blur-sm p-3 rounded-xl border border-white/40 text-center shadow-inner"><span className="block text-[10px] mb-1">سحب</span><span className="font-bold text-lg">-{fawryStats.withdrawals.toLocaleString()}</span></div></div></div></div>
+<div className="relative group no-print"><button type="button" onClick={() => dispatch({ type: 'SET_EDITING_FAWRY', payload: fawryData })} className="absolute -top-3 -right-3 z-20 gradient-bg-primary text-white p-3 rounded-2xl shadow-xl hover:scale-110 active:scale-95 font-bold"><Edit size={18} /></button><div className="bg-gradient-to-br from-yellow-100 to-yellow-200 border border-yellow-300 p-8 rounded-2xl flex flex-col justify-between shadow-lg h-full text-yellow-900 hover-lift cursor-pointer transition-transform" onClick={() => dispatch({ type: 'SET_EDITING_FAWRY', payload: fawryData })}><div className="flex justify-between items-start mb-6"><div className="flex items-center gap-4"><div className="bg-white p-3 rounded-2xl shadow-sm"><BankLogo type="fawry" size={32}/></div><div><h3 className="font-black text-2xl">محفظة فوري</h3><p className="text-sm font-bold opacity-80">مدفوعات إلكترونية</p></div></div><div className="text-left flex flex-col items-end"><span className="block text-xs uppercase font-bold mb-1 tracking-widest opacity-60">الرصيد</span><span className="font-black text-4xl group-hover:scale-105 transition-transform">{walletVisibility.fawry ? currentFawryBalance.toLocaleString() : '•••••'}</span></div></div><div className="grid grid-cols-2 gap-3 w-full font-bold mt-auto"><div className="bg-white/60 backdrop-blur-sm p-3 rounded-xl border border-white/40 text-center shadow-inner"><span className="block text-[10px] mb-1">إيداع</span><span className="font-bold text-lg">+{walletVisibility.fawry ? fawryStats.deposits.toLocaleString() : '•••••'}</span></div><div className="bg-white/60 backdrop-blur-sm p-3 rounded-xl border border-white/40 text-center shadow-inner"><span className="block text-[10px] mb-1">سحب</span><span className="font-bold text-lg">-{walletVisibility.fawry ? fawryStats.withdrawals.toLocaleString() : '•••••'}</span></div></div></div></div>
 
-<div className="relative group no-print"><button type="button" onClick={() => dispatch({ type: 'SET_EDITING_ETISALAT', payload: etisalatData })} className="absolute -top-3 -right-3 z-20 bg-white hover:bg-slate-100 text-etisalatGreen p-3 rounded-2xl shadow-xl transition-all hover:scale-110 active:scale-95 font-bold border border-slate-200"><Edit size={18} /></button><div className="bg-gradient-to-br from-emerald-100 to-emerald-200 border border-emerald-300 p-8 rounded-2xl flex flex-col justify-between shadow-lg h-full text-emerald-900 relative overflow-hidden hover-lift cursor-pointer transition-transform" onClick={() => dispatch({ type: 'SET_EDITING_ETISALAT', payload: etisalatData })}><div className="absolute top-0 right-0 bg-etisalatRed w-24 h-24 rounded-bl-[4rem] z-0 shadow-lg"></div><div className="flex justify-between items-start mb-6 z-10 relative"><div className="flex items-center gap-4"><div className="bg-white p-3 rounded-2xl shadow-lg"><BankLogo type="etisalat" size={32}/></div><div><h3 className="font-black text-2xl">اتصالات كاش</h3><p className="text-sm font-bold opacity-80">e& wallet</p></div></div><div className="text-left flex flex-col items-end z-10 relative"><span className="block text-xs uppercase font-bold mb-1 tracking-widest opacity-80">الرصيد</span><span className="font-black text-4xl group-hover:scale-105 transition-transform">{isPrivate ? '****' : currentEtisalatBalance.toLocaleString()}</span></div></div><div className="grid grid-cols-2 gap-3 w-full font-bold mt-auto z-10 relative"><div className="bg-white/40 backdrop-blur-md p-3 rounded-xl border border-white/40 text-center shadow-sm"><span className="block text-[10px] mb-1 opacity-80">إيداع</span><span className="font-bold text-lg">+{etisalatStats.deposits.toLocaleString()}</span></div><div className="bg-white/40 backdrop-blur-md p-3 rounded-xl border border-white/40 text-center shadow-sm"><span className="block text-[10px] mb-1 opacity-80">سحب</span><span className="font-bold text-lg">-{etisalatStats.withdrawals.toLocaleString()}</span></div></div></div></div>
+<div className="relative group no-print"><button type="button" onClick={() => dispatch({ type: 'SET_EDITING_ETISALAT', payload: etisalatData })} className="absolute -top-3 -right-3 z-20 bg-white hover:bg-slate-100 text-etisalatGreen p-3 rounded-2xl shadow-xl transition-all hover:scale-110 active:scale-95 font-bold border border-slate-200"><Edit size={18} /></button><div className="bg-gradient-to-br from-emerald-100 to-emerald-200 border border-emerald-300 p-8 rounded-2xl flex flex-col justify-between shadow-lg h-full text-emerald-900 relative overflow-hidden hover-lift cursor-pointer transition-transform" onClick={() => dispatch({ type: 'SET_EDITING_ETISALAT', payload: etisalatData })}><div className="absolute top-0 right-0 bg-etisalatRed w-24 h-24 rounded-bl-[4rem] z-0 shadow-lg"></div><div className="flex justify-between items-start mb-6 z-10 relative"><div className="flex items-center gap-4"><div className="bg-white p-3 rounded-2xl shadow-lg"><BankLogo type="etisalat" size={32}/></div><div><h3 className="font-black text-2xl">اتصالات كاش</h3><p className="text-sm font-bold opacity-80">e& wallet</p></div></div><div className="text-left flex flex-col items-end z-10 relative"><span className="block text-xs uppercase font-bold mb-1 tracking-widest opacity-80">الرصيد</span><span className="font-black text-4xl group-hover:scale-105 transition-transform">{walletVisibility.etisalat ? currentEtisalatBalance.toLocaleString() : '•••••'}</span></div></div><div className="grid grid-cols-2 gap-3 w-full font-bold mt-auto z-10 relative"><div className="bg-white/40 backdrop-blur-md p-3 rounded-xl border border-white/40 text-center shadow-sm"><span className="block text-[10px] mb-1 opacity-80">إيداع</span><span className="font-bold text-lg">+{walletVisibility.etisalat ? etisalatStats.deposits.toLocaleString() : '•••••'}</span></div><div className="bg-white/40 backdrop-blur-md p-3 rounded-xl border border-white/40 text-center shadow-sm"><span className="block text-[10px] mb-1 opacity-80">سحب</span><span className="font-bold text-lg">-{walletVisibility.etisalat ? etisalatStats.withdrawals.toLocaleString() : '•••••'}</span></div></div></div></div>
 </div>
 
 <GenericLedgerComponent {...ledgerProps('fawry')} />
@@ -2818,18 +2943,18 @@ const renderMonthlyInsight = () => (
   <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8 animate-fadeIn">
 <div className="glass p-5 rounded-2xl border-b-4 border-emerald-500 bg-emerald-50/10">
 <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">دخل محصل ({selectedMonth})</p>
-<p className="text-xl font-black text-emerald-600">{isPrivate ? '****' : monthInsights.inc.toLocaleString()} ج.م</p>
+<p className="text-xl font-black text-emerald-600">{monthInsights.inc.toLocaleString()} ج.م</p>
 {monthInsights.pendInc > 0 && <p className="text-[9px] text-amber-500 mt-1 font-bold">⚠️ +{monthInsights.pendInc.toLocaleString()} منتظر</p>}
 </div>
 <div className="glass p-5 rounded-2xl border-b-4 border-rose-500 bg-rose-50/10">
 <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">مصاريف مدفوعة</p>
-<p className="text-xl font-black text-rose-600">{isPrivate ? '****' : monthInsights.exp.toLocaleString()} ج.م</p>
+<p className="text-xl font-black text-rose-600">{monthInsights.exp.toLocaleString()} ج.م</p>
 {monthInsights.pendExp > 0 && <p className="text-[9px] text-amber-500 mt-1 font-bold">⚠️ +{monthInsights.pendExp.toLocaleString()} معلق</p>}
 </div>
 <div className="glass p-5 rounded-2xl border-b-4 border-blue-500 bg-blue-50/10">
 <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">صافي التدفق المالي</p>
 <p className={`text-xl font-black ${monthInsights.net >= 0 ? 'text-blue-600' : 'text-rose-500'}`}>
-{isPrivate ? '****' : monthInsights.net.toLocaleString()} ج.م
+{monthInsights.net.toLocaleString()} ج.م
 </p>
 <p className="text-[9px] text-slate-400 mt-1">سيولة الشهر الفعلية</p>
 </div>
@@ -2903,7 +3028,7 @@ return (
 <td className="p-6 text-center"><div className={`p-2 rounded-full transition-transform ${isActiveGroupExpanded ? 'bg-blue-50 text-blue-500 rotate-180' : 'bg-slate-50 text-slate-400'}`}><ChevronDown size={16} /></div></td>
 <td className="p-6 font-bold flex items-center gap-4 text-slate-700 dark:text-slate-200"><span className="p-3 rounded-2xl shadow-sm" style={{ backgroundColor: `${CATEGORY_COLORS[g.category]}20`, color: CATEGORY_COLORS[g.category] }}><Layers size={20} /></span>{g.category}</td>
 <td className="p-6 text-center text-slate-400">{g.items.length}</td>
-<td className={`p-6 font-black text-left text-lg tracking-tight ${transViewMode === 'income' ? 'text-emerald-500' : 'text-slate-700 dark:text-white'}`}>{isPrivate ? '****' : g.items.reduce((s,i)=>s+Number(i.amount),0).toLocaleString()}</td>
+<td className={`p-6 font-black text-left text-lg tracking-tight ${transViewMode === 'income' ? 'text-emerald-500' : 'text-slate-700 dark:text-white'}`}>{g.items.reduce((s,i)=>s+Number(i.amount),0).toLocaleString()}</td>
 <td className="p-6 text-center"></td>
 </tr>
 {isActiveGroupExpanded && g.items.map(t => (
@@ -2924,7 +3049,7 @@ title={t.status === 'paid' ? "تعيين كمعلق" : "تعيين كمدفوع"
 </td>
 <td className="pr-20 py-4 text-slate-500 font-bold leading-relaxed"><div className="font-bold text-slate-800 dark:text-slate-200 text-base mb-1">{t.description || 'بدون وصف'}</div><div className="flex gap-3 items-center opacity-80"><span className="bg-white dark:bg-slate-800 px-3 py-1 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm">{t.date}</span><span className="bg-blue-50 text-blue-600 px-3 py-1 rounded-lg font-bold">{PAYMENT_METHODS.find(p=>p.id===t.method)?.label}</span></div></td>
 <td className="py-4 text-center text-slate-400 font-bold">{t.quantity > 1 ? `${t.quantity} × ${t.unitPrice}` : '-'}</td>
-<td className="py-4 font-black text-left text-base dark:text-slate-200">{isPrivate ? '****' : Number(t.amount).toLocaleString()}</td>
+<td className="py-4 font-black text-left text-base dark:text-slate-200">{Number(t.amount).toLocaleString()}</td>
 <td className="py-4 text-center">
 {!data.closedMonths?.includes(t.month) && (
 <div className="flex gap-2 justify-center no-print">
@@ -2963,7 +3088,7 @@ title={t.status === 'paid' ? "تعيين كمعلق" : "تعيين كمدفوع"
 </div>
 <div className="text-left">
 <p className={`font-black text-base ${t.type === 'income' ? 'text-emerald-600' : 'text-slate-800 dark:text-white'}`}>
-{isPrivate ? '****' : Number(t.amount).toLocaleString()}
+{Number(t.amount).toLocaleString()}
 </p>
 <button onClick={() => handleDelete(t.id)} className="text-rose-400 mt-1 hover:text-rose-600 transition-colors no-print" title="حذف"><Trash2 size={12}/></button>
 </div>
@@ -3004,7 +3129,7 @@ title={t.status === 'paid' ? "تعيين كمعلق" : "تعيين كمدفوع"
 </div>
 <div className="flex items-center gap-3">
 <p className={`font-black text-sm whitespace-nowrap ${t.type === 'income' ? 'text-emerald-600' : 'text-slate-700 dark:text-white'}`}>
-{isPrivate ? '****' : Number(t.amount).toLocaleString()} ج.م
+{Number(t.amount).toLocaleString()} ج.م
 </p>
 
 <div className="flex gap-1 no-print opacity-0 group-hover:opacity-100 transition-opacity">
@@ -3091,7 +3216,7 @@ return (
 </div>
 <div className="hidden md:block text-left bg-white/10 p-4 rounded-2xl backdrop-blur-sm">
 <div className="text-xs uppercase tracking-widest text-slate-300 font-bold mb-1">الوضعية الحالية</div>
-<div className="text-2xl font-black text-emerald-400">{isPrivate ? '****' : financeSnapshot.actualCashInHand.toLocaleString()} <span className="text-sm">ج.م</span></div>
+<div className="text-2xl font-black text-emerald-400">{financeSnapshot.actualCashInHand.toLocaleString()} <span className="text-sm">ج.م</span></div>
 </div>
 </div>
 </div>
@@ -3309,7 +3434,23 @@ return (
 
 <NotificationCenter notifications={notifications} removeNotification={removeNotification} />
 
-{isProcessing && (<div className="modal-backdrop z-[9999]"><div className="text-center"><div className="loading-spinner mx-auto mb-6"></div><p className="text-white text-xl font-black animate-pulse">جاري المعالجة...</p></div></div>)}
+{/* Processing Overlay */}
+{isProcessing && (
+<div className="processing-overlay">
+  <div className="processing-spinner mb-4"></div>
+  <h3 className="text-xl font-bold mb-2">جاري تطبيق العملية</h3>
+  <p className="text-sm opacity-80 mb-6">قد تستغرق العملية بضع ثوانٍ</p>
+  <button
+    onClick={() => {
+      dispatch({ type: 'SET_IS_PROCESSING', payload: false });
+      addNotification({ type: 'info', title: 'تم الإلغاء', message: 'تم إلغاء العملية' });
+    }}
+    className="px-6 py-2 bg-red-500 hover:bg-red-600 text-white rounded-xl font-bold transition-colors"
+  >
+    إلغاء العملية
+  </button>
+</div>
+)}
 
 <ConfirmDialog />
 
@@ -3343,11 +3484,11 @@ return (
                     <div className="grid grid-cols-2 gap-4">
                         <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl border-r-4 border-amber-500 shadow-sm">
                             <p className="text-[10px] font-bold text-slate-400 uppercase">رصيد بداية المدة (دين)</p>
-                            <p className="text-lg font-black text-slate-700 dark:text-white">{isPrivate ? '****' : Math.round(monthData?.openingDebt || 0).toLocaleString()} ج.م</p>
+                            <p className="text-lg font-black text-slate-700 dark:text-white">{Math.round(monthData?.openingDebt || 0).toLocaleString()} ج.م</p>
                         </div>
                         <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl border-r-4 border-blue-500 shadow-sm">
                             <p className="text-[10px] font-bold text-slate-400 uppercase">رصيد نهاية المدة (دين)</p>
-                            <p className="text-lg font-black text-blue-600">{isPrivate ? '****' : Math.round(monthData?.closingDebt || 0).toLocaleString()} ج.م</p>
+                            <p className="text-lg font-black text-blue-600">{Math.round(monthData?.closingDebt || 0).toLocaleString()} ج.م</p>
                         </div>
                     </div>
                 </div>
@@ -3518,7 +3659,17 @@ payload: { ...formData, method: newMethod, subType: newSubType }
 
 <div><label className="block text-sm font-bold mb-3 text-slate-400 uppercase mb-2 block tracking-wider">الوصف</label><input type="text" id="form-desc" className="input-field font-bold" value={formData.description} onChange={e => dispatch({ type: 'SET_FORM_DATA', payload: { ...formData, description: e.target.value } })} placeholder="تفاصيل إضافية..." /></div>
 {formMode === 'add' && (<details className="group border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden bg-white dark:bg-slate-800"><summary className="p-4 cursor-pointer text-xs font-bold text-slate-500 flex items-center justify-between select-none hover:bg-slate-50 transition-colors"><span className="flex items-center gap-2"><Repeat size={16} className="text-blue-500" /> تكرار العملية في المستقبل</span><ChevronDown size={16} className="group-open:rotate-180 transition-transform" /></summary><div className="p-4 border-t border-slate-100 dark:border-slate-700 flex flex-wrap gap-2">{MONTHS.map((m, idx) => { if (idx <= MONTHS.indexOf(selectedMonth)) return null; return (<label key={m} className="inline-flex items-center gap-2 bg-slate-50 dark:bg-slate-700 px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-600 cursor-pointer select-none text-xs font-bold hover:border-blue-300 transition-colors"><input type="checkbox" className="rounded text-blue-600 focus:rope-0 w-4 h-4" onChange={(e) => { if (e.target.checked) { dispatch({ type: 'SET_REPEAT_MONTHS', payload: [...repeatMonths, m] }); } else { dispatch({ type: 'SET_REPEAT_MONTHS', payload: repeatMonths.filter(rm => rm !== m) }); } }} />{m}</label>); })}</div></details>)}
-<button type="submit" className="w-full gradient-bg-primary text-white py-4 rounded-2xl font-black text-lg shadow-xl hover:shadow-2xl hover:scale-[1.02] active:scale-95 transition-all mt-4" disabled={isProcessing}>{isProcessing ? (<span className="flex items-center justify-center gap-2"><div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div> جاري الحفظ...</span>) : 'حفظ العملية'}</button>
+<button type="submit" className="w-full gradient-bg-primary text-white py-4 rounded-2xl font-black text-lg shadow-xl hover:shadow-2xl hover:scale-[1.02] active:scale-95 transition-all mt-4 relative" disabled={isProcessing}>
+  {isProcessing ? (
+    <>
+      <div className="absolute inset-0 bg-blue-600 rounded-2xl"></div>
+      <div className="relative flex items-center justify-center gap-3">
+        <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+        جاري الحفظ والتطبيق...
+      </div>
+    </>
+  ) : 'حفظ العملية'}
+</button>
 </form>
 </div>
 </div>
