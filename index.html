@@ -3,10 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<title>المحفظة المالية - V51 Secure + Smart Insights</title>
+<title>المحفظة المالية - V52 Advanced Edition</title>
 
 <!-- SEO Meta Tags -->
-<meta name="description" content="تطبيق محفظة مالية شخصية متكامل وأداة تخطيط ذكية للديون - نسخة آمنة مع ملخص شهري ذكي">
+<meta name="description" content="تطبيق محفظة مالية متكامل مع تحسينات متقدمة لتحليل السيولة وتتبع المحافظ الرقمية">
 <meta name="theme-color" content="#0f172a">
 
 <!-- Fonts -->
@@ -499,9 +499,8 @@ const diffTime = target - today;
 return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 };
 
-const STORAGE_KEY = 'finance_tracker_V51_SECURE';
+const STORAGE_KEY = 'finance_tracker_V52_ADVANCED';
 const MONTHS = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
-const OPENING_SAVINGS_JAN = 0;
 
 const getMonthIndex = (monthName) => {
 return MONTHS.indexOf(monthName);
@@ -663,8 +662,8 @@ aaib_savings: {
 }
 };
 
-// ========== Enhanced GenericLedgerComponent مع التحسينات ==========
-const GenericLedgerComponent = React.memo(({
+// ========== Enhanced WalletLedgerComponent ==========
+const WalletLedgerComponent = React.memo(({
 walletKey,
 ledgerData,
 isExpanded,
@@ -672,31 +671,45 @@ onToggle,
 onDelete,
 onEditTransaction,
 theme,
-isPrivate,
+walletVisibility,
+onToggleVisibility,
 onAddDeposit,
 onAddWithdrawal,
 onExportCSV,
-walletVisibility,
-onToggleVisibility
+openingBalance
 }) => {
 const [filter, setFilter] = useState('all');
 const [dateFilter, setDateFilter] = useState('');
 
 const validatedLedger = useMemo(() => {
 try {
-  return (ledgerData || []).map(item => ({
-    ...item,
-    amount: Number(item.amount) || 0,
-    runningBalance: Number(item.runningBalance) || 0,
-    date: item.date || 'غير معروف',
-    description: item.description || 'بدون وصف',
-    subType: item.subType || (item.type === 'income' ? 'deposit' : 'withdrawal')
-  }));
+  const sorted = [...(ledgerData || [])].sort((a, b) => new Date(b.date) - new Date(a.date));
+  
+  // حساب الرصيد الجاري مع بدء من الرصيد الافتتاحي 0
+  let runningBalance = Number(openingBalance) || 0;
+  const processed = sorted.map(item => {
+    const amount = Number(item.amount) || 0;
+    if (item.subType === 'deposit') {
+      runningBalance += amount;
+    } else {
+      runningBalance -= amount;
+    }
+    return {
+      ...item,
+      amount,
+      runningBalance,
+      date: item.date || 'غير معروف',
+      description: item.description || 'بدون وصف',
+      subType: item.subType || (item.type === 'income' ? 'deposit' : 'withdrawal')
+    };
+  });
+  
+  return processed;
 } catch (error) {
   console.error('خطأ في معالجة سجل المحفظة:', error);
   return [];
 }
-}, [ledgerData]);
+}, [ledgerData, openingBalance]);
 
 const filteredLedger = useMemo(() => {
 return validatedLedger.filter(item => {
@@ -718,10 +731,10 @@ const withdrawals = validatedLedger
   
 const currentBalance = validatedLedger.length > 0 
   ? validatedLedger[0].runningBalance 
-  : 0;
+  : (Number(openingBalance) || 0);
 
 return { deposits, withdrawals, currentBalance };
-}, [validatedLedger]);
+}, [validatedLedger, openingBalance]);
 
 const handleVisibilityToggle = useCallback((e) => {
   e.stopPropagation();
@@ -730,9 +743,8 @@ const handleVisibilityToggle = useCallback((e) => {
   }
 }, [onToggleVisibility, walletKey]);
 
-if (!ledgerData || ledgerData.length === 0) {
 return (
-<div className={`glass rounded-2xl overflow-hidden border border-slate-200/60 dark:border-slate-700/60 ${theme.bgColor} hover-lift`}>
+<div className={`glass rounded-2xl overflow-hidden border border-slate-200/60 dark:border-slate-700/60 ${theme.bgColor} hover-lift mb-4`}>
 <div className={`collapsible-header p-6 flex justify-between items-center border-b border-slate-100/50 dark:border-slate-800/50 ${theme.headerClass}`} onClick={onToggle}>
 <div className="flex items-center gap-4">
 <div className={`p-3 rounded-xl bg-gradient-to-br ${theme.gradient} text-white shadow-md`}>
@@ -741,60 +753,7 @@ return (
 <div>
 <h3 className="text-xl font-black">{theme.title}</h3>
 <p className="text-xs text-slate-500 font-bold mt-1">{theme.subtitle}</p>
-</div>
-</div>
-
-<div className="flex items-center gap-3">
-<button 
-  type="button"
-  onClick={(e) => {
-    e.stopPropagation();
-    onAddDeposit && onAddDeposit(walletKey);
-  }}
-  className="p-2 bg-emerald-500 text-white rounded-xl hover:bg-emerald-600 transition-colors shadow-md"
-  title="إيداع جديد"
->
-  <ArrowDownCircle size={20} />
-</button>
-
-<button 
-  type="button"
-  onClick={(e) => {
-    e.stopPropagation();
-    onAddWithdrawal && onAddWithdrawal(walletKey);
-  }}
-  className="p-2 bg-red-500 text-white rounded-xl hover:bg-red-600 transition-colors shadow-md"
-  title="سحب جديد"
->
-  <ArrowUpCircle size={20} />
-</button>
-
-<button 
-  type="button"
-  onClick={handleVisibilityToggle}
-  className="p-2 bg-slate-500 text-white rounded-xl hover:bg-slate-600 transition-colors shadow-md"
-  title={walletVisibility?.[walletKey] ? 'إخفاء الرصيد' : 'إظهار الرصيد'}
->
-  {walletVisibility?.[walletKey] ? <EyeOff size={20} /> : <Eye size={20} />}
-</button>
-
-<ChevronDown size={24} className={`text-slate-400 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`} />
-</div>
-</div>
-</div>
-);
-}
-
-return (
-<div className={`glass rounded-2xl overflow-hidden border border-slate-200/60 dark:border-slate-700/60 mb-6 ${theme.bgColor} hover-lift`}>
-<div className={`collapsible-header p-6 flex justify-between items-center border-b border-slate-100/50 dark:border-slate-800/50 ${theme.headerClass}`} onClick={onToggle}>
-<div className="flex items-center gap-4">
-<div className={`p-3 rounded-xl bg-gradient-to-br ${theme.gradient} text-white shadow-md`}>
-<theme.icon size={24} />
-</div>
-<div>
-<h3 className="text-xl font-black">{theme.title}</h3>
-<p className="text-xs text-slate-500 font-bold mt-1">{theme.subtitle}</p>
+<p className="text-xs text-slate-400 mt-1">الرصيد الافتتاحي: {Number(openingBalance).toLocaleString()} ج.م</p>
 </div>
 </div>
 
@@ -860,19 +819,19 @@ return (
   <div className="text-center">
     <div className="text-xs text-slate-500">إجمالي الإيداع</div>
     <div className="text-lg font-black text-emerald-600">
-      {isPrivate || !walletVisibility?.[walletKey] ? '•••••' : stats.deposits.toLocaleString()} ج.م
+      {!walletVisibility?.[walletKey] ? '•••••' : stats.deposits.toLocaleString()} ج.م
     </div>
   </div>
   <div className="text-center">
     <div className="text-xs text-slate-500">إجمالي السحب</div>
     <div className="text-lg font-black text-red-600">
-      {isPrivate || !walletVisibility?.[walletKey] ? '•••••' : stats.withdrawals.toLocaleString()} ج.م
+      {!walletVisibility?.[walletKey] ? '•••••' : stats.withdrawals.toLocaleString()} ج.م
     </div>
   </div>
   <div className="text-center">
     <div className="text-xs text-slate-500">الرصيد الحالي</div>
     <div className="text-lg font-black text-blue-600">
-      {isPrivate || !walletVisibility?.[walletKey] ? '•••••' : stats.currentBalance.toLocaleString()} ج.م
+      {!walletVisibility?.[walletKey] ? '•••••' : stats.currentBalance.toLocaleString()} ج.م
     </div>
   </div>
 </div>
@@ -951,11 +910,11 @@ return (
     : 'text-red-500'
 }`}>
 {t.subType === 'deposit' ? '+' : '-'}
-{isPrivate || !walletVisibility?.[walletKey] ? '•••••' : Number(t.amount).toLocaleString()} ج.م
+{!walletVisibility?.[walletKey] ? '•••••' : Number(t.amount).toLocaleString()} ج.م
 </td>
 <td className={`table-cell text-left font-black ${theme.color}`}>
 <div className="flex items-center gap-2">
-  {isPrivate || !walletVisibility?.[walletKey] ? '•••••' : t.runningBalance.toLocaleString()} ج.م
+  {!walletVisibility?.[walletKey] ? '•••••' : t.runningBalance.toLocaleString()} ج.م
   {t.runningBalance < 0 && (
     <span className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded-full">
       سالب
@@ -1089,10 +1048,6 @@ return (
 };
 
 const getInitialData = () => {
-// محاولة استيراد القديم لتوفير التوافق
-const legacyOpeningBalance = localStorage.getItem('opening_balance_2026');
-const finalOpeningBalance = legacyOpeningBalance ? Number(legacyOpeningBalance) : 0;
-
 const defaultLoans = [
 { id: 1, name: 'قرض شخصي AAIB', totalAmount: 81532.99, prePaidAmount: 0, monthlyInstallment: 5098, dueDay: 1, interest: 'ينتهي أبريل 2027', description: 'شامل القسط الأخير (5,062)', type: 'loan', nextPaymentDate: `${CURRENT_YEAR}-02-01` },
 { id: 2, name: 'مدرسة عبد الرحمن', totalAmount: 15500, prePaidAmount: 0, monthlyInstallment: 0, dueDay: 15, interest: 'يناير+', description: 'مستحق في يناير (7000)', type: 'debt', nextPaymentDate: `${CURRENT_YEAR}-02-15` },
@@ -1111,14 +1066,18 @@ try {
   const cached = localStorage.getItem(STORAGE_KEY);
   if (cached) {
     const parsed = JSON.parse(cached);
-    // دمج الرصيد الافتتاحي القديم في البيانات الجديدة إذا لم يكن موجوداً
     return {
       ...parsed,
-      openingBalance2026: parsed.openingBalance2026 || finalOpeningBalance,
+      openingBalance2026: parsed.openingBalance2026 || 0,
       loans: parsed.loans || defaultLoans,
       cards: parsed.cards || defaultCards,
-      fawryAccount: parsed.fawryAccount || { id: 'f1', name: 'فوري', openingBalance: 0 },
-      etisalatAccount: parsed.etisalatAccount || { id: 'e1', name: 'محفظة اتصالات', openingBalance: 0 },
+      walletBalances: parsed.walletBalances || {
+        fawry: 0,
+        etisalat: 0,
+        cib_savings: 0,
+        aaib_savings: 0,
+        cash: 0
+      },
       recurringItems: parsed.recurringItems || [],
       closedMonths: parsed.closedMonths || [],
       monthlySnapshots: parsed.monthlySnapshots || {}
@@ -1132,10 +1091,14 @@ return {
   transactions: [],
   loans: defaultLoans,
   cards: defaultCards,
-  fawryAccount: { id: 'f1', name: 'فوري', openingBalance: 0 },
-  etisalatAccount: { id: 'e1', name: 'محفظة اتصالات', openingBalance: 0 },
-  // الرصيد الافتتاحي الجديد يتم تعيينه هنا
-  openingBalance2026: finalOpeningBalance,
+  walletBalances: {
+    fawry: 0,
+    etisalat: 0,
+    cib_savings: 0,
+    aaib_savings: 0,
+    cash: 0
+  },
+  openingBalance2026: 0,
   savingsGoals: [],
   recurringItems: [],
   closedMonths: [],
@@ -1152,12 +1115,10 @@ isFormOpen: false, formMode: 'add',
 formData: { type: 'expense', subType: 'withdrawal' },
 isLocked: false, isDarkMode: localStorage.getItem('theme') === 'dark',
 budgets: JSON.parse(localStorage.getItem('budgets') || '{}'), editingCard: null, editingLoan: null, editingTransaction: null,
-searchTerm: '', editingBudgetCategory: null, budgetAmount: '', editingFawry: null, editingEtisalat: null,
+searchTerm: '', editingBudgetCategory: null, budgetAmount: '', editingWallet: null,
 isRecurringModalOpen: false, recurringFormData: { title: '', amount: '', day: 1, category: 'أخرى' },
 filterType: 'all', hidePast: false, notifications: [], isAiModalOpen: false, aiTab: 'analyze',
 aiQuery: '', aiResponse: '', isAiLoading: false,
-fawryData: JSON.parse(localStorage.getItem('fawryData')) || { id: 'f_1', name: 'محفظة فوري', openingBalance: 0 },
-etisalatData: JSON.parse(localStorage.getItem('etisalatData')) || { id: 'e_1', name: 'محفظة اتصالات', openingBalance: 0 },
 history: [], future: [],
 expandedLedgers: { fawry: true, etisalat: true, cib_savings: true, aaib_savings: true },
 expandedCardsSection: true,
@@ -1174,7 +1135,8 @@ walletVisibility: {
   aaib_savings: true,
   cash: true
 },
-isProcessing: false
+isProcessing: false,
+showLiquidityDetails: false
 };
 
 function dataReducer(state, action) {
@@ -1197,8 +1159,7 @@ case 'SET_EDITING_LOAN': return { ...state, editingLoan: action.payload };
 case 'SET_SEARCH_TERM': return { ...state, searchTerm: action.payload };
 case 'SET_EDITING_BUDGET_CATEGORY': return { ...state, editingBudgetCategory: action.payload };
 case 'SET_BUDGET_AMOUNT': return { ...state, budgetAmount: action.payload };
-case 'SET_EDITING_FAWRY': return { ...state, editingFawry: action.payload };
-case 'SET_EDITING_ETISALAT': return { ...state, editingEtisalat: action.payload };
+case 'SET_EDITING_WALLET': return { ...state, editingWallet: action.payload };
 case 'SET_RECURRING_MODAL_OPEN': return { ...state, isRecurringModalOpen: action.payload };
 case 'SET_RECURRING_FORM_DATA': return { ...state, recurringFormData: action.payload };
 case 'SET_FILTER_TYPE': return { ...state, filterType: action.payload };
@@ -1214,9 +1175,18 @@ case 'REMOVE_NOTIFICATION': return { ...state, notifications: state.notification
 case 'UPDATE_TRANSACTIONS': return { ...state, data: { ...state.data, transactions: action.payload } };
 case 'UPDATE_LOANS': return { ...state, data: { ...state.data, loans: action.payload } };
 case 'UPDATE_CARDS': return { ...state, data: { ...state.data, cards: action.payload } };
-case 'UPDATE_OPENING_BALANCE': return { ...state, data: { ...state.data, openingBalance2026: action.payload } }; // Action جديدة
-case 'UPDATE_FAWRY_DATA': return { ...state, fawryData: action.payload };
-case 'UPDATE_ETISALAT_DATA': return { ...state, etisalatData: action.payload };
+case 'UPDATE_OPENING_BALANCE': return { ...state, data: { ...state.data, openingBalance2026: action.payload } };
+case 'UPDATE_WALLET_BALANCE': 
+  return { 
+    ...state, 
+    data: { 
+      ...state.data, 
+      walletBalances: {
+        ...state.data.walletBalances,
+        [action.payload.walletKey]: action.payload.balance
+      }
+    } 
+  };
 case 'UPDATE_RECURRING_ITEMS': return { ...state, data: { ...state.data, recurringItems: action.payload } };
 case 'ADD_TO_HISTORY':
 const limitedHistory = [...state.history].slice(-19);
@@ -1280,6 +1250,8 @@ case 'TOGGLE_WALLET_VISIBILITY':
   };
 case 'SET_IS_PROCESSING':
   return { ...state, isProcessing: action.payload };
+case 'TOGGLE_LIQUIDITY_DETAILS':
+  return { ...state, showLiquidityDetails: !state.showLiquidityDetails };
 default: return state;
 }
 }
@@ -1331,29 +1303,333 @@ className="w-full bg-white text-slate-900 py-4 px-8 rounded-2xl font-black flex 
 );
 };
 
+// ========== Enhanced Liquidity Analysis Component ==========
+const LiquidityAnalysis = React.memo(({ 
+  transactions, 
+  selectedMonth, 
+  walletBalances,
+  walletVisibility,
+  showLiquidityDetails,
+  onToggleDetails
+}) => {
+  const detailedAnalysis = useMemo(() => {
+    const monthTrans = transactions.filter(t => t.month === selectedMonth && t.status === 'paid');
+    const prevMonthIndex = getMonthIndex(selectedMonth) - 1;
+    const prevMonthName = MONTHS[prevMonthIndex >= 0 ? prevMonthIndex : 11];
+    const prevMonthTrans = prevMonthIndex >= 0 ? 
+      transactions.filter(t => t.month === prevMonthName && t.status === 'paid') : [];
+    
+    // تحليل لكل وسيلة دفع
+    const cashAnalysis = {
+      name: 'النقدية',
+      opening: walletBalances.cash || 0,
+      income: monthTrans.filter(t => t.method === 'cash' && t.type === 'income')
+        .reduce((sum, t) => sum + Number(t.amount), 0),
+      expense: monthTrans.filter(t => t.method === 'cash' && t.type === 'expense' && 
+        !['شحن محفظة', 'تحويلات'].includes(t.category))
+        .reduce((sum, t) => sum + Number(t.amount), 0),
+      transfersIn: monthTrans.filter(t => t.type === 'income' && 
+        ['تحويلات واردة'].includes(t.category) && t.method === 'cash')
+        .reduce((sum, t) => sum + Number(t.amount), 0),
+      transfersOut: monthTrans.filter(t => t.type === 'expense' && 
+        t.category === 'تحويلات' && t.method === 'cash')
+        .reduce((sum, t) => sum + Number(t.amount), 0),
+      closing: 0
+    };
+    
+    cashAnalysis.closing = cashAnalysis.opening + cashAnalysis.income - cashAnalysis.expense + 
+                          cashAnalysis.transfersIn - cashAnalysis.transfersOut;
+    
+    // فوري
+    const fawryAnalysis = {
+      name: 'فوري',
+      opening: walletBalances.fawry || 0,
+      deposits: monthTrans.filter(t => t.method === 'fawry' && t.subType === 'deposit')
+        .reduce((sum, t) => sum + Number(t.amount), 0),
+      withdrawals: monthTrans.filter(t => t.method === 'fawry' && t.subType === 'withdrawal')
+        .reduce((sum, t) => sum + Number(t.amount), 0),
+      transfersIn: monthTrans.filter(t => t.type === 'income' && t.method === 'fawry' && 
+        t.category === 'تحويلات واردة')
+        .reduce((sum, t) => sum + Number(t.amount), 0),
+      transfersOut: monthTrans.filter(t => t.type === 'expense' && t.method === 'fawry' && 
+        t.category === 'تحويلات')
+        .reduce((sum, t) => sum + Number(t.amount), 0),
+      closing: 0
+    };
+    
+    fawryAnalysis.closing = fawryAnalysis.opening + fawryAnalysis.deposits - 
+                           fawryAnalysis.withdrawals + fawryAnalysis.transfersIn - 
+                           fawryAnalysis.transfersOut;
+    
+    // اتصالات
+    const etisalatAnalysis = {
+      name: 'اتصالات',
+      opening: walletBalances.etisalat || 0,
+      deposits: monthTrans.filter(t => t.method === 'etisalat' && t.subType === 'deposit')
+        .reduce((sum, t) => sum + Number(t.amount), 0),
+      withdrawals: monthTrans.filter(t => t.method === 'etisalat' && t.subType === 'withdrawal')
+        .reduce((sum, t) => sum + Number(t.amount), 0),
+      transfersIn: monthTrans.filter(t => t.type === 'income' && t.method === 'etisalat' && 
+        t.category === 'تحويلات واردة')
+        .reduce((sum, t) => sum + Number(t.amount), 0),
+      transfersOut: monthTrans.filter(t => t.type === 'expense' && t.method === 'etisalat' && 
+        t.category === 'تحويلات')
+        .reduce((sum, t) => sum + Number(t.amount), 0),
+      closing: 0
+    };
+    
+    etisalatAnalysis.closing = etisalatAnalysis.opening + etisalatAnalysis.deposits - 
+                              etisalatAnalysis.withdrawals + etisalatAnalysis.transfersIn - 
+                              etisalatAnalysis.transfersOut;
+    
+    // CIB توفير
+    const cibSavingsAnalysis = {
+      name: 'CIB توفير',
+      opening: walletBalances.cib_savings || 0,
+      deposits: monthTrans.filter(t => t.method === 'cib_savings' && t.subType === 'deposit')
+        .reduce((sum, t) => sum + Number(t.amount), 0),
+      withdrawals: monthTrans.filter(t => t.method === 'cib_savings' && t.subType === 'withdrawal')
+        .reduce((sum, t) => sum + Number(t.amount), 0),
+      transfersIn: monthTrans.filter(t => t.type === 'income' && t.method === 'cib_savings' && 
+        t.category === 'تحويلات واردة')
+        .reduce((sum, t) => sum + Number(t.amount), 0),
+      transfersOut: monthTrans.filter(t => t.type === 'expense' && t.method === 'cib_savings' && 
+        t.category === 'تحويلات')
+        .reduce((sum, t) => sum + Number(t.amount), 0),
+      closing: 0
+    };
+    
+    cibSavingsAnalysis.closing = cibSavingsAnalysis.opening + cibSavingsAnalysis.deposits - 
+                                cibSavingsAnalysis.withdrawals + cibSavingsAnalysis.transfersIn - 
+                                cibSavingsAnalysis.transfersOut;
+    
+    // AAIB توفير
+    const aaibSavingsAnalysis = {
+      name: 'AAIB توفير',
+      opening: walletBalances.aaib_savings || 0,
+      deposits: monthTrans.filter(t => t.method === 'aaib_savings' && t.subType === 'deposit')
+        .reduce((sum, t) => sum + Number(t.amount), 0),
+      withdrawals: monthTrans.filter(t => t.method === 'aaib_savings' && t.subType === 'withdrawal')
+        .reduce((sum, t) => sum + Number(t.amount), 0),
+      transfersIn: monthTrans.filter(t => t.type === 'income' && t.method === 'aaib_savings' && 
+        t.category === 'تحويلات واردة')
+        .reduce((sum, t) => sum + Number(t.amount), 0),
+      transfersOut: monthTrans.filter(t => t.type === 'expense' && t.method === 'aaib_savings' && 
+        t.category === 'تحويلات')
+        .reduce((sum, t) => sum + Number(t.amount), 0),
+      closing: 0
+    };
+    
+    aaibSavingsAnalysis.closing = aaibSavingsAnalysis.opening + aaibSavingsAnalysis.deposits - 
+                                 aaibSavingsAnalysis.withdrawals + aaibSavingsAnalysis.transfersIn - 
+                                 aaibSavingsAnalysis.transfersOut;
+    
+    const totalLiquidity = cashAnalysis.closing + fawryAnalysis.closing + 
+                          etisalatAnalysis.closing + cibSavingsAnalysis.closing + 
+                          aaibSavingsAnalysis.closing;
+    
+    return {
+      cash: cashAnalysis,
+      fawry: fawryAnalysis,
+      etisalat: etisalatAnalysis,
+      cib_savings: cibSavingsAnalysis,
+      aaib_savings: aaibSavingsAnalysis,
+      total: totalLiquidity,
+      prevMonthName
+    };
+  }, [transactions, selectedMonth, walletBalances]);
+  
+  const totalVisible = Object.keys(walletVisibility).filter(key => walletVisibility[key]).length;
+  const allHidden = totalVisible === 0;
+  
+  return (
+    <div className="glass rounded-2xl p-6 mb-6">
+      <div className="flex justify-between items-center mb-6">
+        <div>
+          <h3 className="text-lg font-bold flex items-center gap-2">
+            <Coins className="text-blue-500" />
+            تحليل السيولة التفصيلي - {selectedMonth}
+          </h3>
+          <p className="text-sm text-slate-500">تفصيل كامل للتدفقات النقدية لكل محفظة</p>
+        </div>
+        <button
+          onClick={onToggleDetails}
+          className="bg-blue-100 hover:bg-blue-200 text-blue-600 px-4 py-2 rounded-xl text-sm font-bold transition-colors flex items-center gap-2"
+        >
+          {showLiquidityDetails ? <EyeOff size={16} /> : <Eye size={16} />}
+          {showLiquidityDetails ? 'إخفاء التفاصيل' : 'عرض التفاصيل'}
+        </button>
+      </div>
+      
+      {allHidden ? (
+        <div className="text-center p-8 text-slate-400 font-bold">
+          جميع المحافظ مخفية. الرجاء إظهار بعض المحافظ لعرض البيانات.
+        </div>
+      ) : (
+        <>
+          {/* ملخص إجمالي */}
+          <div className="bg-gradient-to-r from-blue-500 to-purple-500 p-4 rounded-xl mb-6">
+            <div className="flex justify-between items-center text-white">
+              <div>
+                <span className="font-bold">إجمالي السيولة المتاحة</span>
+                <p className="text-xs opacity-80">جميع المحافظ المرئية</p>
+              </div>
+              <span className="text-2xl font-black">
+                {detailedAnalysis.total.toLocaleString()}
+                <span className="text-sm"> ج.م</span>
+              </span>
+            </div>
+          </div>
+          
+          {/* شبكة المحافظ */}
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
+            {Object.entries(detailedAnalysis).filter(([key]) => 
+              key !== 'total' && key !== 'prevMonthName'
+            ).map(([key, analysis]) => (
+              <div key={key} className="balance-account-card">
+                <div className="flex justify-between items-center mb-2">
+                  <div className={`text-xs font-bold ${
+                    key === 'cash' ? 'text-green-600' :
+                    key === 'fawry' ? 'text-yellow-600' :
+                    key === 'etisalat' ? 'text-emerald-600' :
+                    key === 'cib_savings' ? 'text-blue-600' :
+                    'text-red-600'
+                  } flex items-center gap-1`}>
+                    {key === 'cash' ? <Wallet size={14} /> :
+                     key === 'fawry' ? <Store size={14} /> :
+                     key === 'etisalat' ? <Signal size={14} /> :
+                     key === 'cib_savings' ? <BuildingBank size={14} /> :
+                     <PiggyBank size={14} />}
+                    {analysis.name}
+                  </div>
+                </div>
+                <div className={`text-lg font-black ${
+                  !walletVisibility[key] ? 'text-slate-400' :
+                  key === 'cash' ? 'text-green-600' :
+                  key === 'fawry' ? 'text-yellow-600' :
+                  key === 'etisalat' ? 'text-emerald-600' :
+                  key === 'cib_savings' ? 'text-blue-600' :
+                  'text-red-600'
+                }`}>
+                  {!walletVisibility[key] ? '•••••' : Math.round(analysis.closing).toLocaleString()}
+                  <span className="text-xs"> ج.م</span>
+                </div>
+                {walletVisibility[key] && (
+                  <div className="text-[10px] text-slate-400 mt-1">
+                    {analysis.closing >= analysis.opening ? '↗' : '↘'} 
+                    {Math.abs(analysis.closing - analysis.opening).toLocaleString()}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+          
+          {/* التفاصيل الموسعة */}
+          {showLiquidityDetails && (
+            <div className="mt-6 animate-fadeIn">
+              <h4 className="font-bold text-slate-600 mb-3">تفاصيل التدفقات النقدية</h4>
+              <div className="space-y-3">
+                {Object.entries(detailedAnalysis).filter(([key]) => 
+                  key !== 'total' && key !== 'prevMonthName'
+                ).map(([key, analysis]) => (
+                  <div key={key} className="bg-slate-50 dark:bg-slate-800/30 p-4 rounded-xl border border-slate-100 dark:border-slate-700">
+                    <div className="flex justify-between items-center mb-2">
+                      <h5 className="font-bold text-slate-700 dark:text-slate-300">{analysis.name}</h5>
+                      <div className={`text-sm font-black ${
+                        analysis.closing >= analysis.opening ? 'text-emerald-600' : 'text-red-600'
+                      }`}>
+                        {analysis.closing.toLocaleString()} ج.م
+                      </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-xs">
+                      <div className="text-center">
+                        <div className="text-slate-500">الافتتاحي</div>
+                        <div className="font-bold">{analysis.opening.toLocaleString()}</div>
+                      </div>
+                      
+                      {analysis.income !== undefined && analysis.income > 0 && (
+                        <div className="text-center">
+                          <div className="text-emerald-600">الدخل</div>
+                          <div className="font-bold">+{analysis.income.toLocaleString()}</div>
+                        </div>
+                      )}
+                      
+                      {analysis.deposits !== undefined && analysis.deposits > 0 && (
+                        <div className="text-center">
+                          <div className="text-emerald-600">الإيداع</div>
+                          <div className="font-bold">+{analysis.deposits.toLocaleString()}</div>
+                        </div>
+                      )}
+                      
+                      {analysis.expense !== undefined && analysis.expense > 0 && (
+                        <div className="text-center">
+                          <div className="text-red-600">المصروف</div>
+                          <div className="font-bold">-{analysis.expense.toLocaleString()}</div>
+                        </div>
+                      )}
+                      
+                      {analysis.withdrawals !== undefined && analysis.withdrawals > 0 && (
+                        <div className="text-center">
+                          <div className="text-red-600">السحب</div>
+                          <div className="font-bold">-{analysis.withdrawals.toLocaleString()}</div>
+                        </div>
+                      )}
+                      
+                      {(analysis.transfersIn || analysis.transfersOut) && (
+                        <div className="text-center">
+                          <div className="text-blue-600">التحويلات</div>
+                          <div className="font-bold">
+                            {(analysis.transfersIn || 0) - (analysis.transfersOut || 0) > 0 ? '+' : ''}
+                            {((analysis.transfersIn || 0) - (analysis.transfersOut || 0)).toLocaleString()}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    
+                    {analysis.closing < 0 && (
+                      <div className="mt-2 text-xs text-red-600 bg-red-50 dark:bg-red-900/20 p-2 rounded-lg">
+                        ⚠️ تنبيه: الرصيد سالب
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+              
+              <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-xl text-sm">
+                <div className="flex justify-between items-center">
+                  <span className="font-bold text-blue-700 dark:text-blue-300">المعادلة:</span>
+                  <span className="text-xs text-slate-500">
+                    الرصيد النهائي = الافتتاحي + الإيداع - السحب + التحويلات الداخلة - التحويلات الخارجة
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+});
+
 // Quick Balance Overview Component
 const QuickBalanceOverview = React.memo(({ 
-  financeSnapshot, 
-  currentFawryBalance, 
-  currentEtisalatBalance,
-  getSavingsLedger,
-  isPrivate,
+  walletBalances,
   walletVisibility,
   onToggleVisibility
 }) => {
   const [isVisible, setIsVisible] = useState(true);
   
   const accounts = [
-    { name: 'النقدية', balance: financeSnapshot.actualCashInHand, color: 'text-green-600', icon: Wallet, key: 'cash' },
-    { name: 'فوري', balance: currentFawryBalance, color: 'text-yellow-600', icon: Store, key: 'fawry' },
-    { name: 'اتصالات', balance: currentEtisalatBalance, color: 'text-emerald-600', icon: Signal, key: 'etisalat' },
-    { name: 'CIB توفير', balance: getSavingsLedger('cib_savings')[0]?.runningBalance || 0, color: 'text-blue-600', icon: BuildingBank, key: 'cib_savings' },
-    { name: 'AAIB توفير', balance: getSavingsLedger('aaib_savings')[0]?.runningBalance || 0, color: 'text-red-600', icon: PiggyBank, key: 'aaib_savings' },
+    { name: 'النقدية', balance: walletBalances.cash, color: 'text-green-600', icon: Wallet, key: 'cash' },
+    { name: 'فوري', balance: walletBalances.fawry, color: 'text-yellow-600', icon: Store, key: 'fawry' },
+    { name: 'اتصالات', balance: walletBalances.etisalat, color: 'text-emerald-600', icon: Signal, key: 'etisalat' },
+    { name: 'CIB توفير', balance: walletBalances.cib_savings, color: 'text-blue-600', icon: BuildingBank, key: 'cib_savings' },
+    { name: 'AAIB توفير', balance: walletBalances.aaib_savings, color: 'text-red-600', icon: PiggyBank, key: 'aaib_savings' },
   ];
   
   const total = accounts.reduce((sum, acc) => sum + acc.balance, 0);
   
-  // دالة محلية للتبديل
   const handleToggle = (key) => {
     if (onToggleVisibility) {
       onToggleVisibility(key);
@@ -1392,16 +1668,16 @@ const QuickBalanceOverview = React.memo(({
                       handleToggle(account.key);
                     }}
                     className="text-xs text-slate-400 hover:text-blue-500 p-1"
-                    title={walletVisibility?.[account.key] ? 'إخفاء الرصيد' : 'إظهار الرصيد'}
+                    title={walletVisibility[account.key] ? 'إخفاء الرصيد' : 'إظهار الرصيد'}
                   >
-                    {walletVisibility?.[account.key] ? 
+                    {walletVisibility[account.key] ? 
                       <EyeOff size={12} /> : 
                       <Eye size={12} />
                     }
                   </button>
                 </div>
-                <div className={`text-lg font-black ${isPrivate || !walletVisibility?.[account.key] ? 'text-slate-400' : account.color}`}>
-                  {isPrivate || !walletVisibility?.[account.key] ? '•••••' : Math.round(account.balance).toLocaleString()}
+                <div className={`text-lg font-black ${!walletVisibility[account.key] ? 'text-slate-400' : account.color}`}>
+                  {!walletVisibility[account.key] ? '•••••' : Math.round(account.balance).toLocaleString()}
                   <span className="text-xs"> ج.م</span>
                 </div>
               </div>
@@ -1412,7 +1688,7 @@ const QuickBalanceOverview = React.memo(({
             <div className="flex justify-between items-center text-white">
               <span className="font-bold">إجمالي السيولة المتاحة</span>
               <span className="text-2xl font-black">
-                {isPrivate ? '•••••' : Math.round(total).toLocaleString()}
+                {Math.round(total).toLocaleString()}
                 <span className="text-sm"> ج.م</span>
               </span>
             </div>
@@ -1429,8 +1705,8 @@ const [isAuthenticated, setIsAuthenticated] = useState(false);
 const mainContentRef = useRef(null);
 const saveTimeoutRef = useRef(null);
 
-const { data, activeTab, selectedMonth, transViewMode, catViewType, isFormOpen, formMode, formData, activeCategoryDetail, repeatMonths, isLocked, isDarkMode, expandedGroup, budgets, editingCard, editingLoan, editingTransaction, searchTerm, editingBudgetCategory, budgetAmount, editingFawry, editingEtisalat, isRecurringModalOpen, recurringFormData, filterType, hidePast, notifications, isAiModalOpen, aiTab, aiQuery, aiResponse, isAiLoading, fawryData, etisalatData, history, future, expandedLedgers, expandedCardsSection, statusFilter, confirmDialog, isQuickTransferModalOpen, quickTransferData, isBackupReminderOpen, viewingCardStatement, walletVisibility, isProcessing } = state;
-const { transactions = [], loans = [], cards = [], recurringItems = [], savingsGoals = [], openingBalance2026 } = data || {};
+const { data, activeTab, selectedMonth, transViewMode, catViewType, isFormOpen, formMode, formData, activeCategoryDetail, repeatMonths, isLocked, isDarkMode, expandedGroup, budgets, editingCard, editingLoan, editingTransaction, searchTerm, editingBudgetCategory, budgetAmount, editingWallet, isRecurringModalOpen, recurringFormData, filterType, hidePast, notifications, isAiModalOpen, aiTab, aiQuery, aiResponse, isAiLoading, history, future, expandedLedgers, expandedCardsSection, statusFilter, confirmDialog, isQuickTransferModalOpen, quickTransferData, isBackupReminderOpen, viewingCardStatement, walletVisibility, isProcessing, showLiquidityDetails } = state;
+const { transactions = [], loans = [], cards = [], recurringItems = [], savingsGoals = [], openingBalance2026, walletBalances } = data || {};
 
 // Auth Observer
 useEffect(() => {
@@ -1469,70 +1745,42 @@ db.collection("finance_2026").doc("user_ahmed_data").set(data)
 return () => clearTimeout(saveTimeoutRef.current);
 }, [data, isAuthenticated]);
 
-// Enhanced Finance Snapshot Logic
-const financeSnapshot = useMemo(() => {
-// استخدام الرصيد الافتتاحي المخزن أو الصفر كقيمة افتراضية
-let actualCarryover = Number(data.openingBalance2026 || 0);
-const selectedMonthIdx = getMonthIndex(selectedMonth);
-const transferCats = ['شحن محفظة', 'تحويلات', 'شحن رصيد فوري', 'شحن رصيد', 'إيداع'];
+// حساب أرصدة المحافظ بشكل ديناميكي من المعاملات
+const calculatedWalletBalances = useMemo(() => {
+  const balances = {
+    cash: walletBalances.cash || 0,
+    fawry: walletBalances.fawry || 0,
+    etisalat: walletBalances.etisalat || 0,
+    cib_savings: walletBalances.cib_savings || 0,
+    aaib_savings: walletBalances.aaib_savings || 0
+  };
+  
+  // تحديث الأرصدة بناءً على المعاملات
+  transactions.forEach(t => {
+    if (t.status !== 'paid') return;
+    
+    const method = t.method;
+    if (!balances.hasOwnProperty(method)) return;
+    
+    const amount = Number(t.amount) || 0;
+    
+    if (t.subType === 'deposit' || t.type === 'income') {
+      balances[method] += amount;
+    } else if (t.subType === 'withdrawal' || t.type === 'expense') {
+      balances[method] -= amount;
+    }
+  });
+  
+  return balances;
+}, [transactions, walletBalances]);
 
-const prevMonthName = MONTHS[selectedMonthIdx - 1];
-
-if (prevMonthName && data.closedMonths?.includes(prevMonthName)) {
-actualCarryover = Number(data.monthlySnapshots[prevMonthName] || 0);
-} else {
-transactions.filter(t => getMonthIndex(t.month) < selectedMonthIdx).forEach(t => {
-const amt = Number(t.amount || 0);
-if (t.type === 'income' && t.status === 'paid') {
-actualCarryover += amt;
-} else if (t.type === 'expense' && t.status === 'paid') {
-if (!['cib_card', 'aaib_card'].includes(t.method) && !transferCats.includes(t.category)) {
-actualCarryover -= amt;
-}
-}
-});
-}
-
-const currentMonthTrans = transactions.filter(t => t.month === selectedMonth);
-
-const currentActualIncome = currentMonthTrans
-.filter(t => t.type === 'income' && t.status === 'paid')
-.reduce((s, t) => s + Number(t.amount || 0), 0);
-
-const currentPendingIncome = currentMonthTrans
-.filter(t => t.type === 'income' && t.status !== 'paid')
-.reduce((s, t) => s + Number(t.amount || 0), 0);
-
-const currentPaidCash = currentMonthTrans
-.filter(t => t.type === 'expense' && t.status === 'paid' &&
-!['cib_card', 'aaib_card'].includes(t.method) &&
-!transferCats.includes(t.category))
-.reduce((s, t) => s + Number(t.amount || 0), 0);
-
-const currentPendingCash = currentMonthTrans
-.filter(t => t.type === 'expense' && t.status !== 'paid' &&
-!['cib_card', 'aaib_card'].includes(t.method))
-.reduce((s, t) => s + Number(t.amount || 0), 0);
-
-const currentCreditExpenses = currentMonthTrans
-.filter(t => t.type === 'expense' && ['cib_card', 'aaib_card'].includes(t.method))
-.reduce((s, t) => s + Number(t.amount || 0), 0);
-
-const actualCashInHand = actualCarryover + currentActualIncome - currentPaidCash;
-const projectedClosingBalance = actualCashInHand + currentPendingIncome - currentPendingCash;
-
-return {
-actualCarryover: actualCarryover,
-income: currentActualIncome,
-actualIncome: currentActualIncome,
-cashExpenses: currentPaidCash,
-creditExpenses: currentCreditExpenses,
-pendingIncome: currentPendingIncome,
-actualCashInHand,
-projectedClosingBalance,
-pendingAmount: currentPendingCash
-};
-}, [transactions, selectedMonth, data.closedMonths, data.monthlySnapshots, data.openingBalance2026]);
+// تحديث walletBalances عند تغيير transactions
+useEffect(() => {
+  dispatch({
+    type: 'UPDATE_WALLET_BALANCE',
+    payload: { walletKey: 'cash', balance: calculatedWalletBalances.cash }
+  });
+}, [calculatedWalletBalances.cash]);
 
 const chartData = useMemo(() => MONTHS.map(m => ({
 name: m,
@@ -1595,62 +1843,22 @@ const flatItems = groupedTransactions.flatMap(g => g.items);
 return { count: flatItems.length, sum: flatItems.reduce((sum, t) => sum + Number(t.amount), 0) };
 }, [groupedTransactions]);
 
-const fawryStats = useMemo(() => {
-const deposits = transactions.filter(t => t.method === 'fawry' && t.subType === 'deposit').reduce((sum, t) => sum + Number(t.amount), 0);
-const withdrawals = transactions.filter(t => t.method === 'fawry' && t.subType === 'withdrawal').reduce((sum, t) => sum + Number(t.amount), 0);
-return { deposits, withdrawals };
-}, [transactions]);
-const currentFawryBalance = (Number(fawryData.openingBalance) || 0) + fawryStats.deposits - fawryStats.withdrawals;
-
-const etisalatStats = useMemo(() => {
-const deposits = transactions.filter(t => t.method === 'etisalat' && t.subType === 'deposit').reduce((sum, t) => sum + Number(t.amount), 0);
-const withdrawals = transactions.filter(t => t.method === 'etisalat' && t.subType === 'withdrawal').reduce((sum, t) => sum + Number(t.amount), 0);
-return { deposits, withdrawals };
-}, [transactions]);
-const currentEtisalatBalance = (Number(etisalatData.openingBalance) || 0) + etisalatStats.deposits - etisalatStats.withdrawals;
-
-const getSavingsLedger = useCallback((methodId) => {
+const getWalletLedger = useCallback((methodId) => {
 const accTransactions = transactions
 .filter(t => t.method === methodId && t.status === 'paid')
 .sort((a, b) => new Date(a.date) - new Date(b.date));
 
-let runningBalance = 0;
+let runningBalance = walletBalances[methodId] || 0;
 return accTransactions.map(t => {
 const amount = Number(t.amount);
-const isDeposit = t.subType === 'deposit' || (t.type === 'income' && !t.subType);
-if (isDeposit) runningBalance += amount;
-else runningBalance -= amount;
+if (t.subType === 'deposit' || t.type === 'income') {
+runningBalance += amount;
+} else {
+runningBalance -= amount;
+}
 return { ...t, runningBalance };
 }).reverse();
-}, [transactions]);
-
-const fawryLedger = useMemo(() => {
-const accTransactions = transactions
-.filter(t => t.method === 'fawry' && t.status === 'paid')
-.sort((a, b) => new Date(a.date) - new Date(b.date));
-
-let runningBalance = fawryData.openingBalance || 0;
-return accTransactions.map(t => {
-const amount = Number(t.amount);
-if (t.subType === 'deposit') runningBalance += amount;
-else runningBalance -= amount;
-return { ...t, runningBalance };
-}).reverse();
-}, [transactions, fawryData]);
-
-const etisalatLedger = useMemo(() => {
-const accTransactions = transactions
-.filter(t => t.method === 'etisalat' && t.status === 'paid')
-.sort((a, b) => new Date(a.date) - new Date(b.date));
-
-let runningBalance = etisalatData.openingBalance || 0;
-return accTransactions.map(t => {
-const amount = Number(t.amount);
-if (t.subType === 'deposit') runningBalance += amount;
-else runningBalance -= amount;
-return { ...t, runningBalance };
-}).reverse();
-}, [transactions, etisalatData]);
+}, [transactions, walletBalances]);
 
 const calculateCardHistory = useCallback((card) => {
 let runningDebt = Number(card.openingBalance) || 0;
@@ -1744,7 +1952,10 @@ const saveHistory = useCallback(() => { dispatch({ type: 'ADD_TO_HISTORY', paylo
 
 // ========== دوال جديدة للمحافظ ==========
 const handleAddWalletDeposit = useCallback((walletKey) => {
-const walletName = walletKey === 'fawry' ? 'فوري' : 'اتصالات';
+const walletName = walletKey === 'fawry' ? 'فوري' : 
+                   walletKey === 'etisalat' ? 'اتصالات' :
+                   walletKey === 'cib_savings' ? 'CIB توفير' :
+                   walletKey === 'aaib_savings' ? 'AAIB توفير' : 'النقدية';
   
 dispatch({ type: 'SET_FORM_MODE', payload: 'add' });
 dispatch({ 
@@ -1765,7 +1976,10 @@ dispatch({ type: 'SET_FORM_OPEN', payload: true });
 }, [selectedMonth]);
 
 const handleAddWalletWithdrawal = useCallback((walletKey) => {
-const walletName = walletKey === 'fawry' ? 'فوري' : 'اتصالات';
+const walletName = walletKey === 'fawry' ? 'فوري' : 
+                   walletKey === 'etisalat' ? 'اتصالات' :
+                   walletKey === 'cib_savings' ? 'CIB توفير' :
+                   walletKey === 'aaib_savings' ? 'AAIB توفير' : 'النقدية';
   
 dispatch({ type: 'SET_FORM_MODE', payload: 'add' });
 dispatch({ 
@@ -1786,8 +2000,11 @@ dispatch({ type: 'SET_FORM_OPEN', payload: true });
 }, [selectedMonth]);
 
 const exportWalletCSV = useCallback((walletKey) => {
-const ledger = walletKey === 'fawry' ? fawryLedger : etisalatLedger;
-const walletName = walletKey === 'fawry' ? 'فوري' : 'اتصالات';
+const ledger = getWalletLedger(walletKey);
+const walletName = walletKey === 'fawry' ? 'فوري' : 
+                   walletKey === 'etisalat' ? 'اتصالات' :
+                   walletKey === 'cib_savings' ? 'CIB توفير' :
+                   walletKey === 'aaib_savings' ? 'AAIB توفير' : 'النقدية';
   
 const header = "التاريخ,نوع العملية,الوصف,المبلغ,الرصيد الجاري\n";
 const rows = ledger.map(t => 
@@ -1801,12 +2018,11 @@ const a = document.createElement('a');
 a.href = url;
 a.download = `${walletName}_transactions_${new Date().toISOString().split('T')[0]}.csv`;
 a.click();
-}, [fawryLedger, etisalatLedger]);
+}, [getWalletLedger]);
 
 const handleSaveTransaction = useCallback((e) => {
   e.preventDefault();
 
-  // منع المعالجة المزدوجة
   if (isProcessing) {
     addNotification({
       type: 'warning',
@@ -1829,7 +2045,6 @@ const handleSaveTransaction = useCallback((e) => {
     return;
   }
 
-  // تأخير التنفيذ لمحاكاة المعالجة
   setTimeout(() => {
     try {
       saveHistory();
@@ -1847,27 +2062,7 @@ const handleSaveTransaction = useCallback((e) => {
       const amount = Number(formData.amount);
       
       if (immediateAccounts.includes(formData.method) && formData.type === 'expense') {
-        let availableBalance = 0;
-        
-        switch(formData.method) {
-          case 'cash':
-            availableBalance = financeSnapshot.actualCashInHand;
-            break;
-          case 'fawry':
-            availableBalance = currentFawryBalance;
-            break;
-          case 'etisalat':
-            availableBalance = currentEtisalatBalance;
-            break;
-          case 'cib_savings':
-            const cibLedger = getSavingsLedger('cib_savings');
-            availableBalance = cibLedger.length > 0 ? cibLedger[0].runningBalance : 0;
-            break;
-          case 'aaib_savings':
-            const aaibLedger = getSavingsLedger('aaib_savings');
-            availableBalance = aaibLedger.length > 0 ? aaibLedger[0].runningBalance : 0;
-            break;
-        }
+        let availableBalance = calculatedWalletBalances[formData.method] || 0;
         
         if (amount > availableBalance) {
           dispatch({
@@ -1960,7 +2155,7 @@ const handleSaveTransaction = useCallback((e) => {
     
     dispatch({ type: 'SET_IS_PROCESSING', payload: false });
   };
-}, [formData, formMode, selectedMonth, repeatMonths, transactions, saveHistory, addNotification, currentFawryBalance, currentEtisalatBalance, loans, dispatch, data.closedMonths, financeSnapshot, getSavingsLedger, isProcessing]);
+}, [formData, formMode, selectedMonth, repeatMonths, transactions, saveHistory, addNotification, loans, dispatch, data.closedMonths, calculatedWalletBalances, isProcessing]);
 
 const handleDelete = useCallback((id) => {
 const targetTransaction = transactions.find(t => t.id === id);
@@ -2010,20 +2205,7 @@ dispatch({ type: 'SET_IS_PROCESSING', payload: false });
 return;
 }
 
-let sourceBalance = 0;
-if (quickTransferData.from === 'fawry') {
-sourceBalance = currentFawryBalance;
-} else if (quickTransferData.from === 'etisalat') {
-sourceBalance = currentEtisalatBalance;
-} else if (quickTransferData.from === 'cash') {
-sourceBalance = financeSnapshot.actualCashInHand;
-} else if (quickTransferData.from === 'cib_savings') {
-const ledger = getSavingsLedger('cib_savings');
-sourceBalance = ledger.length > 0 ? ledger[0].runningBalance : 0;
-} else if (quickTransferData.from === 'aaib_savings') {
-const ledger = getSavingsLedger('aaib_savings');
-sourceBalance = ledger.length > 0 ? ledger[0].runningBalance : 0;
-}
+let sourceBalance = calculatedWalletBalances[quickTransferData.from] || 0;
 
 if (amount > sourceBalance) {
 addNotification({ type: 'error', title: 'رصيد غير كافٍ', message: `رصيد الحساب المصدر (${sourceBalance.toLocaleString()}) لا يكفي للتحويل.` });
@@ -2044,7 +2226,8 @@ method: quickTransferData.from,
 date: getLocalISODate(),
 month: selectedMonth,
 monthIndex: getMonthIndex(selectedMonth),
-subType: 'withdrawal'
+subType: 'withdrawal',
+status: 'paid'
 };
 
 const toTransaction = {
@@ -2057,7 +2240,8 @@ method: quickTransferData.to,
 date: getLocalISODate(),
 month: selectedMonth,
 monthIndex: getMonthIndex(selectedMonth),
-subType: 'deposit'
+subType: 'deposit',
+status: 'paid'
 };
 
 const newTransactions = [...transactions, fromTransaction, toTransaction];
@@ -2069,7 +2253,7 @@ dispatch({ type: 'SET_QUICK_TRANSFER_DATA', payload: { from: 'cash', to: 'fawry'
 addNotification({ type: 'success', title: 'تم التحويل بنجاح', message: `تم تحويل ${amount.toLocaleString()} ج.م` });
 dispatch({ type: 'SET_IS_PROCESSING', payload: false });
 }, 600);
-}, [quickTransferData, selectedMonth, transactions, saveHistory, dispatch, addNotification, currentFawryBalance, currentEtisalatBalance, financeSnapshot, getSavingsLedger, data.closedMonths]);
+}, [quickTransferData, selectedMonth, transactions, saveHistory, dispatch, addNotification, calculatedWalletBalances, data.closedMonths]);
 
 const handleUpdateLoan = useCallback((e) => { e.preventDefault(); saveHistory(); dispatch({ type: 'UPDATE_LOANS', payload: loans.map(l => l.id === editingLoan.id ? editingLoan : l) }); dispatch({ type: 'SET_EDITING_LOAN', payload: null }); }, [loans, editingLoan, saveHistory]);
 const handleUpdateCard = useCallback((e) => { e.preventDefault(); saveHistory(); dispatch({ type: 'UPDATE_CARDS', payload: cards.map(c => c.id === editingCard.id ? editingCard : c) }); dispatch({ type: 'SET_EDITING_CARD', payload: null }); }, [cards, editingCard, saveHistory]);
@@ -2085,12 +2269,26 @@ db.collection("finance_2026").doc("user_ahmed_data").update({ budgets: newBudget
 
 const handleSaveRecurring = useCallback((e) => { e.preventDefault(); saveHistory(); const newItem = { ...recurringFormData, id: Date.now() }; dispatch({ type: 'UPDATE_RECURRING_ITEMS', payload: [...recurringItems, newItem] }); dispatch({ type: 'SET_RECURRING_MODAL_OPEN', payload: false }); addNotification({ type: 'success', title: 'تمت الإضافة', message: 'تم حفظ التذكير الدوري' }); }, [recurringFormData, recurringItems, saveHistory, addNotification]);
 const deleteRecurring = useCallback((id) => { saveHistory(); dispatch({ type: 'UPDATE_RECURRING_ITEMS', payload: recurringItems.filter(i => i.id !== id) }); }, [recurringItems, saveHistory]);
-const handleUpdateFawry = useCallback((e) => { e.preventDefault(); saveHistory(); dispatch({ type: 'UPDATE_FAWRY_DATA', payload: editingFawry }); dispatch({ type: 'SET_EDITING_FAWRY', payload: null }); }, [editingFawry, saveHistory]);
-const handleUpdateEtisalat = useCallback((e) => { e.preventDefault(); saveHistory(); dispatch({ type: 'UPDATE_ETISALAT_DATA', payload: editingEtisalat }); dispatch({ type: 'SET_EDITING_ETISALAT', payload: null }); }, [editingEtisalat, saveHistory]);
+
+const handleUpdateWallet = useCallback((e) => { 
+  e.preventDefault(); 
+  saveHistory(); 
+  dispatch({ 
+    type: 'UPDATE_WALLET_BALANCE', 
+    payload: { 
+      walletKey: editingWallet.key, 
+      balance: Number(editingWallet.balance) 
+    } 
+  }); 
+  dispatch({ type: 'SET_EDITING_WALLET', payload: null }); 
+}, [editingWallet, saveHistory]);
 
 const handleExportCSV = useCallback(() => {
 const bom = "\uFEFF"; const header = "التاريخ,النوع,الفئة,الوصف,المبلغ,الطريقة,الحالة\n";
-const rows = transactions.map(t => `${t.date},${t.type},${t.category},"${escapeHtml(t.description || '')}",${t.amount},${PAYMENT_METHODS.find(p=>p.id===t.method)?.label},${t.status || 'pending'}`).join("\n");
+const rows = transactions.map(t => 
+  `${t.date},${t.type},${t.category},"${escapeHtml(t.description || '')}",${t.amount},${PAYMENT_METHODS.find(p=>p.id===t.method)?.label},${t.status || 'pending'}`
+).join("\n");
+  
 const blob = new Blob([bom + header + rows], { type: 'text/csv;charset=utf-8;' });
 const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `transactions_${CURRENT_YEAR}.csv`; a.click();
 }, [transactions]);
@@ -2155,13 +2353,13 @@ sessionStorage.setItem(sessionKey, 'true');
 }, [isAuthenticated, transactions.length]);
 
 const tickerData = useMemo(() => {
-const totalCashAvailable = walletVisibility.cash ? financeSnapshot.actualCashInHand.toLocaleString() : '•••••';
+const totalCashAvailable = walletVisibility.cash ? calculatedWalletBalances.cash.toLocaleString() : '•••••';
 const totalDebtRemaining = updatedLoans.reduce((acc, loan) => acc + loan.remaining, 0).toLocaleString();
 const today = new Date();
 const gregDate = today.toLocaleDateString('ar-EG', { weekday: 'long', day: 'numeric', month: 'short' });
 const hijriDate = new Intl.DateTimeFormat('ar-SA-u-ca-islamic', { day: 'numeric', month: 'long', year: 'numeric' }).format(today);
 return { totalCashAvailable, totalDebtRemaining, gregDate, hijriDate };
-}, [financeSnapshot, updatedLoans, walletVisibility]);
+}, [calculatedWalletBalances, updatedLoans, walletVisibility]);
 
 const ProfessionalTicker = React.memo(() => {
 const [quote] = React.useState(() => DAILY_DHIKR[Math.floor(Math.random() * DAILY_DHIKR.length)]);
@@ -2173,7 +2371,7 @@ return (
 <div className="ticker-wrap flex-1 h-full flex items-center overflow-hidden">
 <div className="ticker-content flex-1 h-full flex items-center whitespace-nowrap animate-ticker-scroll">
 {[
-<span className="ticker-item text-emerald-300 flex items-center gap-3 px-6 font-bold">💰 الرصيد المتاح: {walletVisibility.cash ? financeSnapshot.actualCashInHand.toLocaleString() : '•••••'} ج.م</span>,
+<span className="ticker-item text-emerald-300 flex items-center gap-3 px-6 font-bold">💰 الرصيد النقدي: {walletVisibility.cash ? calculatedWalletBalances.cash.toLocaleString() : '•••••'} ج.م</span>,
 <span className="text-white/20 mx-2">•</span>,
 <span className="ticker-item text-amber-200 flex items-center gap-3">⚠️ إجمالي الديون: {updatedLoans.reduce((acc, loan) => acc + loan.remaining, 0).toLocaleString()} ج.م</span>,
 <span className="text-white/20 mx-2">•</span>,
@@ -2187,7 +2385,7 @@ return (
 );
 });
 
-// مكون شريط الأشهر الموحد (بنفس تصميم لوحة التحكم)
+// مكون شريط الأشهر الموحد
 const MonthSelector = ({ selectedMonth, onSelectMonth, className = "" }) => {
   return (
     <div className={`glass p-4 rounded-2xl ${className}`}>
@@ -2378,7 +2576,7 @@ const renderDashboard = () => (
         <div className="flex items-center gap-3 bg-white dark:bg-slate-800 p-2 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
             <input 
                 type="number" 
-                value={data.openingBalance2026 || ''}
+                value={openingBalance2026 || ''}
                 onChange={(e) => dispatch({ type: 'UPDATE_OPENING_BALANCE', payload: Number(e.target.value) })}
                 className="w-32 md:w-48 p-2 bg-transparent text-center font-black text-blue-600 outline-none text-lg placeholder:text-slate-300" 
                 placeholder="0.00"
@@ -2386,6 +2584,10 @@ const renderDashboard = () => (
             <button 
                 onClick={() => {
                     dispatch({ type: 'UPDATE_OPENING_BALANCE', payload: Number(document.activeElement.previousElementSibling?.value || 0) });
+                    dispatch({ 
+                      type: 'UPDATE_WALLET_BALANCE', 
+                      payload: { walletKey: 'cash', balance: Number(document.activeElement.previousElementSibling?.value || 0) } 
+                    });
                     addNotification({ type: 'success', title: 'تم الحفظ', message: 'تم تحديث الرصيد الافتتاحي وتحديث الحسابات' });
                 }}
                 className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors flex items-center gap-2"
@@ -2398,13 +2600,19 @@ const renderDashboard = () => (
 
 {/* لوحة السيولة الفورية */}
 <QuickBalanceOverview 
-  financeSnapshot={financeSnapshot}
-  currentFawryBalance={currentFawryBalance}
-  currentEtisalatBalance={currentEtisalatBalance}
-  getSavingsLedger={getSavingsLedger}
-  isPrivate={false}
+  walletBalances={calculatedWalletBalances}
   walletVisibility={walletVisibility}
   onToggleVisibility={(key) => dispatch({ type: 'TOGGLE_WALLET_VISIBILITY', payload: key })}
+/>
+
+{/* تحليل السيولة التفصيلي */}
+<LiquidityAnalysis 
+  transactions={transactions}
+  selectedMonth={selectedMonth}
+  walletBalances={calculatedWalletBalances}
+  walletVisibility={walletVisibility}
+  showLiquidityDetails={showLiquidityDetails}
+  onToggleDetails={() => dispatch({ type: 'TOGGLE_LIQUIDITY_DETAILS' })}
 />
 
 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 no-print">
@@ -2451,24 +2659,24 @@ className="gradient-bg-danger text-white p-6 rounded-2xl flex flex-col items-cen
 
 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
 <EnhancedStatCard
-title="السيولة الحالية"
-amount={financeSnapshot.actualCashInHand}
+title="النقدية المتاحة"
+amount={calculatedWalletBalances.cash}
 icon={Wallet}
-subtitle={`رصيد مُرّحل: ${financeSnapshot.actualCarryover.toLocaleString()} ج.م`}
+subtitle={`${selectedMonth}`}
 isPrivate={!walletVisibility.cash}
 />
 
 <EnhancedStatCard
-title="الدخل المعلّق"
-amount={financeSnapshot.pendingIncome}
-icon={PendingCircle}
-subtitle="مبالغ متوقعة لم تستلم بعد"
-isPrivate={false}
+title="إجمالي السيولة"
+amount={Object.values(calculatedWalletBalances).reduce((a, b) => a + b, 0)}
+icon={Coins}
+subtitle="جميع المحافظ المرئية"
+isPrivate={Object.keys(walletVisibility).filter(k => walletVisibility[k]).length === 0}
 />
 
 <EnhancedStatCard
 title="المصاريف المعلقة"
-amount={-financeSnapshot.pendingAmount}
+amount={-monthInsights.pendExp}
 icon={Clock}
 subtitle="التزامات لم تسدد بعد"
 isPrivate={false}
@@ -2481,14 +2689,14 @@ onClick={() => dispatch({ type: 'SET_ACTIVE_TAB', payload: 'planner' })}
 <div className="flex justify-between items-center">
 <div>
 <p className="text-sm font-bold text-slate-500 dark:text-slate-400 mb-1">
-الرصيد المتوقع
+صافي الشهر
 </p>
 <h3 className={`text-2xl font-black ${
-financeSnapshot.projectedClosingBalance >= 0 
+monthInsights.net >= 0 
 ? 'text-blue-600' 
 : 'text-red-600'
 }`}>
-{Math.round(financeSnapshot.projectedClosingBalance).toLocaleString()}
+{Math.round(monthInsights.net).toLocaleString()}
 <span className="text-sm font-medium text-slate-400 mr-1">ج.م</span>
 </h3>
 </div>
@@ -2497,7 +2705,7 @@ financeSnapshot.projectedClosingBalance >= 0
 </div>
 </div>
 <div className="mt-4 text-xs text-slate-500">
-{financeSnapshot.projectedClosingBalance >= 0 ? '✅ وضع مالي آمن' : '⚠️ تحتاج لمراجعة المصروفات'}
+{monthInsights.net >= 0 ? '✅ فائض' : '⚠️ عجز'}
 </div>
 </div>
 </div>
@@ -2548,7 +2756,7 @@ formatter={(value) => `${Number(value).toLocaleString()} ج.م`}
 <PieChart>
 <Pie 
 data={transactions
-  .filter(t => t.type === 'expense' && t.month === selectedMonth)
+  .filter(t => t.type === 'expense' && t.month === selectedMonth && t.status === 'paid')
   .map((t, i, arr) => { 
     const name = t.category; 
     const value = arr.filter(x => x.category === name).reduce((a, b) => a + Number(b.amount), 0); 
@@ -2566,7 +2774,7 @@ dataKey="value"
 cornerRadius={6}
 >
 {transactions
-  .filter(t => t.type === 'expense' && t.month === selectedMonth)
+  .filter(t => t.type === 'expense' && t.month === selectedMonth && t.status === 'paid')
   .map((t, i, arr) => { 
     const name = t.category; 
     const value = arr.filter(x => x.category === name).reduce((a, b) => a + Number(b.amount), 0); 
@@ -2598,25 +2806,29 @@ cornerRadius={6}
 );
 
 const renderCategoriesView = () => {
-const catTotals = transactions.filter(t => t.type === catViewType && t.month === selectedMonth).reduce((acc, t) => { acc[t.category] = (acc[t.category] || 0) + Number(t.amount); return acc; }, {});
-const detailedTransactions = activeCategoryDetail ? transactions.filter(t => t.category === activeCategoryDetail && t.month === selectedMonth).sort((a,b) => new Date(b.date) - new Date(a.date)) : [];
+const catTotals = transactions.filter(t => t.type === catViewType && t.month === selectedMonth && t.status === 'paid').reduce((acc, t) => { acc[t.category] = (acc[t.category] || 0) + Number(t.amount); return acc; }, {});
+const detailedTransactions = activeCategoryDetail ? transactions.filter(t => t.category === activeCategoryDetail && t.month === selectedMonth && t.status === 'paid').sort((a,b) => new Date(b.date) - new Date(a.date)) : [];
 const detailedTotal = detailedTransactions.reduce((sum, t) => sum + Number(t.amount), 0);
 const printGlobalData = CATEGORIES[catViewType].map(cat => ({ date: selectedMonth, category: cat, description: 'إجمالي الفئة', method: '-', amount: catTotals[cat] || 0 })).filter(i => i.amount > 0);
-return (
-<div className="space-y-8 animate-fadeIn">
-<div className="flex flex-col md:flex-row justify-between items-center glass p-4 rounded-2xl gap-4 no-print">
-<div className="flex bg-slate-100 dark:bg-slate-800 p-1.5 rounded-2xl w-full md:w-fit">
-<button type="button" onClick={() => dispatch({ type: 'SET_CAT_VIEW_TYPE', payload: 'expense' })} className={`flex-1 md:flex-none px-8 py-3 rounded-xl text-sm font-bold transition-all duration-300 ${catViewType === 'expense' ? 'bg-white dark:bg-slate-700 shadow-sm text-red-500' : 'text-gray-400 hover:text-gray-600'}`}>المصروفات</button>
-<button type="button" onClick={() => dispatch({ type: 'SET_CAT_VIEW_TYPE', payload: 'income' })} className={`flex-1 md:flex-none px-8 py-3 rounded-xl text-sm font-bold transition-all duration-300 ${catViewType === 'income' ? 'bg-white dark:bg-slate-700 shadow-sm text-green-500' : 'text-gray-400 hover:text-gray-600'}`}>الإيرادات</button>
-</div>
 
+return (
+<div className="space-y-8 animate-fadeIn pb-24">
 <MonthSelector 
   selectedMonth={selectedMonth}
   onSelectMonth={(month) => dispatch({ type: 'SET_SELECTED_MONTH', payload: month })}
   className="no-print mb-6"
 />
 
+<div className="flex bg-slate-100 dark:bg-slate-800 p-1.5 rounded-2xl w-full md:w-fit mx-auto">
+<button type="button" onClick={() => dispatch({ type: 'SET_CAT_VIEW_TYPE', payload: 'expense' })} className={`flex-1 md:flex-none px-8 py-3 rounded-xl text-sm font-bold transition-all duration-300 ${catViewType === 'expense' ? 'bg-white dark:bg-slate-700 shadow-sm text-red-500' : 'text-gray-400 hover:text-gray-600'}`}>المصروفات</button>
+<button type="button" onClick={() => dispatch({ type: 'SET_CAT_VIEW_TYPE', payload: 'income' })} className={`flex-1 md:flex-none px-8 py-3 rounded-xl text-sm font-bold transition-all duration-300 ${catViewType === 'income' ? 'bg-white dark:bg-slate-700 shadow-sm text-green-500' : 'text-gray-400 hover:text-gray-600'}`}>الإيرادات</button>
+</div>
+
+<div className="glass p-4 rounded-2xl flex flex-col md:flex-row justify-between items-center gap-4 no-print mb-6">
 <button type="button" onClick={() => printReport(`ملخص الفئات - ${catViewType === 'expense' ? 'المصروفات' : 'الإيرادات'} - ${selectedMonth}`, printGlobalData)} className="w-full md:w-auto bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 px-6 py-3 rounded-2xl flex items-center justify-center gap-2 font-bold transition-all"><Printer size={18} /> طباعة الملخص</button>
+<div className="text-sm text-slate-500 font-bold">
+  إجمالي {catViewType === 'expense' ? 'المصروفات' : 'الإيرادات'}: <span className="text-lg font-black text-slate-800 dark:text-white">{Object.values(catTotals).reduce((a, b) => a + b, 0).toLocaleString()} ج.م</span>
+</div>
 </div>
 
 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -2879,27 +3091,25 @@ className="text-xs font-bold bg-white border border-slate-200 hover:bg-emerald-5
 
 const renderWalletsAndCardsView = () => {
 const cardHistories = cards.map(card => calculateCardHistory(card));
-const cibLedger = getSavingsLedger('cib_savings');
-const aaibLedger = getSavingsLedger('aaib_savings');
 
 const ledgerProps = (key) => ({
 walletKey: key,
-ledgerData: key === 'fawry' ? fawryLedger : key === 'etisalat' ? etisalatLedger : key === 'cib_savings' ? cibLedger : aaibLedger,
+ledgerData: getWalletLedger(key),
 isExpanded: expandedLedgers[key],
 onToggle: () => dispatch({ type: 'TOGGLE_LEDGER', payload: key }),
 onDelete: (id) => handleDelete(id),
 onEditTransaction: (t) => { dispatch({ type: 'SET_FORM_MODE', payload: 'edit' }); dispatch({ type: 'SET_FORM_DATA', payload: t }); dispatch({ type: 'SET_FORM_OPEN', payload: true }); },
 theme: WALLET_CONFIGS[key],
-isPrivate: false,
+walletVisibility: walletVisibility,
+onToggleVisibility: (key) => dispatch({ type: 'TOGGLE_WALLET_VISIBILITY', payload: key }),
 onAddDeposit: handleAddWalletDeposit,
 onAddWithdrawal: handleAddWalletWithdrawal,
 onExportCSV: exportWalletCSV,
-walletVisibility: walletVisibility,
-onToggleVisibility: (key) => dispatch({ type: 'TOGGLE_WALLET_VISIBILITY', payload: key })
+openingBalance: walletBalances[key] || 0
 });
 
 return (
-<div className="space-y-12 animate-fadeIn">
+<div className="space-y-12 animate-fadeIn pb-24">
 <div className="glass rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-700">
 <div className="collapsible-header p-6 flex justify-between items-center border-b border-slate-100 dark:border-slate-800 gradient-border" onClick={() => dispatch({ type: 'TOGGLE_CARDS_SECTION' })}>
 <div className="flex items-center gap-3"><CreditCard size={28} className="text-indigo-600 dark:text-indigo-400" /><div><h3 className="text-xl font-black text-indigo-600 dark:text-indigo-400">البطاقات الائتمانية</h3><p className="text-xs text-slate-500 font-bold mt-1">جدول الديون والسداد</p></div></div>
@@ -2957,16 +3167,77 @@ return (
 )}
 </div>
 
+{/* بطاقات المحافظ */}
 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-<div className="relative group no-print"><button type="button" onClick={() => dispatch({ type: 'SET_EDITING_FAWRY', payload: fawryData })} className="absolute -top-3 -right-3 z-20 gradient-bg-primary text-white p-3 rounded-2xl shadow-xl hover:scale-110 active:scale-95 font-bold"><Edit size={18} /></button><div className="bg-gradient-to-br from-yellow-100 to-yellow-200 border border-yellow-300 p-8 rounded-2xl flex flex-col justify-between shadow-lg h-full text-yellow-900 hover-lift cursor-pointer transition-transform" onClick={() => dispatch({ type: 'SET_EDITING_FAWRY', payload: fawryData })}><div className="flex justify-between items-start mb-6"><div className="flex items-center gap-4"><div className="bg-white p-3 rounded-2xl shadow-sm"><BankLogo type="fawry" size={32}/></div><div><h3 className="font-black text-2xl">محفظة فوري</h3><p className="text-sm font-bold opacity-80">مدفوعات إلكترونية</p></div></div><div className="text-left flex flex-col items-end"><span className="block text-xs uppercase font-bold mb-1 tracking-widest opacity-60">الرصيد</span><span className="font-black text-4xl group-hover:scale-105 transition-transform">{walletVisibility.fawry ? currentFawryBalance.toLocaleString() : '•••••'}</span></div></div><div className="grid grid-cols-2 gap-3 w-full font-bold mt-auto"><div className="bg-white/60 backdrop-blur-sm p-3 rounded-xl border border-white/40 text-center shadow-inner"><span className="block text-[10px] mb-1">إيداع</span><span className="font-bold text-lg">+{walletVisibility.fawry ? fawryStats.deposits.toLocaleString() : '•••••'}</span></div><div className="bg-white/60 backdrop-blur-sm p-3 rounded-xl border border-white/40 text-center shadow-inner"><span className="block text-[10px] mb-1">سحب</span><span className="font-bold text-lg">-{walletVisibility.fawry ? fawryStats.withdrawals.toLocaleString() : '•••••'}</span></div></div></div></div>
-
-<div className="relative group no-print"><button type="button" onClick={() => dispatch({ type: 'SET_EDITING_ETISALAT', payload: etisalatData })} className="absolute -top-3 -right-3 z-20 bg-white hover:bg-slate-100 text-etisalatGreen p-3 rounded-2xl shadow-xl transition-all hover:scale-110 active:scale-95 font-bold border border-slate-200"><Edit size={18} /></button><div className="bg-gradient-to-br from-emerald-100 to-emerald-200 border border-emerald-300 p-8 rounded-2xl flex flex-col justify-between shadow-lg h-full text-emerald-900 relative overflow-hidden hover-lift cursor-pointer transition-transform" onClick={() => dispatch({ type: 'SET_EDITING_ETISALAT', payload: etisalatData })}><div className="absolute top-0 right-0 bg-etisalatRed w-24 h-24 rounded-bl-[4rem] z-0 shadow-lg"></div><div className="flex justify-between items-start mb-6 z-10 relative"><div className="flex items-center gap-4"><div className="bg-white p-3 rounded-2xl shadow-lg"><BankLogo type="etisalat" size={32}/></div><div><h3 className="font-black text-2xl">اتصالات كاش</h3><p className="text-sm font-bold opacity-80">e& wallet</p></div></div><div className="text-left flex flex-col items-end z-10 relative"><span className="block text-xs uppercase font-bold mb-1 tracking-widest opacity-80">الرصيد</span><span className="font-black text-4xl group-hover:scale-105 transition-transform">{walletVisibility.etisalat ? currentEtisalatBalance.toLocaleString() : '•••••'}</span></div></div><div className="grid grid-cols-2 gap-3 w-full font-bold mt-auto z-10 relative"><div className="bg-white/40 backdrop-blur-md p-3 rounded-xl border border-white/40 text-center shadow-sm"><span className="block text-[10px] mb-1 opacity-80">إيداع</span><span className="font-bold text-lg">+{walletVisibility.etisalat ? etisalatStats.deposits.toLocaleString() : '•••••'}</span></div><div className="bg-white/40 backdrop-blur-md p-3 rounded-xl border border-white/40 text-center shadow-sm"><span className="block text-[10px] mb-1 opacity-80">سحب</span><span className="font-bold text-lg">-{walletVisibility.etisalat ? etisalatStats.withdrawals.toLocaleString() : '•••••'}</span></div></div></div></div>
+{Object.entries(WALLET_CONFIGS).map(([key, config]) => (
+<div key={key} className="relative group no-print">
+<button 
+  type="button" 
+  onClick={() => dispatch({ 
+    type: 'SET_EDITING_WALLET', 
+    payload: { 
+      key, 
+      name: config.title, 
+      balance: calculatedWalletBalances[key] || 0 
+    } 
+  })} 
+  className="absolute -top-3 -right-3 z-20 gradient-bg-primary text-white p-3 rounded-2xl shadow-xl hover:scale-110 active:scale-95 font-bold"
+>
+  <Edit size={18} />
+</button>
+<div 
+  className={`bg-gradient-to-br ${
+    key === 'fawry' ? 'from-yellow-100 to-yellow-200 border-yellow-300 text-yellow-900' :
+    key === 'etisalat' ? 'from-emerald-100 to-emerald-200 border-emerald-300 text-emerald-900' :
+    key === 'cib_savings' ? 'from-blue-100 to-blue-200 border-blue-300 text-blue-900' :
+    'from-red-100 to-red-200 border-red-300 text-red-900'
+  } border p-8 rounded-2xl flex flex-col justify-between shadow-lg h-full hover-lift cursor-pointer transition-transform`} 
+  onClick={() => dispatch({ 
+    type: 'SET_EDITING_WALLET', 
+    payload: { 
+      key, 
+      name: config.title, 
+      balance: calculatedWalletBalances[key] || 0 
+    } 
+  })}
+>
+<div className="flex justify-between items-start mb-6">
+<div className="flex items-center gap-4">
+<div className="bg-white p-3 rounded-2xl shadow-sm">
+<BankLogo type={key} size={32}/>
+</div>
+<div>
+<h3 className="font-black text-2xl">{config.title}</h3>
+<p className="text-sm font-bold opacity-80">{config.subtitle}</p>
+</div>
+</div>
+<div className="text-left flex flex-col items-end">
+<span className="block text-xs uppercase font-bold mb-1 tracking-widest opacity-60">الرصيد</span>
+<span className="font-black text-4xl group-hover:scale-105 transition-transform">
+  {!walletVisibility[key] ? '•••••' : (calculatedWalletBalances[key] || 0).toLocaleString()}
+</span>
+</div>
+</div>
+<div className="grid grid-cols-2 gap-3 w-full font-bold mt-auto">
+<div className="bg-white/60 backdrop-blur-sm p-3 rounded-xl border border-white/40 text-center shadow-inner">
+<span className="block text-[10px] mb-1">الرصيد الافتتاحي</span>
+<span className="font-bold text-lg">{(walletBalances[key] || 0).toLocaleString()}</span>
+</div>
+<div className="bg-white/60 backdrop-blur-sm p-3 rounded-xl border border-white/40 text-center shadow-inner">
+<span className="block text-[10px] mb-1">عمليات مسجلة</span>
+<span className="font-bold text-lg">{getWalletLedger(key).length}</span>
+</div>
+</div>
+</div>
+</div>
+))}
 </div>
 
-<GenericLedgerComponent {...ledgerProps('fawry')} />
-<GenericLedgerComponent {...ledgerProps('etisalat')} />
-<GenericLedgerComponent {...ledgerProps('cib_savings')} />
-<GenericLedgerComponent {...ledgerProps('aaib_savings')} />
+{/* سجلات المحافظ */}
+<WalletLedgerComponent {...ledgerProps('fawry')} />
+<WalletLedgerComponent {...ledgerProps('etisalat')} />
+<WalletLedgerComponent {...ledgerProps('cib_savings')} />
+<WalletLedgerComponent {...ledgerProps('aaib_savings')} />
 </div>
 );
 };
@@ -2991,11 +3262,11 @@ const renderMonthlyInsight = () => (
             dispatch({
               type: 'SHOW_CONFIRM',
               title: `اعتماد وإقفال شهر ${selectedMonth}`,
-              message: `سيتم اعتماد مبلغ (${financeSnapshot.actualCashInHand.toLocaleString()}) ج.م كرصيد مرحل نهائي لهذا الشهر. لن تتمكن من إضافة أو تعديل عمليات في هذا الشهر بعد الإقفال. هل أنت متأكد؟`,
+              message: `سيتم اعتماد الرصيد الحالي كرصيد مرحل نهائي لهذا الشهر. لن تتمكن من إضافة أو تعديل عمليات في هذا الشهر بعد الإقفال. هل أنت متأكد؟`,
               onConfirm: () => { 
                 dispatch({ 
                   type: 'CLOSE_MONTH', 
-                  payload: { month: selectedMonth, balance: financeSnapshot.actualCashInHand } 
+                  payload: { month: selectedMonth, balance: Object.values(calculatedWalletBalances).reduce((a, b) => a + b, 0) } 
                 });
                 addNotification({ type: 'success', title: 'تم الإقفال', message: `تم إغلاق شهر ${selectedMonth} واعتماد الرصيد.` });
               },
@@ -3028,7 +3299,7 @@ const renderMonthlyInsight = () => (
 </p>
 <p className="text-[9px] text-slate-400 mt-1">سيولة الشهر الفعلية</p>
 </div>
-<div className="glass p-5 rounded-2xl border-b-4 border-purple-500 bg-purple-50/10 flex items-center justify-center cursor-pointer hover:bg-purple-100 transition-all" onClick={() => printReport(`تقرير شهر ${selectedMonth}`, transactions.filter(t => t.month === selectedMonth))}>
+<div className="glass p-5 rounded-2xl border-b-4 border-purple-500 bg-purple-50/10 flex items-center justify-center cursor-pointer hover:bg-purple-100 transition-all" onClick={() => printReport(`تقرير شهر ${selectedMonth}`, transactions.filter(t => t.month === selectedMonth && t.status === 'paid'))}>
 <div className="text-center">
 <Printer size={20} className="mx-auto text-purple-600 mb-1" />
 <p className="text-[10px] font-black text-purple-600">طباعة سجل {selectedMonth}</p>
@@ -3049,17 +3320,17 @@ const paidArchive = transactions
 .sort((a, b) => new Date(b.date) - new Date(a.date));
 
 return (
-<div className="space-y-8 animate-fadeIn">
-<div className="glass p-2 rounded-2xl w-fit mx-auto mb-8 flex no-print">
-<button type="button" onClick={() => dispatch({ type: 'SET_TRANS_VIEW_MODE', payload: 'expense' })} className={`px-12 py-4 rounded-xl text-lg font-bold transition-all duration-300 flex items-center gap-3 ${transViewMode === 'expense' ? 'bg-red-50 text-red-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}><TrendingDown size={24} /> المصروفات</button>
-<button type="button" onClick={() => dispatch({ type: 'SET_TRANS_VIEW_MODE', payload: 'income' })} className={`px-12 py-4 rounded-xl text-lg font-bold transition-all duration-300 flex items-center gap-3 ${transViewMode === 'income' ? 'bg-emerald-50 text-emerald-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}><TrendingUp size={24} /> الدخل</button>
-</div>
-
+<div className="space-y-8 animate-fadeIn pb-24">
 <MonthSelector 
   selectedMonth={selectedMonth}
   onSelectMonth={(month) => dispatch({ type: 'SET_SELECTED_MONTH', payload: month })}
   className="no-print mb-6"
 />
+
+<div className="glass p-2 rounded-2xl w-fit mx-auto mb-8 flex no-print">
+<button type="button" onClick={() => dispatch({ type: 'SET_TRANS_VIEW_MODE', payload: 'expense' })} className={`px-12 py-4 rounded-xl text-lg font-bold transition-all duration-300 flex items-center gap-3 ${transViewMode === 'expense' ? 'bg-red-50 text-red-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}><TrendingDown size={24} /> المصروفات</button>
+<button type="button" onClick={() => dispatch({ type: 'SET_TRANS_VIEW_MODE', payload: 'income' })} className={`px-12 py-4 rounded-xl text-lg font-bold transition-all duration-300 flex items-center gap-3 ${transViewMode === 'income' ? 'bg-emerald-50 text-emerald-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}><TrendingUp size={24} /> الدخل</button>
+</div>
 
 {renderMonthlyInsight()}
 
@@ -3239,7 +3510,7 @@ const plannerProjection = useMemo(() => {
 const currentMonthIdx = new Date().getMonth();
 const monthsRemaining = MONTHS.slice(currentMonthIdx);
 
-let runningLiquidity = financeSnapshot.actualCashInHand;
+let runningLiquidity = calculatedWalletBalances.cash;
 let simulatedLoans = JSON.parse(JSON.stringify(updatedLoans));
 
 let simulatedCards = cards.map(card => {
@@ -3261,7 +3532,7 @@ simulatedCards = simulatedCards.map(c => ({ ...c, currentDebt: 0 }));
 
 const totalOutflow = monthlyLoanPayments + monthlyCardPayments;
 
-const monthlyNetIncome = financeSnapshot.actualIncome - financeSnapshot.cashExpenses;
+const monthlyNetIncome = monthInsights.inc - monthInsights.exp;
 const openingLiquidity = runningLiquidity;
 runningLiquidity = (openingLiquidity + monthlyNetIncome) - totalOutflow;
 
@@ -3271,7 +3542,7 @@ const isDanger = runningLiquidity < 0;
 
 return { month, openingLiquidity, totalOutflow, runningLiquidity, remainingTotalDebt, isDanger };
 });
-}, [financeSnapshot, updatedLoans, cards, selectedMonth]);
+}, [calculatedWalletBalances, updatedLoans, cards, selectedMonth, monthInsights]);
 
 const renderStrategicPlanner = () => {
 return (
@@ -3286,7 +3557,7 @@ return (
 </div>
 <div className="hidden md:block text-left bg-white/10 p-4 rounded-2xl backdrop-blur-sm">
 <div className="text-xs uppercase tracking-widest text-slate-300 font-bold mb-1">الوضعية الحالية</div>
-<div className="text-2xl font-black text-emerald-400">{financeSnapshot.actualCashInHand.toLocaleString()} <span className="text-sm">ج.م</span></div>
+<div className="text-2xl font-black text-emerald-400">{calculatedWalletBalances.cash.toLocaleString()} <span className="text-sm">ج.م</span></div>
 </div>
 </div>
 </div>
@@ -3381,7 +3652,7 @@ const EnhancedSidebar = () => (
 </div>
 <div>
 <h2 className="font-black text-xl text-slate-900 dark:text-white">المحفظة الذكية</h2>
-<p className="text-xs text-slate-500 font-bold">V51 Professional</p>
+<p className="text-xs text-slate-500 font-bold">V52 Advanced</p>
 </div>
 </div>
 
@@ -3454,10 +3725,10 @@ const ProfessionalHeader = () => (
 </div>
 <div>
 <h1 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">
-محفظتي المالية
+محفظتي المالية - النسخة المتقدمة
 </h1>
 <p className="text-sm text-slate-500 font-medium mt-1">
-إدارة مالية ذكية • {CURRENT_YEAR} • الإصدار الاحترافي
+تحليل سيولة تفصيلي • تتبع محافظ منفصل • {CURRENT_YEAR}
 </p>
 </div>
 </div>
@@ -3798,51 +4069,29 @@ payload: { ...formData, method: newMethod, subType: newSubType }
 </div>
 )}
 
-{editingFawry && (
+{editingWallet && (
 <div className="modal-backdrop no-print">
-<div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl shadow-2xl overflow-hidden animate-fadeIn border border-yellow-400/50">
-<div className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-yellow-50 dark:bg-yellow-900/10">
-<h3 className="text-xl font-black text-slate-800 dark:text-white">ضبط رصيد فوري</h3>
-<button type="button" onClick={() => dispatch({ type: 'SET_EDITING_FAWRY', payload: null })} className="p-2 hover:bg-red-50 hover:text-red-500 rounded-xl transition-colors"><X size={24} /></button>
+<div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl shadow-2xl overflow-hidden animate-fadeIn border border-blue-500/50">
+<div className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-blue-50 dark:bg-blue-900/10">
+<h3 className="text-xl font-black text-slate-800 dark:text-white">تعديل رصيد محفظة: {editingWallet.name}</h3>
+<button type="button" onClick={() => dispatch({ type: 'SET_EDITING_WALLET', payload: null })} className="p-2 hover:bg-red-50 hover:text-red-500 rounded-xl transition-colors"><X size={24} /></button>
 </div>
-<form onSubmit={(e) => { e.preventDefault(); localStorage.setItem('fawryData', JSON.stringify(editingFawry)); dispatch({ type: 'UPDATE_FAWRY_DATA', payload: editingFawry }); dispatch({ type: 'SET_EDITING_FAWRY', payload: null }); addNotification({ type: 'success', title: 'تم الحفظ', message: 'تم تحديث رصيد فوري الافتتاحي' }); }} className="p-6 space-y-6">
+<form onSubmit={handleUpdateWallet} className="p-6 space-y-6">
 <div className="bg-slate-50 dark:bg-slate-800 rounded-2xl p-5 border border-slate-200 dark:border-slate-700">
-<div className="flex items-center gap-2 mb-4 text-sm font-bold text-fawryBlue"><Calculator size={18} /> معادلة الرصيد التلقائية</div>
+<div className="flex items-center gap-2 mb-4 text-sm font-bold text-blue-700 dark:text-blue-300"><Calculator size={18} /> توضيح مهم</div>
 <div className="space-y-2 text-sm font-mono">
-<div className="flex justify-between items-center"><span className="text-slate-500">رصيد البداية (الافتتاحي)</span><span className="font-bold text-slate-800 dark:text-white">{Number(editingFawry.openingBalance).toLocaleString()}</span></div>
-<div className="flex justify-between items-center text-emerald-600"><span>+ إجمالي الشحن (من المعاملات)</span><span className="font-bold">+{fawryStats.deposits.toLocaleString()}</span></div>
-<div className="flex justify-between items-center text-red-500"><span>- إجمالي المدفوعات (من المعاملات)</span><span className="font-bold">-{fawryStats.withdrawals.toLocaleString()}</span></div>
+<div className="text-slate-500 leading-relaxed">
+هذا الرصيد الافتتاحي سيتم اعتماده كنقطة بداية لجميع العمليات المستقبلية. جميع العمليات المسجلة ستؤثر على هذا الرصيد بشكل تلقائي.
+</div>
 <div className="h-px bg-slate-300 dark:bg-slate-600 my-2"></div>
-<div className="flex justify-between items-center text-lg font-black text-fawryBlue"><span>= الرصيد الحالي المتوقع</span><span>{((Number(editingFawry.openingBalance) || 0) + fawryStats.deposits - fawryStats.withdrawals).toLocaleString()} ج.م</span></div>
+<div className="flex justify-between items-center text-lg font-black text-blue-600">
+<span>المبلغ الحالي المسجل</span>
+<span>{(calculatedWalletBalances[editingWallet.key] || 0).toLocaleString()} ج.م</span>
 </div>
 </div>
-<div><label className="block text-xs font-bold text-slate-500 mb-2">تعديل رصيد البداية</label><input type="number" step="0.01" className="input-field text-xl font-black text-fawryBlue" value={editingFawry.openingBalance} onChange={e => dispatch({ type: 'SET_EDITING_FAWRY', payload: { ...editingFawry, openingBalance: Number(e.target.value) } })} placeholder="أدخل الرصيد الموجود قبل 2026..." /><p className="text-[10px] text-slate-400 mt-2 leading-relaxed">💡 تلميح: لا تقم بكتابة الرصيد الحالي هنا. فقط اكتب الرصيد الذي بدأت به السنة (أو رصيد الترحيل)، وسيقوم التطبيق بحساب الباقي.</p></div>
+</div>
+<div><label className="block text-xs font-bold text-slate-500 mb-2">تعديل الرصيد الافتتاحي</label><input type="number" step="0.01" className="input-field text-xl font-black text-blue-600" value={editingWallet.balance} onChange={e => dispatch({ type: 'SET_EDITING_WALLET', payload: { ...editingWallet, balance: Number(e.target.value) } })} placeholder="0.00" /></div>
 <button type="submit" className="w-full gradient-bg-primary text-white py-3 rounded-xl font-bold shadow-lg hover:shadow-xl transition-all">حفظ التعديلات</button>
-</form>
-</div>
-</div>
-)}
-
-{editingEtisalat && (
-<div className="modal-backdrop no-print">
-<div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl shadow-2xl overflow-hidden animate-fadeIn border border-green-500/50">
-<div className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-green-50 dark:bg-green-900/10">
-<h3 className="text-xl font-black text-slate-800 dark:text-white">ضبط اتصالات كاش</h3>
-<button type="button" onClick={() => dispatch({ type: 'SET_EDITING_ETISALAT', payload: null })} className="p-2 hover:bg-red-50 hover:text-red-500 rounded-xl transition-colors"><X size={24} /></button>
-</div>
-<form onSubmit={(e) => { e.preventDefault(); localStorage.setItem('etisalatData', JSON.stringify(editingEtisalat)); dispatch({ type: 'UPDATE_ETISALAT_DATA', payload: editingEtisalat }); dispatch({ type: 'SET_EDITING_ETISALAT', payload: null }); addNotification({ type: 'success', title: 'تم الحفظ', message: 'تم تحديث رصيد المحفظة الافتتاحي' }); }} className="p-6 space-y-6">
-<div className="bg-slate-50 dark:bg-slate-800 rounded-2xl p-5 border border-slate-200 dark:border-slate-700">
-<div className="flex items-center gap-2 mb-4 text-sm font-bold text-etisalatGreen"><Calculator size={18} /> معادلة الرصيد التلقائية</div>
-<div className="space-y-2 text-sm font-mono">
-<div className="flex justify-between items-center"><span className="text-slate-500">رصيد البداية (الافتتاحي)</span><span className="font-bold text-slate-800 dark:text-white">{Number(editingEtisalat.openingBalance).toLocaleString()}</span></div>
-<div className="flex justify-between items-center text-emerald-600"><span>+ إجمالي الإيداع/التحويلات</span><span className="font-bold">+{etisalatStats.deposits.toLocaleString()}</span></div>
-<div className="flex justify-between items-center text-red-500"><span>- إجمالي السحب/الشراء</span><span className="font-bold">-{etisalatStats.withdrawals.toLocaleString()}</span></div>
-<div className="h-px bg-slate-300 dark:bg-slate-600 my-2"></div>
-<div className="flex justify-between items-center text-lg font-black text-etisalatGreen"><span>= الرصيد الحالي المتوقع</span><span>{((Number(editingEtisalat.openingBalance) || 0) + etisalatStats.deposits - etisalatStats.withdrawals).toLocaleString()} ج.م</span></div>
-</div>
-</div>
-<div><label className="block text-xs font-bold text-slate-500 mb-2">تعديل رصيد البداية</label><input type="number" step="0.01" className="input-field text-xl font-black text-etisalatGreen" value={editingEtisalat.openingBalance} onChange={e => dispatch({ type: 'SET_EDITING_ETISALAT', payload: { ...editingEtisalat, openingBalance: Number(e.target.value) } })} placeholder="أدخل الرصيد الافتتاحي..." /></div>
-<button type="submit" className="w-full gradient-bg-success text-white py-3 rounded-xl font-bold shadow-lg hover:shadow-xl transition-all">حفظ التعديلات</button>
 </form>
 </div>
 </div>
@@ -3883,7 +4132,6 @@ payload: { ...formData, method: newMethod, subType: newSubType }
 
 const rootElement = document.getElementById('root');
 if(rootElement) {
-// إخفاء شاشة التحميل عند تحميل التطبيق
 setTimeout(() => {
   document.getElementById('loading').style.display = 'none';
 }, 2000);
