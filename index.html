@@ -444,407 +444,25 @@ body {
   <p style="margin-top:20px;">جاري تحميل التطبيق...</p>
 </div>
 
-<!-- إضافة مكتبات React مباشرة -->
+<!-- مكتبات React -->
 <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
 <script src="https://unpkg.com/@babel/standalone@7/babel.min.js"></script>
 
-<!-- Recharts من CDN -->
-<script src="https://unpkg.com/recharts@2.10.3/umd/Recharts.js"></script>
-
-<!-- Lucide Icons -->
-<script type="module">
-  import { createIcons, icons } from 'https://cdn.jsdelivr.net/npm/lucide@latest/dist/umd/lucide.min.js';
-  createIcons({ icons });
-</script>
+<!-- مكتبة الأيقونات -->
+<script src="https://cdn.jsdelivr.net/npm/lucide-react@0.309.0/dist/umd/lucide-react.production.min.js"></script>
 
 <script type="text/babel">
-// تعريف المتغيرات الأساسية
+// ========== تعريف المتغيرات الأساسية ==========
 const { useState, useEffect, useCallback, useMemo, useReducer, useRef } = React;
 
+// ========== الثوابت والبيانات الأولية ==========
 const CURRENT_YEAR = new Date().getFullYear();
-
-const firebaseConfig = {
-  apiKey: "AIzaSyCEq-Trf1oFsvPF5tlMvqU83ea_J2DLZjs",
-  authDomain: "finance-app-2026-3e318.firebaseapp.com",
-  projectId: "finance-app-2026-3e318",
-  storageBucket: "finance-app-2026-3e318.firebasestorage.app",
-  messagingSenderId: "855414629770",
-  appId: "1:855414629770:web:8bb07198b8245b63781473"
-};
-
-if (!firebase.apps.length) {
-  firebase.initializeApp(firebaseConfig);
-}
-const db = firebase.firestore();
-
-// ========== هياكل البيانات المحاسبية المحسنة ==========
-
-// تعريف حسابات الميزانية
-const ACCOUNT_TYPES = {
-  ASSET: 'asset',       // الأصول
-  LIABILITY: 'liability', // الخصوم
-  EQUITY: 'equity',     // حقوق الملكية
-  INCOME: 'income',     // الإيرادات
-  EXPENSE: 'expense'    // المصروفات
-};
-
-// دليل الحسابات المحدث
-const CHART_OF_ACCOUNTS = {
-  // الأصول (Assets)
-  '1001': { id: '1001', name: 'النقدية في الصندوق', type: ACCOUNT_TYPES.ASSET, normalBalance: 'debit' },
-  '1002': { id: '1002', name: 'بنك CIB - حساب التوفير', type: ACCOUNT_TYPES.ASSET, normalBalance: 'debit' },
-  '1003': { id: '1003', name: 'بنك AAIB - حساب التوفير', type: ACCOUNT_TYPES.ASSET, normalBalance: 'debit' },
-  '1004': { id: '1004', name: 'محفظة فوري الإلكترونية', type: ACCOUNT_TYPES.ASSET, normalBalance: 'debit' },
-  '1005': { id: '1005', name: 'محفظة اتصالات كاش', type: ACCOUNT_TYPES.ASSET, normalBalance: 'debit' },
-  '1006': { id: '1006', name: 'بطاقة ائتمان CIB - رصيد مدين', type: ACCOUNT_TYPES.ASSET, normalBalance: 'debit' },
-  '1007': { id: '1007', name: 'بطاقة ائتمان AAIB - رصيد مدين', type: ACCOUNT_TYPES.ASSET, normalBalance: 'debit' },
-  
-  // الخصوم (Liabilities)
-  '2001': { id: '2001', name: 'قرض شخصي AAIB', type: ACCOUNT_TYPES.LIABILITY, normalBalance: 'credit' },
-  '2002': { id: '2002', name: 'مديونية مدرسة عبد الرحمن', type: ACCOUNT_TYPES.LIABILITY, normalBalance: 'credit' },
-  '2003': { id: '2003', name: 'مديونية مدرسة أنس', type: ACCOUNT_TYPES.LIABILITY, normalBalance: 'credit' },
-  '2004': { id: '2004', name: 'مديونية جامعة سلمى', type: ACCOUNT_TYPES.LIABILITY, normalBalance: 'credit' },
-  '2005': { id: '2005', name: 'أقساط Valu - مصطفى', type: ACCOUNT_TYPES.LIABILITY, normalBalance: 'credit' },
-  '2006': { id: '2006', name: 'التزامات متنوعة أخرى', type: ACCOUNT_TYPES.LIABILITY, normalBalance: 'credit' },
-  '2007': { id: '2007', name: 'بطاقة ائتمان CIB - حد ائتماني', type: ACCOUNT_TYPES.LIABILITY, normalBalance: 'credit' },
-  '2008': { id: '2008', name: 'بطاقة ائتمان AAIB - حد ائتماني', type: ACCOUNT_TYPES.LIABILITY, normalBalance: 'credit' },
-  
-  // حقوق الملكية (Equity)
-  '3001': { id: '3001', name: 'رأس المال', type: ACCOUNT_TYPES.EQUITY, normalBalance: 'credit' },
-  '3002': { id: '3002', name: 'الأرباح المحتجزة', type: ACCOUNT_TYPES.EQUITY, normalBalance: 'credit' },
-  '3003': { id: '3003', name: 'صافي الدخل', type: ACCOUNT_TYPES.EQUITY, normalBalance: 'credit' },
-  
-  // الإيرادات (Income)
-  '4001': { id: '4001', name: 'الراتب الشهري', type: ACCOUNT_TYPES.INCOME, normalBalance: 'credit' },
-  '4002': { id: '4002', name: 'العمل الحر', type: ACCOUNT_TYPES.INCOME, normalBalance: 'credit' },
-  '4003': { id: '4003', name: 'العائد على الاستثمارات', type: ACCOUNT_TYPES.INCOME, normalBalance: 'credit' },
-  '4004': { id: '4004', name: 'عهدة شركة إيماك', type: ACCOUNT_TYPES.INCOME, normalBalance: 'credit' },
-  '4005': { id: '4005', name: 'تحويلات واردة', type: ACCOUNT_TYPES.INCOME, normalBalance: 'credit' },
-  '4006': { id: '4006', name: 'إيرادات أخرى', type: ACCOUNT_TYPES.INCOME, normalBalance: 'credit' },
-  
-  // المصروفات (Expenses)
-  '5001': { id: '5001', name: 'الالتزامات البنكية والتمويلية', type: ACCOUNT_TYPES.EXPENSE, normalBalance: 'debit' },
-  '5002': { id: '5002', name: 'مصروفات المعيشة اليومية', type: ACCOUNT_TYPES.EXPENSE, normalBalance: 'debit' },
-  '5003': { id: '5003', name: 'مسحوبات محل هاني', type: ACCOUNT_TYPES.EXPENSE, normalBalance: 'debit' },
-  '5004': { id: '5004', name: 'الملابس والمستلزمات الشخصية', type: ACCOUNT_TYPES.EXPENSE, normalBalance: 'debit' },
-  '5005': { id: '5005', name: 'الزكاة والتبرعات', type: ACCOUNT_TYPES.EXPENSE, normalBalance: 'debit' },
-  '5006': { id: '5006', name: 'التعليم والدروس والأنشطة', type: ACCOUNT_TYPES.EXPENSE, normalBalance: 'debit' },
-  '5007': { id: '5007', name: 'المصروفات النقدية الشهرية', type: ACCOUNT_TYPES.EXPENSE, normalBalance: 'debit' },
-  '5008': { id: '5008', name: 'المرافق والخدمات – بولاق', type: ACCOUNT_TYPES.EXPENSE, normalBalance: 'debit' },
-  '5009': { id: '5009', name: 'المرافق والخدمات – العبور', type: ACCOUNT_TYPES.EXPENSE, normalBalance: 'debit' },
-  '5010': { id: '5010', name: 'الاتصالات وشحن الهواتف المحمولة', type: ACCOUNT_TYPES.EXPENSE, normalBalance: 'debit' },
-  '5011': { id: '5011', name: 'الصحة والرعاية الطبية', type: ACCOUNT_TYPES.EXPENSE, normalBalance: 'debit' },
-  '5012': { id: '5012', name: 'المستلزمات المنزلية والتموين', type: ACCOUNT_TYPES.EXPENSE, normalBalance: 'debit' },
-  '5013': { id: '5013', name: 'اللحوم والدواجن والأسماك', type: ACCOUNT_TYPES.EXPENSE, normalBalance: 'debit' },
-  '5014': { id: '5014', name: 'الطوارئ والاحتياطي النقدي', type: ACCOUNT_TYPES.EXPENSE, normalBalance: 'debit' },
-  '5015': { id: '5015', name: 'الصيانة والإصلاحات المنزلية', type: ACCOUNT_TYPES.EXPENSE, normalBalance: 'debit' },
-  '5016': { id: '5016', name: 'المواصلات والانتقالات', type: ACCOUNT_TYPES.EXPENSE, normalBalance: 'debit' },
-  '5017': { id: '5017', name: 'الترفيه والمناسبات الاجتماعية', type: ACCOUNT_TYPES.EXPENSE, normalBalance: 'debit' },
-  '5018': { id: '5018', name: 'مصاريف موسمية وسنوية', type: ACCOUNT_TYPES.EXPENSE, normalBalance: 'debit' },
-  '5019': { id: '5019', name: 'شحن رصيد فوري', type: ACCOUNT_TYPES.EXPENSE, normalBalance: 'debit' },
-  '5020': { id: '5020', name: 'مصاريف أخرى', type: ACCOUNT_TYPES.EXPENSE, normalBalance: 'debit' },
-  '5021': { id: '5021', name: 'شحن محفظة', type: ACCOUNT_TYPES.EXPENSE, normalBalance: 'debit' },
-  '5022': { id: '5022', name: 'تحويلات', type: ACCOUNT_TYPES.EXPENSE, normalBalance: 'debit' }
-};
-
-// ========== وظائف مساعدة محاسبية ==========
-
-// إنشاء قيد محاسبي
-const createJournalEntry = (entries, description, date, reference = '') => {
-  // التحقق من توازن القيد (المدين = الدائن)
-  const totalDebit = entries.filter(e => e.type === 'debit').reduce((sum, e) => sum + e.amount, 0);
-  const totalCredit = entries.filter(e => e.type === 'credit').reduce((sum, e) => sum + e.amount, 0);
-  
-  if (Math.abs(totalDebit - totalCredit) > 0.01) {
-    throw new Error(`القيد غير متوازن! المدين: ${totalDebit}, الدائن: ${totalCredit}`);
-  }
-  
-  return {
-    id: `je_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-    date: date || new Date().toISOString().split('T')[0],
-    description,
-    reference,
-    entries: entries.map(entry => ({
-      ...entry,
-      accountId: entry.accountId,
-      accountName: CHART_OF_ACCOUNTS[entry.accountId]?.name || 'غير معروف'
-    })),
-    createdAt: new Date().toISOString(),
-    totalDebit,
-    totalCredit
-  };
-};
-
-// تحديث حسابات الأستاذ
-const updateLedgerAccounts = (currentLedger, journalEntry) => {
-  const newLedger = { ...currentLedger };
-  
-  journalEntry.entries.forEach(entry => {
-    const accountId = entry.accountId;
-    if (!newLedger[accountId]) {
-      newLedger[accountId] = {
-        accountId,
-        accountName: CHART_OF_ACCOUNTS[accountId]?.name || 'غير معروف',
-        accountType: CHART_OF_ACCOUNTS[accountId]?.type,
-        normalBalance: CHART_OF_ACCOUNTS[accountId]?.normalBalance,
-        debitBalance: 0,
-        creditBalance: 0,
-        transactions: []
-      };
-    }
-    
-    // إضافة الحركة
-    const transaction = {
-      id: `tr_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      date: journalEntry.date,
-      description: journalEntry.description,
-      journalEntryId: journalEntry.id,
-      debit: entry.type === 'debit' ? entry.amount : 0,
-      credit: entry.type === 'credit' ? entry.amount : 0,
-      balance: 0
-    };
-    
-    newLedger[accountId].transactions.push(transaction);
-    
-    // تحديث الأرصدة
-    if (entry.type === 'debit') {
-      newLedger[accountId].debitBalance += entry.amount;
-    } else {
-      newLedger[accountId].creditBalance += entry.amount;
-    }
-    
-    // حساب الرصيد النهائي
-    const account = newLedger[accountId];
-    if (account.normalBalance === 'debit') {
-      account.balance = account.debitBalance - account.creditBalance;
-    } else {
-      account.balance = account.creditBalance - account.debitBalance;
-    }
-  });
-  
-  return newLedger;
-};
-
-// حساب ميزان المراجعة
-const calculateTrialBalance = (ledgerAccounts) => {
-  const trialBalance = {
-    assets: [],
-    liabilities: [],
-    equity: [],
-    income: [],
-    expenses: [],
-    totals: {
-      debit: 0,
-      credit: 0,
-      balance: 0
-    }
-  };
-  
-  Object.values(ledgerAccounts).forEach(account => {
-    const accountData = {
-      accountId: account.accountId,
-      accountName: account.accountName,
-      debitBalance: account.debitBalance,
-      creditBalance: account.creditBalance,
-      balance: account.balance
-    };
-    
-    switch(account.accountType) {
-      case ACCOUNT_TYPES.ASSET:
-        trialBalance.assets.push(accountData);
-        break;
-      case ACCOUNT_TYPES.LIABILITY:
-        trialBalance.liabilities.push(accountData);
-        break;
-      case ACCOUNT_TYPES.EQUITY:
-        trialBalance.equity.push(accountData);
-        break;
-      case ACCOUNT_TYPES.INCOME:
-        trialBalance.income.push(accountData);
-        break;
-      case ACCOUNT_TYPES.EXPENSE:
-        trialBalance.expenses.push(accountData);
-        break;
-    }
-    
-    // حساب المجاميع
-    trialBalance.totals.debit += account.debitBalance;
-    trialBalance.totals.credit += account.creditBalance;
-  });
-  
-  trialBalance.totals.balance = Math.abs(trialBalance.totals.debit - trialBalance.totals.credit);
-  
-  return trialBalance;
-};
-
-// توليد القيود المحاسبية من المعاملات المالية
-const generateJournalEntriesFromTransactions = (transactions) => {
-  const journalEntries = [];
-  
-  transactions.forEach(transaction => {
-    let entries = [];
-    const date = transaction.date;
-    const description = transaction.description || transaction.category;
-    
-    if (transaction.type === 'income') {
-      // قيد الإيرادات: مدين الأصول (النقد/المحفظة)، دائن الإيرادات
-      const assetAccount = getAssetAccountId(transaction.method);
-      if (assetAccount) {
-        entries = [
-          { accountId: assetAccount, type: 'debit', amount: transaction.amount },
-          { accountId: getIncomeAccountId(transaction.category), type: 'credit', amount: transaction.amount }
-        ];
-      }
-    } else if (transaction.type === 'expense') {
-      // قيد المصروفات: مدين المصروفات، دائن الأصول (النقد/المحفظة)
-      const assetAccount = getAssetAccountId(transaction.method);
-      if (assetAccount) {
-        entries = [
-          { accountId: getExpenseAccountId(transaction.category), type: 'debit', amount: transaction.amount },
-          { accountId: assetAccount, type: 'credit', amount: transaction.amount }
-        ];
-      }
-    }
-    
-    if (entries.length > 0) {
-      try {
-        const journalEntry = createJournalEntry(entries, description, date, transaction.id);
-        journalEntries.push(journalEntry);
-      } catch (error) {
-        console.error('خطأ في توليد القيد المحاسبي:', error);
-      }
-    }
-  });
-  
-  return journalEntries;
-};
-
-// وظائف مساعدة للحسابات
-const getAssetAccountId = (method) => {
-  switch(method) {
-    case 'cash': return '1001';
-    case 'cib_savings': return '1002';
-    case 'aaib_savings': return '1003';
-    case 'fawry': return '1004';
-    case 'etisalat': return '1005';
-    case 'cib_card': return '1006';
-    case 'aaib_card': return '1007';
-    default: return '1001';
-  }
-};
-
-const getIncomeAccountId = (category) => {
-  switch(category) {
-    case 'راتب شهري': return '4001';
-    case 'عمل حر': return '4002';
-    case 'استثمارات': return '4003';
-    case 'عهدة شركة إيماك': return '4004';
-    case 'تحويلات واردة': return '4005';
-    default: return '4006';
-  }
-};
-
-const getExpenseAccountId = (category) => {
-  switch(category) {
-    case 'الالتزامات البنكية والتمويلية': return '5001';
-    case 'مصروفات المعيشة اليومية': return '5002';
-    case 'مسحوبات محل هاني': return '5003';
-    case 'الملابس والمستلزمات الشخصية': return '5004';
-    case 'الزكاة والتبرعات': return '5005';
-    case 'التعليم والدروس والأنشطة': return '5006';
-    case 'المصروفات النقدية الشهرية': return '5007';
-    case 'المرافق والخدمات – بولاق': return '5008';
-    case 'المرافق والخدمات – العبور': return '5009';
-    case 'الاتصالات وشحن الهواتف المحمولة': return '5010';
-    case 'الصحة والرعاية الطبية': return '5011';
-    case 'المستلزمات المنزلية والتموين': return '5012';
-    case 'اللحوم والدواجن والأسماك': return '5013';
-    case 'الطوارئ والاحتياطي النقدي': return '5014';
-    case 'الصيانة والإصلاحات المنزلية': return '5015';
-    case 'المواصلات والانتقالات': return '5016';
-    case 'الترفيه والمناسبات الاجتماعية': return '5017';
-    case 'مصاريف موسمية وسنوية': return '5018';
-    case 'شحن رصيد فوري': return '5019';
-    case 'شحن محفظة': return '5021';
-    case 'تحويلات': return '5022';
-    default: return '5020';
-  }
-};
-
-// ========== بقية الوظائف المساعدة ==========
-const escapeHtml = (unsafe) => {
-  if (typeof unsafe !== 'string') return unsafe;
-  return unsafe
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
-};
-
-const generateId = () => {
-  try {
-    return typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : null;
-  } catch (e) {
-    return null;
-  }
-};
-
-const getSafeId = () => {
-  const secureId = generateId();
-  if (secureId) return secureId;
-  return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-};
-
-const normalizeText = (text) => {
-  if (!text) return "";
-  return text.toString()
-    .replace(/[أإآ]/g, 'ا')
-    .replace(/ى/g, 'ي')
-    .replace(/ة/g, 'ه')
-    .replace(/[\u064B-\u065F]/g, '')
-    .trim()
-    .toLowerCase();
-};
-
-const getLocalISODate = () => {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const day = String(now.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-};
-
-const calculateDaysLeft = (targetDate) => {
-  if (!targetDate) return null;
-  try {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const target = new Date(targetDate);
-    target.setHours(0, 0, 0, 0);
-    const diffTime = target - today;
-    const days = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    return days;
-  } catch (error) {
-    console.error('Error calculating days left:', error);
-    return null;
-  }
-};
-
-const validateDate = (dateString) => {
-  if (!dateString) return false;
-  const date = new Date(dateString);
-  return date instanceof Date && !isNaN(date);
-};
-
 const STORAGE_KEY = 'finance_tracker_V52_ACCOUNTING';
 const MONTHS = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
 const OPENING_SAVINGS_JAN = 0;
 
-const getMonthIndex = (monthName) => {
-  return MONTHS.indexOf(monthName);
-};
+const getMonthIndex = (monthName) => MONTHS.indexOf(monthName);
 
 const CATEGORY_COLORS = {
   'راتب شهري': '#10b981', 'عمل حر': '#3b82f6', 'استثمارات': '#8b5cf6',
@@ -854,8 +472,7 @@ const CATEGORY_COLORS = {
   'المصروفات النقدية الشهرية': '#84cc16', 'المرافق والخدمات – بولاق': '#64748b',
   'المرافق والخدمات – العبور': '#0ea5e9', 'الاتصالات وشحن الهواتف المحمولة': '#eab308',
   'الصحة والرعاية الطبية': '#be123c', 'المستلزمات المنزلية والتموين': '#a855f7',
-  'اللحوم والدواجن والأسماك': '#be185d',
-  'الطوارئ والاحتياطي النقدي': '#dc2626',
+  'اللحوم والدواجن والأسماك': '#be185d', 'الطوارئ والاحتياطي النقدي': '#dc2626',
   'الصيانة والإصلاحات المنزلية': '#78716c', 'المواصلات والانتقالات': '#06b6d4',
   'الترفيه والمناسبات الاجتماعية': '#d946ef', 'مصاريف موسمية وسنوية': '#22c55e',
   'شحن رصيد فوري': '#eab308', 'أخرى': '#9ca3af', 'عهدة شركة إيماك': '#f59e0b',
@@ -873,31 +490,121 @@ const PAYMENT_METHODS = [
   { id: 'fawry', name: 'Fawry', label: 'فوري' },
 ];
 
-const CATEGORY_GROUPS = {
-  'income': {
-    'مصادر الدخل': ['راتب شهري', 'عمل حر', 'استثمارات'],
-    'تحويلات': ['عهدة شركة إيماك', 'تحويلات واردة', 'أخرى']
-  },
-  'expense': {
-    'أساسيات المعيشة': ['مصروفات المعيشة اليومية', 'المستلزمات المنزلية والتموين', 'اللحوم والدواجن والأسماك', 'الملابس والمستلزمات الشخصية', 'مسحوبات محل هاني'],
-    'فواتير وخدمات': ['الاتصالات وشحن الهواتف المحمولة', 'المرافق والخدمات – بولاق', 'المرافق والخدمات – العبور', 'شحن رصيد فوري', 'شحن محفظة', 'الصيانة والإصلاحات المنزلية'],
-    'التزامات شهرية': ['الالتزامات البنكية والتمويلية', 'التعليم والدروس والأنشطة', 'المصروفات النقدية الشهرية', 'الزكاة والتبرعات'],
-    'نقل وصحة وترفيه': ['الصحة والرعاية الطبية', 'المواصلات والانتقالات', 'الترفيه والمناسبات الاجتماعية', 'الطوارئ والاحتياطي النقدي', 'مصاريف موسمية وسنوية', 'أخرى'],
-    'تحويلات': ['تحويلات']
-  }
-};
-
 const CATEGORIES = {
   income: ['راتب شهري', 'عمل حر', 'استثمارات', 'عهدة شركة إيماك', 'تحويلات واردة', 'أخرى'],
-  expense: [ 'الالتزامات البنكية والتمويلية', 'مصروفات المعيشة اليومية', 'مسحوبات محل هاني', 'الملابس والمستلزمات الشخصية', 'الزكاة والتبرعات', 'التعليم والدروس والأنشطة', 'المصروفات النقدية الشهرية', 'شحن رصيد فوري', 'المرافق والخدمات – بولاق', 'المرافق والخدمات – العبور', 'الاتصالات وشحن الهواتف المحمولة', 'الصحة والرعاية الطبية', 'المستلزمات المنزلية والتموين', 'اللحوم والدواجن والأسماك', 'الطوارئ والاحتياطي النقدي', 'الصيانة والإصلاحات المنزلية', 'المواصلات والانتقالات', 'الترفيه والمناسبات الاجتماعية', 'مصاريف موسمية وسنوية', 'شحن محفظة', 'تحويلات', 'أخرى' ]
+  expense: [
+    'الالتزامات البنكية والتمويلية', 'مصروفات المعيشة اليومية', 'مسحوبات محل هاني', 
+    'الملابس والمستلزمات الشخصية', 'الزكاة والتبرعات', 'التعليم والدروس والأنشطة', 
+    'المصروفات النقدية الشهرية', 'شحن رصيد فوري', 'المرافق والخدمات – بولاق', 
+    'المرافق والخدمات – العبور', 'الاتصالات وشحن الهواتف المحمولة', 'الصحة والرعاية الطبية', 
+    'المستلزمات المنزلية والتموين', 'اللحوم والدواجن والأسماك', 'الطوارئ والاحتياطي النقدي', 
+    'الصيانة والإصلاحات المنزلية', 'المواصلات والانتقالات', 'الترفيه والمناسبات الاجتماعية', 
+    'مصاريف موسمية وسنوية', 'شحن محفظة', 'تحويلات', 'أخرى'
+  ]
 };
 
-// تعريف الأيقونات كعناصر React
-const IconWrapper = ({ icon: Icon, size = 24, className = '', ...props }) => {
-  return React.createElement('div', {
-    className: `flex items-center justify-center ${className}`,
-    ...props
-  }, React.createElement(Icon, { size }));
+// ========== هياكل البيانات المحاسبية ==========
+const ACCOUNT_TYPES = {
+  ASSET: 'asset',
+  LIABILITY: 'liability',
+  EQUITY: 'equity',
+  INCOME: 'income',
+  EXPENSE: 'expense'
+};
+
+const CHART_OF_ACCOUNTS = {
+  '1001': { id: '1001', name: 'النقدية في الصندوق', type: ACCOUNT_TYPES.ASSET, normalBalance: 'debit' },
+  '1002': { id: '1002', name: 'بنك CIB - حساب التوفير', type: ACCOUNT_TYPES.ASSET, normalBalance: 'debit' },
+  '1003': { id: '1003', name: 'بنك AAIB - حساب التوفير', type: ACCOUNT_TYPES.ASSET, normalBalance: 'debit' },
+  '1004': { id: '1004', name: 'محفظة فوري الإلكترونية', type: ACCOUNT_TYPES.ASSET, normalBalance: 'debit' },
+  '1005': { id: '1005', name: 'محفظة اتصالات كاش', type: ACCOUNT_TYPES.ASSET, normalBalance: 'debit' },
+  '2001': { id: '2001', name: 'قرض شخصي AAIB', type: ACCOUNT_TYPES.LIABILITY, normalBalance: 'credit' },
+  '2002': { id: '2002', name: 'مديونية مدرسة عبد الرحمن', type: ACCOUNT_TYPES.LIABILITY, normalBalance: 'credit' },
+  '3001': { id: '3001', name: 'رأس المال', type: ACCOUNT_TYPES.EQUITY, normalBalance: 'credit' },
+  '3002': { id: '3002', name: 'الأرباح المحتجزة', type: ACCOUNT_TYPES.EQUITY, normalBalance: 'credit' },
+  '4001': { id: '4001', name: 'الراتب الشهري', type: ACCOUNT_TYPES.INCOME, normalBalance: 'credit' },
+  '4002': { id: '4002', name: 'العمل الحر', type: ACCOUNT_TYPES.INCOME, normalBalance: 'credit' },
+  '5001': { id: '5001', name: 'الالتزامات البنكية والتمويلية', type: ACCOUNT_TYPES.EXPENSE, normalBalance: 'debit' },
+  '5002': { id: '5002', name: 'مصروفات المعيشة اليومية', type: ACCOUNT_TYPES.EXPENSE, normalBalance: 'debit' }
+};
+
+// ========== وظائف مساعدة ==========
+const getLocalISODate = () => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const generateId = () => `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+const getInitialData = () => {
+  const saved = localStorage.getItem(STORAGE_KEY);
+  if (saved) {
+    try {
+      return JSON.parse(saved);
+    } catch (e) {
+      console.error('Error parsing saved data:', e);
+    }
+  }
+  
+  return {
+    transactions: [],
+    closedMonths: [],
+    settings: {
+      currency: 'ج.م',
+      language: 'ar',
+      notifications: true
+    },
+    accounts: {
+      cash: { balance: 5000, name: 'النقدية' },
+      fawry: { balance: 1000, name: 'فوري' },
+      etisalat: { balance: 500, name: 'اتصالات' },
+      cib_savings: { balance: 15000, name: 'CIB توفير' },
+      aaib_savings: { balance: 8000, name: 'AAIB توفير' }
+    },
+    loans: [
+      {
+        id: 'loan_1',
+        name: 'قرض شخصي AAIB',
+        amount: 50000,
+        remaining: 45000,
+        interestRate: 12,
+        startDate: '2024-01-01',
+        endDate: '2025-01-01',
+        monthlyPayment: 4500,
+        status: 'active'
+      }
+    ],
+    budgets: {},
+    recurring: [],
+    notifications: []
+  };
+};
+
+// ========== وظائف محاسبية ==========
+const createJournalEntry = (entries, description, date, reference = '') => {
+  const totalDebit = entries.filter(e => e.type === 'debit').reduce((sum, e) => sum + e.amount, 0);
+  const totalCredit = entries.filter(e => e.type === 'credit').reduce((sum, e) => sum + e.amount, 0);
+  
+  if (Math.abs(totalDebit - totalCredit) > 0.01) {
+    throw new Error(`القيد غير متوازن! المدين: ${totalDebit}, الدائن: ${totalCredit}`);
+  }
+  
+  return {
+    id: `je_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+    date: date || getLocalISODate(),
+    description,
+    reference,
+    entries: entries.map(entry => ({
+      ...entry,
+      accountName: CHART_OF_ACCOUNTS[entry.accountId]?.name || 'غير معروف'
+    })),
+    createdAt: new Date().toISOString(),
+    totalDebit,
+    totalCredit
+  };
 };
 
 // ========== مكونات React ==========
@@ -925,7 +632,7 @@ class ErrorBoundary extends React.Component {
         React.createElement('div', {
           className: "w-24 h-24 bg-white/20 rounded-full flex items-center justify-center mb-6 animate-pulse backdrop-blur-sm"
         },
-          React.createElement(IconWrapper, { icon: 'AlertTriangle', size: 48 })
+          React.createElement('span', { className: "text-4xl" }, "⚠️")
         ),
         React.createElement('h1', { className: "text-3xl font-black mb-2" }, "عذراً، حدث خطأ تقني"),
         React.createElement('p', { className: "mb-6 max-w-md text-sm opacity-90" }, "يبدو أن هناك مشكلة في تحميل التطبيق. يرجى المحاولة مرة أخرى."),
@@ -934,7 +641,7 @@ class ErrorBoundary extends React.Component {
             onClick: () => window.location.reload(),
             className: "gradient-bg-primary text-white px-8 py-4 rounded-2xl font-bold shadow-hard hover:shadow-neon transition-all flex items-center gap-2"
           },
-            React.createElement(IconWrapper, { icon: 'RefreshCcw', size: 20 }),
+            React.createElement('span', null, "🔄"),
             " إعادة التحميل"
           ),
           React.createElement('button', {
@@ -944,7 +651,7 @@ class ErrorBoundary extends React.Component {
             },
             className: "bg-red-500 hover:bg-red-600 text-white px-8 py-4 rounded-2xl font-bold shadow-hard hover:shadow-neon transition-all flex items-center gap-2"
           },
-            React.createElement(IconWrapper, { icon: 'Trash2', size: 20 }),
+            React.createElement('span', null, "🗑️"),
             " مسح الذاكرة المحلية"
           )
         )
@@ -954,153 +661,160 @@ class ErrorBoundary extends React.Component {
   }
 }
 
-const AccountingLedgerView = React.memo(({
-  ledgerAccounts,
-  journalEntries,
-  trialBalance,
-  onExportReport
-}) => {
+// مكون الأيقونة
+const Icon = ({ name, size = 24, className = '', ...props }) => {
+  const icons = {
+    Wallet: '👛', LayoutDashboard: '📊', CreditCard: '💳', Banknote: '💰',
+    Plus: '➕', Trash2: '🗑️', TrendingUp: '📈', TrendingDown: '📉',
+    Calendar: '📅', ArrowUpRight: '↗️', ArrowDownLeft: '↙️', Edit: '✏️',
+    X: '✕', Save: '💾', ShoppingBag: '🛍️', Smartphone: '📱',
+    Store: '🏪', ArrowRightLeft: '🔄', Layers: '📚', ArrowRight: '→',
+    Printer: '🖨️', ChevronRight: '›', ChevronDown: '⌄', Calculator: '🧮',
+    ArrowUp: '↑', Undo2: '↶', Redo2: '↷', FileJson: '📄',
+    LogOut: '🚪', Lock: '🔒', Unlock: '🔓', Moon: '🌙',
+    Sun: '☀️', ShieldCheck: '✅', Repeat: '🔁', RefreshCw: '🔄',
+    Search: '🔍', FileSpreadsheet: '📋', Settings: '⚙️', Target: '🎯',
+    CalendarDays: '📅', BarChart3: '📊', Bell: '🔔', Copy: '📋',
+    Sparkles: '✨', Bot: '🤖', MessageSquare: '💬', Send: '📤',
+    AlertTriangle: '⚠️', Clock: '⏰', CheckCircle2: '✅', Zap: '⚡',
+    Tag: '🏷️', FileText: '📝', Hash: '#', Coins: '🪙',
+    Landmark: '🏦', Circle: '●', Percent: '%', BellRing: '🔔',
+    Filter: '🔍', Eye: '👁️', EyeOff: '🙈', ShieldAlert: '⚠️',
+    Download: '📥', Upload: '📤', RefreshCcw: '🔄', Signal: '📶',
+    Home: '🏠', Menu: '☰', PiggyBank: '🐷', BuildingBank: '🏦',
+    ArrowDownCircle: '⬇️', ArrowUpCircle: '⬆️', Wifi: '📶', Trophy: '🏆',
+    PendingCircle: '⏳', BookOpen: '📖', Scale: '⚖️', Receipt: '🧾',
+    Profit: '📈', Loss: '📉', FileBarChart: '📊'
+  };
+  
+  return React.createElement('span', {
+    className: `inline-flex items-center justify-center ${className}`,
+    style: { fontSize: size },
+    ...props
+  }, icons[name] || '□');
+};
+
+// مكون الحقل الإدخال
+const InputField = ({ label, type = 'text', value, onChange, placeholder, className = '', ...props }) => {
+  return React.createElement('div', { className: `space-y-2 ${className}` },
+    label && React.createElement('label', { className: "text-sm font-medium text-slate-700 dark:text-slate-300" }, label),
+    React.createElement('input', {
+      type,
+      value,
+      onChange,
+      placeholder,
+      className: "input-field",
+      ...props
+    })
+  );
+};
+
+// مكون البطاقة الإحصائية
+const StatCard = ({ title, value, icon, color = 'primary', trend, className = '' }) => {
+  const colorClasses = {
+    primary: 'border-l-primary text-primary',
+    success: 'border-l-success text-success',
+    danger: 'border-l-danger text-danger',
+    warning: 'border-l-warning text-warning',
+    info: 'border-l-info text-info'
+  };
+
+  return React.createElement('div', {
+    className: `stat-card ${colorClasses[color]} ${className}`
+  },
+    React.createElement('div', { className: "flex justify-between items-start" },
+      React.createElement('div', null,
+        React.createElement('p', { className: "text-sm text-slate-500 dark:text-slate-400 mb-1" }, title),
+        React.createElement('p', { className: "text-2xl font-black" }, value)
+      ),
+      icon && React.createElement('div', {
+        className: `p-3 rounded-xl bg-${color}-100 dark:bg-${color}-900/20`
+      },
+        React.createElement(Icon, { name: icon, size: 24 })
+      )
+    ),
+    trend && React.createElement('div', { className: "mt-2 flex items-center gap-1" },
+      React.createElement(Icon, { name: trend > 0 ? 'TrendingUp' : 'TrendingDown', size: 16 }),
+      React.createElement('span', { className: `text-xs font-bold ${trend > 0 ? 'text-success' : 'text-danger'}` },
+        `${trend > 0 ? '+' : ''}${trend}%`
+      )
+    )
+  );
+};
+
+// مكون دفتر الأستاذ المحاسبي
+const AccountingLedgerView = ({ ledgerAccounts = {}, journalEntries = [], onExport }) => {
   const [activeTab, setActiveTab] = useState('ledger');
   const [selectedAccount, setSelectedAccount] = useState(null);
   const [dateRange, setDateRange] = useState({
     start: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0],
-    end: new Date().toISOString().split('T')[0]
+    end: getLocalISODate()
   });
 
-  // حساب إجمالي الأصول
-  const totalAssets = useMemo(() => {
-    return Object.values(ledgerAccounts)
-      .filter(account => account.accountType === ACCOUNT_TYPES.ASSET)
-      .reduce((sum, account) => sum + (account.balance || 0), 0);
+  // حساب الإحصائيات
+  const stats = useMemo(() => {
+    const accounts = Object.values(ledgerAccounts);
+    return {
+      totalAssets: accounts.filter(a => a.accountType === ACCOUNT_TYPES.ASSET)
+        .reduce((sum, a) => sum + (a.balance || 0), 0),
+      totalLiabilities: accounts.filter(a => a.accountType === ACCOUNT_TYPES.LIABILITY)
+        .reduce((sum, a) => sum + (a.balance || 0), 0),
+      netIncome: accounts.filter(a => a.accountType === ACCOUNT_TYPES.INCOME)
+        .reduce((sum, a) => sum + (a.balance || 0), 0) -
+        accounts.filter(a => a.accountType === ACCOUNT_TYPES.EXPENSE)
+        .reduce((sum, a) => sum + (a.balance || 0), 0)
+    };
   }, [ledgerAccounts]);
 
-  // حساب إجمالي الخصوم وحقوق الملكية
-  const totalLiabilitiesEquity = useMemo(() => {
-    const liabilities = Object.values(ledgerAccounts)
-      .filter(account => account.accountType === ACCOUNT_TYPES.LIABILITY)
-      .reduce((sum, account) => sum + (account.balance || 0), 0);
+  const renderLedgerTable = () => {
+    const accounts = Object.values(ledgerAccounts).sort((a, b) => a.accountId.localeCompare(b.accountId));
     
-    const equity = Object.values(ledgerAccounts)
-      .filter(account => account.accountType === ACCOUNT_TYPES.EQUITY)
-      .reduce((sum, account) => sum + (account.balance || 0), 0);
-    
-    return liabilities + equity;
-  }, [ledgerAccounts]);
-
-  // حساب صافي الدخل
-  const netIncome = useMemo(() => {
-    const totalIncome = Object.values(ledgerAccounts)
-      .filter(account => account.accountType === ACCOUNT_TYPES.INCOME)
-      .reduce((sum, account) => sum + (account.balance || 0), 0);
-    
-    const totalExpenses = Object.values(ledgerAccounts)
-      .filter(account => account.accountType === ACCOUNT_TYPES.EXPENSE)
-      .reduce((sum, account) => sum + (account.balance || 0), 0);
-    
-    return totalIncome - totalExpenses;
-  }, [ledgerAccounts]);
-
-  // تصدير تقرير القيود اليومية
-  const exportJournalEntries = () => {
-    const csvContent = [
-      ['تاريخ القيد', 'رقم القيد', 'الوصف', 'الحساب المدين', 'المدين', 'الحساب الدائن', 'الدائن'],
-      ...journalEntries.map(je => [
-        je.date,
-        je.id,
-        je.description,
-        je.entries.find(e => e.type === 'debit')?.accountName || '',
-        je.entries.find(e => e.type === 'debit')?.amount || 0,
-        je.entries.find(e => e.type === 'credit')?.accountName || '',
-        je.entries.find(e => e.type === 'credit')?.amount || 0
-      ])
-    ].map(row => row.join(',')).join('\n');
-    
-    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `journal_entries_${new Date().toISOString().split('T')[0]}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  // تصدير ميزان المراجعة
-  const exportTrialBalance = () => {
-    const csvContent = [
-      ['رقم الحساب', 'اسم الحساب', 'مدين', 'دائن', 'الرصيد'],
-      ...Object.values(ledgerAccounts).map(account => [
-        account.accountId,
-        account.accountName,
-        account.debitBalance,
-        account.creditBalance,
-        account.balance
-      ])
-    ].map(row => row.join(',')).join('\n');
-    
-    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `trial_balance_${new Date().toISOString().split('T')[0]}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  // عرض دفتر الأستاذ لحساب محدد
-  const renderLedgerAccount = (account) => {
-    const openingBalance = 0;
-    
-    return React.createElement('div', { className: "ledger-account", key: account.accountId },
-      React.createElement('div', { className: "flex justify-between items-center mb-4" },
-        React.createElement('div', null,
-          React.createElement('h4', { className: "font-bold text-lg" }, account.accountName),
-          React.createElement('p', { className: "text-sm text-slate-500" }, `رقم الحساب: ${account.accountId}`)
+    return React.createElement('div', { className: "overflow-x-auto" },
+      React.createElement('table', { className: "w-full text-sm" },
+        React.createElement('thead', null,
+          React.createElement('tr', { className: "bg-slate-50 dark:bg-slate-800" },
+            React.createElement('th', { className: "p-3 text-right" }, "رقم الحساب"),
+            React.createElement('th', { className: "p-3 text-right" }, "اسم الحساب"),
+            React.createElement('th', { className: "p-3 text-right" }, "نوع الحساب"),
+            React.createElement('th', { className: "p-3 text-right" }, "مدين"),
+            React.createElement('th', { className: "p-3 text-right" }, "دائن"),
+            React.createElement('th', { className: "p-3 text-right" }, "الرصيد")
+          )
         ),
-        React.createElement('div', { 
-          className: `text-lg font-black ${account.balance >= 0 ? 'text-emerald-600' : 'text-red-600'}` 
-        }, `${account.balance.toLocaleString()} ج.م`)
-      ),
-      
-      React.createElement('div', { className: "overflow-x-auto" },
-        React.createElement('table', { className: "w-full text-sm" },
-          React.createElement('thead', null,
-            React.createElement('tr', { className: "bg-slate-50 dark:bg-slate-800" },
-              React.createElement('th', { className: "p-2" }, "التاريخ"),
-              React.createElement('th', { className: "p-2" }, "الوصف"),
-              React.createElement('th', { className: "p-2 text-center" }, "مدين"),
-              React.createElement('th', { className: "p-2 text-center" }, "دائن"),
-              React.createElement('th', { className: "p-2 text-center" }, "الرصيد")
-            )
-          ),
-          React.createElement('tbody', null,
-            React.createElement('tr', { className: "border-b border-slate-200" },
-              React.createElement('td', { className: "p-2" }, dateRange.start),
-              React.createElement('td', { className: "p-2" }, "رصيد افتتاحي"),
-              React.createElement('td', { className: "p-2 text-center text-emerald-600" },
-                account.normalBalance === 'debit' ? openingBalance.toLocaleString() : '-'
+        React.createElement('tbody', null,
+          accounts.map(account => 
+            React.createElement('tr', {
+              key: account.accountId,
+              className: "border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer",
+              onClick: () => setSelectedAccount(account)
+            },
+              React.createElement('td', { className: "p-3 font-mono" }, account.accountId),
+              React.createElement('td', { className: "p-3" }, account.accountName),
+              React.createElement('td', { className: "p-3" },
+                React.createElement('span', {
+                  className: `px-2 py-1 rounded text-xs ${
+                    account.accountType === ACCOUNT_TYPES.ASSET ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400' :
+                    account.accountType === ACCOUNT_TYPES.LIABILITY ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400' :
+                    account.accountType === ACCOUNT_TYPES.EQUITY ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400' :
+                    account.accountType === ACCOUNT_TYPES.INCOME ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400' :
+                    'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400'
+                  }`
+                }, account.accountType)
               ),
-              React.createElement('td', { className: "p-2 text-center text-red-600" },
-                account.normalBalance === 'credit' ? openingBalance.toLocaleString() : '-'
+              React.createElement('td', { className: "p-3 text-emerald-600 font-bold" },
+                account.debitBalance?.toLocaleString() || '0'
               ),
-              React.createElement('td', { className: "p-2 text-center font-bold" }, openingBalance.toLocaleString())
-            ),
-            
-            ...account.transactions?.map((transaction, index) => 
-              React.createElement('tr', { key: transaction.id, className: "border-b border-slate-100" },
-                React.createElement('td', { className: "p-2" }, transaction.date),
-                React.createElement('td', { className: "p-2" }, transaction.description),
-                React.createElement('td', { className: "p-2 text-center text-emerald-600" },
-                  transaction.debit > 0 ? transaction.debit.toLocaleString() : '-'
-                ),
-                React.createElement('td', { className: "p-2 text-center text-red-600" },
-                  transaction.credit > 0 ? transaction.credit.toLocaleString() : '-'
-                ),
-                React.createElement('td', { className: "p-2 text-center font-bold" },
-                  (openingBalance + account.transactions
-                    .slice(0, index + 1)
-                    .reduce((sum, t) => sum + t.debit - t.credit, 0)).toLocaleString()
-                )
-              )
+              React.createElement('td', { className: "p-3 text-red-600 font-bold" },
+                account.creditBalance?.toLocaleString() || '0'
+              ),
+              React.createElement('td', {
+                className: `p-3 font-bold ${
+                  (account.normalBalance === 'debit' && account.balance >= 0) ||
+                  (account.normalBalance === 'credit' && account.balance >= 0)
+                    ? 'text-emerald-600'
+                    : 'text-red-600'
+                }`
+              }, (account.balance || 0).toLocaleString())
             )
           )
         )
@@ -1108,526 +822,1530 @@ const AccountingLedgerView = React.memo(({
     );
   };
 
+  const renderJournalEntries = () => {
+    return React.createElement('div', { className: "space-y-4" },
+      journalEntries.map(entry => 
+        React.createElement('div', {
+          key: entry.id,
+          className: "journal-entry bg-white dark:bg-slate-800/50 rounded-xl p-4 shadow-sm"
+        },
+          React.createElement('div', { className: "flex justify-between items-center mb-3" },
+            React.createElement('div', null,
+              React.createElement('span', { className: "font-bold" }, entry.date),
+              React.createElement('span', { className: "text-sm text-slate-500 mr-3" }, ` - ${entry.description}`)
+            ),
+            React.createElement('span', { className: "text-xs text-slate-500" }, `#${entry.id.substring(0, 8)}`)
+          ),
+          
+          React.createElement('div', { className: "grid grid-cols-2 gap-4" },
+            React.createElement('div', null,
+              React.createElement('div', { className: "font-bold mb-2 text-emerald-600" }, "مدين"),
+              ...entry.entries.filter(e => e.type === 'debit').map(e =>
+                React.createElement('div', {
+                  key: e.accountId,
+                  className: "flex justify-between mb-1"
+                },
+                  React.createElement('span', null, e.accountName),
+                  React.createElement('span', { className: "font-bold" }, `${e.amount.toLocaleString()} ج.م`)
+                )
+              )
+            ),
+            React.createElement('div', null,
+              React.createElement('div', { className: "font-bold mb-2 text-red-600" }, "دائن"),
+              ...entry.entries.filter(e => e.type === 'credit').map(e =>
+                React.createElement('div', {
+                  key: e.accountId,
+                  className: "flex justify-between mb-1"
+                },
+                  React.createElement('span', null, e.accountName),
+                  React.createElement('span', { className: "font-bold" }, `${e.amount.toLocaleString()} ج.م`)
+                )
+              )
+            )
+          ),
+          
+          React.createElement('div', { className: "flex justify-between mt-3 pt-3 border-t border-slate-200 dark:border-slate-700" },
+            React.createElement('span', { className: "font-bold text-emerald-600" },
+              `إجمالي المدين: ${entry.totalDebit.toLocaleString()} ج.م`
+            ),
+            React.createElement('span', { className: "font-bold text-red-600" },
+              `إجمالي الدائن: ${entry.totalCredit.toLocaleString()} ج.م`
+            )
+          )
+        )
+      )
+    );
+  };
+
+  const renderAccountDetails = (account) => {
+    if (!account) return null;
+    
+    return React.createElement('div', { className: "fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" },
+      React.createElement('div', {
+        className: "glass rounded-2xl p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+      },
+        React.createElement('div', { className: "flex justify-between items-center mb-6" },
+          React.createElement('div', null,
+            React.createElement('h3', { className: "text-xl font-bold" }, account.accountName),
+            React.createElement('p', { className: "text-sm text-slate-500" }, `رقم الحساب: ${account.accountId}`)
+          ),
+          React.createElement('button', {
+            onClick: () => setSelectedAccount(null),
+            className: "p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800"
+          },
+            React.createElement(Icon, { name: 'X', size: 20 })
+          )
+        ),
+        
+        React.createElement('div', { className: "grid grid-cols-2 gap-4 mb-6" },
+          React.createElement(StatCard, {
+            title: "رصيد المدين",
+            value: `${(account.debitBalance || 0).toLocaleString()} ج.م`,
+            icon: 'TrendingUp',
+            color: 'success'
+          }),
+          React.createElement(StatCard, {
+            title: "رصيد الدائن",
+            value: `${(account.creditBalance || 0).toLocaleString()} ج.م`,
+            icon: 'TrendingDown',
+            color: 'danger'
+          })
+        ),
+        
+        account.transactions && account.transactions.length > 0 && 
+          React.createElement('div', null,
+            React.createElement('h4', { className: "font-bold mb-4" }, "الحركات"),
+            React.createElement('div', { className: "space-y-2" },
+              account.transactions.map(transaction =>
+                React.createElement('div', {
+                  key: transaction.id,
+                  className: "p-3 rounded-lg bg-slate-50 dark:bg-slate-800/50"
+                },
+                  React.createElement('div', { className: "flex justify-between items-center" },
+                    React.createElement('span', { className: "font-medium" }, transaction.date),
+                    React.createElement('span', { className: "font-bold" }, transaction.description)
+                  ),
+                  React.createElement('div', { className: "flex justify-between mt-2" },
+                    transaction.debit > 0 && 
+                      React.createElement('span', { className: "text-emerald-600 font-bold" },
+                        `مدين: ${transaction.debit.toLocaleString()} ج.م`
+                      ),
+                    transaction.credit > 0 && 
+                      React.createElement('span', { className: "text-red-600 font-bold" },
+                        `دائن: ${transaction.credit.toLocaleString()} ج.م`
+                      )
+                  )
+                )
+              )
+            )
+          )
+      )
+    );
+  };
+
   return React.createElement('div', { className: "space-y-6 animate-fadeIn" },
     // شريط التحكم
-    React.createElement('div', { className: "glass p-4 rounded-2xl flex flex-wrap gap-4 items-center" },
+    React.createElement('div', { className: "glass p-4 rounded-2xl flex flex-wrap gap-4 items-center justify-between" },
       React.createElement('div', { className: "flex gap-2" },
-        React.createElement('button', {
-          type: "button",
-          onClick: () => setActiveTab('ledger'),
-          className: `px-4 py-2 rounded-xl font-bold ${activeTab === 'ledger' ? 'gradient-bg-primary text-white' : 'bg-slate-100 dark:bg-slate-800'}`
-        },
-          React.createElement(IconWrapper, { icon: 'BookOpen', size: 16, className: "inline ml-2" }),
-          " دفتر الأستاذ"
-        ),
-        React.createElement('button', {
-          type: "button",
-          onClick: () => setActiveTab('journal'),
-          className: `px-4 py-2 rounded-xl font-bold ${activeTab === 'journal' ? 'gradient-bg-primary text-white' : 'bg-slate-100 dark:bg-slate-800'}`
-        },
-          React.createElement(IconWrapper, { icon: 'Receipt', size: 16, className: "inline ml-2" }),
-          " القيود اليومية"
-        ),
-        React.createElement('button', {
-          type: "button",
-          onClick: () => setActiveTab('trial'),
-          className: `px-4 py-2 rounded-xl font-bold ${activeTab === 'trial' ? 'gradient-bg-primary text-white' : 'bg-slate-100 dark:bg-slate-800'}`
-        },
-          React.createElement(IconWrapper, { icon: 'Scale', size: 16, className: "inline ml-2" }),
-          " ميزان المراجعة"
-        ),
-        React.createElement('button', {
-          type: "button",
-          onClick: () => setActiveTab('reports'),
-          className: `px-4 py-2 rounded-xl font-bold ${activeTab === 'reports' ? 'gradient-bg-primary text-white' : 'bg-slate-100 dark:bg-slate-800'}`
-        },
-          React.createElement(IconWrapper, { icon: 'FileBarChart', size: 16, className: "inline ml-2" }),
-          " التقارير المالية"
+        ['ledger', 'journal', 'reports'].map(tab =>
+          React.createElement('button', {
+            key: tab,
+            type: "button",
+            onClick: () => setActiveTab(tab),
+            className: `px-4 py-2 rounded-xl font-bold flex items-center gap-2 ${
+              activeTab === tab 
+                ? 'gradient-bg-primary text-white' 
+                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+            }` 
+          },
+            React.createElement(Icon, { 
+              name: tab === 'ledger' ? 'BookOpen' : tab === 'journal' ? 'Receipt' : 'FileBarChart',
+              size: 16 
+            }),
+            tab === 'ledger' ? 'دفتر الأستاذ' : 
+            tab === 'journal' ? 'القيود اليومية' : 'التقارير'
+          )
         )
       ),
       
-      React.createElement('div', { className: "flex-1" }),
-      
-      React.createElement('div', { className: "flex gap-2" },
+      React.createElement('div', { className: "flex gap-4" },
         React.createElement('input', {
           type: "date",
           value: dateRange.start,
-          onChange: (e) => setDateRange({...dateRange, start: e.target.value}),
+          onChange: (e) => setDateRange(prev => ({ ...prev, start: e.target.value })),
           className: "bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm"
         }),
         React.createElement('span', { className: "self-center" }, "إلى"),
         React.createElement('input', {
           type: "date",
           value: dateRange.end,
-          onChange: (e) => setDateRange({...dateRange, end: e.target.value}),
+          onChange: (e) => setDateRange(prev => ({ ...prev, end: e.target.value })),
           className: "bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm"
         })
       )
     ),
 
-    // بطاقات النتائج السريعة
-    React.createElement('div', { className: "grid grid-cols-1 md:grid-cols-4 gap-4" },
-      React.createElement('div', { className: "glass p-4 rounded-2xl border-r-4 border-blue-500" },
-        React.createElement('p', { className: "text-sm text-slate-500 mb-2" }, "إجمالي الأصول"),
-        React.createElement('p', { className: "text-2xl font-black text-blue-600" }, `${totalAssets.toLocaleString()} ج.م`)
-      ),
-      React.createElement('div', { className: "glass p-4 rounded-2xl border-r-4 border-red-500" },
-        React.createElement('p', { className: "text-sm text-slate-500 mb-2" }, "إجمالي الخصوم"),
-        React.createElement('p', { className: "text-2xl font-black text-red-600" },
-          `${Object.values(ledgerAccounts)
-            .filter(a => a.accountType === ACCOUNT_TYPES.LIABILITY)
-            .reduce((sum, a) => sum + a.balance, 0)
-            .toLocaleString()} ج.م`
-        )
-      ),
-      React.createElement('div', { className: "glass p-4 rounded-2xl border-r-4 border-emerald-500" },
-        React.createElement('p', { className: "text-sm text-slate-500 mb-2" }, "صافي الدخل"),
-        React.createElement('p', { 
-          className: `text-2xl font-black ${netIncome >= 0 ? 'text-emerald-600' : 'text-red-600'}` 
-        }, `${netIncome.toLocaleString()} ج.م`)
-      ),
-      React.createElement('div', { className: "glass p-4 rounded-2xl border-r-4 border-purple-500" },
-        React.createElement('p', { className: "text-sm text-slate-500 mb-2" }, "توازن الميزانية"),
-        React.createElement('p', { 
-          className: `text-2xl font-black ${Math.abs(totalAssets - totalLiabilitiesEquity) < 0.01 ? 'text-emerald-600' : 'text-red-600'}` 
-        }, Math.abs(totalAssets - totalLiabilitiesEquity) < 0.01 ? 'متوازنة ✓' : 'غير متوازنة ✗')
-      )
+    // الإحصائيات
+    React.createElement('div', { className: "grid grid-cols-1 md:grid-cols-3 gap-4" },
+      React.createElement(StatCard, {
+        title: "إجمالي الأصول",
+        value: `${stats.totalAssets.toLocaleString()} ج.م`,
+        icon: 'TrendingUp',
+        color: 'success'
+      }),
+      React.createElement(StatCard, {
+        title: "إجمالي الخصوم",
+        value: `${stats.totalLiabilities.toLocaleString()} ج.م`,
+        icon: 'TrendingDown',
+        color: 'danger'
+      }),
+      React.createElement(StatCard, {
+        title: "صافي الدخل",
+        value: `${stats.netIncome.toLocaleString()} ج.م`,
+        icon: 'Profit',
+        color: stats.netIncome >= 0 ? 'success' : 'danger'
+      })
     ),
 
-    // محتوى التبويب النشط
-    activeTab === 'ledger' && React.createElement('div', { className: "space-y-4" },
-      React.createElement('div', { className: "flex justify-between items-center" },
-        React.createElement('h3', { className: "text-lg font-bold" }, "دفتر الأستاذ العام"),
-        React.createElement('button', {
-          type: "button",
-          onClick: exportTrialBalance,
-          className: "gradient-bg-primary text-white px-4 py-2 rounded-xl text-sm font-bold"
-        },
-          React.createElement(IconWrapper, { icon: 'Download', size: 16, className: "inline ml-2" }),
-          " تصدير دفتر الأستاذ"
-        )
-      ),
-      
-      React.createElement('div', { className: "grid grid-cols-1 lg:grid-cols-2 gap-4" },
-        ...Object.values(ledgerAccounts)
-          .sort((a, b) => a.accountId.localeCompare(b.accountId))
-          .map(account => renderLedgerAccount(account))
-      )
-    ),
-
-    activeTab === 'journal' && React.createElement('div', { className: "space-y-4" },
-      React.createElement('div', { className: "flex justify-between items-center" },
-        React.createElement('h3', { className: "text-lg font-bold" }, "سجل القيود اليومية"),
-        React.createElement('button', {
-          type: "button",
-          onClick: exportJournalEntries,
-          className: "gradient-bg-primary text-white px-4 py-2 rounded-xl text-sm font-bold"
-        },
-          React.createElement(IconWrapper, { icon: 'Download', size: 16, className: "inline ml-2" }),
-          " تصدير القيود"
-        )
-      ),
-      
+    // المحتوى الرئيسي
+    activeTab === 'ledger' && 
       React.createElement('div', { className: "space-y-4" },
-        ...journalEntries.map(entry => 
-          React.createElement('div', { key: entry.id, className: "journal-entry" },
-            React.createElement('div', { className: "flex justify-between items-center mb-3" },
-              React.createElement('div', null,
-                React.createElement('span', { className: "font-bold" }, entry.date),
-                React.createElement('span', { className: "text-sm text-slate-500 mr-3" }, ` - ${entry.description}`)
-              ),
-              React.createElement('span', { className: "text-sm text-slate-500" }, `رقم القيد: ${entry.id.substring(0, 8)}`)
-            ),
-            
-            React.createElement('div', { className: "accounting-grid" },
-              React.createElement('div', { className: "debit-column" },
-                React.createElement('div', { className: "font-bold mb-2" }, "مدين"),
-                ...entry.entries
-                  .filter(e => e.type === 'debit')
-                  .map(e => 
-                    React.createElement('div', { key: e.accountId, className: "flex justify-between mb-1" },
-                      React.createElement('span', null, e.accountName),
-                      React.createElement('span', { className: "font-bold" }, `${e.amount.toLocaleString()} ج.م`)
-                    )
-                  )
-              ),
-              
-              React.createElement('div', { className: "credit-column" },
-                React.createElement('div', { className: "font-bold mb-2" }, "دائن"),
-                ...entry.entries
-                  .filter(e => e.type === 'credit')
-                  .map(e => 
-                    React.createElement('div', { key: e.accountId, className: "flex justify-between mb-1" },
-                      React.createElement('span', null, e.accountName),
-                      React.createElement('span', { className: "font-bold" }, `${e.amount.toLocaleString()} ج.م`)
-                    )
-                  )
-              )
-            ),
-            
-            React.createElement('div', { className: "flex justify-between mt-3 pt-3 border-t border-slate-200" },
-              React.createElement('span', { className: "font-bold text-emerald-600" },
-                `إجمالي المدين: ${entry.totalDebit.toLocaleString()} ج.م`
-              ),
-              React.createElement('span', { className: "font-bold text-red-600" },
-                `إجمالي الدائن: ${entry.totalCredit.toLocaleString()} ج.م`
-              )
-            )
+        React.createElement('div', { className: "flex justify-between items-center" },
+          React.createElement('h3', { className: "text-lg font-bold" }, "دفتر الأستاذ العام"),
+          React.createElement('button', {
+            type: "button",
+            onClick: onExport,
+            className: "gradient-bg-primary text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2"
+          },
+            React.createElement(Icon, { name: 'Download', size: 16 }),
+            "تصدير البيانات"
           )
-        )
-      )
-    ),
+        ),
+        renderLedgerTable()
+      ),
 
-    activeTab === 'trial' && React.createElement('div', { className: "space-y-4" },
-      React.createElement('h3', { className: "text-lg font-bold" }, "ميزان المراجعة"),
-      
-      React.createElement('div', { className: "overflow-x-auto" },
-        React.createElement('table', { className: "w-full text-sm" },
-          React.createElement('thead', null,
-            React.createElement('tr', { className: "bg-slate-50 dark:bg-slate-800" },
-              React.createElement('th', { className: "p-3" }, "رقم الحساب"),
-              React.createElement('th', { className: "p-3" }, "اسم الحساب"),
-              React.createElement('th', { className: "p-3 text-center" }, "مدين"),
-              React.createElement('th', { className: "p-3 text-center" }, "دائن"),
-              React.createElement('th', { className: "p-3 text-center" }, "الرصيد"),
-              React.createElement('th', { className: "p-3" }, "نوع الحساب")
+    activeTab === 'journal' &&
+      React.createElement('div', { className: "space-y-4" },
+        React.createElement('h3', { className: "text-lg font-bold" }, "سجل القيود اليومية"),
+        journalEntries.length > 0 
+          ? renderJournalEntries()
+          : React.createElement('div', { className: "text-center py-12 text-slate-500" },
+              React.createElement(Icon, { name: 'FileText', size: 48, className: "mx-auto mb-4 opacity-50" }),
+              React.createElement('p', null, "لا توجد قيود محاسبية مسجلة بعد")
             )
-          ),
-          React.createElement('tbody', null,
-            ...Object.values(ledgerAccounts)
-              .sort((a, b) => a.accountId.localeCompare(b.accountId))
-              .map(account => 
-                React.createElement('tr', { key: account.accountId, className: "border-b border-slate-100" },
-                  React.createElement('td', { className: "p-3 font-mono" }, account.accountId),
-                  React.createElement('td', { className: "p-3" }, account.accountName),
-                  React.createElement('td', { 
-                    className: "p-3 text-center text-emerald-600" 
-                  }, account.debitBalance > 0 ? account.debitBalance.toLocaleString() : '-'),
-                  React.createElement('td', { 
-                    className: "p-3 text-center text-red-600" 
-                  }, account.creditBalance > 0 ? account.creditBalance.toLocaleString() : '-'),
-                  React.createElement('td', { 
-                    className: "p-3 text-center font-bold" 
-                  }, account.balance.toLocaleString()),
-                  React.createElement('td', { className: "p-3" },
-                    React.createElement('span', { 
-                      className: `px-2 py-1 rounded text-xs ${
-                        account.accountType === ACCOUNT_TYPES.ASSET ? 'bg-blue-100 text-blue-800' :
-                        account.accountType === ACCOUNT_TYPES.LIABILITY ? 'bg-red-100 text-red-800' :
-                        account.accountType === ACCOUNT_TYPES.EQUITY ? 'bg-purple-100 text-purple-800' :
-                        account.accountType === ACCOUNT_TYPES.INCOME ? 'bg-emerald-100 text-emerald-800' :
-                        'bg-amber-100 text-amber-800'
-                      }`
-                    }, account.accountType)
-                  )
+      ),
+
+    activeTab === 'reports' &&
+      React.createElement('div', { className: "space-y-6" },
+        React.createElement('h3', { className: "text-lg font-bold" }, "التقارير المالية"),
+        React.createElement('div', { className: "grid grid-cols-1 lg:grid-cols-2 gap-6" },
+          // قائمة الدخل
+          React.createElement('div', { className: "glass p-6 rounded-2xl" },
+            React.createElement('h4', { className: "font-bold text-lg mb-4 flex items-center gap-2" },
+              React.createElement(Icon, { name: 'Profit', size: 20, className: "text-emerald-600" }),
+              "قائمة الدخل"
+            ),
+            React.createElement('div', { className: "space-y-4" },
+              React.createElement('div', null,
+                React.createElement('h5', { className: "font-bold text-emerald-700 mb-2" }, "الإيرادات"),
+                React.createElement('div', { className: "space-y-2" },
+                  Object.values(ledgerAccounts)
+                    .filter(a => a.accountType === ACCOUNT_TYPES.INCOME && a.balance > 0)
+                    .map(account =>
+                      React.createElement('div', {
+                        key: account.accountId,
+                        className: "flex justify-between"
+                      },
+                        React.createElement('span', null, account.accountName),
+                        React.createElement('span', { className: "font-bold text-emerald-600" },
+                          `${account.balance.toLocaleString()} ج.م`
+                        )
+                      )
+                    )
+                )
+              ),
+              React.createElement('div', null,
+                React.createElement('h5', { className: "font-bold text-red-700 mb-2" }, "المصروفات"),
+                React.createElement('div', { className: "space-y-2" },
+                  Object.values(ledgerAccounts)
+                    .filter(a => a.accountType === ACCOUNT_TYPES.EXPENSE && a.balance > 0)
+                    .map(account =>
+                      React.createElement('div', {
+                        key: account.accountId,
+                        className: "flex justify-between"
+                      },
+                        React.createElement('span', null, account.accountName),
+                        React.createElement('span', { className: "font-bold text-red-600" },
+                          `${account.balance.toLocaleString()} ج.م`
+                        )
+                      )
+                    )
+                )
+              ),
+              React.createElement('div', { className: "border-t-2 border-slate-300 pt-4" },
+                React.createElement('div', {
+                  className: `flex justify-between text-lg font-black ${
+                    stats.netIncome >= 0 ? 'text-emerald-600' : 'text-red-600'
+                  }` 
+                },
+                  React.createElement('span', null, "صافي الدخل (الخسارة)"),
+                  React.createElement('span', null, `${stats.netIncome.toLocaleString()} ج.م`)
                 )
               )
-          ),
-          React.createElement('tfoot', { className: "bg-slate-50 dark:bg-slate-800 font-bold" },
-            React.createElement('tr', null,
-              React.createElement('td', { colSpan: "2", className: "p-3" }, "المجموع"),
-              React.createElement('td', { 
-                className: "p-3 text-center text-emerald-600" 
-              }, Object.values(ledgerAccounts).reduce((sum, a) => sum + a.debitBalance, 0).toLocaleString()),
-              React.createElement('td', { 
-                className: "p-3 text-center text-red-600" 
-              }, Object.values(ledgerAccounts).reduce((sum, a) => sum + a.creditBalance, 0).toLocaleString()),
-              React.createElement('td', { colSpan: "2", className: "p-3 text-center" },
-                `${Math.abs(
-                  Object.values(ledgerAccounts).reduce((sum, a) => sum + a.debitBalance, 0) -
-                  Object.values(ledgerAccounts).reduce((sum, a) => sum + a.creditBalance, 0)
-                ).toLocaleString()} ج.م`
-              )
             )
-          )
-        )
-      )
-    ),
-
-    activeTab === 'reports' && React.createElement('div', { className: "space-y-6" },
-      React.createElement('h3', { className: "text-lg font-bold" }, "التقارير المالية"),
-      
-      React.createElement('div', { className: "grid grid-cols-1 lg:grid-cols-2 gap-6" },
-        // قائمة الدخل
-        React.createElement('div', { className: "glass p-6 rounded-2xl" },
-          React.createElement('h4', { 
-            className: "font-bold text-lg mb-4 flex items-center gap-2" 
-          },
-            React.createElement(IconWrapper, { icon: 'TrendingUp', size: 20, className: "text-emerald-600" }),
-            " قائمة الدخل"
           ),
           
-          React.createElement('div', { className: "space-y-4" },
-            React.createElement('div', null,
-              React.createElement('h5', { className: "font-bold text-emerald-700 mb-2" }, "الإيرادات"),
-              ...Object.values(ledgerAccounts)
-                .filter(a => a.accountType === ACCOUNT_TYPES.INCOME && a.balance > 0)
-                .map(account => 
-                  React.createElement('div', { key: account.accountId, className: "flex justify-between mb-1" },
-                    React.createElement('span', null, account.accountName),
-                    React.createElement('span', { className: "font-bold text-emerald-600" }, `${account.balance.toLocaleString()} ج.م`)
-                  )
+          // الميزانية العمومية
+          React.createElement('div', { className: "glass p-6 rounded-2xl" },
+            React.createElement('h4', { className: "font-bold text-lg mb-4 flex items-center gap-2" },
+              React.createElement(Icon, { name: 'Scale', size: 20, className: "text-blue-600" }),
+              "الميزانية العمومية"
+            ),
+            React.createElement('div', { className: "space-y-4" },
+              React.createElement('div', null,
+                React.createElement('h5', { className: "font-bold text-blue-700 mb-2" }, "الأصول"),
+                React.createElement('div', { className: "space-y-2" },
+                  Object.values(ledgerAccounts)
+                    .filter(a => a.accountType === ACCOUNT_TYPES.ASSET && a.balance > 0)
+                    .map(account =>
+                      React.createElement('div', {
+                        key: account.accountId,
+                        className: "flex justify-between"
+                      },
+                        React.createElement('span', null, account.accountName),
+                        React.createElement('span', { className: "font-bold text-blue-600" },
+                          `${account.balance.toLocaleString()} ج.م`
+                        )
+                      )
+                    )
                 ),
-              React.createElement('div', { className: "border-t border-emerald-200 pt-2 mt-2" },
-                React.createElement('div', { className: "flex justify-between font-bold" },
-                  React.createElement('span', null, "إجمالي الإيرادات"),
-                  React.createElement('span', { className: "text-emerald-600" },
-                    `${Object.values(ledgerAccounts)
-                      .filter(a => a.accountType === ACCOUNT_TYPES.INCOME)
-                      .reduce((sum, a) => sum + a.balance, 0)
-                      .toLocaleString()} ج.م`
+                React.createElement('div', { className: "border-t border-blue-200 pt-2 mt-2" },
+                  React.createElement('div', { className: "flex justify-between font-bold" },
+                    React.createElement('span', null, "إجمالي الأصول"),
+                    React.createElement('span', { className: "text-blue-600" },
+                      `${stats.totalAssets.toLocaleString()} ج.م`
+                    )
                   )
                 )
-              )
-            ),
-            
-            React.createElement('div', null,
-              React.createElement('h5', { className: "font-bold text-red-700 mb-2" }, "المصروفات"),
-              ...Object.values(ledgerAccounts)
-                .filter(a => a.accountType === ACCOUNT_TYPES.EXPENSE && a.balance > 0)
-                .map(account => 
-                  React.createElement('div', { key: account.accountId, className: "flex justify-between mb-1" },
-                    React.createElement('span', null, account.accountName),
-                    React.createElement('span', { className: "font-bold text-red-600" }, `${account.balance.toLocaleString()} ج.م`)
-                  )
-                ),
-              React.createElement('div', { className: "border-t border-red-200 pt-2 mt-2" },
-                React.createElement('div', { className: "flex justify-between font-bold" },
-                  React.createElement('span', null, "إجمالي المصروفات"),
-                  React.createElement('span', { className: "text-red-600" },
-                    `${Object.values(ledgerAccounts)
-                      .filter(a => a.accountType === ACCOUNT_TYPES.EXPENSE)
-                      .reduce((sum, a) => sum + a.balance, 0)
-                      .toLocaleString()} ج.م`
-                  )
+              ),
+              React.createElement('div', null,
+                React.createElement('h5', { className: "font-bold text-red-700 mb-2" }, "الخصوم وحقوق الملكية"),
+                React.createElement('div', { className: "space-y-2" },
+                  Object.values(ledgerAccounts)
+                    .filter(a => (a.accountType === ACCOUNT_TYPES.LIABILITY || 
+                                 a.accountType === ACCOUNT_TYPES.EQUITY) && a.balance > 0)
+                    .map(account =>
+                      React.createElement('div', {
+                        key: account.accountId,
+                        className: "flex justify-between"
+                      },
+                        React.createElement('span', null, account.accountName),
+                        React.createElement('span', { className: "font-bold text-red-600" },
+                          `${account.balance.toLocaleString()} ج.م`
+                        )
+                      )
+                    )
                 )
               )
-            ),
-            
-            React.createElement('div', { className: "border-t-2 border-slate-300 pt-4" },
-              React.createElement('div', { 
-                className: `flex justify-between text-lg font-black ${netIncome >= 0 ? 'text-emerald-600' : 'text-red-600'}` 
+            )
+          )
+        )
+      ),
+
+    // تفاصيل الحساب
+    selectedAccount && renderAccountDetails(selectedAccount)
+  );
+};
+
+// مكون لوحة التحكم
+const Dashboard = ({ data, onNavigate }) => {
+  const stats = useMemo(() => {
+    const transactions = data.transactions || [];
+    const currentMonth = MONTHS[new Date().getMonth()];
+    const monthTransactions = transactions.filter(t => t.month === currentMonth);
+    
+    const income = monthTransactions.filter(t => t.type === 'income')
+      .reduce((sum, t) => sum + (t.amount || 0), 0);
+    const expense = monthTransactions.filter(t => t.type === 'expense')
+      .reduce((sum, t) => sum + (t.amount || 0), 0);
+    const balance = income - expense;
+    
+    return { income, expense, balance };
+  }, [data.transactions]);
+
+  const recentTransactions = useMemo(() => {
+    return (data.transactions || [])
+      .sort((a, b) => new Date(b.date) - new Date(a.date))
+      .slice(0, 5);
+  }, [data.transactions]);
+
+  const accountBalances = useMemo(() => {
+    return Object.entries(data.accounts || {}).map(([id, account]) => ({
+      id,
+      name: account.name,
+      balance: account.balance || 0
+    }));
+  }, [data.accounts]);
+
+  return React.createElement('div', { className: "space-y-6 animate-fadeIn" },
+    // الترحيب
+    React.createElement('div', { className: "glass p-6 rounded-2xl gradient-border" },
+      React.createElement('div', { className: "flex justify-between items-center" },
+        React.createElement('div', null,
+          React.createElement('h1', { className: "text-2xl font-black mb-2" }, "مرحباً بك في نظام المحاسبة المتكاملة"),
+          React.createElement('p', { className: "text-slate-600 dark:text-slate-400" },
+            `اليوم ${new Date().toLocaleDateString('ar-SA')} - ${MONTHS[new Date().getMonth()]} ${CURRENT_YEAR}`
+          )
+        ),
+        React.createElement('div', { className: "p-3 rounded-xl gradient-bg-primary" },
+          React.createElement(Icon, { name: 'Wallet', size: 32, className: "text-white" })
+        )
+      )
+    ),
+
+    // الإحصائيات السريعة
+    React.createElement('div', { className: "grid grid-cols-1 md:grid-cols-3 gap-4" },
+      React.createElement(StatCard, {
+        title: "إجمالي الدخل الشهري",
+        value: `${stats.income.toLocaleString()} ج.م`,
+        icon: 'TrendingUp',
+        color: 'success',
+        trend: 12
+      }),
+      React.createElement(StatCard, {
+        title: "إجمالي المصروفات الشهرية",
+        value: `${stats.expense.toLocaleString()} ج.م`,
+        icon: 'TrendingDown',
+        color: 'danger',
+        trend: -8
+      }),
+      React.createElement(StatCard, {
+        title: "صافي الرصيد",
+        value: `${stats.balance.toLocaleString()} ج.م`,
+        icon: 'Scale',
+        color: stats.balance >= 0 ? 'success' : 'danger'
+      })
+    ),
+
+    // أرصدة الحسابات
+    React.createElement('div', { className: "glass p-6 rounded-2xl" },
+      React.createElement('div', { className: "flex justify-between items-center mb-6" },
+        React.createElement('h3', { className: "text-lg font-bold" }, "أرصدة الحسابات"),
+        React.createElement('button', {
+          onClick: () => onNavigate('cards'),
+          className: "text-primary hover:text-primary/80 font-medium flex items-center gap-2"
+        },
+          "عرض الكل",
+          React.createElement(Icon, { name: 'ChevronRight', size: 16 })
+        )
+      ),
+      React.createElement('div', { className: "grid grid-cols-2 md:grid-cols-5 gap-4" },
+        accountBalances.map(account =>
+          React.createElement('div', {
+            key: account.id,
+            className: "balance-account-card hover-lift"
+          },
+            React.createElement('p', { className: "text-sm text-slate-500 mb-1" }, account.name),
+            React.createElement('p', { className: "font-bold text-lg" }, `${account.balance.toLocaleString()} ج.م`)
+          )
+        )
+      )
+    ),
+
+    // آخر المعاملات
+    React.createElement('div', { className: "glass p-6 rounded-2xl" },
+      React.createElement('div', { className: "flex justify-between items-center mb-6" },
+        React.createElement('h3', { className: "text-lg font-bold" }, "آخر المعاملات"),
+        React.createElement('button', {
+          onClick: () => onNavigate('transactions'),
+          className: "text-primary hover:text-primary/80 font-medium flex items-center gap-2"
+        },
+          "عرض الكل",
+          React.createElement(Icon, { name: 'ChevronRight', size: 16 })
+        )
+      ),
+      recentTransactions.length > 0 
+        ? React.createElement('div', { className: "space-y-3" },
+            recentTransactions.map(transaction =>
+              React.createElement('div', {
+                key: transaction.id,
+                className: "flex items-center justify-between p-3 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/50"
               },
-                React.createElement('span', null, "صافي الدخل (الخسارة)"),
-                React.createElement('span', null, `${netIncome.toLocaleString()} ج.م`)
+                React.createElement('div', { className: "flex items-center gap-3" },
+                  React.createElement('div', {
+                    className: `p-2 rounded-lg ${
+                      transaction.type === 'income' 
+                        ? 'bg-emerald-100 dark:bg-emerald-900/20' 
+                        : 'bg-red-100 dark:bg-red-900/20'
+                    }` 
+                  },
+                    React.createElement(Icon, {
+                      name: transaction.type === 'income' ? 'ArrowDownLeft' : 'ArrowUpRight',
+                      size: 20,
+                      className: transaction.type === 'income' ? 'text-emerald-600' : 'text-red-600'
+                    })
+                  ),
+                  React.createElement('div', null,
+                    React.createElement('p', { className: "font-medium" }, transaction.category),
+                    React.createElement('p', { className: "text-sm text-slate-500" },
+                      `${transaction.date} - ${PAYMENT_METHODS.find(m => m.id === transaction.method)?.label || transaction.method}`
+                    )
+                  )
+                ),
+                React.createElement('p', {
+                  className: `font-bold ${
+                    transaction.type === 'income' ? 'text-emerald-600' : 'text-red-600'
+                  }` 
+                }, `${transaction.amount.toLocaleString()} ج.م`)
+              )
+            )
+          )
+        : React.createElement('div', { className: "text-center py-8 text-slate-500" },
+            React.createElement(Icon, { name: 'FileText', size: 32, className: "mx-auto mb-3 opacity-50" }),
+            React.createElement('p', null, "لا توجد معاملات مسجلة بعد")
+          )
+    ),
+
+    // الإجراءات السريعة
+    React.createElement('div', { className: "grid grid-cols-2 md:grid-cols-4 gap-4" },
+      React.createElement('button', {
+        onClick: () => onNavigate('add-income'),
+        className: "gradient-bg-success text-white p-4 rounded-2xl font-bold flex flex-col items-center gap-2 hover-lift"
+      },
+        React.createElement(Icon, { name: 'Plus', size: 24 }),
+        "إضافة دخل"
+      ),
+      React.createElement('button', {
+        onClick: () => onNavigate('add-expense'),
+        className: "gradient-bg-danger text-white p-4 rounded-2xl font-bold flex flex-col items-center gap-2 hover-lift"
+      },
+        React.createElement(Icon, { name: 'Plus', size: 24 }),
+        "إضافة مصروف"
+      ),
+      React.createElement('button', {
+        onClick: () => onNavigate('accounting'),
+        className: "gradient-bg-primary text-white p-4 rounded-2xl font-bold flex flex-col items-center gap-2 hover-lift"
+      },
+        React.createElement(Icon, { name: 'BookOpen', size: 24 }),
+        "السجلات المحاسبية"
+      ),
+      React.createElement('button', {
+        onClick: () => onNavigate('reports'),
+        className: "gradient-bg-warning text-white p-4 rounded-2xl font-bold flex flex-col items-center gap-2 hover-lift"
+      },
+        React.createElement(Icon, { name: 'FileBarChart', size: 24 }),
+        "التقارير"
+      )
+    )
+  );
+};
+
+// مكون سجل المعاملات
+const TransactionsView = ({ transactions, onEdit, onDelete }) => {
+  const [filterType, setFilterType] = useState('all');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedMonth, setSelectedMonth] = useState(MONTHS[new Date().getMonth()]);
+
+  const filteredTransactions = useMemo(() => {
+    return (transactions || [])
+      .filter(t => {
+        if (filterType !== 'all' && t.type !== filterType) return false;
+        if (searchTerm && !t.category?.toLowerCase().includes(searchTerm.toLowerCase()) &&
+            !t.description?.toLowerCase().includes(searchTerm.toLowerCase())) return false;
+        if (selectedMonth !== 'all' && t.month !== selectedMonth) return false;
+        return true;
+      })
+      .sort((a, b) => new Date(b.date) - new Date(a.date));
+  }, [transactions, filterType, searchTerm, selectedMonth]);
+
+  const stats = useMemo(() => {
+    const filtered = filteredTransactions;
+    return {
+      income: filtered.filter(t => t.type === 'income')
+        .reduce((sum, t) => sum + (t.amount || 0), 0),
+      expense: filtered.filter(t => t.type === 'expense')
+        .reduce((sum, t) => sum + (t.amount || 0), 0),
+      count: filtered.length
+    };
+  }, [filteredTransactions]);
+
+  return React.createElement('div', { className: "space-y-6 animate-fadeIn" },
+    // فلترة وإحصائيات
+    React.createElement('div', { className: "glass p-6 rounded-2xl" },
+      React.createElement('div', { className: "flex flex-col md:flex-row gap-4 items-center justify-between mb-6" },
+        React.createElement('div', { className: "flex gap-2" },
+          ['all', 'income', 'expense'].map(type =>
+            React.createElement('button', {
+              key: type,
+              onClick: () => setFilterType(type),
+              className: `px-4 py-2 rounded-lg font-medium ${
+                filterType === type 
+                  ? 'gradient-bg-primary text-white' 
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+              }` 
+            },
+              type === 'all' ? 'الكل' : 
+              type === 'income' ? 'الدخل' : 'المصروفات'
+            )
+          )
+        ),
+        React.createElement('select', {
+          value: selectedMonth,
+          onChange: (e) => setSelectedMonth(e.target.value),
+          className: "bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2"
+        },
+          React.createElement('option', { value: 'all' }, "جميع الأشهر"),
+          ...MONTHS.map(month => 
+            React.createElement('option', { key: month, value: month }, month)
+          )
+        ),
+        React.createElement(InputField, {
+          type: "search",
+          placeholder: "بحث في المعاملات...",
+          value: searchTerm,
+          onChange: (e) => setSearchTerm(e.target.value),
+          className: "w-full md:w-64"
+        })
+      ),
+      
+      React.createElement('div', { className: "grid grid-cols-1 md:grid-cols-3 gap-4" },
+        React.createElement(StatCard, {
+          title: "عدد المعاملات",
+          value: stats.count.toString(),
+          icon: 'FileText',
+          color: 'info'
+        }),
+        React.createElement(StatCard, {
+          title: "إجمالي الدخل",
+          value: `${stats.income.toLocaleString()} ج.م`,
+          icon: 'TrendingUp',
+          color: 'success'
+        }),
+        React.createElement(StatCard, {
+          title: "إجمالي المصروفات",
+          value: `${stats.expense.toLocaleString()} ج.م`,
+          icon: 'TrendingDown',
+          color: 'danger'
+        })
+      )
+    ),
+
+    // جدول المعاملات
+    React.createElement('div', { className: "glass rounded-2xl overflow-hidden" },
+      filteredTransactions.length > 0 
+        ? React.createElement('div', { className: "overflow-x-auto" },
+            React.createElement('table', { className: "w-full" },
+              React.createElement('thead', null,
+                React.createElement('tr', { className: "bg-slate-50 dark:bg-slate-800" },
+                  React.createElement('th', { className: "p-4 text-right" }, "التاريخ"),
+                  React.createElement('th', { className: "p-4 text-right" }, "النوع"),
+                  React.createElement('th', { className: "p-4 text-right" }, "الفئة"),
+                  React.createElement('th', { className: "p-4 text-right" }, "الوصف"),
+                  React.createElement('th', { className: "p-4 text-right" }, "طريقة الدفع"),
+                  React.createElement('th', { className: "p-4 text-right" }, "المبلغ"),
+                  React.createElement('th', { className: "p-4 text-right" }, "الإجراءات")
+                )
+              ),
+              React.createElement('tbody', null,
+                filteredTransactions.map(transaction =>
+                  React.createElement('tr', {
+                    key: transaction.id,
+                    className: "border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                  },
+                    React.createElement('td', { className: "p-4" }, transaction.date),
+                    React.createElement('td', { className: "p-4" },
+                      React.createElement('span', {
+                        className: `px-3 py-1 rounded-full text-xs font-bold ${
+                          transaction.type === 'income' 
+                            ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' 
+                            : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                        }` 
+                      },
+                        transaction.type === 'income' ? 'دخل' : 'مصروف'
+                      )
+                    ),
+                    React.createElement('td', { className: "p-4" },
+                      React.createElement('div', { className: "flex items-center gap-2" },
+                        React.createElement('div', {
+                          className: "w-3 h-3 rounded-full",
+                          style: { backgroundColor: CATEGORY_COLORS[transaction.category] || '#9ca3af' }
+                        }),
+                        transaction.category
+                      )
+                    ),
+                    React.createElement('td', { className: "p-4" }, transaction.description || '-'),
+                    React.createElement('td', { className: "p-4" },
+                      PAYMENT_METHODS.find(m => m.id === transaction.method)?.label || transaction.method
+                    ),
+                    React.createElement('td', {
+                      className: `p-4 font-bold ${
+                        transaction.type === 'income' ? 'text-emerald-600' : 'text-red-600'
+                      }` 
+                    }, `${transaction.amount.toLocaleString()} ج.م`),
+                    React.createElement('td', { className: "p-4" },
+                      React.createElement('div', { className: "flex gap-2" },
+                        React.createElement('button', {
+                          onClick: () => onEdit(transaction),
+                          className: "p-2 rounded-lg bg-blue-100 dark:bg-blue-900/20 text-blue-600 hover:bg-blue-200"
+                        },
+                          React.createElement(Icon, { name: 'Edit', size: 16 })
+                        ),
+                        React.createElement('button', {
+                          onClick: () => onDelete(transaction.id),
+                          className: "p-2 rounded-lg bg-red-100 dark:bg-red-900/20 text-red-600 hover:bg-red-200"
+                        },
+                          React.createElement(Icon, { name: 'Trash2', size: 16 })
+                        )
+                      )
+                    )
+                  )
+                )
+              )
+            )
+          )
+        : React.createElement('div', { className: "text-center py-12 text-slate-500" },
+            React.createElement(Icon, { name: 'FileText', size: 48, className: "mx-auto mb-4 opacity-50" }),
+            React.createElement('p', { className: "text-lg mb-2" }, "لا توجد معاملات"),
+            React.createElement('p', { className: "text-sm" }, "ابدأ بإضافة معاملة جديدة")
+          )
+    )
+  );
+};
+
+// مكون إضافة/تعديل معاملة
+const TransactionForm = ({ mode, initialData, onSubmit, onCancel }) => {
+  const [formData, setFormData] = useState({
+    type: 'expense',
+    category: '',
+    amount: '',
+    description: '',
+    date: getLocalISODate(),
+    month: MONTHS[new Date().getMonth()],
+    method: 'cash',
+    ...initialData
+  });
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!formData.amount || !formData.category) {
+      alert('يرجى ملء جميع الحقول المطلوبة');
+      return;
+    }
+    onSubmit({
+      ...formData,
+      id: mode === 'add' ? generateId() : formData.id,
+      amount: Number(formData.amount)
+    });
+  };
+
+  return React.createElement('div', { className: "modal-backdrop" },
+    React.createElement('div', {
+      className: "glass rounded-2xl p-6 max-w-md w-full max-h-[90vh] overflow-y-auto"
+    },
+      React.createElement('div', { className: "flex justify-between items-center mb-6" },
+        React.createElement('h3', { className: "text-xl font-bold" },
+          mode === 'add' ? 'إضافة معاملة جديدة' : 'تعديل المعاملة'
+        ),
+        React.createElement('button', {
+          onClick: onCancel,
+          className: "p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800"
+        },
+          React.createElement(Icon, { name: 'X', size: 20 })
+        )
+      ),
+      
+      React.createElement('form', { onSubmit: handleSubmit, className: "space-y-4" },
+        // نوع المعاملة
+        React.createElement('div', null,
+          React.createElement('label', { className: "block text-sm font-medium mb-2" }, "نوع المعاملة"),
+          React.createElement('div', { className: "flex gap-2" },
+            React.createElement('button', {
+              type: "button",
+              onClick: () => setFormData({ ...formData, type: 'income' }),
+              className: `flex-1 p-3 rounded-lg text-center font-medium ${
+                formData.type === 'income' 
+                  ? 'gradient-bg-success text-white' 
+                  : 'bg-slate-100 dark:bg-slate-800'
+              }` 
+            },
+              React.createElement('div', { className: "flex items-center justify-center gap-2" },
+                React.createElement(Icon, { name: 'ArrowDownLeft', size: 18 }),
+                "دخل"
+              )
+            ),
+            React.createElement('button', {
+              type: "button",
+              onClick: () => setFormData({ ...formData, type: 'expense' }),
+              className: `flex-1 p-3 rounded-lg text-center font-medium ${
+                formData.type === 'expense' 
+                  ? 'gradient-bg-danger text-white' 
+                  : 'bg-slate-100 dark:bg-slate-800'
+              }` 
+            },
+              React.createElement('div', { className: "flex items-center justify-center gap-2" },
+                React.createElement(Icon, { name: 'ArrowUpRight', size: 18 }),
+                "مصروف"
               )
             )
           )
         ),
         
-        // الميزانية العمومية
-        React.createElement('div', { className: "glass p-6 rounded-2xl" },
-          React.createElement('h4', { 
-            className: "font-bold text-lg mb-4 flex items-center gap-2" 
+        // المبلغ
+        React.createElement(InputField, {
+          label: "المبلغ (ج.م)",
+          type: "number",
+          value: formData.amount,
+          onChange: (e) => setFormData({ ...formData, amount: e.target.value }),
+          placeholder: "أدخل المبلغ",
+          required: true,
+          min: "0.01",
+          step: "0.01"
+        }),
+        
+        // الفئة
+        React.createElement('div', null,
+          React.createElement('label', { className: "block text-sm font-medium mb-2" }, "الفئة"),
+          React.createElement('select', {
+            value: formData.category,
+            onChange: (e) => setFormData({ ...formData, category: e.target.value }),
+            className: "input-field",
+            required: true
           },
-            React.createElement(IconWrapper, { icon: 'Scale', size: 20, className: "text-blue-600" }),
-            " الميزانية العمومية"
-          ),
-          
-          React.createElement('div', { className: "space-y-4" },
-            React.createElement('div', null,
-              React.createElement('h5', { className: "font-bold text-blue-700 mb-2" }, "الأصول"),
-              ...Object.values(ledgerAccounts)
-                .filter(a => a.accountType === ACCOUNT_TYPES.ASSET && a.balance > 0)
-                .map(account => 
-                  React.createElement('div', { key: account.accountId, className: "flex justify-between mb-1" },
-                    React.createElement('span', null, account.accountName),
-                    React.createElement('span', { className: "font-bold text-blue-600" }, `${account.balance.toLocaleString()} ج.م`)
+            React.createElement('option', { value: "" }, "اختر الفئة"),
+            ...(formData.type === 'income' ? CATEGORIES.income : CATEGORIES.expense).map(category =>
+              React.createElement('option', { key: category, value: category }, category)
+            )
+          )
+        ),
+        
+        // التاريخ والشهر
+        React.createElement('div', { className: "grid grid-cols-2 gap-4" },
+          React.createElement(InputField, {
+            label: "التاريخ",
+            type: "date",
+            value: formData.date,
+            onChange: (e) => setFormData({ ...formData, date: e.target.value }),
+            required: true
+          }),
+          React.createElement('div', null,
+            React.createElement('label', { className: "block text-sm font-medium mb-2" }, "الشهر"),
+            React.createElement('select', {
+              value: formData.month,
+              onChange: (e) => setFormData({ ...formData, month: e.target.value }),
+              className: "input-field",
+              required: true
+            },
+              ...MONTHS.map(month => 
+                React.createElement('option', { key: month, value: month }, month)
+              )
+            )
+          )
+        ),
+        
+        // طريقة الدفع
+        React.createElement('div', null,
+          React.createElement('label', { className: "block text-sm font-medium mb-2" }, "طريقة الدفع"),
+          React.createElement('select', {
+            value: formData.method,
+            onChange: (e) => setFormData({ ...formData, method: e.target.value }),
+            className: "input-field",
+            required: true
+          },
+            ...PAYMENT_METHODS.map(method =>
+              React.createElement('option', { key: method.id, value: method.id }, method.label)
+            )
+          )
+        ),
+        
+        // الوصف
+        React.createElement(InputField, {
+          label: "الوصف (اختياري)",
+          value: formData.description,
+          onChange: (e) => setFormData({ ...formData, description: e.target.value }),
+          placeholder: "وصف مختصر للمعاملة"
+        }),
+        
+        // الأزرار
+        React.createElement('div', { className: "flex gap-3 pt-4" },
+          React.createElement('button', {
+            type: "button",
+            onClick: onCancel,
+            className: "flex-1 p-3 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 font-medium"
+          }, "إلغاء"),
+          React.createElement('button', {
+            type: "submit",
+            className: "flex-1 p-3 rounded-xl gradient-bg-primary text-white font-bold hover:shadow-lg"
+          },
+            mode === 'add' ? 'إضافة المعاملة' : 'حفظ التعديلات'
+          )
+        )
+      )
+    )
+  );
+};
+
+// مكون القروض والديون
+const LoansView = ({ loans, onAdd, onEdit, onDelete }) => {
+  const [showForm, setShowForm] = useState(false);
+  const [editingLoan, setEditingLoan] = useState(null);
+
+  const totalLoans = useMemo(() => {
+    return loans.reduce((sum, loan) => sum + (loan.remaining || 0), 0);
+  }, [loans]);
+
+  const upcomingPayments = useMemo(() => {
+    return loans
+      .filter(loan => loan.status === 'active')
+      .sort((a, b) => new Date(a.nextPayment || a.endDate) - new Date(b.nextPayment || b.endDate))
+      .slice(0, 3);
+  }, [loans]);
+
+  return React.createElement('div', { className: "space-y-6 animate-fadeIn" },
+    // الإحصائيات
+    React.createElement('div', { className: "grid grid-cols-1 md:grid-cols-3 gap-4" },
+      React.createElement(StatCard, {
+        title: "إجمالي الديون",
+        value: `${totalLoans.toLocaleString()} ج.م`,
+        icon: 'Banknote',
+        color: 'danger'
+      }),
+      React.createElement(StatCard, {
+        title: "عدد القروض",
+        value: loans.length.toString(),
+        icon: 'FileText',
+        color: 'info'
+      }),
+      React.createElement(StatCard, {
+        title: "متوسط الفائدة",
+        value: `${(loans.reduce((sum, loan) => sum + (loan.interestRate || 0), 0) / Math.max(loans.length, 1)).toFixed(1)}%`,
+        icon: 'Percent',
+        color: 'warning'
+      })
+    ),
+
+    // أزرار الإجراءات
+    React.createElement('div', { className: "glass p-6 rounded-2xl" },
+      React.createElement('div', { className: "flex justify-between items-center mb-6" },
+        React.createElement('h3', { className: "text-lg font-bold" }, "إدارة القروض والديون"),
+        React.createElement('button', {
+          onClick: () => {
+            setEditingLoan(null);
+            setShowForm(true);
+          },
+          className: "gradient-bg-primary text-white px-4 py-2 rounded-xl font-bold flex items-center gap-2"
+        },
+          React.createElement(Icon, { name: 'Plus', size: 16 }),
+          "إضافة قرض جديد"
+        )
+      ),
+      
+      // القروض القادمة
+      upcomingPayments.length > 0 && 
+        React.createElement('div', { className: "mb-6" },
+          React.createElement('h4', { className: "font-bold mb-4 text-warning" }, "الدفعات القادمة"),
+          React.createElement('div', { className: "space-y-3" },
+            upcomingPayments.map(loan =>
+              React.createElement('div', {
+                key: loan.id,
+                className: "p-4 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800"
+              },
+                React.createElement('div', { className: "flex justify-between items-center" },
+                  React.createElement('div', null,
+                    React.createElement('p', { className: "font-bold" }, loan.name),
+                    React.createElement('p', { className: "text-sm text-slate-600 dark:text-slate-400" },
+                      `الدفعة القادمة: ${loan.nextPayment || loan.endDate}`
+                    )
+                  ),
+                  React.createElement('p', { className: "text-lg font-bold text-amber-600" },
+                    `${loan.monthlyPayment?.toLocaleString()} ج.م`
                   )
-                ),
-              React.createElement('div', { className: "border-t border-blue-200 pt-2 mt-2" },
-                React.createElement('div', { className: "flex justify-between font-bold" },
-                  React.createElement('span', null, "إجمالي الأصول"),
-                  React.createElement('span', { className: "text-blue-600" }, `${totalAssets.toLocaleString()} ج.م`)
                 )
               )
-            ),
-            
-            React.createElement('div', null,
-              React.createElement('h5', { className: "font-bold text-red-700 mb-2" }, "الخصوم"),
-              ...Object.values(ledgerAccounts)
-                .filter(a => a.accountType === ACCOUNT_TYPES.LIABILITY && a.balance > 0)
-                .map(account => 
-                  React.createElement('div', { key: account.accountId, className: "flex justify-between mb-1" },
-                    React.createElement('span', null, account.accountName),
-                    React.createElement('span', { className: "font-bold text-red-600" }, `${account.balance.toLocaleString()} ج.م`)
-                  )
+            )
+          )
+        ),
+      
+      // جدول القروض
+      loans.length > 0 
+        ? React.createElement('div', { className: "overflow-x-auto" },
+            React.createElement('table', { className: "w-full text-sm" },
+              React.createElement('thead', null,
+                React.createElement('tr', { className: "bg-slate-50 dark:bg-slate-800" },
+                  React.createElement('th', { className: "p-3 text-right" }, "اسم القرض"),
+                  React.createElement('th', { className: "p-3 text-right" }, "المبلغ الأصلي"),
+                  React.createElement('th', { className: "p-3 text-right" }, "المتبقي"),
+                  React.createElement('th', { className: "p-3 text-right" }, "نسبة الفائدة"),
+                  React.createElement('th', { className: "p-3 text-right" }, "تاريخ الانتهاء"),
+                  React.createElement('th', { className: "p-3 text-right" }, "الحالة"),
+                  React.createElement('th', { className: "p-3 text-right" }, "الإجراءات")
                 )
-            ),
-            
-            React.createElement('div', null,
-              React.createElement('h5', { className: "font-bold text-purple-700 mb-2" }, "حقوق الملكية"),
-              ...Object.values(ledgerAccounts)
-                .filter(a => a.accountType === ACCOUNT_TYPES.EQUITY && a.balance > 0)
-                .map(account => 
-                  React.createElement('div', { key: account.accountId, className: "flex justify-between mb-1" },
-                    React.createElement('span', null, account.accountName),
-                    React.createElement('span', { className: "font-bold text-purple-600" }, `${account.balance.toLocaleString()} ج.م`)
-                  )
-                ),
-              
-              React.createElement('div', { className: "flex justify-between mb-1" },
-                React.createElement('span', null, "صافي الدخل"),
-                React.createElement('span', { 
-                  className: `font-bold ${netIncome >= 0 ? 'text-emerald-600' : 'text-red-600'}` 
-                }, `${netIncome.toLocaleString()} ج.م`)
-              )
-            ),
-            
-            React.createElement('div', { className: "border-t-2 border-slate-300 pt-4" },
-              React.createElement('div', { className: "flex justify-between text-lg font-bold" },
-                React.createElement('span', null, "إجمالي الخصوم وحقوق الملكية"),
-                React.createElement('span', { className: "text-purple-600" }, `${totalLiabilitiesEquity.toLocaleString()} ج.م`)
               ),
-              
-              React.createElement('div', { 
-                className: `mt-2 p-3 rounded-lg text-center font-black ${
-                  Math.abs(totalAssets - totalLiabilitiesEquity) < 0.01
-                    ? 'bg-emerald-100 text-emerald-700'
-                    : 'bg-red-100 text-red-700'
-                }` 
-              }, Math.abs(totalAssets - totalLiabilitiesEquity) < 0.01
-                ? '✓ الميزانية متوازنة'
-                : `✗ الميزانية غير متوازنة (فارق: ${Math.abs(totalAssets - totalLiabilitiesEquity).toLocaleString()} ج.م)`)
+              React.createElement('tbody', null,
+                loans.map(loan =>
+                  React.createElement('tr', {
+                    key: loan.id,
+                    className: "border-b border-slate-100 dark:border-slate-800"
+                  },
+                    React.createElement('td', { className: "p-3 font-medium" }, loan.name),
+                    React.createElement('td', { className: "p-3" }, `${loan.amount?.toLocaleString()} ج.م`),
+                    React.createElement('td', { className: "p-3 font-bold" }, `${loan.remaining?.toLocaleString()} ج.م`),
+                    React.createElement('td', { className: "p-3" }, `${loan.interestRate}%`),
+                    React.createElement('td', { className: "p-3" }, loan.endDate),
+                    React.createElement('td', { className: "p-3" },
+                      React.createElement('span', {
+                        className: `px-3 py-1 rounded-full text-xs font-bold ${
+                          loan.status === 'active' 
+                            ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400' 
+                            : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400'
+                        }` 
+                      },
+                        loan.status === 'active' ? 'نشط' : 'مسدد'
+                      )
+                    ),
+                    React.createElement('td', { className: "p-3" },
+                      React.createElement('div', { className: "flex gap-2" },
+                        React.createElement('button', {
+                          onClick: () => {
+                            setEditingLoan(loan);
+                            setShowForm(true);
+                          },
+                          className: "p-2 rounded-lg bg-blue-100 dark:bg-blue-900/20 text-blue-600 hover:bg-blue-200"
+                        },
+                          React.createElement(Icon, { name: 'Edit', size: 16 })
+                        ),
+                        React.createElement('button', {
+                          onClick: () => onDelete(loan.id),
+                          className: "p-2 rounded-lg bg-red-100 dark:bg-red-900/20 text-red-600 hover:bg-red-200"
+                        },
+                          React.createElement(Icon, { name: 'Trash2', size: 16 })
+                        )
+                      )
+                    )
+                  )
+                )
+              )
+            )
+          )
+        : React.createElement('div', { className: "text-center py-12 text-slate-500" },
+            React.createElement(Icon, { name: 'Banknote', size: 48, className: "mx-auto mb-4 opacity-50" }),
+            React.createElement('p', { className: "text-lg mb-2" }, "لا توجد قروض مسجلة"),
+            React.createElement('p', { className: "text-sm" }, "ابدأ بإضافة قرض جديد")
+          )
+    ),
+
+    // نموذج إضافة/تعديل قرض
+    showForm && React.createElement(LoanForm, {
+      mode: editingLoan ? 'edit' : 'add',
+      initialData: editingLoan,
+      onSubmit: (loanData) => {
+        if (editingLoan) {
+          onEdit(loanData);
+        } else {
+          onAdd(loanData);
+        }
+        setShowForm(false);
+        setEditingLoan(null);
+      },
+      onCancel: () => {
+        setShowForm(false);
+        setEditingLoan(null);
+      }
+    })
+  );
+};
+
+// مكون نموذج القرض
+const LoanForm = ({ mode, initialData, onSubmit, onCancel }) => {
+  const [formData, setFormData] = useState({
+    name: '',
+    amount: '',
+    interestRate: '',
+    startDate: getLocalISODate(),
+    endDate: '',
+    monthlyPayment: '',
+    status: 'active',
+    ...initialData
+  });
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!formData.name || !formData.amount || !formData.endDate) {
+      alert('يرجى ملء الحقول المطلوبة');
+      return;
+    }
+    onSubmit({
+      ...formData,
+      id: mode === 'add' ? generateId() : formData.id,
+      amount: Number(formData.amount),
+      remaining: mode === 'add' ? Number(formData.amount) : formData.remaining,
+      interestRate: Number(formData.interestRate),
+      monthlyPayment: Number(formData.monthlyPayment)
+    });
+  };
+
+  return React.createElement('div', { className: "modal-backdrop" },
+    React.createElement('div', {
+      className: "glass rounded-2xl p-6 max-w-md w-full max-h-[90vh] overflow-y-auto"
+    },
+      React.createElement('div', { className: "flex justify-between items-center mb-6" },
+        React.createElement('h3', { className: "text-xl font-bold" },
+          mode === 'add' ? 'إضافة قرض جديد' : 'تعديل القرض'
+        ),
+        React.createElement('button', {
+          onClick: onCancel,
+          className: "p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800"
+        },
+          React.createElement(Icon, { name: 'X', size: 20 })
+        )
+      ),
+      
+      React.createElement('form', { onSubmit: handleSubmit, className: "space-y-4" },
+        React.createElement(InputField, {
+          label: "اسم القرض",
+          value: formData.name,
+          onChange: (e) => setFormData({ ...formData, name: e.target.value }),
+          placeholder: "أدخل اسم القرض",
+          required: true
+        }),
+        
+        React.createElement('div', { className: "grid grid-cols-2 gap-4" },
+          React.createElement(InputField, {
+            label: "المبلغ (ج.م)",
+            type: "number",
+            value: formData.amount,
+            onChange: (e) => setFormData({ ...formData, amount: e.target.value }),
+            placeholder: "المبلغ الكلي",
+            required: true,
+            min: "0.01"
+          }),
+          React.createElement(InputField, {
+            label: "نسبة الفائدة (%)",
+            type: "number",
+            value: formData.interestRate,
+            onChange: (e) => setFormData({ ...formData, interestRate: e.target.value }),
+            placeholder: "نسبة الفائدة",
+            step: "0.1"
+          })
+        ),
+        
+        React.createElement('div', { className: "grid grid-cols-2 gap-4" },
+          React.createElement(InputField, {
+            label: "تاريخ البدء",
+            type: "date",
+            value: formData.startDate,
+            onChange: (e) => setFormData({ ...formData, startDate: e.target.value }),
+            required: true
+          }),
+          React.createElement(InputField, {
+            label: "تاريخ الانتهاء",
+            type: "date",
+            value: formData.endDate,
+            onChange: (e) => setFormData({ ...formData, endDate: e.target.value }),
+            required: true
+          })
+        ),
+        
+        React.createElement(InputField, {
+          label: "الدفعة الشهرية (ج.م)",
+          type: "number",
+          value: formData.monthlyPayment,
+          onChange: (e) => setFormData({ ...formData, monthlyPayment: e.target.value }),
+          placeholder: "الدفعة الشهرية",
+          required: true,
+          min: "0.01"
+        }),
+        
+        React.createElement('div', null,
+          React.createElement('label', { className: "block text-sm font-medium mb-2" }, "الحالة"),
+          React.createElement('select', {
+            value: formData.status,
+            onChange: (e) => setFormData({ ...formData, status: e.target.value }),
+            className: "input-field"
+          },
+            React.createElement('option', { value: "active" }, "نشط"),
+            React.createElement('option', { value: "paid" }, "مسدد")
+          )
+        ),
+        
+        React.createElement('div', { className: "flex gap-3 pt-4" },
+          React.createElement('button', {
+            type: "button",
+            onClick: onCancel,
+            className: "flex-1 p-3 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 font-medium"
+          }, "إلغاء"),
+          React.createElement('button', {
+            type: "submit",
+            className: "flex-1 p-3 rounded-xl gradient-bg-primary text-white font-bold hover:shadow-lg"
+          },
+            mode === 'add' ? 'إضافة القرض' : 'حفظ التعديلات'
+          )
+        )
+      )
+    )
+  );
+};
+
+// مكون البطاقات والمحافظ
+const CardsView = ({ accounts, onUpdateBalance }) => {
+  const [editingAccount, setEditingAccount] = useState(null);
+  const [newBalance, setNewBalance] = useState('');
+
+  const handleUpdateBalance = (accountId) => {
+    if (!newBalance || isNaN(newBalance)) {
+      alert('يرجى إدخال مبلغ صحيح');
+      return;
+    }
+    onUpdateBalance(accountId, Number(newBalance));
+    setEditingAccount(null);
+    setNewBalance('');
+  };
+
+  return React.createElement('div', { className: "space-y-6 animate-fadeIn" },
+    React.createElement('div', { className: "glass p-6 rounded-2xl" },
+      React.createElement('div', { className: "flex justify-between items-center mb-6" },
+        React.createElement('h3', { className: "text-xl font-bold" }, "البطاقات والمحافظ"),
+        React.createElement('p', { className: "text-slate-600 dark:text-slate-400" },
+          "إدارة أرصدة حساباتك المختلفة"
+        )
+      ),
+      
+      React.createElement('div', { className: "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" },
+        Object.entries(accounts).map(([id, account]) => {
+          const isEditing = editingAccount === id;
+          
+          return React.createElement('div', {
+            key: id,
+            className: "bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-lg hover-lift"
+          },
+            React.createElement('div', { className: "flex justify-between items-center mb-4" },
+              React.createElement('div', null,
+                React.createElement('h4', { className: "font-bold text-lg" }, account.name),
+                React.createElement('p', { className: "text-sm text-slate-500" },
+                  `آخر تحديث: ${new Date().toLocaleDateString('ar-SA')}`
+                )
+              ),
+              React.createElement('div', { className: "p-3 rounded-xl bg-slate-100 dark:bg-slate-700" },
+                React.createElement(Icon, {
+                  name: id.includes('cash') ? 'Wallet' : 
+                         id.includes('fawry') ? 'Store' : 
+                         id.includes('etisalat') ? 'Smartphone' : 
+                         id.includes('cib') ? 'BuildingBank' : 'PiggyBank',
+                  size: 24,
+                  className: "text-slate-600 dark:text-slate-400"
+                })
+              )
+            ),
+            
+            isEditing 
+              ? React.createElement('div', { className: "space-y-3" },
+                  React.createElement(InputField, {
+                    type: "number",
+                    value: newBalance,
+                    onChange: (e) => setNewBalance(e.target.value),
+                    placeholder: `أدخل الرصيد الجديد لـ ${account.name}`,
+                    className: "text-center text-xl font-bold"
+                  }),
+                  React.createElement('div', { className: "flex gap-2" },
+                    React.createElement('button', {
+                      onClick: () => handleUpdateBalance(id),
+                      className: "flex-1 gradient-bg-primary text-white py-2 rounded-lg font-bold"
+                    }, "حفظ"),
+                    React.createElement('button', {
+                      onClick: () => {
+                        setEditingAccount(null);
+                        setNewBalance('');
+                      },
+                      className: "flex-1 bg-slate-100 dark:bg-slate-700 py-2 rounded-lg font-medium"
+                    }, "إلغاء")
+                  )
+                )
+              : React.createElement('div', null,
+                  React.createElement('p', { className: "text-3xl font-black mb-4 text-center" },
+                    `${(account.balance || 0).toLocaleString()} ج.م`
+                  ),
+                  React.createElement('button', {
+                    onClick: () => {
+                      setEditingAccount(id);
+                      setNewBalance(account.balance || '');
+                    },
+                    className: "w-full gradient-bg-primary text-white py-3 rounded-xl font-bold hover:shadow-lg"
+                  },
+                    React.createElement('div', { className: "flex items-center justify-center gap-2" },
+                      React.createElement(Icon, { name: 'Edit', size: 18 }),
+                      "تعديل الرصيد"
+                    )
+                  )
+                )
+          );
+        })
+      )
+    ),
+    
+    // تحويل سريع بين الحسابات
+    React.createElement('div', { className: "glass p-6 rounded-2xl" },
+      React.createElement('h3', { className: "text-lg font-bold mb-6" }, "تحويل سريع بين الحسابات"),
+      React.createElement('div', { className: "bg-gradient-to-r from-primary/10 to-primary/5 p-6 rounded-2xl" },
+        React.createElement('p', { className: "text-slate-600 dark:text-slate-400 mb-4 text-center" },
+          "ميزة التحويل بين الحسابات قيد التطوير..."
+        ),
+        React.createElement('div', { className: "flex justify-center" },
+          React.createElement(Icon, { name: 'ArrowRightLeft', size: 32, className: "text-primary opacity-50" })
+        )
+      )
+    )
+  );
+};
+
+// مكون التقارير
+const ReportsView = ({ transactions, accounts }) => {
+  const [reportType, setReportType] = useState('monthly');
+  const [selectedYear, setSelectedYear] = useState(CURRENT_YEAR);
+
+  // حساب الإحصائيات الشهرية
+  const monthlyStats = useMemo(() => {
+    const stats = {};
+    MONTHS.forEach(month => {
+      const monthTransactions = (transactions || []).filter(t => t.month === month);
+      stats[month] = {
+        income: monthTransactions.filter(t => t.type === 'income')
+          .reduce((sum, t) => sum + (t.amount || 0), 0),
+        expense: monthTransactions.filter(t => t.type === 'expense')
+          .reduce((sum, t) => sum + (t.amount || 0), 0),
+        count: monthTransactions.length
+      };
+    });
+    return stats;
+  }, [transactions]);
+
+  // حساب الإحصائيات حسب الفئة
+  const categoryStats = useMemo(() => {
+    const stats = { income: {}, expense: {} };
+    (transactions || []).forEach(transaction => {
+      const type = transaction.type;
+      const category = transaction.category;
+      if (!stats[type][category]) {
+        stats[type][category] = { total: 0, count: 0 };
+      }
+      stats[type][category].total += transaction.amount || 0;
+      stats[type][category].count++;
+    });
+    return stats;
+  }, [transactions]);
+
+  return React.createElement('div', { className: "space-y-6 animate-fadeIn" },
+    // فلترة التقارير
+    React.createElement('div', { className: "glass p-6 rounded-2xl" },
+      React.createElement('div', { className: "flex flex-col md:flex-row gap-4 items-center justify-between" },
+        React.createElement('div', { className: "flex gap-2" },
+          ['monthly', 'categories', 'accounts'].map(type =>
+            React.createElement('button', {
+              key: type,
+              onClick: () => setReportType(type),
+              className: `px-4 py-2 rounded-lg font-medium ${
+                reportType === type 
+                  ? 'gradient-bg-primary text-white' 
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+              }` 
+            },
+              type === 'monthly' ? 'شهري' : 
+              type === 'categories' ? 'حسب الفئة' : 'حسب الحساب'
+            )
+          )
+        ),
+        React.createElement('select', {
+          value: selectedYear,
+          onChange: (e) => setSelectedYear(Number(e.target.value)),
+          className: "bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2"
+        },
+          [CURRENT_YEAR - 1, CURRENT_YEAR, CURRENT_YEAR + 1].map(year =>
+            React.createElement('option', { key: year, value: year }, `عام ${year}`)
+          )
+        )
+      )
+    ),
+
+    // محتوى التقرير
+    reportType === 'monthly' && 
+      React.createElement('div', { className: "space-y-6" },
+        React.createElement('h3', { className: "text-xl font-bold" }, "التقرير الشهري"),
+        React.createElement('div', { className: "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" },
+          Object.entries(monthlyStats).map(([month, data]) =>
+            React.createElement('div', {
+              key: month,
+              className: "glass p-4 rounded-2xl hover-lift"
+            },
+              React.createElement('div', { className: "flex justify-between items-center mb-3" },
+                React.createElement('h4', { className: "font-bold" }, month),
+                React.createElement('span', { className: "text-sm text-slate-500" }, `${data.count} معاملة`)
+              ),
+              React.createElement('div', { className: "space-y-2" },
+                React.createElement('div', { className: "flex justify-between" },
+                  React.createElement('span', { className: "text-sm text-slate-600" }, "الدخل:"),
+                  React.createElement('span', { className: "font-bold text-emerald-600" },
+                    `${data.income.toLocaleString()} ج.م`
+                  )
+                ),
+                React.createElement('div', { className: "flex justify-between" },
+                  React.createElement('span', { className: "text-sm text-slate-600" }, "المصروفات:"),
+                  React.createElement('span', { className: "font-bold text-red-600" },
+                    `${data.expense.toLocaleString()} ج.م`
+                  )
+                ),
+                React.createElement('div', { className: "flex justify-between pt-2 border-t border-slate-200" },
+                  React.createElement('span', { className: "font-medium" }, "الصافي:"),
+                  React.createElement('span', {
+                    className: `font-bold ${data.income - data.expense >= 0 ? 'text-emerald-600' : 'text-red-600'}`
+                  },
+                    `${(data.income - data.expense).toLocaleString()} ج.م`
+                  )
+                )
+              )
             )
           )
         )
       ),
-      
-      React.createElement('div', { className: "flex gap-4" },
-        React.createElement('button', {
-          type: "button",
-          onClick: () => {
-            // تصدير قائمة الدخل
-            const incomeStatement = [
-              ['قائمة الدخل'],
-              ['الفترة:', `${dateRange.start} إلى ${dateRange.end}`],
-              [],
-              ['الإيرادات', 'المبلغ'],
-              ...Object.values(ledgerAccounts)
-                .filter(a => a.accountType === ACCOUNT_TYPES.INCOME && a.balance > 0)
-                .map(a => [a.accountName, a.balance]),
-              ['إجمالي الإيرادات', Object.values(ledgerAccounts)
-                .filter(a => a.accountType === ACCOUNT_TYPES.INCOME)
-                .reduce((sum, a) => sum + a.balance, 0)],
-              [],
-              ['المصروفات', 'المبلغ'],
-              ...Object.values(ledgerAccounts)
-                .filter(a => a.accountType === ACCOUNT_TYPES.EXPENSE && a.balance > 0)
-                .map(a => [a.accountName, a.balance]),
-              ['إجمالي المصروفات', Object.values(ledgerAccounts)
-                .filter(a => a.accountType === ACCOUNT_TYPES.EXPENSE)
-                .reduce((sum, a) => sum + a.balance, 0)],
-              [],
-              ['صافي الدخل', netIncome]
-            ];
-            
-            const csvContent = incomeStatement.map(row => row.join(',')).join('\n');
-            const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `income_statement_${dateRange.start}_to_${dateRange.end}.csv`;
-            a.click();
-            URL.revokeObjectURL(url);
-          },
-          className: "gradient-bg-profit text-white px-4 py-2 rounded-xl font-bold"
-        }, "تصدير قائمة الدخل"),
-        
-        React.createElement('button', {
-          type: "button",
-          onClick: () => {
-            // تصدير الميزانية العمومية
-            const balanceSheet = [
-              ['الميزانية العمومية'],
-              ['التاريخ:', dateRange.end],
-              [],
-              ['الأصول', 'المبلغ'],
-              ...Object.values(ledgerAccounts)
-                .filter(a => a.accountType === ACCOUNT_TYPES.ASSET && a.balance > 0)
-                .map(a => [a.accountName, a.balance]),
-              ['إجمالي الأصول', totalAssets],
-              [],
-              ['الخصوم', 'المبلغ'],
-              ...Object.values(ledgerAccounts)
-                .filter(a => a.accountType === ACCOUNT_TYPES.LIABILITY && a.balance > 0)
-                .map(a => [a.accountName, a.balance]),
-              [],
-              ['حقوق الملكية', 'المبلغ'],
-              ...Object.values(ledgerAccounts)
-                .filter(a => a.accountType === ACCOUNT_TYPES.EQUITY && a.balance > 0)
-                .map(a => [a.accountName, a.balance]),
-              ['إجمالي الخصوم وحقوق الملكية', totalLiabilitiesEquity]
-            ];
-            
-            const csvContent = balanceSheet.map(row => row.join(',')).join('\n');
-            const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `balance_sheet_${dateRange.end}.csv`;
-            a.click();
-            URL.revokeObjectURL(url);
-          },
-          className: "gradient-bg-primary text-white px-4 py-2 rounded-xl font-bold"
-        }, "تصدير الميزانية العمومية"),
-        
-        React.createElement('button', {
-          type: "button",
-          onClick: () => {
-            // تصدير التقرير المالي الكامل
-            const fullReport = [
-              ['التقرير المالي الكامل'],
-              ['الفترة:', `${dateRange.start} إلى ${dateRange.end}`],
-              [],
-              ['ميزان المراجعة'],
-              ['رقم الحساب', 'اسم الحساب', 'مدين', 'دائن', 'الرصيد', 'نوع الحساب'],
-              ...Object.values(ledgerAccounts)
-                .sort((a, b) => a.accountId.localeCompare(b.accountId))
-                .map(a => [a.accountId, a.accountName, a.debitBalance, a.creditBalance, a.balance, a.accountType]),
-              [],
-              ['المجاميع', '', 
-                Object.values(ledgerAccounts).reduce((sum, a) => sum + a.debitBalance, 0),
-                Object.values(ledgerAccounts).reduce((sum, a) => sum + a.creditBalance, 0),
-                Math.abs(
-                  Object.values(ledgerAccounts).reduce((sum, a) => sum + a.debitBalance, 0) -
-                  Object.values(ledgerAccounts).reduce((sum, a) => sum + a.creditBalance, 0)
+
+    reportType === 'categories' &&
+      React.createElement('div', { className: "space-y-6" },
+        React.createElement('div', { className: "grid grid-cols-1 lg:grid-cols-2 gap-6" },
+          // الدخل حسب الفئة
+          React.createElement('div', { className: "glass p-6 rounded-2xl" },
+            React.createElement('h4', { className: "font-bold text-lg mb-4 flex items-center gap-2" },
+              React.createElement(Icon, { name: 'TrendingUp', size: 20, className: "text-emerald-600" }),
+              "الدخل حسب الفئة"
+            ),
+            Object.entries(categoryStats.income).length > 0
+              ? React.createElement('div', { className: "space-y-3" },
+                  Object.entries(categoryStats.income)
+                    .sort((a, b) => b[1].total - a[1].total)
+                    .map(([category, data]) =>
+                      React.createElement('div', {
+                        key: category,
+                        className: "flex items-center justify-between p-3 rounded-lg bg-emerald-50 dark:bg-emerald-900/10"
+                      },
+                        React.createElement('div', { className: "flex items-center gap-3" },
+                          React.createElement('div', {
+                            className: "w-3 h-3 rounded-full",
+                            style: { backgroundColor: CATEGORY_COLORS[category] || '#10b981' }
+                          }),
+                          React.createElement('span', { className: "font-medium" }, category)
+                        ),
+                        React.createElement('div', { className: "text-right" },
+                          React.createElement('p', { className: "font-bold text-emerald-600" },
+                            `${data.total.toLocaleString()} ج.م`
+                          ),
+                          React.createElement('p', { className: "text-xs text-slate-500" },
+                            `${data.count} معاملة`
+                          )
+                        )
+                      )
+                    )
+                )
+              : React.createElement('div', { className: "text-center py-8 text-slate-500" },
+                  React.createElement(Icon, { name: 'FileText', size: 32, className: "mx-auto mb-3 opacity-50" }),
+                  React.createElement('p', null, "لا توجد بيانات للدخل")
+                )
+          ),
+          
+          // المصروفات حسب الفئة
+          React.createElement('div', { className: "glass p-6 rounded-2xl" },
+            React.createElement('h4', { className: "font-bold text-lg mb-4 flex items-center gap-2" },
+              React.createElement(Icon, { name: 'TrendingDown', size: 20, className: "text-red-600" }),
+              "المصروفات حسب الفئة"
+            ),
+            Object.entries(categoryStats.expense).length > 0
+              ? React.createElement('div', { className: "space-y-3" },
+                  Object.entries(categoryStats.expense)
+                    .sort((a, b) => b[1].total - a[1].total)
+                    .map(([category, data]) =>
+                      React.createElement('div', {
+                        key: category,
+                        className: "flex items-center justify-between p-3 rounded-lg bg-red-50 dark:bg-red-900/10"
+                      },
+                        React.createElement('div', { className: "flex items-center gap-3" },
+                          React.createElement('div', {
+                            className: "w-3 h-3 rounded-full",
+                            style: { backgroundColor: CATEGORY_COLORS[category] || '#ef4444' }
+                          }),
+                          React.createElement('span', { className: "font-medium" }, category)
+                        ),
+                        React.createElement('div', { className: "text-right" },
+                          React.createElement('p', { className: "font-bold text-red-600" },
+                            `${data.total.toLocaleString()} ج.م`
+                          ),
+                          React.createElement('p', { className: "text-xs text-slate-500" },
+                            `${data.count} معاملة`
+                          )
+                        )
+                      )
+                    )
+                )
+              : React.createElement('div', { className: "text-center py-8 text-slate-500" },
+                  React.createElement(Icon, { name: 'FileText', size: 32, className: "mx-auto mb-3 opacity-50" }),
+                  React.createElement('p', null, "لا توجد بيانات للمصروفات")
+                )
+          )
+        )
+      ),
+
+    reportType === 'accounts' &&
+      React.createElement('div', { className: "space-y-6" },
+        React.createElement('h3', { className: "text-xl font-bold" }, "أرصدة الحسابات"),
+        React.createElement('div', { className: "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" },
+          Object.entries(accounts || {}).map(([id, account]) =>
+            React.createElement('div', {
+              key: id,
+              className: "glass p-6 rounded-2xl hover-lift"
+            },
+              React.createElement('div', { className: "flex items-center gap-3 mb-4" },
+                React.createElement('div', { className: "p-2 rounded-lg bg-primary/10" },
+                  React.createElement(Icon, {
+                    name: id.includes('cash') ? 'Wallet' : 
+                           id.includes('fawry') ? 'Store' : 
+                           id.includes('etisalat') ? 'Smartphone' : 
+                           id.includes('cib') ? 'BuildingBank' : 'PiggyBank',
+                    size: 24,
+                    className: "text-primary"
+                  })
                 ),
-                ''
-              ]
-            ];
-            
-            const csvContent = fullReport.map(row => row.join(',')).join('\n');
-            const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `financial_report_${dateRange.start}_to_${dateRange.end}.csv`;
-            a.click();
-            URL.revokeObjectURL(url);
-          },
-          className: "gradient-bg-warning text-white px-4 py-2 rounded-xl font-bold"
-        }, "تصدير تقرير كامل")
+                React.createElement('div', null,
+                  React.createElement('h4', { className: "font-bold" }, account.name),
+                  React.createElement('p', { className: "text-sm text-slate-500" }, `آخر تحديث: اليوم`)
+                )
+              ),
+              React.createElement('p', { className: "text-3xl font-black text-center mb-4" },
+                `${(account.balance || 0).toLocaleString()} ج.م`
+              ),
+              React.createElement('div', { className: "h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden" },
+                React.createElement('div', {
+                  className: "h-full gradient-bg-primary",
+                  style: { 
+                    width: `${Math.min((account.balance || 0) / 10000 * 100, 100)}%` 
+                  }
+                })
+              )
+            )
+          )
+        )
       )
-    )
   );
-});
-AccountingLedgerView.displayName = 'AccountingLedgerView';
+};
 
 // المكون الرئيسي للتطبيق
 const App = () => {
   const [state, setState] = useState({
     activeTab: 'dashboard',
-    selectedMonth: MONTHS[new Date().getMonth()],
     isLocked: false,
     isDarkMode: localStorage.getItem('theme') === 'dark',
-    accountingData: {
-      journalEntries: JSON.parse(localStorage.getItem('journalEntries') || '[]'),
-      ledgerAccounts: JSON.parse(localStorage.getItem('ledgerAccounts') || '{}'),
-      trialBalance: JSON.parse(localStorage.getItem('trialBalance') || '{}')
-    }
+    data: getInitialData(),
+    showTransactionForm: false,
+    transactionFormMode: 'add',
+    editingTransaction: null,
+    showNotification: false,
+    notification: { type: 'success', message: '' }
   });
 
+  // التبديل بين الوضع الداكن والفاتح
   const toggleDarkMode = () => {
     const newMode = !state.isDarkMode;
     setState(prev => ({ ...prev, isDarkMode: newMode }));
@@ -1639,52 +2357,178 @@ const App = () => {
     }
   };
 
-  const renderActiveView = () => {
-    switch (state.activeTab) {
-      case 'dashboard':
-        return React.createElement('div', { className: "space-y-6" },
-          React.createElement('h1', { className: "text-2xl font-bold" }, "لوحة التحكم"),
-          React.createElement('p', null, "مرحباً بك في نظام المحاسبة المتكامل")
-        );
-      case 'accounting':
-        return React.createElement(AccountingLedgerView, {
-          ledgerAccounts: state.accountingData.ledgerAccounts,
-          journalEntries: state.accountingData.journalEntries,
-          trialBalance: state.accountingData.trialBalance,
-          onExportReport: () => {
-            const allData = {
-              journalEntries: state.accountingData.journalEntries,
-              ledgerAccounts: state.accountingData.ledgerAccounts,
-              trialBalance: state.accountingData.trialBalance,
-              chartOfAccounts: CHART_OF_ACCOUNTS
-            };
-            
-            const blob = new Blob([JSON.stringify(allData, null, 2)], {type: 'application/json'});
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `accounting_records_${new Date().toISOString().split('T')[0]}.json`;
-            a.click();
-            URL.revokeObjectURL(url);
-            
-            alert('تم تصدير السجلات المحاسبية بنجاح');
-          }
-        });
-      default:
-        return React.createElement('div', { className: "space-y-6" },
-          React.createElement('h1', { className: "text-2xl font-bold" }, "لوحة التحكم"),
-          React.createElement('p', null, "مرحباً بك في نظام المحاسبة المتكامل")
-        );
+  // حفظ البيانات
+  const saveData = useCallback((newData) => {
+    setState(prev => {
+      const updated = { ...prev, data: newData };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(newData));
+      return updated;
+    });
+  }, []);
+
+  // عرض الإشعار
+  const showNotification = (type, message) => {
+    setState(prev => ({
+      ...prev,
+      showNotification: true,
+      notification: { type, message }
+    }));
+    setTimeout(() => {
+      setState(prev => ({ ...prev, showNotification: false }));
+    }, 3000);
+  };
+
+  // إضافة معاملة
+  const handleAddTransaction = (transactionData) => {
+    const newTransactions = [...state.data.transactions, transactionData];
+    const newData = { ...state.data, transactions: newTransactions };
+    saveData(newData);
+    showNotification('success', 'تم إضافة المعاملة بنجاح');
+    setState(prev => ({
+      ...prev,
+      showTransactionForm: false,
+      editingTransaction: null
+    }));
+  };
+
+  // تعديل معاملة
+  const handleEditTransaction = (transactionData) => {
+    const newTransactions = state.data.transactions.map(t =>
+      t.id === transactionData.id ? transactionData : t
+    );
+    const newData = { ...state.data, transactions: newTransactions };
+    saveData(newData);
+    showNotification('success', 'تم تعديل المعاملة بنجاح');
+    setState(prev => ({
+      ...prev,
+      showTransactionForm: false,
+      editingTransaction: null
+    }));
+  };
+
+  // حذف معاملة
+  const handleDeleteTransaction = (transactionId) => {
+    if (window.confirm('هل أنت متأكد من حذف هذه المعاملة؟')) {
+      const newTransactions = state.data.transactions.filter(t => t.id !== transactionId);
+      const newData = { ...state.data, transactions: newTransactions };
+      saveData(newData);
+      showNotification('success', 'تم حذف المعاملة بنجاح');
     }
   };
 
-  // التأثيرات
+  // إضافة قرض
+  const handleAddLoan = (loanData) => {
+    const newLoans = [...state.data.loans, loanData];
+    const newData = { ...state.data, loans: newLoans };
+    saveData(newData);
+    showNotification('success', 'تم إضافة القرض بنجاح');
+  };
+
+  // تعديل قرض
+  const handleEditLoan = (loanData) => {
+    const newLoans = state.data.loans.map(l =>
+      l.id === loanData.id ? loanData : l
+    );
+    const newData = { ...state.data, loans: newLoans };
+    saveData(newData);
+    showNotification('success', 'تم تعديل القرض بنجاح');
+  };
+
+  // حذف قرض
+  const handleDeleteLoan = (loanId) => {
+    if (window.confirm('هل أنت متأكد من حذف هذا القرض؟')) {
+      const newLoans = state.data.loans.filter(l => l.id !== loanId);
+      const newData = { ...state.data, loans: newLoans };
+      saveData(newData);
+      showNotification('success', 'تم حذف القرض بنجاح');
+    }
+  };
+
+  // تحديث رصيد الحساب
+  const handleUpdateAccountBalance = (accountId, newBalance) => {
+    const newAccounts = {
+      ...state.data.accounts,
+      [accountId]: { ...state.data.accounts[accountId], balance: newBalance }
+    };
+    const newData = { ...state.data, accounts: newAccounts };
+    saveData(newData);
+    showNotification('success', 'تم تحديث الرصيد بنجاح');
+  };
+
+  // توليد بيانات محاسبية افتراضية
+  const generateAccountingData = () => {
+    const journalEntries = [];
+    const ledgerAccounts = {};
+
+    // معالجة المعاملات الحالية
+    state.data.transactions.forEach(transaction => {
+      try {
+        let entries = [];
+        if (transaction.type === 'income') {
+          entries = [
+            { accountId: '1001', type: 'debit', amount: transaction.amount },
+            { accountId: '4001', type: 'credit', amount: transaction.amount }
+          ];
+        } else {
+          entries = [
+            { accountId: '5001', type: 'debit', amount: transaction.amount },
+            { accountId: '1001', type: 'credit', amount: transaction.amount }
+          ];
+        }
+
+        const journalEntry = createJournalEntry(
+          entries,
+          transaction.description || transaction.category,
+          transaction.date,
+          transaction.id
+        );
+        journalEntries.push(journalEntry);
+
+        // تحديث دفتر الأستاذ
+        journalEntry.entries.forEach(entry => {
+          const accountId = entry.accountId;
+          if (!ledgerAccounts[accountId]) {
+            ledgerAccounts[accountId] = {
+              ...CHART_OF_ACCOUNTS[accountId],
+              debitBalance: 0,
+              creditBalance: 0,
+              balance: 0,
+              transactions: []
+            };
+          }
+
+          if (entry.type === 'debit') {
+            ledgerAccounts[accountId].debitBalance += entry.amount;
+          } else {
+            ledgerAccounts[accountId].creditBalance += entry.amount;
+          }
+
+          // حساب الرصيد
+          if (ledgerAccounts[accountId].normalBalance === 'debit') {
+            ledgerAccounts[accountId].balance = 
+              ledgerAccounts[accountId].debitBalance - ledgerAccounts[accountId].creditBalance;
+          } else {
+            ledgerAccounts[accountId].balance = 
+              ledgerAccounts[accountId].creditBalance - ledgerAccounts[accountId].debitBalance;
+          }
+        });
+      } catch (error) {
+        console.error('Error generating accounting data:', error);
+      }
+    });
+
+    return { journalEntries, ledgerAccounts };
+  };
+
+  // التبديل بين الصفحات
+  const navigate = (tab) => {
+    setState(prev => ({ ...prev, activeTab: tab }));
+  };
+
+  // إعداد تأثيرات أولية
   useEffect(() => {
-    // تحميل حالة Dark Mode
     if (state.isDarkMode) {
       document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
     }
 
     // إخفاء شاشة التحميل
@@ -1696,70 +2540,235 @@ const App = () => {
     }, 1000);
   }, [state.isDarkMode]);
 
-  return React.createElement('div', { 
-    className: `min-h-screen transition-colors duration-300 ${state.isDarkMode ? 'dark bg-dark-bg' : 'bg-gray-50'}`
+  // عرض الصفحة النشطة
+  const renderActiveView = () => {
+    const accountingData = generateAccountingData();
+
+    switch (state.activeTab) {
+      case 'dashboard':
+        return React.createElement(Dashboard, {
+          data: state.data,
+          onNavigate: navigate
+        });
+
+      case 'transactions':
+        return React.createElement(TransactionsView, {
+          transactions: state.data.transactions,
+          onEdit: (transaction) => {
+            setState(prev => ({
+              ...prev,
+              showTransactionForm: true,
+              transactionFormMode: 'edit',
+              editingTransaction: transaction
+            }));
+          },
+          onDelete: handleDeleteTransaction
+        });
+
+      case 'cards':
+        return React.createElement(CardsView, {
+          accounts: state.data.accounts,
+          onUpdateBalance: handleUpdateAccountBalance
+        });
+
+      case 'loans':
+        return React.createElement(LoansView, {
+          loans: state.data.loans,
+          onAdd: handleAddLoan,
+          onEdit: handleEditLoan,
+          onDelete: handleDeleteLoan
+        });
+
+      case 'accounting':
+        return React.createElement(AccountingLedgerView, {
+          ledgerAccounts: accountingData.ledgerAccounts,
+          journalEntries: accountingData.journalEntries,
+          onExport: () => {
+            const dataStr = JSON.stringify(accountingData, null, 2);
+            const dataBlob = new Blob([dataStr], { type: 'application/json' });
+            const url = URL.createObjectURL(dataBlob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `accounting_data_${getLocalISODate()}.json`;
+            link.click();
+            URL.revokeObjectURL(url);
+            showNotification('success', 'تم تصدير البيانات المحاسبية بنجاح');
+          }
+        });
+
+      case 'reports':
+        return React.createElement(ReportsView, {
+          transactions: state.data.transactions,
+          accounts: state.data.accounts
+        });
+
+      default:
+        return React.createElement(Dashboard, {
+          data: state.data,
+          onNavigate: navigate
+        });
+    }
+  };
+
+  // قائمة التنقل السفلية
+  const bottomNavItems = [
+    { id: 'dashboard', label: 'الرئيسية', icon: 'LayoutDashboard' },
+    { id: 'transactions', label: 'المعاملات', icon: 'ArrowRightLeft' },
+    { id: 'cards', label: 'المحافظ', icon: 'CreditCard' },
+    { id: 'loans', label: 'القروض', icon: 'Banknote' },
+    { id: 'accounting', label: 'المحاسبة', icon: 'BookOpen' },
+    { id: 'reports', label: 'التقارير', icon: 'FileBarChart' }
+  ];
+
+  return React.createElement('div', {
+    className: `min-h-screen transition-colors duration-300 ${
+      state.isDarkMode ? 'dark bg-dark-bg' : 'bg-gray-50'
+    }`
   },
     // Header
-    React.createElement('header', { className: "glass sticky top-0 z-50 border-b border-slate-200 dark:border-slate-800" },
+    React.createElement('header', {
+      className: "glass sticky top-0 z-50 border-b border-slate-200 dark:border-slate-800"
+    },
       React.createElement('div', { className: "px-4 py-3 flex justify-between items-center" },
         React.createElement('div', { className: "flex items-center gap-3" },
           React.createElement('div', { className: "gradient-bg-primary p-2 rounded-lg" },
-            React.createElement(IconWrapper, { icon: 'Wallet', size: 24, className: "text-white" })
+            React.createElement(Icon, { name: 'Wallet', size: 24, className: "text-white" })
           ),
           React.createElement('div', null,
             React.createElement('h1', { className: "font-black text-lg" }, "المحفظة المالية"),
             React.createElement('p', { className: "text-xs text-slate-500" }, "V52 المحاسبة المتكاملة")
           )
         ),
-        React.createElement('button', {
-          onClick: toggleDarkMode,
-          className: "p-2 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700"
-        },
-          state.isDarkMode 
-            ? React.createElement(IconWrapper, { icon: 'Sun', size: 20, className: "text-yellow-500" })
-            : React.createElement(IconWrapper, { icon: 'Moon', size: 20, className: "text-slate-600" })
+        React.createElement('div', { className: "flex items-center gap-3" },
+          React.createElement('button', {
+            onClick: toggleDarkMode,
+            className: "p-2 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700"
+          },
+            state.isDarkMode 
+              ? React.createElement(Icon, { name: 'Sun', size: 20, className: "text-yellow-500" })
+              : React.createElement(Icon, { name: 'Moon', size: 20, className: "text-slate-600" })
+          ),
+          state.activeTab === 'dashboard' && React.createElement('button', {
+            onClick: () => {
+              setState(prev => ({
+                ...prev,
+                showTransactionForm: true,
+                transactionFormMode: 'add',
+                editingTransaction: null
+              }));
+            },
+            className: "gradient-bg-primary text-white px-4 py-2 rounded-xl font-bold flex items-center gap-2"
+          },
+            React.createElement(Icon, { name: 'Plus', size: 16 }),
+            "معاملة جديدة"
+          )
         )
       )
     ),
 
     // Main Content
-    React.createElement('main', { className: "p-4 max-w-7xl mx-auto" },
-      // Navigation Tabs
-      React.createElement('div', { className: "flex gap-2 mb-6 overflow-x-auto pb-2" },
-        ['dashboard', 'accounting'].map(tab => 
-          React.createElement('button', {
-            key: tab,
-            onClick: () => setState(prev => ({ ...prev, activeTab: tab })),
-            className: `px-4 py-2 rounded-lg font-medium whitespace-nowrap ${
-              state.activeTab === tab 
-                ? 'gradient-bg-primary text-white' 
-                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
-            }` 
-          }, 
-            tab === 'dashboard' ? 'لوحة التحكم' : 'المحاسبة'
-          )
-        )
-      ),
-
-      // Active View
+    React.createElement('main', {
+      className: "p-4 max-w-7xl mx-auto pb-24"
+    },
       renderActiveView()
     ),
 
-    // Lock Screen
-    state.isLocked && React.createElement('div', { 
-      className: "fixed inset-0 bg-black/80 backdrop-blur-sm flex flex-col items-center justify-center z-50" 
+    // Floating Action Button
+    state.activeTab !== 'dashboard' && React.createElement('button', {
+      onClick: () => {
+        setState(prev => ({
+          ...prev,
+          showTransactionForm: true,
+          transactionFormMode: 'add',
+          editingTransaction: null
+        }));
+      },
+      className: "fab"
     },
-      React.createElement(IconWrapper, { icon: 'Lock', size: 80, className: "text-blue-500 mb-4" }),
-      React.createElement('h2', { className: "text-2xl font-bold text-white mb-4" }, "التطبيق مقفل"),
+      React.createElement(Icon, { name: 'Plus', size: 24, className: "text-white" })
+    ),
+
+    // Bottom Navigation
+    React.createElement('div', { className: "bottom-nav-container" },
+      React.createElement('div', { className: "scrollable-nav" },
+        bottomNavItems.map(item =>
+          React.createElement('button', {
+            key: item.id,
+            type: "button",
+            onClick: () => navigate(item.id),
+            className: `nav-btn ${state.activeTab === item.id ? 'active' : ''}`
+          },
+            React.createElement(Icon, { name: item.icon, size: 22 }),
+            React.createElement('span', null, item.label)
+          )
+        )
+      )
+    ),
+
+    // Transaction Form Modal
+    state.showTransactionForm && React.createElement(TransactionForm, {
+      mode: state.transactionFormMode,
+      initialData: state.editingTransaction,
+      onSubmit: (data) => {
+        if (state.transactionFormMode === 'add') {
+          handleAddTransaction(data);
+        } else {
+          handleEditTransaction(data);
+        }
+      },
+      onCancel: () => {
+        setState(prev => ({
+          ...prev,
+          showTransactionForm: false,
+          editingTransaction: null
+        }));
+      }
+    }),
+
+    // Notification
+    state.showNotification && React.createElement('div', {
+      className: `fixed top-4 left-4 right-4 md:left-auto md:right-4 md:w-96 z-50 animate-fadeInUp`
+    },
+      React.createElement('div', {
+        className: `p-4 rounded-2xl shadow-lg flex items-center gap-3 ${
+          state.notification.type === 'success' 
+            ? 'bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800' 
+            : 'bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800'
+        }` 
+      },
+        React.createElement(Icon, {
+          name: state.notification.type === 'success' ? 'CheckCircle2' : 'AlertTriangle',
+          size: 20,
+          className: state.notification.type === 'success' ? 'text-emerald-600' : 'text-red-600'
+        }),
+        React.createElement('p', { className: "flex-1 font-medium" }, state.notification.message),
+        React.createElement('button', {
+          onClick: () => setState(prev => ({ ...prev, showNotification: false })),
+          className: "p-1 rounded-full hover:bg-black/5"
+        },
+          React.createElement(Icon, { name: 'X', size: 16 })
+        )
+      )
+    ),
+
+    // Lock Screen
+    state.isLocked && React.createElement('div', {
+      className: "lock-screen backdrop-blur-3xl fixed inset-0 z-50 flex flex-col items-center justify-center animate-fadeIn"
+    },
+      React.createElement(Icon, { name: 'Lock', size: 80, className: "text-primary mb-8" }),
+      React.createElement('h2', { className: "text-3xl font-black mb-8 text-white" }, "التطبيق مقفل"),
       React.createElement('button', {
         onClick: () => setState(prev => ({ ...prev, isLocked: false })),
-        className: "gradient-bg-primary text-white px-8 py-3 rounded-xl font-bold"
-      }, "فتح التطبيق")
+        className: "gradient-bg-primary text-white px-12 py-4 rounded-full font-bold shadow-2xl hover:shadow-neon transition-all flex items-center gap-3"
+      },
+        React.createElement(Icon, { name: 'Unlock', size: 24 }),
+        "فتح التطبيق"
+      )
     )
   );
 };
 
-// التقديم
+// تشغيل التطبيق
 const rootElement = document.getElementById('root');
 if (rootElement) {
   const root = ReactDOM.createRoot(rootElement);
