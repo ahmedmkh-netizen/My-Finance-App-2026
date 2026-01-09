@@ -403,7 +403,7 @@ import {
   ArrowUp, Undo2, Redo2, FileJson, LogOut, Lock, Unlock, Moon, Sun, ShieldCheck, Repeat, RefreshCw,
   Search, FileSpreadsheet, Settings, Target, CalendarDays, BarChart3, Bell, Copy, Sparkles, Bot, MessageSquare, Send,
   AlertTriangle, Clock, CheckCircle2, Zap, Tag, FileText, Hash, Coins, Landmark, Circle, Percent, BellRing, Filter, Eye, EyeOff, ShieldAlert,
-  Download, Upload, RefreshCcw, Signal, Home, Menu, PiggyBank, Landmark as BuildingBank, ArrowDownCircle, ArrowUpCircle, Wifi, Trophy, ArrowUpCircle as PendingCircle
+  Download, Upload, RefreshCcw, Signal, Home, Menu, PiggyBank, Landmark as BuildingBank, ArrowDownCircle, ArrowUpCircle, Wifi, Trophy
 } from 'lucide-react';
 
 // ========== PART 1: CONSTANTS AND CONFIGURATION ==========
@@ -644,6 +644,7 @@ const WALLET_CONFIGS = {
     id: 'fawry', 
     title: 'محفظة فوري', 
     subtitle: 'تتبع الشحن والسداد', 
+    color: 'text-fawryBlue',
     themeColor: 'text-fawryBlue', 
     bgColor: 'bg-yellow-50/50 dark:bg-yellow-900/10', 
     icon: Store, 
@@ -654,6 +655,7 @@ const WALLET_CONFIGS = {
     id: 'etisalat', 
     title: 'سجل اتصالات كاش', 
     subtitle: 'تتبع الإيداع والسحب', 
+    color: 'text-etisalatGreen',
     themeColor: 'text-etisalatGreen', 
     bgColor: 'bg-emerald-50/50 dark:bg-emerald-900/10', 
     icon: Signal, 
@@ -664,6 +666,7 @@ const WALLET_CONFIGS = {
     id: 'cib_savings', 
     title: 'سجل حساب توفير CIB', 
     subtitle: 'تتبع المعاملات والأرصدة الجارية', 
+    color: 'text-cibBlue',
     themeColor: 'text-cibBlue', 
     bgColor: 'bg-blue-50/50 dark:bg-blue-900/10', 
     icon: BuildingBank, 
@@ -674,6 +677,7 @@ const WALLET_CONFIGS = {
     id: 'aaib_savings', 
     title: 'سجل حساب توفير AAIB', 
     subtitle: 'تتبع المعاملات والأرصدة الجارية', 
+    color: 'text-aaibRed',
     themeColor: 'text-aaibRed', 
     bgColor: 'bg-red-50/50 dark:bg-red-900/10', 
     icon: PiggyBank, 
@@ -703,7 +707,8 @@ const GenericLedgerComponent = React.memo(({
 
   const validatedLedger = useMemo(() => {
     try {
-      return (ledgerData || []).map(item => ({
+      if (!ledgerData || !Array.isArray(ledgerData)) return [];
+      return ledgerData.map(item => ({
         ...item,
         amount: Number(item.amount) || 0,
         runningBalance: Number(item.runningBalance) || 0,
@@ -2695,14 +2700,14 @@ function App() {
         <EnhancedStatCard
           title="الدخل المعلّق"
           amount={financeSnapshot.pendingIncome}
-          icon={PendingCircle}
+          icon={Clock}
           subtitle="مبالغ متوقعة لم تستلم بعد"
           isPrivate={false}
         />
 
         <EnhancedStatCard
           title="المصاريف المعلقة"
-          amount={-financeSnapshot.pendingAmount}
+          amount={-financeSnapshot.pendingExpenses}
           icon={Clock}
           subtitle="التزامات لم تسدد بعد"
           isPrivate={false}
@@ -3234,67 +3239,69 @@ function App() {
     );
   };
 
+  const renderLoansView = () => (
+    <div className="space-y-8 animate-fadeIn">
+      <div className="glass p-8 rounded-2xl gradient-border relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-[80px] -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
+        <p className="text-slate-400 text-xs font-bold uppercase tracking-widest relative z-10">إجمالي المديونية الشاملة</p>
+        <h3 className="text-4xl font-black font-mono mt-2 text-gradient relative z-10">
+          {updatedLoans.reduce((sum, l) => sum + l.remaining, 0).toLocaleString()} <span className="text-2xl text-slate-500 font-normal">ج.م</span>
+        </h3>
+      </div>
+      
+      <div className="grid grid-cols-1 gap-6">
+        {updatedLoans.map(loan => {
+          const isPaid = loan.remaining <= 0;
+          const percentPaid = loan.totalAmount > 0 ? (loan.totalPaid / loan.totalAmount) * 100 : 0;
+          return (
+            <div key={loan.id} className={`glass p-0 rounded-2xl border overflow-hidden shadow-md ${isPaid ? 'border-emerald-200 bg-emerald-50/30' : 'border-slate-200 dark:border-slate-700'}`}>
+              <div className="p-5 flex flex-col md:flex-row justify-between items-center gap-4 border-b border-slate-100 dark:border-slate-800">
+                <div className="flex items-center gap-4">
+                  <div className={`p-3 rounded-xl ${isPaid ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 dark:bg-slate-800 text-slate-600'}`}>
+                    <Banknote size={24} />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-lg text-slate-800 dark:text-white">{loan.name}</h4>
+                    <p className="text-xs text-slate-500 font-mono">يستحق يوم {loan.dueDay} من كل شهر</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-6">
+                  <div className="text-center">
+                    <p className="text-[10px] text-slate-400 font-bold uppercase">المتبقي</p>
+                    <p className={`text-xl font-mono font-black ${isPaid ? 'text-emerald-600' : 'text-red-500'}`}>{loan.remaining.toLocaleString()}</p>
+                  </div>
+                  <div className="text-center pl-4 border-l border-slate-200 dark:border-slate-700">
+                    <p className="text-[10px] text-slate-400 font-bold uppercase">القسط</p>
+                    <p className="text-xl font-mono font-black text-slate-800 dark:text-white">{Number(loan.monthlyInstallment).toLocaleString()}</p>
+                  </div>
+                  <button type="button" onClick={() => dispatch({ type: 'SET_EDITING_LOAN', payload: loan })} className="p-2 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-blue-600 transition-colors no-print"><Edit size={18}/></button>
+                </div>
+              </div>
+
+              <div className="bg-slate-50 dark:bg-slate-800/50 p-4">
+                <div className="flex justify-between text-[10px] mb-1 font-bold">
+                  <span>نسبة السداد</span>
+                  <span>{Math.round(percentPaid)}%</span>
+                </div>
+                <div className="w-full bg-slate-200 rounded-full h-1.5 dark:bg-slate-700">
+                  <div className="gradient-bg-success h-1.5 rounded-full transition-all"
+                    style={{ width: `${Math.min(100, percentPaid)}%` }}>
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+
   const renderActiveView = () => {
     switch (activeTab) {
       case 'dashboard': return renderDashboard();
       case 'transactions': return renderTransactionsViewFull();
       case 'cards': return renderWalletsAndCardsView();
-      case 'loans': return (
-        <div className="space-y-8 animate-fadeIn">
-          <div className="glass p-8 rounded-2xl gradient-border relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-[80px] -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
-            <p className="text-slate-400 text-xs font-bold uppercase tracking-widest relative z-10">إجمالي المديونية الشاملة</p>
-            <h3 className="text-4xl font-black font-mono mt-2 text-gradient relative z-10">
-              {updatedLoans.reduce((sum, l) => sum + l.remaining, 0).toLocaleString()} <span className="text-2xl text-slate-500 font-normal">ج.م</span>
-            </h3>
-          </div>
-          
-          <div className="grid grid-cols-1 gap-6">
-            {updatedLoans.map(loan => {
-              const isPaid = loan.remaining <= 0;
-              const percentPaid = loan.totalAmount > 0 ? (loan.totalPaid / loan.totalAmount) * 100 : 0;
-              return (
-                <div key={loan.id} className={`glass p-0 rounded-2xl border overflow-hidden shadow-md ${isPaid ? 'border-emerald-200 bg-emerald-50/30' : 'border-slate-200 dark:border-slate-700'}`}>
-                  <div className="p-5 flex flex-col md:flex-row justify-between items-center gap-4 border-b border-slate-100 dark:border-slate-800">
-                    <div className="flex items-center gap-4">
-                      <div className={`p-3 rounded-xl ${isPaid ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 dark:bg-slate-800 text-slate-600'}`}>
-                        <Banknote size={24} />
-                      </div>
-                      <div>
-                        <h4 className="font-bold text-lg text-slate-800 dark:text-white">{loan.name}</h4>
-                        <p className="text-xs text-slate-500 font-mono">يستحق يوم {loan.dueDay} من كل شهر</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-6">
-                      <div className="text-center">
-                        <p className="text-[10px] text-slate-400 font-bold uppercase">المتبقي</p>
-                        <p className={`text-xl font-mono font-black ${isPaid ? 'text-emerald-600' : 'text-red-500'}`}>{loan.remaining.toLocaleString()}</p>
-                      </div>
-                      <div className="text-center pl-4 border-l border-slate-200 dark:border-slate-700">
-                        <p className="text-[10px] text-slate-400 font-bold uppercase">القسط</p>
-                        <p className="text-xl font-mono font-black text-slate-800 dark:text-white">{Number(loan.monthlyInstallment).toLocaleString()}</p>
-                      </div>
-                      <button type="button" onClick={() => dispatch({ type: 'SET_EDITING_LOAN', payload: loan })} className="p-2 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-blue-600 transition-colors no-print"><Edit size={18}/></button>
-                    </div>
-                  </div>
-
-                  <div className="bg-slate-50 dark:bg-slate-800/50 p-4">
-                    <div className="flex justify-between text-[10px] mb-1 font-bold">
-                      <span>نسبة السداد</span>
-                      <span>{Math.round(percentPaid)}%</span>
-                    </div>
-                    <div className="w-full bg-slate-200 rounded-full h-1.5 dark:bg-slate-700">
-                      <div className="gradient-bg-success h-1.5 rounded-full transition-all"
-                        style={{ width: `${Math.min(100, percentPaid)}%` }}>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      );
+      case 'loans': return renderLoansView();
       case 'duplicates': return <DuplicateDetectionSystem transactions={transactions} dispatch={dispatch} addNotification={addNotification} MONTHS={MONTHS} closedMonths={data.closedMonths} />;
       default: return renderDashboard();
     }
@@ -3423,7 +3430,6 @@ function App() {
 
   if (!isAuthenticated) return <LoginScreen onLogin={() => {
     setIsAuthenticated(true);
-    dispatch({ type: 'SET_BACKUP_REMINDER_OPEN', payload: true });
   }} />;
 
   // ========== PART 14: MAIN RENDER ==========
