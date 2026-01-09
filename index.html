@@ -1756,29 +1756,28 @@ db.collection("finance_2026").doc("user_ahmed_data").set(data, { merge: true })
 return () => clearTimeout(saveTimeoutRef.current);
 }, [data, isAuthenticated]);
 
-// Enhanced Finance Snapshot Logic
+
 // Enhanced Finance Snapshot Logic (CORRECTED)
 const financeSnapshot = useMemo(() => {
     let actualCarryover = Number(data.openingBalance2026 || 0);
     const selectedMonthIdx = getMonthIndex(selectedMonth);
     
-    // تصحيح منطق الترحيل للأشهر السابقة
+    // 1. حساب الرصيد المرحل من الأشهر السابقة
     const prevMonthName = MONTHS[selectedMonthIdx - 1];
 
     if (prevMonthName && data.closedMonths?.includes(prevMonthName)) {
+        // إذا كان الشهر السابق مغلقاً، نأخذ الرصيد المعتمد
         actualCarryover = Number(data.monthlySnapshots[prevMonthName] || 0);
     } else {
+        // إذا لم يكن مغلقاً، نحسب التراكمي يدوياً
         transactions.filter(t => getMonthIndex(t.month) < selectedMonthIdx).forEach(t => {
             const amt = Number(t.amount || 0);
             if (t.status === 'paid') {
-                // إذا كان دخلاً وتم استلامه نقداً (أو لم يحدد طريقة، نفترض أنه نقدية ما لم يذهب لبنك)
-                // هنا نفترض أن أي دخل هو زيادة في السيولة ما لم يحدد أنه تحويل بنكي (يمكنك تخصيصها أكثر)
                 if (t.type === 'income') {
                      actualCarryover += amt;
-                } 
-                // إذا كان مصروفاً وتم دفعه "كاش" تحديداً
-                else if (t.type === 'expense') {
-                    if (t.method === 'cash') { 
+                } else if (t.type === 'expense') {
+                    // التعديل الهام: نخصم فقط ما خرج من جيبك (Cash)
+                    if (t.method === 'cash') {
                         actualCarryover -= amt;
                     }
                 }
@@ -1788,35 +1787,38 @@ const financeSnapshot = useMemo(() => {
 
     const currentMonthTrans = transactions.filter(t => t.month === selectedMonth);
 
-    // الدخل الفعلي هذا الشهر
+    // 2. الدخل الفعلي هذا الشهر (الذي دخل جيبك)
     const currentActualIncome = currentMonthTrans
         .filter(t => t.type === 'income' && t.status === 'paid')
         .reduce((s, t) => s + Number(t.amount || 0), 0);
 
-    // الدخل المعلق
+    // 3. الدخل المعلق (الذي تتوقع استلامه "كاش" فقط)
     const currentPendingIncome = currentMonthTrans
-        .filter(t => t.type === 'income' && t.status !== 'paid')
+        .filter(t => t.type === 'income' && t.status !== 'paid' && t.method === 'cash')
         .reduce((s, t) => s + Number(t.amount || 0), 0);
 
-    // المصروفات المدفوعة "نقداً" فقط (إزالة شرط transferCats)
-    // التعديل الجوهري هنا: نخصم أي شيء طريقته 'cash' سواء كان شراء أو تحويل
+    // 4. المصروف المدفوع "كاش" فعلياً
+    // (يشمل المصاريف العادية + التحويلات للمحافظ لأنها خرجت من جيبك)
     const currentPaidCash = currentMonthTrans
         .filter(t => t.type === 'expense' && t.status === 'paid' && t.method === 'cash')
         .reduce((s, t) => s + Number(t.amount || 0), 0);
 
-    // الكاش المعلق (مصروفات لم تدفع بعد)
+    // 5. المصروف المعلق (نخصم من التوقعات فقط ما نويت دفعه "كاش")
     const currentPendingCash = currentMonthTrans
-        .filter(t => t.type === 'expense' && t.status !== 'paid' &&
-        !['cib_card', 'aaib_card'].includes(t.method))
+        .filter(t => t.type === 'expense' && t.status !== 'paid' && t.method === 'cash')
         .reduce((s, t) => s + Number(t.amount || 0), 0);
 
-    // مصروفات الفيزا (للعلم فقط)
+    // مصروفات الفيزا (للعرض فقط ولا تؤثر على سيولة الكاش)
     const currentCreditExpenses = currentMonthTrans
         .filter(t => t.type === 'expense' && ['cib_card', 'aaib_card'].includes(t.method))
         .reduce((s, t) => s + Number(t.amount || 0), 0);
 
-    // المعادلة النهائية
+    // === المعادلات النهائية ===
+    
+    // السيولة الحالية في اليد = (المرحل + الدخل المقبوض) - (المدفوع كاش)
     const actualCashInHand = actualCarryover + currentActualIncome - currentPaidCash;
+    
+    // الرصيد المتوقع إغلاقه = (السيولة الحالية + المنتظر قبضه كاش) - (المنتظر دفعه كاش)
     const projectedClosingBalance = actualCashInHand + currentPendingIncome - currentPendingCash;
 
     return {
