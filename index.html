@@ -430,6 +430,27 @@ Download, Upload, RefreshCcw, Signal, Home, Menu, PiggyBank, Landmark as Buildin
 } from 'lucide-react';
 
 const CURRENT_YEAR = new Date().getFullYear();
+// ========== CONSTANTS AND HELPER FUNCTIONS FOR NEW MODEL ==========
+const TRANSFER_CATEGORIES = ['شحن محفظة', 'تحويلات', 'تحويلات واردة', 'شحن رصيد فوري', 'إيداع', 'سحب'];
+const CASH_ACCOUNTS = ['cash', 'fawry', 'etisalat', 'cib_savings', 'aaib_savings'];
+
+// Helper: Check if transaction is internal transfer
+const isInternalTransfer = (transaction) => {
+  if (!transaction) return false;
+  
+  const isTransferCategory = TRANSFER_CATEGORIES.includes(transaction.category);
+  const isBetweenCashAccounts = CASH_ACCOUNTS.includes(transaction.method) && 
+                                (transaction.type === 'expense' || 
+                                 (transaction.type === 'income' && 
+                                  TRANSFER_CATEGORIES.includes(transaction.category)));
+  
+  return isTransferCategory || isBetweenCashAccounts;
+};
+
+// Helper: Get net wealth (assets - liabilities)
+const calculateNetWealth = (cashBalance, cardDebts, loanDebts) => {
+  return cashBalance - cardDebts - loanDebts;
+};
 
 const firebaseConfig = {
 apiKey: "AIzaSyCEq-Trf1oFsvPF5tlMvqU83ea_J2DLZjs",
@@ -1758,26 +1779,126 @@ return () => clearTimeout(saveTimeoutRef.current);
 
 // Enhanced Finance Snapshot Logic
 const financeSnapshot = useMemo(() => {
-let actualCarryover = Number(data.openingBalance2026 || 0);
-const selectedMonthIdx = getMonthIndex(selectedMonth);
-const transferCats = ['شحن محفظة', 'تحويلات', 'شحن رصيد فوري', 'شحن رصيد', 'إيداع'];
+  // 1. الرصيد الافتتاحي الفعلي (يعتمد على آخر تسوية)
+  const lastReconciliation = localStorage.getItem('last_reconciliation');
+  let actualCarryover = Number(data.openingBalance2026 || 0);
+  
+  // إذا كان هناك تسوية سابقة، نستخدمها كنقطة بداية
+  if (lastReconciliation) {
+    try {
+      const reconData = JSON.parse(lastReconciliation);
+      if (reconData.date && reconData.balance !== undefined) {
+        // نستخدم رصيد آخر تسوية إذا كانت في الشهر الحالي أو قبله
+        const reconDate = new Date(reconData.date);
+        const currentDate = new Date();
+        if (reconDate.getMonth() <= currentDate.getMonth() || 
+            reconDate.getFullYear() < currentDate.getFullYear()) {
+          actualCarryover = Number(reconData.balance);
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to parse reconciliation data', e);
+    }
+  }
+  
+  const selectedMonthIdx = getMonthIndex(selectedMonth);
+  
+  // 2. حساب التدفقات النقدية الحقيقية (استبعاد التحويلات الداخلية)
+  const currentMonthTrans = transactions.filter(t => t.month === selectedMonth);
+  
+  // الدخل النقدي الحقيقي (استبعاد التحويلات الواردة من حسابات أخرى)
+  const currentActualIncome = currentMonthTrans
+    .filter(t => t.type === 'income' && 
+                 t.status === 'paid' &&
+                 !isInternalTransfer(t))
+    .reduce((s, t) => s + Number(t.amount || 0), 0);
+  
+  // المصروفات النقدية الحقيقية (استبعاد التحويلات الصادرة لحسابات أخرى)
+  const currentPaidCash = currentMonthTrans
+    .filter(t => t.type === 'expense' && 
+                 t.status === 'paid' &&
+                 !isInternalTransfer(t))
+    .reduce((s, t) => s + Number(t.amount || 0), 0);
+  
+  // 3. التحويلات الصافية بين الحسابات (للعرض فقط، لا تدخل في السيولة)
+  const netTransfers = currentMonthTrans
+    .filter(t => t.status === 'paid' && isInternalTransfer(t))
+    .reduce((sum, t) => {
+      const amount = Number(t.amount || 0);
+      if (t.type === 'income') return sum + amount;  // إيداع في حساب
+      if (t.type === 'expense') return sum - amount; // سحب من حساب
+      return sum;
+    }, 0);
+  
+  // 4. حسابات البطاقات الائتمانية المستحقة
+  const currentCreditExpenses = currentMonthTrans
+    .filter(t => t.type === 'expense' && 
+                 ['cib_card', 'aaib_card'].includes(t.method))
+    .reduce((s, t) => s + Number(t.amount || 0), 0);
+  
+  // 5. المعلقات التي تؤثر على السيولة الفعلية
+  const currentPendingIncome = currentMonthTrans
+    .filter(t => t.type === 'income' && 
+                 t.status !== 'paid' &&
+                 !isInternalTransfer(t))
+    .reduce((s, t) => s + Number(t.amount || 0), 0);
+  
+  const currentPendingCash = currentMonthTrans
+    .filter(t => t.type === 'expense' && 
+                 t.status !== 'paid' &&
+                 !isInternalTransfer(t))
+    .reduce((s, t) => s + Number(t.amount || 0), 0);
+  
+  // 6. السيولة النقدية الفعلية في اليد (Cash in Hand)
+  const actualCashInHand = actualCarryover + 
+                          currentActualIncome - 
+                          currentPaidCash;
+  
+  // 7. صافي المركز المالي (Net Wealth)
+  // حساب ديون البطاقات الحالية
+  const currentCardDebt = cards.reduce((sum, card) => {
+    const history = calculateCardHistory(card);
+    const monthData = history.find(h => h.month === selectedMonth);
+    return sum + (monthData?.closingDebt || 0);
+  }, 0);
+  
+  // حساب القروض المتبقية
+  const currentLoanDebt = updatedLoans.reduce((sum, loan) => {
+    return sum + (loan.remaining || 0);
+  }, 0);
+  
+  const netWealth = calculateNetWealth(
+    actualCashInHand + currentFawryBalance + currentEtisalatBalance + 
+    getSavingsLedger('cib_savings')[0]?.runningBalance + 
+    getSavingsLedger('aaib_savings')[0]?.runningBalance,
+    currentCardDebt,
+    currentLoanDebt
+  );
+  
+  // 8. السيولة المتوقعة بعد سداد المعلقات
+  const projectedClosingBalance = actualCashInHand + 
+                                 currentPendingIncome - 
+                                 currentPendingCash;
+  
+  return {
+    actualCarryover,
+    actualIncome: currentActualIncome,
+    cashExpenses: currentPaidCash,
+    creditExpenses: currentCreditExpenses,
+    pendingIncome: currentPendingIncome,
+    pendingExpenses: currentPendingCash,
+    netTransfers,
+    actualCashInHand,
+    projectedClosingBalance,
+    currentCardDebt,
+    currentLoanDebt,
+    netWealth,
+    hasReconciliation: !!lastReconciliation
+  };
+}, [transactions, selectedMonth, data.openingBalance2026, 
+    currentFawryBalance, currentEtisalatBalance, cards, updatedLoans,
+    getSavingsLedger]);
 
-const prevMonthName = MONTHS[selectedMonthIdx - 1];
-
-if (prevMonthName && data.closedMonths?.includes(prevMonthName)) {
-actualCarryover = Number(data.monthlySnapshots[prevMonthName] || 0);
-} else {
-transactions.filter(t => getMonthIndex(t.month) < selectedMonthIdx).forEach(t => {
-const amt = Number(t.amount || 0);
-if (t.type === 'income' && t.status === 'paid') {
-actualCarryover += amt;
-} else if (t.type === 'expense' && t.status === 'paid') {
-if (!['cib_card', 'aaib_card'].includes(t.method) && !transferCats.includes(t.category)) {
-actualCarryover -= amt;
-}
-}
-});
-}
 
 const currentMonthTrans = transactions.filter(t => t.month === selectedMonth);
 
@@ -2906,56 +3027,196 @@ title="دفع سريع"
 };
 
 const renderDashboard = () => (
-<div className="space-y-8 animate-fadeIn">
-{/* مكون الرصيد الافتتاحي الجديد */}
-<div className="glass bg-blue-50/50 dark:bg-blue-900/10 p-6 rounded-2xl border border-blue-100 dark:border-blue-900/30 shadow-sm animate-fadeIn">
-    <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-        <div>
-            <h3 className="text-lg font-bold text-blue-900 dark:text-blue-100 flex items-center gap-2">
-                <Wallet size={20} className="text-blue-600 dark:text-blue-400" />
-                الرصيد الافتتاحي لعام 2026
-            </h3>
-            <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">سيتم اعتماد هذا المبلغ كنقطة بداية لحسابات شهر يناير.</p>
-        </div>
-        <div className="flex items-center gap-3 bg-white dark:bg-slate-800 p-2 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
-            <input 
-                type="number" 
-                value={data.openingBalance2026 || ''}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  if (value === '' || Number(value) >= 0) {
-                    dispatch({ type: 'UPDATE_OPENING_BALANCE', payload: Number(value) || 0 });
-                  }
-                }}
-                className="w-32 md:w-48 p-2 bg-transparent text-center font-black text-blue-600 outline-none text-lg placeholder:text-slate-300" 
-                placeholder="0.00"
-            />
-            <button 
-                onClick={() => {
-                  addNotification({ 
-                    type: 'success', 
-                    title: 'تم الحفظ', 
-                    message: 'تم تحديث الرصيد الافتتاحي وتحديث الحسابات' 
-                  });
-                }}
-                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors flex items-center gap-2"
-            >
-                <Save size={16} /> حفظ
-            </button>
-        </div>
+{/* --- بداية واجهة مساعد التسوية المتقدمة --- */}
+<div className="glass p-6 rounded-2xl border-r-4 border-r-emerald-500 bg-emerald-50/10 mb-8 no-print animate-fadeIn">
+  <div className="flex items-center gap-3 mb-4">
+    <div className="p-3 bg-emerald-100 text-emerald-600 rounded-xl">
+      <ShieldCheck size={24} />
     </div>
+    <div>
+      <h4 className="font-black text-lg text-slate-800 dark:text-white">التسوية الفعلية للسيولة</h4>
+      <p className="text-xs text-slate-500 font-bold mt-1">ضبط الرصيد الحقيقي في يدك الآن</p>
+    </div>
+  </div>
+  
+  <div className="mb-4 p-4 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700">
+    <div className="flex justify-between items-center mb-2">
+      <span className="text-sm font-bold text-slate-600">السيولة المحسوبة:</span>
+      <span className="text-lg font-black text-blue-600">
+        {Math.round(financeSnapshot.actualCashInHand).toLocaleString()} ج.م
+      </span>
+    </div>
+    <div className="text-xs text-slate-500">
+      {financeSnapshot.hasReconciliation ? 
+        '⚠️ تم الاعتماد على آخر تسوية مسجلة' : 
+        'ℹ️ يعتمد على رصيد افتتاح 2026 والحسابات التراكمية'}
+    </div>
+  </div>
+  
+  <div className="flex flex-col md:flex-row items-end gap-4">
+    <div className="flex-1 w-full">
+      <label className="block text-xs font-bold text-slate-500 mb-2">المبلغ الفعلي الموجود معك الآن</label>
+      <input 
+        type="number" 
+        id="adj-amount" 
+        placeholder="ادخل الرقم الحقيقي..." 
+        className="input-field py-3 text-sm font-black text-emerald-600 w-full" 
+        min="0"
+        step="0.01"
+      />
+    </div>
+    
+    <div className="flex-1 w-full">
+      <label className="block text-xs font-bold text-slate-500 mb-2">سبب الفارق (اختياري)</label>
+      <select id="adj-reason" className="input-field py-3 text-sm font-bold w-full">
+        <option value="unrecorded_expenses">مصاريف نثرية غير مسجلة</option>
+        <option value="unrecorded_income">دخل نقدي غير مسجل</option>
+        <option value="transfer_error">خطأ في تسجيل تحويل</option>
+        <option value="other">سبب آخر</option>
+      </select>
+    </div>
+    
+    <button 
+      type="button"
+      onClick={() => {
+        const actualAmount = document.getElementById('adj-amount').value;
+        const reason = document.getElementById('adj-reason').value;
+        
+        if(!actualAmount || actualAmount === "" || Number(actualAmount) < 0) {
+          addNotification({ 
+            type: 'warning', 
+            title: 'خطأ في الإدخال', 
+            message: 'من فضلك ادخل المبلغ الفعلي الموجود معك حالياً (يجب أن يكون رقم موجب)'
+          });
+          return;
+        }
+        
+        const calculated = financeSnapshot.actualCashInHand;
+        const actual = Number(actualAmount);
+        const difference = actual - calculated;
+        
+        dispatch({
+          type: 'SHOW_CONFIRM',
+          title: 'تأكيد التسوية النقدية',
+          message: `سيتم اعتماد ${actual.toLocaleString()} ج.م كرصيدك النقدي الحالي. الفارق ${Math.abs(difference).toLocaleString()} ج.م سيتم تسجيله كـ ${difference > 0 ? 'دخل غير مسجل' : 'مصروف غير مسجل'}.`,
+          onConfirm: () => {
+            // حفظ التسوية
+            const reconciliationData = {
+              date: new Date().toISOString(),
+              balance: actual,
+              reason: reason,
+              previousCalculated: calculated,
+              difference: difference
+            };
+            localStorage.setItem('last_reconciliation', JSON.stringify(reconciliationData));
+            
+            // إذا كان الفارق كبيراً، إضافة عملية ضبط تلقائية
+            if (Math.abs(difference) > 10) { // أكثر من 10 جنيه
+              saveHistory();
+              const adjustmentTrans = {
+                id: 'reconciliation-' + getSafeId(),
+                type: difference > 0 ? 'income' : 'expense',
+                category: difference > 0 ? 'أخرى' : 'مصروفات المعيشة اليومية',
+                amount: Math.abs(difference),
+                description: `تسوية نقدية: ${reason}`,
+                method: 'cash',
+                date: getLocalISODate(),
+                month: selectedMonth,
+                monthIndex: getMonthIndex(selectedMonth),
+                subType: difference > 0 ? 'deposit' : 'withdrawal',
+                status: 'paid'
+              };
+              
+              const newTransactions = [adjustmentTrans, ...transactions];
+              newTransactions.sort((a, b) => new Date(b.date) - new Date(a.date));
+              dispatch({ type: 'UPDATE_TRANSACTIONS', payload: newTransactions });
+            }
+            
+            // تحديث البيانات
+            dispatch({ 
+              type: 'UPDATE_OPENING_BALANCE', 
+              payload: actual 
+            });
+            
+            addNotification({ 
+              type: 'success', 
+              title: 'تمت التسوية بنجاح', 
+              message: `تم اعتماد ${actual.toLocaleString()} ج.م كرصيدك النقدي الحالي`
+            });
+            
+            document.getElementById('adj-amount').value = "";
+          },
+          onCancel: () => dispatch({ type: 'HIDE_CONFIRM' })
+        });
+      }}
+      className="w-full md:w-auto gradient-bg-success text-white px-8 py-3 rounded-xl font-bold shadow-lg hover:shadow-xl active:scale-95 transition-all flex items-center gap-2"
+    >
+      <CheckCircle2 size={18} /> اعتماد التسوية النقدية
+    </button>
+  </div>
+  
+  <div className="mt-4 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700">
+    <p className="text-xs text-slate-600 dark:text-slate-400">
+      <span className="font-bold">💡 كيف تعمل التسوية؟</span> 
+      <br/>1. أحسب النقدية الموجودة فعلاً في محفظتك وجيبك الآن
+      <br/>2. أدخل الرقم الحقيقي في الحقل أعلاه
+      <br/>3. التطبيق سيضبط حساباتك تلقائياً لينطبق على الواقع
+      <br/>4. يمكنك التسوية يومياً أو أسبوعياً للحفاظ على دقة البيانات
+    </p>
+  </div>
 </div>
 
+{/* --- نهاية واجهة مساعد التسوية --- */}
+
 {/* لوحة السيولة الفورية */}
-<QuickBalanceOverview 
-  financeSnapshot={financeSnapshot}
-  currentFawryBalance={currentFawryBalance}
-  currentEtisalatBalance={currentEtisalatBalance}
-  getSavingsLedger={getSavingsLedger}
-  isPrivate={false}
-  walletVisibility={walletVisibility}
-  onToggleVisibility={(key) => dispatch({ type: 'TOGGLE_WALLET_VISIBILITY', payload: key })}
-/>
+const QuickBalanceOverview = React.memo(({ 
+  financeSnapshot, 
+  currentFawryBalance, 
+  currentEtisalatBalance,
+  getSavingsLedger,
+  isPrivate,
+  walletVisibility,
+  onToggleVisibility
+}) => {
+  // ... الكود الحالي
+  
+  const totalCashAssets = accounts.reduce((sum, acc) => sum + acc.balance, 0);
+  const totalLiabilities = financeSnapshot.currentCardDebt + financeSnapshot.currentLoanDebt;
+  const netWealthValue = totalCashAssets - totalLiabilities;
+  
+  return (
+    <div className="quick-balance-panel">
+      {/* ... الكود الحالي للسيولة */}
+      
+      {/* إضافة قسم المركز المالي الصافي */}
+      <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
+        <div className="flex justify-between items-center mb-2">
+          <h4 className="font-bold text-sm flex items-center gap-2">
+            <TrendingUp className="text-purple-500" size={16} />
+            المركز المالي الصافي
+          </h4>
+          <span className={`text-lg font-black ${
+            netWealthValue >= 0 ? 'text-emerald-600' : 'text-red-600'
+          }`}>
+            {isPrivate ? '•••••' : Math.round(netWealthValue).toLocaleString()}
+            <span className="text-xs"> ج.م</span>
+          </span>
+        </div>
+        
+        <div className="grid grid-cols-2 gap-2 text-xs">
+          <div className="bg-emerald-50 dark:bg-emerald-900/20 p-2 rounded">
+            <div className="text-emerald-700 dark:text-emerald-300">الأصول النقدية</div>
+            <div className="font-bold">{Math.round(totalCashAssets).toLocaleString()}</div>
+          </div>
+          <div className="bg-red-50 dark:bg-red-900/20 p-2 rounded">
+            <div className="text-red-700 dark:text-red-300">الالتزامات</div>
+            <div className="font-bold">{Math.round(totalLiabilities).toLocaleString()}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+});
 
 {/* --- بداية واجهة مساعد التسوية --- */}
 <div className="glass p-6 rounded-2xl border-r-4 border-r-amber-500 bg-amber-50/10 mb-8 no-print animate-fadeIn">
