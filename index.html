@@ -1757,67 +1757,79 @@ return () => clearTimeout(saveTimeoutRef.current);
 }, [data, isAuthenticated]);
 
 // Enhanced Finance Snapshot Logic
+// Enhanced Finance Snapshot Logic (CORRECTED)
 const financeSnapshot = useMemo(() => {
-let actualCarryover = Number(data.openingBalance2026 || 0);
-const selectedMonthIdx = getMonthIndex(selectedMonth);
-const transferCats = ['شحن محفظة', 'تحويلات', 'شحن رصيد فوري', 'شحن رصيد', 'إيداع'];
+    let actualCarryover = Number(data.openingBalance2026 || 0);
+    const selectedMonthIdx = getMonthIndex(selectedMonth);
+    
+    // تصحيح منطق الترحيل للأشهر السابقة
+    const prevMonthName = MONTHS[selectedMonthIdx - 1];
 
-const prevMonthName = MONTHS[selectedMonthIdx - 1];
+    if (prevMonthName && data.closedMonths?.includes(prevMonthName)) {
+        actualCarryover = Number(data.monthlySnapshots[prevMonthName] || 0);
+    } else {
+        transactions.filter(t => getMonthIndex(t.month) < selectedMonthIdx).forEach(t => {
+            const amt = Number(t.amount || 0);
+            if (t.status === 'paid') {
+                // إذا كان دخلاً وتم استلامه نقداً (أو لم يحدد طريقة، نفترض أنه نقدية ما لم يذهب لبنك)
+                // هنا نفترض أن أي دخل هو زيادة في السيولة ما لم يحدد أنه تحويل بنكي (يمكنك تخصيصها أكثر)
+                if (t.type === 'income') {
+                     actualCarryover += amt;
+                } 
+                // إذا كان مصروفاً وتم دفعه "كاش" تحديداً
+                else if (t.type === 'expense') {
+                    if (t.method === 'cash') { 
+                        actualCarryover -= amt;
+                    }
+                }
+            }
+        });
+    }
 
-if (prevMonthName && data.closedMonths?.includes(prevMonthName)) {
-actualCarryover = Number(data.monthlySnapshots[prevMonthName] || 0);
-} else {
-transactions.filter(t => getMonthIndex(t.month) < selectedMonthIdx).forEach(t => {
-const amt = Number(t.amount || 0);
-if (t.type === 'income' && t.status === 'paid') {
-actualCarryover += amt;
-} else if (t.type === 'expense' && t.status === 'paid') {
-if (!['cib_card', 'aaib_card'].includes(t.method) && !transferCats.includes(t.category)) {
-actualCarryover -= amt;
-}
-}
-});
-}
+    const currentMonthTrans = transactions.filter(t => t.month === selectedMonth);
 
-const currentMonthTrans = transactions.filter(t => t.month === selectedMonth);
+    // الدخل الفعلي هذا الشهر
+    const currentActualIncome = currentMonthTrans
+        .filter(t => t.type === 'income' && t.status === 'paid')
+        .reduce((s, t) => s + Number(t.amount || 0), 0);
 
-const currentActualIncome = currentMonthTrans
-.filter(t => t.type === 'income' && t.status === 'paid')
-.reduce((s, t) => s + Number(t.amount || 0), 0);
+    // الدخل المعلق
+    const currentPendingIncome = currentMonthTrans
+        .filter(t => t.type === 'income' && t.status !== 'paid')
+        .reduce((s, t) => s + Number(t.amount || 0), 0);
 
-const currentPendingIncome = currentMonthTrans
-.filter(t => t.type === 'income' && t.status !== 'paid')
-.reduce((s, t) => s + Number(t.amount || 0), 0);
+    // المصروفات المدفوعة "نقداً" فقط (إزالة شرط transferCats)
+    // التعديل الجوهري هنا: نخصم أي شيء طريقته 'cash' سواء كان شراء أو تحويل
+    const currentPaidCash = currentMonthTrans
+        .filter(t => t.type === 'expense' && t.status === 'paid' && t.method === 'cash')
+        .reduce((s, t) => s + Number(t.amount || 0), 0);
 
-const currentPaidCash = currentMonthTrans
-.filter(t => t.type === 'expense' && t.status === 'paid' &&
-!['cib_card', 'aaib_card'].includes(t.method) &&
-!transferCats.includes(t.category))
-.reduce((s, t) => s + Number(t.amount || 0), 0);
+    // الكاش المعلق (مصروفات لم تدفع بعد)
+    const currentPendingCash = currentMonthTrans
+        .filter(t => t.type === 'expense' && t.status !== 'paid' &&
+        !['cib_card', 'aaib_card'].includes(t.method))
+        .reduce((s, t) => s + Number(t.amount || 0), 0);
 
-const currentPendingCash = currentMonthTrans
-.filter(t => t.type === 'expense' && t.status !== 'paid' &&
-!['cib_card', 'aaib_card'].includes(t.method))
-.reduce((s, t) => s + Number(t.amount || 0), 0);
+    // مصروفات الفيزا (للعلم فقط)
+    const currentCreditExpenses = currentMonthTrans
+        .filter(t => t.type === 'expense' && ['cib_card', 'aaib_card'].includes(t.method))
+        .reduce((s, t) => s + Number(t.amount || 0), 0);
 
-const currentCreditExpenses = currentMonthTrans
-.filter(t => t.type === 'expense' && ['cib_card', 'aaib_card'].includes(t.method))
-.reduce((s, t) => s + Number(t.amount || 0), 0);
+    // المعادلة النهائية
+    const actualCashInHand = actualCarryover + currentActualIncome - currentPaidCash;
+    const projectedClosingBalance = actualCashInHand + currentPendingIncome - currentPendingCash;
 
-const actualCashInHand = actualCarryover + currentActualIncome - currentPaidCash;
-const projectedClosingBalance = actualCashInHand + currentPendingIncome - currentPendingCash;
-
-return {
-actualCarryover: actualCarryover,
-income: currentActualIncome,
-actualIncome: currentActualIncome,
-cashExpenses: currentPaidCash,
-creditExpenses: currentCreditExpenses,
-pendingIncome: currentPendingIncome,
-actualCashInHand,
-projectedClosingBalance,
-pendingAmount: currentPendingCash
-};
+    return {
+        actualCarryover,
+        income: currentActualIncome,
+        actualIncome: currentActualIncome,
+        cashExpenses: currentPaidCash,
+        creditExpenses: currentCreditExpenses,
+        pendingIncome: currentPendingIncome,
+        actualCashInHand,
+        projectedClosingBalance,
+        pendingAmount: currentPendingCash
+    };
 }, [transactions, selectedMonth, data.closedMonths, data.monthlySnapshots, data.openingBalance2026]);
 
 const chartData = useMemo(() => MONTHS.map(m => ({
