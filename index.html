@@ -391,6 +391,18 @@ animation: spin 1s ease-in-out infinite;
 .balance-account-card {
 @apply bg-white/50 dark:bg-slate-800/50 p-3 rounded-xl text-center transition-all duration-300 hover:scale-[1.02] hover:shadow-md;
 }
+
+/* حماية من التحديق */
+.no-pointer-events {
+pointer-events: none;
+}
+.protected-blur {
+filter: blur(4px);
+transition: filter 0.3s ease;
+}
+.protected-blur:hover {
+filter: blur(0);
+}
 </style>
 </head>
 <body class="selection:bg-primary/30">
@@ -433,6 +445,86 @@ firebase.initializeApp(firebaseConfig);
 }
 const db = firebase.firestore();
 
+const DAILY_DHIKR = [
+"سُبْحَانَ اللَّهِ وَبِحَمْدِهِ، سُبْحَانَ اللَّهِ الْعَظِيمِ",
+"لَا حَوْلَ وَلَا قُوَّةَ إِلَّا بِاللَّهِ الْعَلِيِّ الْعَظِيمِ",
+"اللَّهُمَّ اكْفِنِي بِحَلَالِكَ عَنْ حَرَامِكَ، وَأَغْنِنِي بِفَضْلِكَ عَمَّنْ سِوَاكَ",
+"أَسْتَغْفِرُ اللَّهَ الْعَظِيمَ الَّذِي لَا إِلَهَ إِلَّا هُوَ الْحَيُّ الْقَيُّومُ وَأَتُوبُ إِلَيْهِ",
+"اللَّهُمَّ بَارِكْ لَنَا فِيمَا رَزَقْتَنَا وَقِنَا عَذَابَ النَّارِ",
+"لَا إِلَهَ إِلَّا أَنْتَ سُبْحَانَكَ إِنِّي كُنْتُ مِنَ الظَّالِمِينَ",
+"اللَّهُمَّ بِكَ أَصْبَحْنَا وَبِكَ أَمْسَيْنَا وَبِكَ نَحْيَا وَبِكَ نَمُوتُ وَإِلَيْكَ النُّشُورُ",
+"رَضِيتُ بِاللَّهِ رَبًّا وَبِالإِسْلَامِ دِينًا وَبِمُحَمَّدٍ صَلَّى اللَّهُ عَلَيْهِ وَسَلَّمَ نَبِيًّا",
+"يَا حَيُّ يَا قَيُّومُ بِرَحْمَتِكَ أَسْتَغِيثُ أَصْلِحْ لِي شَأْنِي كُلَّهُ",
+"اللَّهُمَّ إِنِّي أَسْأَلُكَ عِلْمًا نَافِعًا وَرِزقًا طَيِّبًا وَعَمَلًا مُتَقَبَّلًا"
+];
+
+// ========== وظائف مساعدة محسنة ==========
+const escapeHtml = (unsafe) => {
+if (typeof unsafe !== 'string') return unsafe;
+return unsafe
+.replace(/&/g, "&amp;")
+.replace(/</g, "&lt;")
+.replace(/>/g, "&gt;")
+.replace(/"/g, "&quot;")
+.replace(/'/g, "&#039;");
+};
+
+const generateId = () => {
+try {
+return typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : null;
+} catch (e) {
+return null;
+}
+};
+
+const getSafeId = () => {
+const secureId = generateId();
+if (secureId) return secureId;
+return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+};
+
+const normalizeText = (text) => {
+if (!text) return "";
+return text.toString()
+.replace(/[أإآ]/g, 'ا')
+.replace(/ى/g, 'ي')
+.replace(/ة/g, 'ه')
+.replace(/[\u064B-\u065F]/g, '')
+.trim()
+.toLowerCase();
+};
+
+const getLocalISODate = () => {
+const now = new Date();
+const year = now.getFullYear();
+const month = String(now.getMonth() + 1).padStart(2, '0');
+const day = String(now.getDate()).padStart(2, '0');
+return `${year}-${month}-${day}`;
+};
+
+const calculateDaysLeft = (targetDate) => {
+if (!targetDate) return null;
+try {
+const today = new Date();
+today.setHours(0, 0, 0, 0);
+const target = new Date(targetDate);
+target.setHours(0, 0, 0, 0);
+const diffTime = target - today;
+const days = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+return days;
+} catch (error) {
+console.error('Error calculating days left:', error);
+return null;
+}
+};
+
+const validateDate = (dateString) => {
+if (!dateString) return false;
+const date = new Date(dateString);
+return date instanceof Date && !isNaN(date);
+};
+
+const STORAGE_KEY = 'finance_tracker_V51_SECURE';
 const MONTHS = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
 const OPENING_SAVINGS_JAN = 0;
 
@@ -485,8 +577,6 @@ const CATEGORIES = {
 income: ['راتب شهري', 'عمل حر', 'استثمارات', 'عهدة شركة إيماك', 'تحويلات واردة', 'أخرى'],
 expense: [ 'الالتزامات البنكية والتمويلية', 'مصروفات المعيشة اليومية', 'مسحوبات محل هاني', 'الملابس والمستلزمات الشخصية', 'الزكاة والتبرعات', 'التعليم والدروس والأنشطة', 'المصروفات النقدية الشهرية', 'شحن رصيد فوري', 'المرافق والخدمات – بولاق', 'المرافق والخدمات – العبور', 'الاتصالات وشحن الهواتف المحمولة', 'الصحة والرعاية الطبية', 'المستلزمات المنزلية والتموين', 'اللحوم والدواجن والأسماك', 'الطوارئ والاحتياطي النقدي', 'الصيانة والإصلاحات المنزلية', 'المواصلات والانتقالات', 'الترفيه والمناسبات الاجتماعية', 'مصاريف موسمية وسنوية', 'شحن محفظة', 'تحويلات', 'أخرى' ]
 };
-
-const STORAGE_KEY = 'finance_tracker_V51_SECURE';
 
 class ErrorBoundary extends React.Component {
 constructor(props) { super(props); this.state = { hasError: false, error: null }; }
@@ -607,6 +697,7 @@ aaib_savings: {
 }
 };
 
+// ========== Enhanced GenericLedgerComponent مع التحسينات ==========
 const GenericLedgerComponent = React.memo(({
 walletKey,
 ledgerData,
@@ -673,6 +764,61 @@ const handleVisibilityToggle = useCallback((e) => {
   }
 }, [onToggleVisibility, walletKey]);
 
+if (!ledgerData || ledgerData.length === 0) {
+return (
+<div className={`glass rounded-2xl overflow-hidden border border-slate-200/60 dark:border-slate-700/60 ${theme.bgColor} hover-lift`}>
+<div className={`collapsible-header p-6 flex justify-between items-center border-b border-slate-100/50 dark:border-slate-800/50 ${theme.headerClass}`} onClick={onToggle}>
+<div className="flex items-center gap-4">
+<div className={`p-3 rounded-xl bg-gradient-to-br ${theme.gradient} text-white shadow-md`}>
+<theme.icon size={24} />
+</div>
+<div>
+<h3 className="text-xl font-black">{theme.title}</h3>
+<p className="text-xs text-slate-500 font-bold mt-1">{theme.subtitle}</p>
+</div>
+</div>
+
+<div className="flex items-center gap-3">
+<button 
+  type="button"
+  onClick={(e) => {
+    e.stopPropagation();
+    onAddDeposit && onAddDeposit(walletKey);
+  }}
+  className="p-2 bg-emerald-500 text-white rounded-xl hover:bg-emerald-600 transition-colors shadow-md"
+  title="إيداع جديد"
+>
+  <ArrowDownCircle size={20} />
+</button>
+
+<button 
+  type="button"
+  onClick={(e) => {
+    e.stopPropagation();
+    onAddWithdrawal && onAddWithdrawal(walletKey);
+  }}
+  className="p-2 bg-red-500 text-white rounded-xl hover:bg-red-600 transition-colors shadow-md"
+  title="سحب جديد"
+>
+  <ArrowUpCircle size={20} />
+</button>
+
+<button 
+  type="button"
+  onClick={handleVisibilityToggle}
+  className="p-2 bg-slate-500 text-white rounded-xl hover:bg-slate-600 transition-colors shadow-md"
+  title={walletVisibility?.[walletKey] ? 'إخفاء الرصيد' : 'إظهار الرصيد'}
+>
+  {walletVisibility?.[walletKey] ? <EyeOff size={20} /> : <Eye size={20} />}
+</button>
+
+<ChevronDown size={24} className={`text-slate-400 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`} />
+</div>
+</div>
+</div>
+);
+}
+
 return (
 <div className={`glass rounded-2xl overflow-hidden border border-slate-200/60 dark:border-slate-700/60 mb-6 ${theme.bgColor} hover-lift`}>
 <div className={`collapsible-header p-6 flex justify-between items-center border-b border-slate-100/50 dark:border-slate-800/50 ${theme.headerClass}`} onClick={onToggle}>
@@ -738,6 +884,7 @@ return (
 
 {isExpanded && (
 <div className="animate-fadeIn">
+{/* إحصائيات سريعة */}
 <div className="px-6 py-4 bg-white/30 dark:bg-black/10 border-b border-slate-100 dark:border-slate-800">
 <div className="flex flex-col md:flex-row justify-between items-center gap-4">
 <div className="text-sm font-bold text-slate-600 dark:text-slate-300">
@@ -766,6 +913,7 @@ return (
 </div>
 </div>
 
+{/* أدوات الفلترة */}
 <div className="p-4 bg-slate-50/50 dark:bg-slate-800/30 border-b border-slate-100 dark:border-slate-800">
 <div className="flex flex-col md:flex-row gap-4 items-center">
 <div className="flex gap-2 items-center">
@@ -805,6 +953,7 @@ return (
 </div>
 </div>
 
+{/* الجدول */}
 <div className="overflow-x-auto animate-fadeIn p-4">
 <div className="table-container">
 <table className="w-full text-right text-sm">
@@ -879,6 +1028,100 @@ return (
 );
 });
 
+const DuplicateDetectionSystem = ({ transactions, dispatch, addNotification, MONTHS, closedMonths }) => {
+const [duplicateThreshold, setDuplicateThreshold] = useState(2);
+const [selectedMonth, setSelectedMonth] = useState('كل الشهور');
+const [expandedGroups, setExpandedGroups] = useState({});
+
+const detectDuplicates = useMemo(() => {
+const amountMap = {};
+const filtered = selectedMonth === 'كل الشهور' ? transactions : transactions.filter(t => t.month === selectedMonth);
+filtered.forEach(t => {
+const key = `${Number(t.amount)}_${t.method}_${t.category}`;
+if (!amountMap[key]) amountMap[key] = [];
+amountMap[key].push(t);
+});
+return Object.entries(amountMap).filter(([_, items]) => items.length >= duplicateThreshold).map(([key, items]) => ({
+key, amount: items[0].amount, count: items.length, items, category: items[0].category,
+risk: items.length >= 5 ? 'high' : items.length >= 3 ? 'medium' : 'low'
+}));
+}, [transactions, duplicateThreshold, selectedMonth]);
+
+const handleDeleteAll = () => {
+    let idsToDelete = [];
+    let protectedCount = 0;
+
+    detectDuplicates.forEach(d => {
+        const itemsToDelete = d.items.slice(1);
+        
+        itemsToDelete.forEach(item => {
+            if (closedMonths?.includes(item.month)) {
+                protectedCount++;
+            } else {
+                idsToDelete.push(item.id);
+            }
+        });
+    });
+
+    if (idsToDelete.length === 0 && protectedCount > 0) {
+        addNotification({ 
+            type: 'error', 
+            title: 'محظور', 
+            message: 'جميع العمليات المكررة المكتشفة تخص أشهراً مغلقة ولا يمكن حذفها.' 
+        });
+        return;
+    }
+
+    const message = protectedCount > 0
+        ? `سيتم حذف ${idsToDelete.length} عملية مكررة. ${protectedCount} عمليات تم تجاهلها لأنها في أشهر مغلقة.`
+        : `هل أنت متأكد من حذف العمليات المكررة؟ سيتم الاحتفاظ بنسخة واحدة فقط لكل مجموعة (${detectDuplicates.length} مجموعة).`;
+
+    dispatch({
+        type: 'SHOW_CONFIRM',
+        title: protectedCount > 0 ? 'تأكيد الحذف (جزئي)' : 'تأكيد الحذف الجماعي',
+        message: message,
+        onConfirm: () => {
+            dispatch({ type: 'UPDATE_TRANSACTIONS', payload: transactions.filter(t => !idsToDelete.includes(t.id)) });
+            addNotification({ type: 'success', title: 'تم التنظيف', message: `تم حذف ${idsToDelete.length} عملية مكررة${protectedCount > 0 ? ` (تم تجاهل ${protectedCount})` : ''}` });
+        },
+        onCancel: () => dispatch({ type: 'HIDE_CONFIRM' })
+    });
+};
+
+return (
+<div className="space-y-8 animate-fadeIn pb-20">
+<div className="glass p-8 rounded-2xl flex justify-between items-center gradient-border mb-6">
+<div><h2 className="text-2xl font-black flex items-center gap-3"><Filter className="text-blue-500" /> كاشف التكرار الذكي</h2><p className="text-slate-500 mt-1 text-sm font-bold">تحليل ذكي لاكتشاف المبالغ التي قد تكون سجلت مرتين بالخطأ</p></div>
+<button onClick={handleDeleteAll} disabled={detectDuplicates.length === 0} className={`px-6 py-3 rounded-xl font-bold transition-all flex items-center gap-2 ${detectDuplicates.length === 0 ? 'bg-slate-100 text-slate-400' : 'gradient-bg-danger text-white shadow-lg hover:scale-105'}`} title="حذف جميع المكررات"><Trash2 size={18} /> تنظيف السجل</button>
+</div>
+<div className="glass p-6 rounded-2xl grid grid-cols-1 md:grid-cols-2 gap-8">
+<div><label className="block text-xs font-black mb-3 opacity-50 uppercase tracking-widest">نطاق البحث</label><select className="input-field" value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)}><option value="كل الشهور">جميع الشهور</option>{MONTHS.map(m => <option key={m} value={m}>{m}</option>)}</select></div>
+<div><label className="block text-xs font-black mb-3 opacity-50 uppercase tracking-widest">حساسية الكشف (أكثر من {duplicateThreshold} مرات)</label><input type="range" min="2" max="10" className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer" value={duplicateThreshold} onChange={e => setDuplicateThreshold(Number(e.target.value))} /></div>
+</div>
+<div className="space-y-4">
+{detectDuplicates.map(dup => (
+<div key={dup.key} className="glass rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-700">
+<div className={`p-5 flex justify-between items-center cursor-pointer ${dup.risk === 'high' ? 'bg-red-50/50' : 'bg-amber-50/50'}`} onClick={() => setExpandedGroups(p => ({...p, [dup.key]: !p[dup.key]}))}>
+<div className="flex items-center gap-4"><div className={`p-3 rounded-2xl ${dup.risk === 'high' ? 'bg-red-100 text-red-600' : 'bg-amber-100 text-amber-600'}`}><Repeat size={24} /></div><div><h4 className="font-black text-lg">{Number(dup.amount).toLocaleString()} ج.م</h4><span className="text-xs font-bold opacity-60">{dup.category} - تكرر {dup.count} مرات</span></div></div>
+<ChevronDown className={`transition-transform duration-300 ${expandedGroups[dup.key] ? 'rotate-180' : ''}`} />
+</div>
+{expandedGroups[dup.key] && (
+<div className="p-4 bg-white/50 dark:bg-black/20 divide-y dark:divide-slate-800 animate-fadeIn">
+{dup.items.map((item, idx) => (
+<div key={item.id} className="py-4 flex justify-between items-center px-4">
+<div className="text-sm font-bold">📅 {item.date} <span className="mx-2 text-slate-300">|</span> 📝 {item.description || 'بدون وصف'} {closedMonths?.includes(item.month) && <span className="text-red-500 text-xs mr-2 font-bold">(مغلق)</span>}</div>
+{idx !== 0 && !closedMonths?.includes(item.month) && <button onClick={() => dispatch({ type: 'UPDATE_TRANSACTIONS', payload: transactions.filter(t => t.id !== item.id) })} className="text-red-500 hover:bg-red-50 p-2 rounded-xl transition-all" title="حذف هذه المكررة"><Trash2 size={16} /></button>}
+</div>
+))}
+</div>
+)}
+</div>
+))}
+</div>
+</div>
+);
+};
+
 const getInitialData = () => {
 const legacyOpeningBalance = localStorage.getItem('opening_balance_2026');
 const finalOpeningBalance = legacyOpeningBalance ? Number(legacyOpeningBalance) : 0;
@@ -906,6 +1149,8 @@ try {
       openingBalance2026: parsed.openingBalance2026 || finalOpeningBalance,
       loans: Array.isArray(parsed.loans) ? parsed.loans : defaultLoans,
       cards: Array.isArray(parsed.cards) ? parsed.cards : defaultCards,
+      fawryAccount: parsed.fawryAccount || { id: 'f1', name: 'فوري', openingBalance: 0 },
+      etisalatAccount: parsed.etisalatAccount || { id: 'e1', name: 'محفظة اتصالات', openingBalance: 0 },
       recurringItems: Array.isArray(parsed.recurringItems) ? parsed.recurringItems : [],
       closedMonths: Array.isArray(parsed.closedMonths) ? parsed.closedMonths : [],
       monthlySnapshots: parsed.monthlySnapshots || {},
@@ -920,6 +1165,8 @@ return {
   transactions: [],
   loans: defaultLoans,
   cards: defaultCards,
+  fawryAccount: { id: 'f1', name: 'فوري', openingBalance: 0 },
+  etisalatAccount: { id: 'e1', name: 'محفظة اتصالات', openingBalance: 0 },
   openingBalance2026: finalOpeningBalance,
   savingsGoals: [],
   recurringItems: [],
@@ -941,6 +1188,8 @@ searchTerm: '', editingBudgetCategory: null, budgetAmount: '', editingFawry: nul
 isRecurringModalOpen: false, recurringFormData: { title: '', amount: '', day: 1, category: 'أخرى' },
 filterType: 'all', hidePast: false, notifications: [], isAiModalOpen: false, aiTab: 'analyze',
 aiQuery: '', aiResponse: '', isAiLoading: false,
+fawryData: JSON.parse(localStorage.getItem('fawryData')) || { id: 'f_1', name: 'محفظة فوري', openingBalance: 0 },
+etisalatData: JSON.parse(localStorage.getItem('etisalatData')) || { id: 'e_1', name: 'محفظة اتصالات', openingBalance: 0 },
 history: [], future: [],
 expandedLedgers: { fawry: true, etisalat: true, cib_savings: true, aaib_savings: true },
 expandedCardsSection: true,
@@ -1154,6 +1403,16 @@ case 'UPDATE_OPENING_BALANCE':
       openingBalance2026: action.payload 
     } 
   };
+case 'UPDATE_FAWRY_DATA': 
+  return { 
+    ...state, 
+    fawryData: action.payload 
+  };
+case 'UPDATE_ETISALAT_DATA': 
+  return { 
+    ...state, 
+    etisalatData: action.payload 
+  };
 case 'UPDATE_RECURRING_ITEMS': 
   return { 
     ...state, 
@@ -1292,65 +1551,7 @@ default:
 }
 }
 
-const escapeHtml = (unsafe) => {
-if (typeof unsafe !== 'string') return unsafe;
-return unsafe
-.replace(/&/g, "&amp;")
-.replace(/</g, "&lt;")
-.replace(/>/g, "&gt;")
-.replace(/"/g, "&quot;")
-.replace(/'/g, "&#039;");
-};
-
-const generateId = () => {
-try {
-return typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : null;
-} catch (e) {
-return null;
-}
-};
-
-const getSafeId = () => {
-const secureId = generateId();
-if (secureId) return secureId;
-return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-};
-
-const normalizeText = (text) => {
-if (!text) return "";
-return text.toString()
-.replace(/[أإآ]/g, 'ا')
-.replace(/ى/g, 'ي')
-.replace(/ة/g, 'ه')
-.replace(/[\u064B-\u065F]/g, '')
-.trim()
-.toLowerCase();
-};
-
-const getLocalISODate = () => {
-const now = new Date();
-const year = now.getFullYear();
-const month = String(now.getMonth() + 1).padStart(2, '0');
-const day = String(now.getDate()).padStart(2, '0');
-return `${year}-${month}-${day}`;
-};
-
-const calculateDaysLeft = (targetDate) => {
-if (!targetDate) return null;
-try {
-const today = new Date();
-today.setHours(0, 0, 0, 0);
-const target = new Date(targetDate);
-target.setHours(0, 0, 0, 0);
-const diffTime = target - today;
-const days = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-return days;
-} catch (error) {
-console.error('Error calculating days left:', error);
-return null;
-}
-};
-
+// Login Screen with Google Auth
 const LoginScreen = ({ onLogin }) => {
 const [isLoading, setIsLoading] = useState(false);
 
@@ -1412,11 +1613,13 @@ className="w-full bg-white text-slate-900 py-4 px-8 rounded-2xl font-black flex 
 );
 };
 
+// Quick Balance Overview Component
 const QuickBalanceOverview = React.memo(({ 
   financeSnapshot, 
   currentFawryBalance, 
   currentEtisalatBalance,
   getSavingsLedger,
+  isPrivate,
   walletVisibility,
   onToggleVisibility
 }) => {
@@ -1478,8 +1681,8 @@ const QuickBalanceOverview = React.memo(({
                     }
                   </button>
                 </div>
-                <div className={`text-lg font-black ${!walletVisibility?.[account.key] ? 'text-slate-400' : account.color}`}>
-                  {!walletVisibility?.[account.key] ? '•••••' : Math.round(account.balance).toLocaleString()}
+                <div className={`text-lg font-black ${isPrivate || !walletVisibility?.[account.key] ? 'text-slate-400' : account.color}`}>
+                  {isPrivate || !walletVisibility?.[account.key] ? '•••••' : Math.round(account.balance).toLocaleString()}
                   <span className="text-xs"> ج.م</span>
                 </div>
               </div>
@@ -1490,7 +1693,7 @@ const QuickBalanceOverview = React.memo(({
             <div className="flex justify-between items-center text-white">
               <span className="font-bold">إجمالي السيولة المتاحة</span>
               <span className="text-2xl font-black">
-                {Math.round(total).toLocaleString()}
+                {isPrivate ? '•••••' : Math.round(total).toLocaleString()}
                 <span className="text-sm"> ج.م</span>
               </span>
             </div>
@@ -1508,7 +1711,7 @@ const [authLoading, setAuthLoading] = useState(true);
 const mainContentRef = useRef(null);
 const saveTimeoutRef = useRef(null);
 
-const { data, activeTab, selectedMonth, transViewMode, catViewType, isFormOpen, formMode, formData, activeCategoryDetail, repeatMonths, isLocked, isDarkMode, expandedGroup, budgets, editingCard, editingLoan, editingTransaction, searchTerm, editingBudgetCategory, budgetAmount, editingFawry, editingEtisalat, isRecurringModalOpen, recurringFormData, filterType, hidePast, notifications, isAiModalOpen, aiTab, aiQuery, aiResponse, isAiLoading, history, future, expandedLedgers, expandedCardsSection, statusFilter, confirmDialog, isQuickTransferModalOpen, quickTransferData, isBackupReminderOpen, viewingCardStatement, walletVisibility, isProcessing } = state;
+const { data, activeTab, selectedMonth, transViewMode, catViewType, isFormOpen, formMode, formData, activeCategoryDetail, repeatMonths, isLocked, isDarkMode, expandedGroup, budgets, editingCard, editingLoan, editingTransaction, searchTerm, editingBudgetCategory, budgetAmount, editingFawry, editingEtisalat, isRecurringModalOpen, recurringFormData, filterType, hidePast, notifications, isAiModalOpen, aiTab, aiQuery, aiResponse, isAiLoading, fawryData, etisalatData, history, future, expandedLedgers, expandedCardsSection, statusFilter, confirmDialog, isQuickTransferModalOpen, quickTransferData, isBackupReminderOpen, viewingCardStatement, walletVisibility, isProcessing } = state;
 const { transactions = [], loans = [], cards = [], recurringItems = [], savingsGoals = [], openingBalance2026 } = data || {};
 
 // Auth Observer
@@ -1530,6 +1733,7 @@ const docRef = db.collection("finance_2026").doc("user_ahmed_data");
 const unsubscribe = docRef.onSnapshot((doc) => {
 if (doc.exists) {
 dispatch({ type: 'SET_DATA', payload: doc.data() });
+console.log("☁️ تم تحديث البيانات من السحابة");
 }
 });
 return () => unsubscribe();
@@ -1552,21 +1756,27 @@ db.collection("finance_2026").doc("user_ahmed_data").set(data, { merge: true })
 return () => clearTimeout(saveTimeoutRef.current);
 }, [data, isAuthenticated]);
 
+
+// Enhanced Finance Snapshot Logic (CORRECTED)
 const financeSnapshot = useMemo(() => {
     let actualCarryover = Number(data.openingBalance2026 || 0);
     const selectedMonthIdx = getMonthIndex(selectedMonth);
     
+    // 1. حساب الرصيد المرحل من الأشهر السابقة
     const prevMonthName = MONTHS[selectedMonthIdx - 1];
 
     if (prevMonthName && data.closedMonths?.includes(prevMonthName)) {
+        // إذا كان الشهر السابق مغلقاً، نأخذ الرصيد المعتمد
         actualCarryover = Number(data.monthlySnapshots[prevMonthName] || 0);
     } else {
+        // إذا لم يكن مغلقاً، نحسب التراكمي يدوياً
         transactions.filter(t => getMonthIndex(t.month) < selectedMonthIdx).forEach(t => {
             const amt = Number(t.amount || 0);
             if (t.status === 'paid') {
                 if (t.type === 'income') {
                      actualCarryover += amt;
                 } else if (t.type === 'expense') {
+                    // التعديل الهام: نخصم فقط ما خرج من جيبك (Cash)
                     if (t.method === 'cash') {
                         actualCarryover -= amt;
                     }
@@ -1577,24 +1787,38 @@ const financeSnapshot = useMemo(() => {
 
     const currentMonthTrans = transactions.filter(t => t.month === selectedMonth);
 
+    // 2. الدخل الفعلي هذا الشهر (الذي دخل جيبك)
     const currentActualIncome = currentMonthTrans
         .filter(t => t.type === 'income' && t.status === 'paid')
         .reduce((s, t) => s + Number(t.amount || 0), 0);
 
+    // 3. الدخل المعلق (الذي تتوقع استلامه "كاش" فقط)
     const currentPendingIncome = currentMonthTrans
         .filter(t => t.type === 'income' && t.status !== 'paid' && t.method === 'cash')
         .reduce((s, t) => s + Number(t.amount || 0), 0);
 
+    // 4. المصروف المدفوع "كاش" فعلياً
+    // (يشمل المصاريف العادية + التحويلات للمحافظ لأنها خرجت من جيبك)
     const currentPaidCash = currentMonthTrans
         .filter(t => t.type === 'expense' && t.status === 'paid' && t.method === 'cash')
         .reduce((s, t) => s + Number(t.amount || 0), 0);
 
+    // 5. المصروف المعلق (نخصم من التوقعات فقط ما نويت دفعه "كاش")
     const currentPendingCash = currentMonthTrans
         .filter(t => t.type === 'expense' && t.status !== 'paid' && t.method === 'cash')
         .reduce((s, t) => s + Number(t.amount || 0), 0);
 
+    // مصروفات الفيزا (للعرض فقط ولا تؤثر على سيولة الكاش)
+    const currentCreditExpenses = currentMonthTrans
+        .filter(t => t.type === 'expense' && ['cib_card', 'aaib_card'].includes(t.method))
+        .reduce((s, t) => s + Number(t.amount || 0), 0);
+
+    // === المعادلات النهائية ===
+    
+    // السيولة الحالية في اليد = (المرحل + الدخل المقبوض) - (المدفوع كاش)
     const actualCashInHand = actualCarryover + currentActualIncome - currentPaidCash;
     
+    // الرصيد المتوقع إغلاقه = (السيولة الحالية + المنتظر قبضه كاش) - (المنتظر دفعه كاش)
     const projectedClosingBalance = actualCashInHand + currentPendingIncome - currentPendingCash;
 
     return {
@@ -1602,6 +1826,7 @@ const financeSnapshot = useMemo(() => {
         income: currentActualIncome,
         actualIncome: currentActualIncome,
         cashExpenses: currentPaidCash,
+        creditExpenses: currentCreditExpenses,
         pendingIncome: currentPendingIncome,
         actualCashInHand,
         projectedClosingBalance,
@@ -1681,14 +1906,14 @@ const deposits = transactions.filter(t => t.method === 'fawry' && t.subType === 
 const withdrawals = transactions.filter(t => t.method === 'fawry' && t.subType === 'withdrawal').reduce((sum, t) => sum + Number(t.amount), 0);
 return { deposits, withdrawals };
 }, [transactions]);
-const currentFawryBalance = fawryStats.deposits - fawryStats.withdrawals;
+const currentFawryBalance = (Number(fawryData.openingBalance) || 0) + fawryStats.deposits - fawryStats.withdrawals;
 
 const etisalatStats = useMemo(() => {
 const deposits = transactions.filter(t => t.method === 'etisalat' && t.subType === 'deposit').reduce((sum, t) => sum + Number(t.amount), 0);
 const withdrawals = transactions.filter(t => t.method === 'etisalat' && t.subType === 'withdrawal').reduce((sum, t) => sum + Number(t.amount), 0);
 return { deposits, withdrawals };
 }, [transactions]);
-const currentEtisalatBalance = etisalatStats.deposits - etisalatStats.withdrawals;
+const currentEtisalatBalance = (Number(etisalatData.openingBalance) || 0) + etisalatStats.deposits - etisalatStats.withdrawals;
 
 const getSavingsLedger = useCallback((methodId) => {
 const accTransactions = transactions
@@ -1710,28 +1935,28 @@ const accTransactions = transactions
 .filter(t => t.method === 'fawry' && t.status === 'paid')
 .sort((a, b) => new Date(a.date) - new Date(b.date));
 
-let runningBalance = 0;
+let runningBalance = fawryData.openingBalance || 0;
 return accTransactions.map(t => {
 const amount = Number(t.amount);
 if (t.subType === 'deposit') runningBalance += amount;
 else runningBalance -= amount;
 return { ...t, runningBalance };
 }).reverse();
-}, [transactions]);
+}, [transactions, fawryData]);
 
 const etisalatLedger = useMemo(() => {
 const accTransactions = transactions
 .filter(t => t.method === 'etisalat' && t.status === 'paid')
 .sort((a, b) => new Date(a.date) - new Date(b.date));
 
-let runningBalance = 0;
+let runningBalance = etisalatData.openingBalance || 0;
 return accTransactions.map(t => {
 const amount = Number(t.amount);
 if (t.subType === 'deposit') runningBalance += amount;
 else runningBalance -= amount;
 return { ...t, runningBalance };
 }).reverse();
-}, [transactions]);
+}, [transactions, etisalatData]);
 
 const calculateCardHistory = useCallback((card) => {
 let runningDebt = Number(card.openingBalance) || 0;
@@ -1831,6 +2056,7 @@ const saveHistory = useCallback(() => {
   dispatch({ type: 'ADD_TO_HISTORY', payload: JSON.parse(JSON.stringify(data)) }); 
 }, [data]);
 
+// ========== دوال جديدة للمحافظ ==========
 const handleAddWalletDeposit = useCallback((walletKey) => {
 const walletName = walletKey === 'fawry' ? 'فوري' : 'اتصالات';
   
@@ -2285,16 +2511,20 @@ const deleteRecurring = useCallback((id) => {
 const handleUpdateFawry = useCallback((e) => { 
   e.preventDefault(); 
   saveHistory(); 
+  localStorage.setItem('fawryData', JSON.stringify(editingFawry));
+  dispatch({ type: 'UPDATE_FAWRY_DATA', payload: editingFawry }); 
   dispatch({ type: 'SET_EDITING_FAWRY', payload: null }); 
   addNotification({ type: 'success', title: 'تم التحديث', message: 'تم تحديث بيانات محفظة فوري' });
-}, [saveHistory, addNotification]);
+}, [editingFawry, saveHistory, addNotification]);
 
 const handleUpdateEtisalat = useCallback((e) => { 
   e.preventDefault(); 
   saveHistory(); 
+  localStorage.setItem('etisalatData', JSON.stringify(editingEtisalat));
+  dispatch({ type: 'UPDATE_ETISALAT_DATA', payload: editingEtisalat }); 
   dispatch({ type: 'SET_EDITING_ETISALAT', payload: null }); 
   addNotification({ type: 'success', title: 'تم التحديث', message: 'تم تحديث بيانات اتصالات كاش' });
-}, [saveHistory, addNotification]);
+}, [editingEtisalat, saveHistory, addNotification]);
 
 const handleExportCSV = useCallback(() => {
 const bom = "\uFEFF"; 
@@ -2356,6 +2586,8 @@ message: 'هل أنت متأكد تماماً من مسح جميع البيان�
 onConfirm: () => {
 localStorage.removeItem(STORAGE_KEY);
 localStorage.removeItem('budgets');
+localStorage.removeItem('fawryData');
+localStorage.removeItem('etisalatData');
 window.location.reload();
 },
 onCancel: () => dispatch({ type: 'HIDE_CONFIRM' })
@@ -2467,6 +2699,62 @@ sessionStorage.setItem(sessionKey, 'true');
 }
 }, [isAuthenticated, transactions.length, cards, loans, addNotification]);
 
+const tickerData = useMemo(() => {
+const totalCashAvailable = walletVisibility.cash ? financeSnapshot.actualCashInHand.toLocaleString() : '•••••';
+const totalDebtRemaining = updatedLoans.reduce((acc, loan) => acc + loan.remaining, 0).toLocaleString();
+const today = new Date();
+const gregDate = today.toLocaleDateString('ar-EG', { weekday: 'long', day: 'numeric', month: 'short' });
+const hijriDate = new Intl.DateTimeFormat('ar-SA-u-ca-islamic', { day: 'numeric', month: 'long', year: 'numeric' }).format(today);
+return { totalCashAvailable, totalDebtRemaining, gregDate, hijriDate };
+}, [financeSnapshot, updatedLoans, walletVisibility]);
+
+const ProfessionalTicker = React.memo(() => {
+const [quote] = React.useState(() => DAILY_DHIKR[Math.floor(Math.random() * DAILY_DHIKR.length)]);
+return (
+<div className="fixed top-0 left-0 right-0 z-[2000] gradient-bg-primary text-white h-10 shadow-lg flex items-center overflow-hidden no-print">
+<div className="bg-white/20 h-full w-10 flex items-center justify-center z-10 shadow-lg relative flex-shrink-0">
+<Zap size={18} className="text-white animate-pulse" />
+</div>
+<div className="ticker-wrap flex-1 h-full flex items-center overflow-hidden">
+<div className="ticker-content flex-1 h-full flex items-center whitespace-nowrap animate-ticker-scroll">
+{[
+<span className="ticker-item text-emerald-300 flex items-center gap-3 px-6 font-bold">💰 الرصيد المتاح: {walletVisibility.cash ? financeSnapshot.actualCashInHand.toLocaleString() : '•••••'} ج.م</span>,
+<span className="text-white/20 mx-2">•</span>,
+<span className="ticker-item text-amber-200 flex items-center gap-3">⚠️ إجمالي الديون: {updatedLoans.reduce((acc, loan) => acc + loan.remaining, 0).toLocaleString()} ج.م</span>,
+<span className="text-white/20 mx-2">•</span>,
+<span className="ticker-item text-blue-200 flex items-center gap-3">📅 {new Date().toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>,
+<span className="text-white/20 mx-2">•</span>,
+<span className="ticker-item text-purple-200 flex items-center gap-3">💎 {quote}</span>,
+].map((item, i) => <React.Fragment key={`ticker-${i}`}>{item}</React.Fragment>)}
+</div>
+</div>
+</div>
+);
+});
+
+const MonthSelector = ({ selectedMonth, onSelectMonth, className = "" }) => {
+  return (
+    <div className={`glass p-4 rounded-2xl ${className}`}>
+      <div className="flex gap-2 overflow-x-auto pb-2 scroll-hide">
+        {MONTHS.map(m => (
+          <button 
+            key={m} 
+            type="button" 
+            onClick={() => onSelectMonth(m)}
+            className={`flex-shrink-0 px-6 py-3 rounded-xl text-sm font-bold transition-all duration-300 ${
+              selectedMonth === m 
+              ? 'gradient-bg-primary text-white shadow-md scale-105' 
+              : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 hover:scale-[1.02]'
+            }`}
+          >
+            {m}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+};
+
 const EnhancedStatCard = ({ title, amount, icon: Icon, color, subtitle, trend, isPrivate }) => {
 const isPositive = amount >= 0;
 return (
@@ -2557,8 +2845,83 @@ className="flex-1 gradient-bg-danger text-white py-4 rounded-2xl font-bold shado
 );
 };
 
+const renderCalendarView = () => {
+const agendaItems = getAgendaItems();
+const grouped = agendaItems.reduce((acc, item) => {
+const monthName = new Date(item.date).toLocaleDateString('ar-EG', { month: 'long', year: 'numeric' });
+if (!acc[monthName]) acc[monthName] = [];
+acc[monthName].push(item);
+return acc;
+}, {});
+
+return (
+<div className="space-y-6 animate-fadeIn pb-20">
+<div className="glass p-6 rounded-2xl flex justify-between items-center no-print">
+<h3 className="text-xl font-black flex items-center gap-3"><Calendar className="text-blue-500" /> أجندة المواعيد</h3>
+</div>
+{Object.keys(grouped).length === 0 ? (
+<div className="glass p-20 text-center rounded-2xl">
+<p className="text-slate-400 font-bold">لا توجد مواعيد قادمة</p>
+</div>
+) : (
+Object.entries(grouped).map(([month, items]) => (
+<div key={month} className="space-y-4">
+<h4 className="text-slate-500 font-bold mr-4 text-sm">{month}</h4>
+{items.map(item => {
+const daysLeft = calculateDaysLeft(item.date);
+return (
+<div key={item.id} className="glass p-5 rounded-2xl flex justify-between items-center shadow-sm hover:shadow-md transition-shadow">
+<div className="flex items-center gap-4 flex-1">
+<div className={`p-3 rounded-2xl ${item.type === 'danger' ? 'gradient-bg-danger text-white' : 'gradient-bg-warning text-white'}`}>
+<item.icon size={24} />
+</div>
+<div className="flex-1">
+<p className="font-bold text-slate-800 dark:text-white">{item.title}</p>
+<p className={`text-[10px] font-black ${daysLeft <= 3 ? 'text-red-500 animate-pulse' : 'text-slate-400'}`}>
+{daysLeft !== null ? (daysLeft > 0 ? `متبقي ${daysLeft} يوم` : daysLeft === 0 ? "يستحق اليوم!" : "متأخر") : "غير محدد"}
+</p>
+<p className="text-[10px] text-slate-400">تاريخ: {item.date}</p>
+</div>
+</div>
+<div className="flex items-center gap-4">
+<div className="text-left font-black text-lg text-slate-800 dark:text-white">
+{Number(item.amount).toLocaleString()} 
+<span className="text-xs font-normal text-slate-400"> ج.م</span>
+</div>
+<button
+onClick={() => {
+dispatch({ type: 'SET_FORM_MODE', payload: 'add' });
+dispatch({ type: 'SET_FORM_DATA', payload: {
+type: 'expense',
+amount: item.amount,
+description: item.title,
+category: 'الالتزامات البنكية والتمويلية',
+date: getLocalISODate(),
+month: selectedMonth,
+method: 'instapay',
+subType: 'withdrawal'
+}});
+dispatch({ type: 'SET_FORM_OPEN', payload: true });
+}}
+className="p-2 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200 transition-colors active:scale-95 no-print"
+title="دفع سريع"
+>
+<CheckCircle2 size={16} />
+</button>
+</div>
+</div>
+);
+})}
+</div>
+))
+)}
+</div>
+);
+};
+
 const renderDashboard = () => (
 <div className="space-y-8 animate-fadeIn">
+{/* مكون الرصيد الافتتاحي الجديد */}
 <div className="glass bg-blue-50/50 dark:bg-blue-900/10 p-6 rounded-2xl border border-blue-100 dark:border-blue-900/30 shadow-sm animate-fadeIn">
     <div className="flex flex-col md:flex-row items-center justify-between gap-4">
         <div>
@@ -2597,15 +2960,18 @@ const renderDashboard = () => (
     </div>
 </div>
 
+{/* لوحة السيولة الفورية */}
 <QuickBalanceOverview 
   financeSnapshot={financeSnapshot}
   currentFawryBalance={currentFawryBalance}
   currentEtisalatBalance={currentEtisalatBalance}
   getSavingsLedger={getSavingsLedger}
+  isPrivate={false}
   walletVisibility={walletVisibility}
   onToggleVisibility={(key) => dispatch({ type: 'TOGGLE_WALLET_VISIBILITY', payload: key })}
 />
 
+{/* --- بداية واجهة مساعد التسوية --- */}
 <div className="glass p-6 rounded-2xl border-r-4 border-r-amber-500 bg-amber-50/10 mb-8 no-print animate-fadeIn">
     <div className="flex items-center gap-3 mb-4">
         <div className="p-3 bg-amber-100 text-amber-600 rounded-xl">
@@ -2670,6 +3036,7 @@ const renderDashboard = () => (
         </p>
     </div>
 </div>
+{/* --- نهاية واجهة مساعد التسوية --- */}
 
 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 no-print">
 <button
@@ -2722,6 +3089,12 @@ className="gradient-bg-danger text-white p-6 rounded-2xl flex flex-col items-cen
 <span className="font-bold">تسجيل مصروف</span>
 </button>
 </div>
+
+<MonthSelector 
+  selectedMonth={selectedMonth}
+  onSelectMonth={(month) => dispatch({ type: 'SET_SELECTED_MONTH', payload: month })}
+  className="no-print"
+/>
 
 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
 <EnhancedStatCard
@@ -2894,6 +3267,21 @@ const printGlobalData = CATEGORIES[catViewType].map(cat => ({
 
 return (
 <div className="space-y-8 animate-fadeIn">
+<div className="flex flex-col md:flex-row justify-between items-center glass p-4 rounded-2xl gap-4 no-print">
+<div className="flex bg-slate-100 dark:bg-slate-800 p-1.5 rounded-2xl w-full md:w-fit">
+<button type="button" onClick={() => dispatch({ type: 'SET_CAT_VIEW_TYPE', payload: 'expense' })} className={`flex-1 md:flex-none px-8 py-3 rounded-xl text-sm font-bold transition-all duration-300 ${catViewType === 'expense' ? 'bg-white dark:bg-slate-700 shadow-sm text-red-500' : 'text-gray-400 hover:text-gray-600'}`}>المصروفات</button>
+<button type="button" onClick={() => dispatch({ type: 'SET_CAT_VIEW_TYPE', payload: 'income' })} className={`flex-1 md:flex-none px-8 py-3 rounded-xl text-sm font-bold transition-all duration-300 ${catViewType === 'income' ? 'bg-white dark:bg-slate-700 shadow-sm text-green-500' : 'text-gray-400 hover:text-gray-600'}`}>الإيرادات</button>
+</div>
+
+<MonthSelector 
+  selectedMonth={selectedMonth}
+  onSelectMonth={(month) => dispatch({ type: 'SET_SELECTED_MONTH', payload: month })}
+  className="no-print mb-6"
+/>
+
+<button type="button" onClick={() => printReport(`ملخص الفئات - ${catViewType === 'expense' ? 'المصروفات' : 'الإيرادات'} - ${selectedMonth}`, printGlobalData)} className="w-full md:w-auto bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 px-6 py-3 rounded-2xl flex items-center justify-center gap-2 font-bold transition-all"><Printer size={18} /> طباعة الملخص</button>
+</div>
+
 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
 {CATEGORIES[catViewType].map(cat => {
 const spent = catTotals[cat] || 0; 
@@ -3307,7 +3695,10 @@ return (
 
 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
 <div className="relative group no-print">
-  <div className="bg-gradient-to-br from-yellow-100 to-yellow-200 border border-yellow-300 p-8 rounded-2xl flex flex-col justify-between shadow-lg h-full text-yellow-900 hover-lift cursor-pointer transition-transform">
+  <button type="button" onClick={() => dispatch({ type: 'SET_EDITING_FAWRY', payload: fawryData })} className="absolute -top-3 -right-3 z-20 gradient-bg-primary text-white p-3 rounded-2xl shadow-xl hover:scale-110 active:scale-95 font-bold">
+    <Edit size={18} />
+  </button>
+  <div className="bg-gradient-to-br from-yellow-100 to-yellow-200 border border-yellow-300 p-8 rounded-2xl flex flex-col justify-between shadow-lg h-full text-yellow-900 hover-lift cursor-pointer transition-transform" onClick={() => dispatch({ type: 'SET_EDITING_FAWRY', payload: fawryData })}>
     <div className="flex justify-between items-start mb-6">
       <div className="flex items-center gap-4">
         <div className="bg-white p-3 rounded-2xl shadow-sm">
@@ -3339,7 +3730,10 @@ return (
 </div>
 
 <div className="relative group no-print">
-  <div className="bg-gradient-to-br from-emerald-100 to-emerald-200 border border-emerald-300 p-8 rounded-2xl flex flex-col justify-between shadow-lg h-full text-emerald-900 relative overflow-hidden hover-lift cursor-pointer transition-transform">
+  <button type="button" onClick={() => dispatch({ type: 'SET_EDITING_ETISALAT', payload: etisalatData })} className="absolute -top-3 -right-3 z-20 bg-white hover:bg-slate-100 text-etisalatGreen p-3 rounded-2xl shadow-xl transition-all hover:scale-110 active:scale-95 font-bold border border-slate-200">
+    <Edit size={18} />
+  </button>
+  <div className="bg-gradient-to-br from-emerald-100 to-emerald-200 border border-emerald-300 p-8 rounded-2xl flex flex-col justify-between shadow-lg h-full text-emerald-900 relative overflow-hidden hover-lift cursor-pointer transition-transform" onClick={() => dispatch({ type: 'SET_EDITING_ETISALAT', payload: etisalatData })}>
     <div className="absolute top-0 right-0 bg-etisalatRed w-24 h-24 rounded-bl-[4rem] z-0 shadow-lg"></div>
     <div className="flex justify-between items-start mb-6 z-10 relative">
       <div className="flex items-center gap-4">
@@ -3459,6 +3853,46 @@ const paidArchive = transactions
 
 return (
 <div className="space-y-8 animate-fadeIn">
+<div className="glass p-2 rounded-2xl w-fit mx-auto mb-8 flex no-print">
+<button type="button" onClick={() => dispatch({ type: 'SET_TRANS_VIEW_MODE', payload: 'expense' })} className={`px-12 py-4 rounded-xl text-lg font-bold transition-all duration-300 flex items-center gap-3 ${transViewMode === 'expense' ? 'bg-red-50 text-red-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}><TrendingDown size={24} /> المصروفات</button>
+<button type="button" onClick={() => dispatch({ type: 'SET_TRANS_VIEW_MODE', payload: 'income' })} className={`px-12 py-4 rounded-xl text-lg font-bold transition-all duration-300 flex items-center gap-3 ${transViewMode === 'income' ? 'bg-emerald-50 text-emerald-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}><TrendingUp size={24} /> الدخل</button>
+</div>
+
+<MonthSelector 
+  selectedMonth={selectedMonth}
+  onSelectMonth={(month) => dispatch({ type: 'SET_SELECTED_MONTH', payload: month })}
+  className="no-print mb-6"
+/>
+
+{renderMonthlyInsight()}
+
+<div className="flex gap-2 justify-center flex-wrap px-2 mb-4 no-print">
+<button type="button" onClick={() => dispatch({ type: 'SET_STATUS_FILTER', payload: 'all' })} className={`px-3 py-1.5 rounded-xl text-[11px] font-bold transition-all border border-slate-200 dark:border-slate-700 flex items-center gap-1 ${statusFilter === 'all' ? 'bg-slate-800 text-white shadow-md' : 'bg-white dark:bg-slate-800 text-slate-500'}`} title="عرض الكل"><Filter size={12}/> الكل</button>
+<button type="button" onClick={() => dispatch({ type: 'SET_STATUS_FILTER', payload: 'pending' })} className={`px-3 py-1.5 rounded-xl text-[11px] font-bold transition-all border border-slate-200 dark:border-slate-700 flex items-center gap-1 ${statusFilter === 'pending' ? 'gradient-bg-warning text-white shadow-md' : 'bg-white dark:bg-slate-800 text-slate-500'}`} title="المعلق فقط"><Clock size={12}/> معلق</button>
+<button type="button" onClick={() => dispatch({ type: 'SET_STATUS_FILTER', payload: 'paid' })} className={`px-3 py-1.5 rounded-xl text-[11px] font-bold transition-all border border-slate-200 dark:border-slate-700 flex items-center gap-1 ${statusFilter === 'paid' ? 'gradient-bg-success text-white shadow-md' : 'bg-white dark:bg-slate-800 text-slate-500'}`} title="المدفوع فقط"><CheckCircle2 size={12}/> مدفوع</button>
+</div>
+
+<div className="flex gap-2 flex-wrap justify-center px-2 mb-6 no-print">
+<button type="button" onClick={() => dispatch({ type: 'SET_FILTER_TYPE', payload: 'all' })} className={`px-3 py-1.5 rounded-xl text-[11px] font-bold transition-all border ${filterType === 'all' ? 'gradient-bg-primary text-white shadow-md scale-105' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-500'}`}>الكل</button>
+{PAYMENT_METHODS.map(method => (
+<button key={method.id} type="button" onClick={() => dispatch({ type: 'SET_FILTER_TYPE', payload: method.id })} className={`px-3 py-1.5 rounded-xl text-[11px] font-bold transition-all border whitespace-nowrap ${filterType === method.id ? 'gradient-bg-primary text-white shadow-md scale-105' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-500 hover:border-blue-300'}`}>{method.label}</button>
+))}
+<button type="button" onClick={() => dispatch({ type: 'SET_FILTER_TYPE', payload: 'high' })} className={`px-3 py-1.5 rounded-xl text-[11px] font-bold transition-all border ${filterType === 'high' ? 'gradient-bg-warning text-white shadow-md scale-105' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-500 hover:border-orange-300'}`}>مبالغ كبيرة</button>
+</div>
+
+<div className="glass p-4 rounded-2xl no-print">
+  <div className="relative">
+    <Search className="absolute right-4 top-1/2 transform -translate-y-1/2 text-slate-400" size={20} />
+    <input 
+      type="text" 
+      placeholder="🔍 ابحث في المعاملات..." 
+      className="w-full p-4 pr-12 bg-transparent border-0 focus:outline-none text-lg" 
+      value={searchTerm} 
+      onChange={(e) => dispatch({ type: 'SET_SEARCH_TERM', payload: e.target.value })} 
+    />
+  </div>
+</div>
+
 <section>
 <h3 className="text-orange-500 font-black mb-6 flex items-center gap-3 pr-2 border-r-4 border-orange-500 text-xl animate-fadeIn">
 <Clock size={24} /> التزامات الشهر الحالية
@@ -3779,7 +4213,9 @@ case 'transactions': return renderTransactionsViewFull();
 case 'categories': return renderCategoriesView();
 case 'loans': return renderLoansView();
 case 'cards': return renderWalletsAndCardsView();
+case 'calendar': return renderCalendarView();
 case 'planner': return renderStrategicPlanner();
+case 'duplicates': return <DuplicateDetectionSystem transactions={transactions} dispatch={dispatch} addNotification={addNotification} MONTHS={MONTHS} closedMonths={data.closedMonths} />;
 default: return renderDashboard();
 }
 };
@@ -3804,7 +4240,8 @@ const EnhancedSidebar = () => (
 { id: 'loans', label: 'القروض والديون', icon: Banknote, color: 'text-red-500' },
 { id: 'cards', label: 'البطاقات والمحافظ', icon: CreditCard, color: 'text-amber-500' },
 { id: 'planner', label: 'المخطط الاستراتيجي', icon: Target, color: 'text-indigo-500' },
-{ id: 'calendar', label: 'الأجندة والمواعيد', icon: CalendarDays, color: 'text-pink-500' }
+{ id: 'calendar', label: 'الأجندة والمواعيد', icon: CalendarDays, color: 'text-pink-500' },
+{ id: 'duplicates', label: 'كشف المكررات', icon: Filter, color: 'text-cyan-500' }
 ].map(item => (
 <button 
 key={item.id} 
@@ -3921,6 +4358,8 @@ dispatch({ type: 'SET_BACKUP_REMINDER_OPEN', payload: true });
 return (
 <div className="flex h-screen overflow-hidden text-slate-800 dark:text-slate-100 font-sans">
 
+<ProfessionalTicker />
+
 <NotificationCenter notifications={notifications} removeNotification={removeNotification} />
 
 {/* Processing Overlay */}
@@ -4029,6 +4468,7 @@ return (
 { id: 'loans', label: 'القروض', icon: Banknote },
 { id: 'planner', label: 'المخطط', icon: CalendarDays },
 { id: 'calendar', label: 'الأجندة', icon: CalendarDays },
+{ id: 'duplicates', label: 'المكررات', icon: Filter },
 { id: 'categories', label: 'الفئات', icon: Layers }
 ].map(item => (
 <button key={item.id} type="button" onClick={() => dispatch({ type: 'SET_ACTIVE_TAB', payload: item.id })} className={`nav-btn ${activeTab === item.id ? 'active' : ''}`} aria-label={item.label}>
@@ -4370,6 +4810,56 @@ onChange={() => dispatch({ type: 'SET_FORM_DATA', payload: { ...formData, subTyp
     </div>
   </div>
   <button type="submit" className="w-full gradient-bg-primary text-white py-3 rounded-xl font-bold mt-4">حفظ التعديلات</button>
+</form>
+</div>
+</div>
+)}
+
+{editingFawry && (
+<div className="modal-backdrop no-print">
+<div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl shadow-2xl overflow-hidden animate-fadeIn border border-yellow-400/50">
+<div className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-yellow-50 dark:bg-yellow-900/10">
+<h3 className="text-xl font-black text-slate-800 dark:text-white">ضبط رصيد فوري</h3>
+<button type="button" onClick={() => dispatch({ type: 'SET_EDITING_FAWRY', payload: null })} className="p-2 hover:bg-red-50 hover:text-red-500 rounded-xl transition-colors"><X size={24} /></button>
+</div>
+<form onSubmit={(e) => { e.preventDefault(); localStorage.setItem('fawryData', JSON.stringify(editingFawry)); dispatch({ type: 'UPDATE_FAWRY_DATA', payload: editingFawry }); dispatch({ type: 'SET_EDITING_FAWRY', payload: null }); addNotification({ type: 'success', title: 'تم الحفظ', message: 'تم تحديث رصيد فوري الافتتاحي' }); }} className="p-6 space-y-6">
+<div className="bg-slate-50 dark:bg-slate-800 rounded-2xl p-5 border border-slate-200 dark:border-slate-700">
+<div className="flex items-center gap-2 mb-4 text-sm font-bold text-fawryBlue"><Calculator size={18} /> معادلة الرصيد التلقائية</div>
+<div className="space-y-2 text-sm font-mono">
+<div className="flex justify-between items-center"><span className="text-slate-500">رصيد البداية (الافتتاحي)</span><span className="font-bold text-slate-800 dark:text-white">{Number(editingFawry.openingBalance).toLocaleString()}</span></div>
+<div className="flex justify-between items-center text-emerald-600"><span>+ إجمالي الشحن (من المعاملات)</span><span className="font-bold">+{fawryStats.deposits.toLocaleString()}</span></div>
+<div className="flex justify-between items-center text-red-500"><span>- إجمالي المدفوعات (من المعاملات)</span><span className="font-bold">-{fawryStats.withdrawals.toLocaleString()}</span></div>
+<div className="h-px bg-slate-300 dark:bg-slate-600 my-2"></div>
+<div className="flex justify-between items-center text-lg font-black text-fawryBlue"><span>= الرصيد الحالي المتوقع</span><span>{((Number(editingFawry.openingBalance) || 0) + fawryStats.deposits - fawryStats.withdrawals).toLocaleString()} ج.م</span></div>
+</div>
+</div>
+<div><label className="block text-xs font-bold text-slate-500 mb-2">تعديل رصيد البداية</label><input type="number" step="0.01" min="0" className="input-field text-xl font-black text-fawryBlue" value={editingFawry.openingBalance} onChange={e => dispatch({ type: 'SET_EDITING_FAWRY', payload: { ...editingFawry, openingBalance: Number(e.target.value) } })} placeholder="أدخل الرصيد الموجود قبل 2026..." /><p className="text-[10px] text-slate-400 mt-2 leading-relaxed">💡 تلميح: لا تقم بكتابة الرصيد الحالي هنا. فقط اكتب الرصيد الذي بدأت به السنة (أو رصيد الترحيل)، وسيقوم التطبيق بحساب الباقي.</p></div>
+<button type="submit" className="w-full gradient-bg-primary text-white py-3 rounded-xl font-bold shadow-lg hover:shadow-xl transition-all">حفظ التعديلات</button>
+</form>
+</div>
+</div>
+)}
+
+{editingEtisalat && (
+<div className="modal-backdrop no-print">
+<div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl shadow-2xl overflow-hidden animate-fadeIn border border-green-500/50">
+<div className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-green-50 dark:bg-green-900/10">
+<h3 className="text-xl font-black text-slate-800 dark:text-white">ضبط اتصالات كاش</h3>
+<button type="button" onClick={() => dispatch({ type: 'SET_EDITING_ETISALAT', payload: null })} className="p-2 hover:bg-red-50 hover:text-red-500 rounded-xl transition-colors"><X size={24} /></button>
+</div>
+<form onSubmit={(e) => { e.preventDefault(); localStorage.setItem('etisalatData', JSON.stringify(editingEtisalat)); dispatch({ type: 'UPDATE_ETISALAT_DATA', payload: editingEtisalat }); dispatch({ type: 'SET_EDITING_ETISALAT', payload: null }); addNotification({ type: 'success', title: 'تم الحفظ', message: 'تم تحديث رصيد المحفظة الافتتاحي' }); }} className="p-6 space-y-6">
+<div className="bg-slate-50 dark:bg-slate-800 rounded-2xl p-5 border border-slate-200 dark:border-slate-700">
+<div className="flex items-center gap-2 mb-4 text-sm font-bold text-etisalatGreen"><Calculator size={18} /> معادلة الرصيد التلقائية</div>
+<div className="space-y-2 text-sm font-mono">
+<div className="flex justify-between items-center"><span className="text-slate-500">رصيد البداية (الافتتاحي)</span><span className="font-bold text-slate-800 dark:text-white">{Number(editingEtisalat.openingBalance).toLocaleString()}</span></div>
+<div className="flex justify-between items-center text-emerald-600"><span>+ إجمالي الإيداع/التحويلات</span><span className="font-bold">+{etisalatStats.deposits.toLocaleString()}</span></div>
+<div className="flex justify-between items-center text-red-500"><span>- إجمالي السحب/الشراء</span><span className="font-bold">-{etisalatStats.withdrawals.toLocaleString()}</span></div>
+<div className="h-px bg-slate-300 dark:bg-slate-600 my-2"></div>
+<div className="flex justify-between items-center text-lg font-black text-etisalatGreen"><span>= الرصيد الحالي المتوقع</span><span>{((Number(editingEtisalat.openingBalance) || 0) + etisalatStats.deposits - etisalatStats.withdrawals).toLocaleString()} ج.م</span></div>
+</div>
+</div>
+<div><label className="block text-xs font-bold text-slate-500 mb-2">تعديل رصيد البداية</label><input type="number" step="0.01" min="0" className="input-field text-xl font-black text-etisalatGreen" value={editingEtisalat.openingBalance} onChange={e => dispatch({ type: 'SET_EDITING_ETISALAT', payload: { ...editingEtisalat, openingBalance: Number(e.target.value) } })} placeholder="أدخل الرصيد الافتتاحي..." /></div>
+<button type="submit" className="w-full gradient-bg-success text-white py-3 rounded-xl font-bold shadow-lg hover:shadow-xl transition-all">حفظ التعديلات</button>
 </form>
 </div>
 </div>
