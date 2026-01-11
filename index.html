@@ -419,7 +419,7 @@ import React, { useState, useMemo, useEffect, useCallback, useReducer, useRef } 
 import { createRoot } from 'react-dom/client';
 import { PieChart, Pie, Cell, BarChart, Bar, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import {
-LayoutDashboard, Wallet, CreditCard, Banknote, Plus, Trash2, TrendingUp, TrendingDown,
+LayoutDashboard, Wallet, CreditCard, Banknote, Plus, Trash2, Repeat, TrendingUp, TrendingDown,
 Calendar, ArrowUpRight, ArrowDownLeft, Edit, X, Save,
 ShoppingBag, Smartphone, Store, ArrowRightLeft, Layers, ArrowRight,
 Printer, ChevronRight, ChevronDown, Calculator,
@@ -2628,19 +2628,48 @@ onCancel: () => dispatch({ type: 'HIDE_CONFIRM' })
 });
 }, [dispatch]);
 
-const handleAnalyzeFinances = useCallback(async () => { 
-  dispatch({ type: 'SET_AI_LOADING', payload: true }); 
-  setTimeout(() => { 
-    const totalIncome = transactions.filter(t => t.type === 'income').reduce((a,c)=>a+Number(c.amount), 0); 
-    const totalExp = transactions.filter(t => t.type === 'expense').reduce((a,c)=>a+Number(c.amount), 0); 
-    const ratio = totalIncome > 0 ? Math.round((totalExp/totalIncome)*100) : 0; 
-    dispatch({ 
-      type: 'SET_AI_RESPONSE', 
-      payload: `تحليل سريع: إجمالي دخلك المسجل ${totalIncome.toLocaleString()} ج.م ومصروفاتك ${totalExp.toLocaleString()} ج.م (${ratio}%). وضعك المالي ${ratio > 90 ? 'حرج، تحتاج لتقليل النفقات' : ratio > 70 ? 'يحتاج لمراقبة' : 'جيد ومستقر'}.` 
-    }); 
-    dispatch({ type: 'SET_AI_LOADING', payload: false }); 
-  }, 1500); 
-}, [transactions]);
+const handleAnalyzeFinances = useCallback(async () => {
+  dispatch({ type: 'SET_AI_LOADING', payload: true });
+  
+  // نستخدم setTimeout لمحاكاة التفكير، لكن الحسابات ستكون حقيقية
+  setTimeout(() => {
+    // 1. حساب إجمالي الدخل والمصروفات للشهر الحالي
+    const currentMonthTrans = transactions.filter(t => t.month === selectedMonth);
+    const totalIncome = currentMonthTrans
+      .filter(t => t.type === 'income')
+      .reduce((a, c) => a + Number(c.amount), 0);
+      
+    const totalExp = currentMonthTrans
+      .filter(t => t.type === 'expense')
+      .reduce((a, c) => a + Number(c.amount), 0);
+
+    // 2. حساب النسبة المئوية
+    const ratio = totalIncome > 0 ? Math.round((totalExp / totalIncome) * 100) : 0;
+    const savings = totalIncome - totalExp;
+
+    // 3. صياغة التقرير بناءً على الأرقام الحقيقية
+    let analysisText = `📊 **تحليل شهر ${selectedMonth}:**\n`;
+    analysisText += `• دخلك: ${totalIncome.toLocaleString()} ج.م\n`;
+    analysisText += `• مصروفك: ${totalExp.toLocaleString()} ج.م\n`;
+    
+    if (savings > 0) {
+      analysisText += `✅ **ممتاز!** لديك وفر بقيمة ${savings.toLocaleString()} ج.م (${100 - ratio}% من الدخل).\n`;
+      analysisText += `نصيحة: حول مبلغ ${Math.round(savings * 0.5).toLocaleString()} ج.م إلى حساب التوفير أو الذهب فوراً.`;
+    } else if (savings < 0) {
+      analysisText += `⚠️ **تنبيه:** أنت تتجاوز دخلك بـ ${Math.abs(savings).toLocaleString()} ج.م.\n`;
+      analysisText += `راجع بند "المصروفات النقدية" وحاول تقليله بنسبة 15%.`;
+    } else {
+      analysisText += `⚖️ **متعادل:** دخلك يساوي مصروفك تماماً. حاول تقليل النفقات قليلاً لتكوين طوارئ.`;
+    }
+
+    dispatch({
+      type: 'SET_AI_RESPONSE',
+      payload: analysisText
+    });
+    dispatch({ type: 'SET_AI_LOADING', payload: false });
+  }, 1000);
+}, [transactions, selectedMonth]);
+
 
 const handleSmartAdd = useCallback(async () => { 
   dispatch({ type: 'SET_AI_LOADING', payload: true }); 
