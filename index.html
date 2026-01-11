@@ -2033,6 +2033,40 @@ desc: loan.description
 }
 });
 }
+if (Array.isArray(recurringItems)) {
+            recurringItems.forEach(item => {
+                // منطق حساب التاريخ للعناصر المتكررة
+                const day = parseInt(item.day) || 1;
+                let targetMonth = currentMonth;
+                let targetYear = currentYear;
+                
+                if (day < currentDay) {
+                     targetMonth++;
+                     if (targetMonth > 11) { targetMonth = 0; targetYear++; }
+                }
+                const date = new Date(targetYear, targetMonth, day);
+                
+                items.push({
+                    id: `agenda-recurring-${item.id}-${targetMonth}`,
+                    title: item.title || item.description, 
+                    date: date.toISOString().split('T')[0],
+                    amount: Number(item.amount),
+                    type: 'warning',
+                    icon: Repeat, // تأكد أن أيقونة Repeat مستوردة في الأعلى
+                    desc: 'التزام شهري متكرر'
+                });
+            });
+        }
+        // >>>> نهاية الكود الجديد <<<<
+
+        // هذا السطر موجود بالفعل في النهاية، لا تحذفه
+        return items.sort((a, b) => new Date(a.date) - new Date(b.date));
+
+    } catch (err) { 
+        console.error("Agenda Error:", err); 
+        return []; 
+    }
+}, [cards, loans, recurringItems]); // تأكد أن recurringItems موجودة هنا في مصفوفة الاعتمادات
 return items.sort((a, b) => new Date(a.date) - new Date(b.date));
 } catch (err) { 
   console.error("Agenda Error:", err); 
