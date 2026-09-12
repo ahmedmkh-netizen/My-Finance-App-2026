@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<title>المحفظة المالية - V56 Pro</title>
+<title>المحفظة المالية - V57 Pro</title>
 <meta name="theme-color" content="#0f172a">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -80,10 +80,7 @@ body { @apply text-slate-800 transition-colors duration-300 font-sans antialiase
 .badge-danger { @apply bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400; }
 .badge-warning { @apply bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400; }
 .stat-card { @apply glass rounded-2xl p-6 hover-lift border-l-4; }
-
-/* ✅ FIX: Modal Backdrop بعيد عن الشريط العلوي */
 .modal-backdrop { position: fixed; top: 40px; left: 0; right: 0; bottom: 0; background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); display: flex; align-items: center; justify-content: center; z-index: 2500; padding: 12px; overflow-y: auto; }
-
 @media print { .no-print, .bottom-nav-container, .fab, .lock-screen, button { display: none !important; } body, .glass { background: white !important; color: black !important; } }
 .ticker-wrap { overflow: hidden; height: 100%; }
 .ticker-content { display: inline-flex; animation: ticker-scroll 50s linear infinite; }
@@ -136,7 +133,7 @@ const getLocalISODate = () => { const n = new Date(); return `${n.getFullYear()}
 const calculateDaysLeft = (d) => { if (!d) return null; try { const t = new Date(); t.setHours(0,0,0,0); const g = new Date(d); g.setHours(0,0,0,0); return Math.ceil((g-t)/(86400000)); } catch { return null; } };
 const safeNumber = (v, f = 0) => { const n = Number(v); return isNaN(n) || !isFinite(n) ? f : n; };
 
-const STORAGE_KEY = 'finance_tracker_V56_SECURE';
+const STORAGE_KEY = 'finance_tracker_V57_SECURE';
 const ALL_MONTHS = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
 const YEARS_CONFIG = { 2026: ['سبتمبر','أكتوبر','نوفمبر','ديسمبر'], 2027: ALL_MONTHS };
 const YEARS_LIST = [2026, 2027];
@@ -216,14 +213,15 @@ closedMonths: Array.isArray(parsed.closedMonths) ? parsed.closedMonths : []
 };
 
 class ErrorBoundary extends React.Component {
-constructor(p) { super(p); this.state = { hasError: false }; }
-static getDerivedStateFromError() { return { hasError: true }; }
+constructor(p) { super(p); this.state = { hasError: false, error: null }; }
+static getDerivedStateFromError(error) { return { hasError: true, error }; }
 componentDidCatch(e, i) { console.error('App Error:', e, i); }
 render() {
 if (this.state.hasError) return (
 <div className="flex flex-col h-screen items-center justify-center gradient-bg-danger text-white p-8 text-center" dir="rtl">
 <div className="w-24 h-24 bg-white/20 rounded-full flex items-center justify-center mb-6"><AlertTriangle size={48} /></div>
 <h1 className="text-3xl font-black mb-2">عذراً، حدث خطأ تقني</h1>
+<p className="text-sm opacity-80 mb-4 max-w-md break-words">{this.state.error?.message || 'خطأ غير معروف'}</p>
 <div className="flex gap-4 flex-wrap justify-center mt-6">
 <button onClick={() => window.location.reload()} className="gradient-bg-primary text-white px-8 py-4 rounded-2xl font-bold flex items-center gap-2"><RefreshCcw size={20}/> إعادة</button>
 <button onClick={() => { localStorage.clear(); window.location.reload(); }} className="bg-red-500 text-white px-8 py-4 rounded-2xl font-bold flex items-center gap-2"><Trash2 size={20}/> مسح</button>
@@ -281,7 +279,6 @@ if (!notifications || notifications.length === 0) return null;
 return (<div className="toast-container no-print">{notifications.slice(-4).map(n => <Toast key={n.id} notification={n} onClose={() => removeNotification(n.id)} />)}</div>);
 };
 
-// ============ Generic Ledger ============
 const GenericLedgerComponent = memo(({ walletKey, ledgerData, isExpanded, onToggle, onDelete, onEditTransaction, theme, onAddDeposit, onAddWithdrawal, onExportCSV, walletVisibility, onToggleVisibility }) => {
 const [filter, setFilter] = useState('all');
 const [dateFilter, setDateFilter] = useState('');
@@ -382,7 +379,6 @@ return (
 );
 });
 
-// ============ Duplicate Detection ============
 const DuplicateDetectionSystem = ({ transactions, dispatch, addNotification, closedMonths }) => {
 const [threshold, setThreshold] = useState(2);
 const [selectedMonth, setSelectedMonth] = useState('كل الشهور');
@@ -443,7 +439,6 @@ return (
 );
 };
 
-// ============ Initial Data ============
 const getInitialData = () => {
 const legacyOpening = localStorage.getItem('opening_balance_2026');
 const finalOpening = legacyOpening ? Number(legacyOpening) : 0;
@@ -459,7 +454,6 @@ return { ...migrated, openingBalance2026: migrated.openingBalance2026 || finalOp
 return { transactions: [], loans: DEFAULT_LOANS, cards: DEFAULT_CARDS, fawryAccount: { id: 'f1', name: 'فوري', openingBalance: 0 }, etisalatAccount: { id: 'e1', name: 'محفظة اتصالات', openingBalance: 0 }, openingBalance2026: finalOpening || 0, recurringItems: DEFAULT_RECURRING, closedMonths: [], monthlySnapshots: {} };
 };
 
-// ============ Initial State ============
 const initialState = {
 data: getInitialData(),
 activeTab: 'dashboard',
@@ -467,11 +461,11 @@ selectedYear: 2026,
 selectedMonth: 'سبتمبر',
 transViewMode: 'expense', catViewType: 'expense',
 isFormOpen: false, formMode: 'add',
-// ✅ FIX: الحالة الافتراضية "معلق" زي V51 الأصلي
 formData: { type: 'expense', subType: 'withdrawal', status: 'pending' },
+repeatMonths: [],
 isLocked: false, isDarkMode: localStorage.getItem('theme') === 'dark',
 budgets: JSON.parse(localStorage.getItem('budgets') || '{}'),
-editingCard: null, editingLoan: null, editingTransaction: null,
+editingCard: null, editingLoan: null,
 searchTerm: '', editingBudgetCategory: null, budgetAmount: '',
 editingFawry: null, editingEtisalat: null,
 isRecurringModalOpen: false, recurringFormData: { title: '', amount: '', day: 1, category: 'أخرى', type: 'expense' },
@@ -489,7 +483,6 @@ walletVisibility: { fawry: true, etisalat: true, cib_savings: true, aaib_savings
 isProcessing: false, formErrors: {}
 };
 
-// ============ Reducer ============
 function dataReducer(state, action) {
 switch (action.type) {
 case 'SET_DATA': return { ...state, data: action.payload };
@@ -550,7 +543,6 @@ default: return state;
 }
 }
 
-// ============ Login Screen ============
 const LoginScreen = ({ onLogin }) => {
 const [isLoading, setIsLoading] = useState(false);
 const handleGoogleLogin = () => {
@@ -566,7 +558,7 @@ return (
 <div className="bg-slate-900/60 backdrop-blur-xl p-8 rounded-2xl border border-slate-700/50 shadow-2xl flex flex-col items-center max-w-sm w-full mx-4 relative overflow-hidden">
 <div className="w-24 h-24 bg-gradient-to-br from-blue-500/20 to-indigo-500/20 rounded-full flex items-center justify-center mb-8 text-blue-500 animate-bounce-slight relative z-10 border border-blue-500/10"><ShieldCheck size={48} /></div>
 <h2 className="text-3xl font-black mb-2 bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent text-center relative z-10">المحفظة المالية</h2>
-<p className="text-slate-400 text-sm mb-8 text-center relative z-10 opacity-80">V56 Pro</p>
+<p className="text-slate-400 text-sm mb-8 text-center relative z-10 opacity-80">V57 Pro</p>
 <button onClick={handleGoogleLogin} disabled={isLoading} className="w-full bg-white text-slate-900 py-4 px-8 rounded-2xl font-black flex items-center justify-center gap-4 hover:bg-slate-100 active:scale-95 shadow-xl relative z-10 mb-4 disabled:opacity-50">
 {isLoading ? (<><div className="w-5 h-5 border-2 border-slate-900 border-t-transparent rounded-full animate-spin"></div> جاري تسجيل الدخول...</>) : (<><img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-6 h-6" alt="Google" />تسجيل الدخول بحساب جوجل</>)}
 </button>
@@ -576,7 +568,6 @@ return (
 );
 };
 
-// ============ Quick Balance ============
 const QuickBalanceOverview = memo(({ financeSnapshot, currentFawryBalance, currentEtisalatBalance, getSavingsLedger, walletVisibility, onToggleVisibility }) => {
 const [isVisible, setIsVisible] = useState(true);
 const accounts = [
@@ -613,7 +604,6 @@ return (
 );
 });
 
-// ============ Stat Card ============
 const EnhancedStatCard = ({ title, amount, icon: Icon, subtitle, isPrivate }) => {
 const isPositive = amount >= 0;
 return (
@@ -630,7 +620,6 @@ return (
 );
 };
 
-// ============ Month Selector ============
 const MonthSelector = memo(({ selectedYear, selectedMonth, onSelectYear, onSelectMonth, className = "" }) => {
 const years = YEARS_LIST;
 const months = getMonthsForYear(selectedYear);
@@ -653,7 +642,6 @@ return (
 );
 });
 
-// ============ Confirm Dialog ============
 const ConfirmDialog = ({ confirmDialog, dispatch }) => {
 if (!confirmDialog.isOpen) return null;
 return (
@@ -684,7 +672,7 @@ activeCategoryDetail, repeatMonths, isLocked, isDarkMode, expandedGroup, budgets
 editingCard, editingLoan, searchTerm, editingBudgetCategory, budgetAmount,
 editingFawry, editingEtisalat, isRecurringModalOpen, recurringFormData, filterType,
 notifications, isAiModalOpen, aiQuery, aiResponse, isAiLoading, fawryData, etisalatData,
-history, future, expandedLedgers, expandedCardsSection, statusFilter, confirmDialog,
+expandedLedgers, expandedCardsSection, statusFilter, confirmDialog,
 isQuickTransferModalOpen, quickTransferData, viewingCardStatement, walletVisibility,
 isProcessing, formErrors } = state;
 
@@ -929,7 +917,7 @@ URL.revokeObjectURL(url);
 addNotification({ type: 'success', title: 'تم التصدير' });
 }, [fawryLedger, etisalatLedger, addNotification]);
 
-// ===== Save Transaction =====
+// ===== ✅ SAVE TRANSACTION مع ميزة التكرار =====
 const handleSaveTransaction = useCallback((e) => {
 e.preventDefault();
 if (isProcessing) return;
@@ -959,19 +947,44 @@ const selectedDay = formData.date.split('-')[2] || '01';
 const targetMonthIdx = String(getMonthIndex(selectedMonth) + 1).padStart(2, '0');
 const adjustedDate = `${selectedYear}-${targetMonthIdx}-${selectedDay}`;
 const newTx = { ...formData, id: getSafeId(), amount: safeNumber(formData.amount), month: selectedMonth, monthIndex: getMonthIndex(selectedMonth), date: adjustedDate, subType: finalSubType, status };
-let newTx2 = formMode === 'add' ? [...transactions, newTx] : transactions.map(t => t.id === formData.id ? { ...newTx, id: formData.id } : t);
+
+let newTx2 = [...transactions];
+if (formMode === 'add') {
+newTx2.push(newTx);
+// ✅ إضافة النسخ المتكررة
+if (repeatMonths && repeatMonths.length > 0) {
+repeatMonths.forEach(m => {
+const targetMonthIdx2 = String(getMonthIndex(m) + 1).padStart(2, '0');
+const adjustedDate2 = `${selectedYear}-${targetMonthIdx2}-${selectedDay}`;
+newTx2.push({
+...formData,
+id: getSafeId(),
+amount: safeNumber(formData.amount),
+month: m,
+monthIndex: getMonthIndex(m),
+date: adjustedDate2,
+subType: finalSubType,
+status
+});
+});
+}
+} else {
+newTx2 = transactions.map(t => t.id === formData.id ? { ...newTx, id: formData.id } : t);
+}
+
 newTx2.sort((a, b) => new Date(b.date) - new Date(a.date));
 dispatch({ type: 'UPDATE_TRANSACTIONS', payload: newTx2 });
 dispatch({ type: 'SET_FORM_OPEN', payload: false });
 dispatch({ type: 'SET_REPEAT_MONTHS', payload: [] });
-addNotification({ type: 'success', title: status === 'paid' ? '✅ تمت الإضافة والاعتماد' : '⏳ تم الحفظ كمعلق', message: `${formData.amount} ج.م` });
+const countText = (formMode === 'add' && repeatMonths?.length > 0) ? ` (متكررة في ${repeatMonths.length + 1} شهور)` : '';
+addNotification({ type: 'success', title: status === 'paid' ? `✅ تمت الإضافة والاعتماد${countText}` : `⏳ تم الحفظ كمعلق${countText}`, message: `${formData.amount} ج.م` });
 dispatch({ type: 'SET_IS_PROCESSING', payload: false });
 } catch (error) {
 addNotification({ type: 'error', title: 'خطأ' });
 dispatch({ type: 'SET_IS_PROCESSING', payload: false });
 }
 }, 300);
-}, [formData, formMode, selectedMonth, selectedYear, transactions, saveHistory, addNotification, isProcessing, data.closedMonths]);
+}, [formData, formMode, selectedMonth, selectedYear, repeatMonths, transactions, saveHistory, addNotification, isProcessing, data.closedMonths]);
 
 // ===== Delete =====
 const handleDelete = useCallback((id) => {
@@ -1213,7 +1226,7 @@ handleManualReconciliation(w, a); document.getElementById('adj-amount').value = 
 </div>
 );
 
-// ===== CATEGORIES (مع الكارت القابل للضغط) =====
+// ===== CATEGORIES =====
 const renderCategoriesView = () => {
 const catTotals = transactions.filter(t => t.type === catViewType && t.month === selectedMonth).reduce((acc, t) => { acc[t.category] = (acc[t.category] || 0) + safeNumber(t.amount); return acc; }, {});
 const detailedTransactions = activeCategoryDetail ? transactions.filter(t => t.category === activeCategoryDetail && t.month === selectedMonth).sort((a, b) => new Date(b.date) - new Date(a.date)) : [];
@@ -1242,9 +1255,7 @@ const spent = catTotals[cat] || 0;
 const budget = budgets[cat] || 0;
 const overBudget = budget > 0 && spent > budget;
 return (
-<div key={cat}
-className="glass p-6 rounded-2xl relative group hover-lift cursor-pointer transition-all active:scale-[0.98]"
-onClick={() => dispatch({ type: 'SET_ACTIVE_CATEGORY_DETAIL', payload: cat })}>
+<div key={cat} className="glass p-6 rounded-2xl relative group hover-lift cursor-pointer transition-all active:scale-[0.98]" onClick={() => dispatch({ type: 'SET_ACTIVE_CATEGORY_DETAIL', payload: cat })}>
 <div className="flex justify-between mb-6">
 <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-700/50 shadow-inner" style={{ color: CATEGORY_COLORS[cat] }}><Layers size={24} /></div>
 <div className="flex gap-2 no-print">
@@ -1270,13 +1281,11 @@ onClick={() => dispatch({ type: 'SET_ACTIVE_CATEGORY_DETAIL', payload: cat })}>
 })}
 </div>
 
-{/* ===== ✅ Modal المحسّن للفئة ===== */}
 {activeCategoryDetail && (
 <div className="fixed inset-0 z-[3000] no-print" style={{ top: '40px' }}>
 <div className="absolute inset-0 bg-slate-900/70 backdrop-blur-lg animate-fadeIn" onClick={() => dispatch({ type: 'SET_ACTIVE_CATEGORY_DETAIL', payload: null })}></div>
 <div className="relative h-full flex items-center justify-center p-2 md:p-4">
 <div className="bg-white dark:bg-slate-900 w-full max-w-6xl rounded-2xl shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-700 flex flex-col" style={{ maxHeight: 'calc(100vh - 60px)' }}>
-{/* Header */}
 <div className="p-5 md:p-6 border-b bg-slate-50/50 dark:bg-slate-800/30 flex-shrink-0">
 <div className="flex justify-between items-start flex-wrap gap-3">
 <div className="flex items-center gap-3 flex-1 min-w-0">
@@ -1295,7 +1304,6 @@ onClick={() => dispatch({ type: 'SET_ACTIVE_CATEGORY_DETAIL', payload: cat })}>
 </button>
 </div>
 </div>
-{/* 3 بطاقات إحصائية */}
 <div className="grid grid-cols-3 gap-3 mt-5">
 <div className="bg-white dark:bg-slate-800 p-4 rounded-xl border-r-4 border-blue-500 shadow-sm">
 <p className="text-[10px] font-bold text-slate-400 uppercase">الإجمالي</p>
@@ -1312,13 +1320,11 @@ onClick={() => dispatch({ type: 'SET_ACTIVE_CATEGORY_DETAIL', payload: cat })}>
 </div>
 </div>
 
-{/* Body */}
 <div className="flex-1 overflow-y-auto scroll-hide" style={{ minHeight: 0 }}>
 {detailedTransactions.length === 0 ? (
 <div className="text-center py-20 text-slate-400 font-bold">لا توجد معاملات</div>
 ) : (
 <>
-{/* Mobile - كروت */}
 <div className="block md:hidden p-4 space-y-3">
 {detailedTransactions.map((t) => (
 <div key={t.id} className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
@@ -1338,8 +1344,6 @@ onClick={() => dispatch({ type: 'SET_ACTIVE_CATEGORY_DETAIL', payload: cat })}>
 </div>
 ))}
 </div>
-
-{/* Desktop - جدول */}
 <div className="hidden md:block">
 <table className="w-full text-right">
 <thead className="text-xs text-slate-400 uppercase font-bold sticky top-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md z-10 border-b border-slate-200 dark:border-slate-700">
@@ -1357,12 +1361,8 @@ onClick={() => dispatch({ type: 'SET_ACTIVE_CATEGORY_DETAIL', payload: cat })}>
 <tr key={t.id} className={`hover:bg-blue-50 dark:hover:bg-blue-900/20 group ${idx % 2 === 0 ? '' : 'bg-slate-50/50 dark:bg-slate-800/30'}`}>
 <td className="px-4 py-4 text-slate-500 whitespace-nowrap border-b border-slate-100 dark:border-slate-800">{t.date}</td>
 <td className="px-4 py-4 border-b border-slate-100 dark:border-slate-800">{t.description || '-'}</td>
-<td className="px-4 py-4 border-b border-slate-100 dark:border-slate-800">
-<span className="bg-slate-100 dark:bg-slate-700 px-3 py-1 rounded-lg text-xs">{PAYMENT_METHODS.find(p => p.id === t.method)?.label}</span>
-</td>
-<td className="px-4 py-4 text-center border-b border-slate-100 dark:border-slate-800">
-<span className={`text-[10px] px-2 py-1 rounded-full font-black ${t.status === 'paid' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{t.status === 'paid' ? '✅ معتمد' : '⏳ معلق'}</span>
-</td>
+<td className="px-4 py-4 border-b border-slate-100 dark:border-slate-800"><span className="bg-slate-100 dark:bg-slate-700 px-3 py-1 rounded-lg text-xs">{PAYMENT_METHODS.find(p => p.id === t.method)?.label}</span></td>
+<td className="px-4 py-4 text-center border-b border-slate-100 dark:border-slate-800"><span className={`text-[10px] px-2 py-1 rounded-full font-black ${t.status === 'paid' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{t.status === 'paid' ? '✅ معتمد' : '⏳ معلق'}</span></td>
 <td className="px-4 py-4 text-left font-black border-b border-slate-100 dark:border-slate-800">{safeNumber(t.amount).toLocaleString()}</td>
 <td className="px-4 py-4 text-center border-b border-slate-100 dark:border-slate-800">
 <div className="flex items-center justify-center gap-2">
@@ -1378,7 +1378,6 @@ onClick={() => dispatch({ type: 'SET_ACTIVE_CATEGORY_DETAIL', payload: cat })}>
 </>
 )}
 </div>
-{/* Footer */}
 <div className="p-4 md:p-6 border-t bg-slate-50/80 dark:bg-slate-800/50 flex justify-between items-center flex-shrink-0">
 <span className="text-slate-500 text-xs md:text-sm font-bold">العمليات: {detailedTransactions.length}</span>
 <div className="text-lg md:text-2xl font-black">الإجمالي: <span style={{ color: CATEGORY_COLORS[activeCategoryDetail] }}>{detailedTotal.toLocaleString()} ج.م</span></div>
@@ -1689,7 +1688,6 @@ return (
 </table>
 </div>
 
-{/* Mobile */}
 <div className="block md:hidden space-y-4 p-2 pb-32">
 {pendingGroups.map(g => (
 <div key={g.category} className="space-y-2">
@@ -1876,7 +1874,7 @@ const EnhancedSidebar = () => (
 <aside className="w-80 glass border-l-0 dark:border-r border-white/20 hidden lg:flex flex-col p-6 z-40 relative no-print">
 <div className="flex items-center gap-4 mb-8 p-4 rounded-2xl gradient-border">
 <div className="gradient-bg-primary p-3 rounded-2xl text-white shadow-lg"><Wallet size={28} /></div>
-<div><h2 className="font-black text-xl">المحفظة الذكية</h2><p className="text-xs text-slate-500 font-bold">V56 Pro</p></div>
+<div><h2 className="font-black text-xl">المحفظة الذكية</h2><p className="text-xs text-slate-500 font-bold">V57 Pro</p></div>
 </div>
 <nav className="space-y-2 flex-1 scroll-hide overflow-y-auto">
 {[{ id: 'dashboard', label: 'لوحة التحكم', icon: LayoutDashboard, color: 'text-blue-500' }, { id: 'transactions', label: 'سجل المعاملات', icon: ArrowUpRight, color: 'text-emerald-500' }, { id: 'categories', label: 'الفئات والميزانية', icon: Layers, color: 'text-purple-500' }, { id: 'loans', label: 'القروض والديون', icon: Banknote, color: 'text-red-500' }, { id: 'cards', label: 'البطاقات والمحافظ', icon: CreditCard, color: 'text-amber-500' }, { id: 'planner', label: 'المخطط الاستراتيجي', icon: Target, color: 'text-indigo-500' }, { id: 'calendar', label: 'الأجندة والمواعيد', icon: CalendarDays, color: 'text-pink-500' }, { id: 'duplicates', label: 'كشف المكررات', icon: Filter, color: 'text-cyan-500' }].map(item => (
@@ -1906,7 +1904,7 @@ const ProfessionalHeader = () => (
 <div className="gradient-bg-primary p-3 rounded-2xl text-white shadow-lg"><Wallet size={28} /></div>
 <div>
 <h1 className="text-3xl font-black">محفظتي المالية</h1>
-<p className="text-sm text-slate-500 font-medium mt-1">إدارة مالية ذكية • {selectedYear} • V56</p>
+<p className="text-sm text-slate-500 font-medium mt-1">إدارة مالية ذكية • {selectedYear} • V57</p>
 </div>
 </div>
 </div>
@@ -1938,7 +1936,6 @@ return (
 </div>
 )}
 
-{/* Card Statement Modal */}
 {viewingCardStatement && (() => {
 const history = calculateCardHistory(viewingCardStatement);
 const monthData = history.find(h => h.month === selectedMonth);
@@ -1977,7 +1974,6 @@ return (
 );
 })()}
 
-{/* Bottom Nav */}
 <div className="bottom-nav-container no-print">
 <div className="scrollable-nav scroll-hide">
 {[{ id: 'dashboard', label: 'الرئيسية', icon: LayoutDashboard }, { id: 'transactions', label: 'المعاملات', icon: ArrowUpRight }, { id: 'cards', label: 'المحافظ', icon: CreditCard }, { id: 'loans', label: 'القروض', icon: Banknote }, { id: 'planner', label: 'المخطط', icon: Target }, { id: 'calendar', label: 'الأجندة', icon: CalendarDays }, { id: 'duplicates', label: 'المكررات', icon: Filter }, { id: 'categories', label: 'الفئات', icon: Layers }].map(item => (
@@ -1998,7 +1994,7 @@ return (
 </div>
 
 {!isLocked && (
-<button type="button" onClick={() => { dispatch({ type: 'SET_FORM_MODE', payload: 'add' }); dispatch({ type: 'SET_FORM_DATA', payload: { type: 'expense', category: '', amount: '', date: getLocalISODate(), month: selectedMonth, method: 'cash', subType: 'withdrawal', status: 'pending' } }); dispatch({ type: 'SET_FORM_OPEN', payload: true }); }} className="fab no-print"><Plus size={32} /></button>
+<button type="button" onClick={() => { dispatch({ type: 'SET_FORM_MODE', payload: 'add' }); dispatch({ type: 'SET_FORM_DATA', payload: { type: 'expense', category: '', amount: '', date: getLocalISODate(), month: selectedMonth, method: 'cash', subType: 'withdrawal', status: 'pending' } }); dispatch({ type: 'SET_REPEAT_MONTHS', payload: [] }); dispatch({ type: 'SET_FORM_OPEN', payload: true }); }} className="fab no-print"><Plus size={32} /></button>
 )}
 
 <EnhancedSidebar />
@@ -2020,7 +2016,7 @@ return (
 )}
 </main>
 
-{/* Transaction Form Modal */}
+{/* ✅ Transaction Form Modal مع ميزة التكرار */}
 {isFormOpen && (
 <div className="modal-backdrop no-print">
 <div className="bg-white dark:bg-slate-900 w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden flex flex-col" style={{ maxHeight: 'calc(100vh - 60px)' }}>
@@ -2117,6 +2113,35 @@ return (
 <label className="block text-sm font-bold mb-2 text-slate-400">الوصف</label>
 <input type="text" className="input-field font-bold" value={formData.description || ''} onChange={e => dispatch({ type: 'SET_FORM_DATA', payload: { ...formData, description: e.target.value } })} placeholder="تفاصيل..." />
 </div>
+
+{/* ✅ ميزة التكرار في الشهور المستقبلية */}
+{formMode === 'add' && (
+<details className="border rounded-2xl overflow-hidden bg-white dark:bg-slate-800">
+<summary className="p-3 cursor-pointer text-xs font-bold text-slate-500 flex items-center justify-between">
+<span className="flex items-center gap-2"><Repeat size={16} className="text-blue-500" /> تكرار العملية في المستقبل</span>
+<ChevronDown size={16} />
+</summary>
+<div className="p-3 border-t">
+<p className="text-[10px] text-slate-400 mb-2 font-bold">اختر الشهور اللي عايز العملية تتكرر فيها تلقائياً (زي الراتب أو القسط):</p>
+<div className="flex flex-wrap gap-2 max-h-48 overflow-y-auto p-1">
+{MONTHS.filter((m) => getMonthIndex(m) > getMonthIndex(selectedMonth) && getMonthsForYear(selectedYear).includes(m)).map(m => (
+<label key={m} className="inline-flex items-center gap-2 bg-slate-50 dark:bg-slate-700 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-600 cursor-pointer text-xs font-bold hover:border-blue-300 transition-colors">
+<input type="checkbox" className="rounded text-blue-600 w-4 h-4" checked={(repeatMonths || []).includes(m)} onChange={(e) => {
+if (e.target.checked) dispatch({ type: 'SET_REPEAT_MONTHS', payload: [...(repeatMonths || []), m] });
+else dispatch({ type: 'SET_REPEAT_MONTHS', payload: (repeatMonths || []).filter(rm => rm !== m) });
+}} />
+{m}
+</label>
+))}
+</div>
+{(repeatMonths || []).length > 0 && (
+<div className="mt-3 p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-[10px] text-blue-600 dark:text-blue-400 font-bold flex items-center gap-2">
+<CheckCircle2 size={12} /> سيتم إنشاء {(repeatMonths || []).length + 1} عملية (الشهر الحالي + {(repeatMonths || []).length} شهور)
+</div>
+)}
+</div>
+</details>
+)}
 
 <button type="submit" className={`w-full text-white py-3 rounded-2xl font-black shadow-xl active:scale-95 ${formData.status === 'paid' ? 'gradient-bg-success' : 'gradient-bg-warning'}`} disabled={isProcessing}>
 {isProcessing ? 'جاري الحفظ...' : <><Save size={20} className="inline ml-2" /> {formData.status === 'paid' ? 'حفظ واعتماد ✅' : 'حفظ كمعلق ⏳'}</>}
