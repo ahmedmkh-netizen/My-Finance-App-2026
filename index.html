@@ -13,7 +13,7 @@
 tailwind.config = {
   darkMode: 'class',
   theme: { extend: {
-    colors: { primary: '#3B82F6', success: '#10B981', danger: '#EF4444', warning: '#F59E0B', fawryBlue: '#005CB9', etisalatGreen: '#709E34', etisalatRed: '#E60000', cibBlue: '#004996', aaibRed: '#A6192E' },
+    colors: { primary: '#3B82F6', success: '#10B981', danger: '#EF4444', warning: '#F59E0B' },
     fontFamily: { sans: ['Cairo', 'Segoe UI', 'sans-serif'] },
     animation: { 'fadeIn': 'fadeIn 0.3s ease-out', 'slideInBottom': 'slideInBottom 0.4s ease-out', 'bounce-slight': 'bounce-slight 2s ease-in-out infinite', 'ticker-scroll': 'ticker-scroll 60s linear infinite', 'spin': 'spin 1s linear infinite', 'shake': 'shake 0.4s ease-in-out' },
     keyframes: {
@@ -31,7 +31,6 @@ tailwind.config = {
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
-<!-- ✅ Patch 1: Google Identity Services for Drive -->
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <script type="importmap">
 { "imports": {
@@ -116,10 +115,9 @@ import {
   ArrowUp, Undo2, LogOut, Lock, Unlock, Moon, Sun, ShieldCheck, RefreshCcw,
   Search, FileSpreadsheet, Settings as SettingsIcon, Target, CalendarDays, BarChart3, Bell, Sparkles, Bot,
   AlertTriangle, Clock, CheckCircle2, Zap, Hash, Coins, Filter, Eye, EyeOff, ShieldAlert,
-  Download, Upload, Cloud, Signal, PiggyBank, Landmark as BuildingBank, ArrowDownCircle, ArrowUpCircle, Wifi, Store as StoreIcon, Users, Activity, Sliders, Table, RotateCcw, Percent
+  Download, Upload, Cloud, Signal, PiggyBank, Landmark as BuildingBank, ArrowDownCircle, ArrowUpCircle, Wifi, Store as StoreIcon, Users, Activity, Sliders, Table, RotateCcw, Percent, LineChart
 } from 'lucide-react';
 
-/* إعدادات Firebase */
 const firebaseConfig = { apiKey: "AIzaSyCEq-Trf1oFsvPF5tlMvqU83ea_J2DLZjs", authDomain: "finance-app-2026-3e318.firebaseapp.com", projectId: "finance-app-2026-3e318", storageBucket: "finance-app-2026-3e318.firebasestorage.app", messagingSenderId: "855414629770", appId: "1:855414629770:web:8bb07198b8245b63781473" };
 if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
@@ -149,7 +147,7 @@ const makeMonthKey = (year, month) => `${year}-${month}`;
 const parseMonthKey = (key) => { if (!key || typeof key !== 'string' || !key.includes('-')) return null; const [y, ...rest] = key.split('-'); const year = Number(y); if (isNaN(year)) return null; return { year, month: rest.join('-') }; };
 
 const STORAGE_KEY = 'finance_tracker_V68_SECURE';
-const LEGACY_KEYS = ['finance_tracker_V67_SECURE', 'finance_tracker_V66_SECURE', 'finance_tracker_V65_SECURE', 'finance_tracker_V64_SECURE', 'finance_tracker_V63_SECURE', 'finance_tracker_V62_SECURE', 'finance_tracker_V61_SECURE'];
+const LEGACY_KEYS = ['finance_tracker_V67_SECURE', 'finance_tracker_V66_SECURE', 'finance_tracker_V65_SECURE'];
 const ALL_MONTHS = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
 const YEARS_CONFIG = { 2026: ['سبتمبر','أكتوبر','نوفمبر','ديسمبر'], 2027: ALL_MONTHS, 2028: ALL_MONTHS };
 const YEARS_LIST = [2026, 2027, 2028];
@@ -194,7 +192,7 @@ const CATEGORY_GROUPS = {
 
 const CATEGORIES = {
   income:['راتب شهري','عمل حر','استثمارات','راتب AAIB','إيجار المحل','عهدة شركة إيماك','عهدة إيماك WE','Cash Back','تكييف محمود','تحويلات واردة'],
-  expense:['الالتزامات البنكية والتمويلية','مصروفات المعيشة اليومية','مسحوبات محل هاني','مشتريات بقالة هاني','الملابس والمستلزمات الشخصية','الزكاة والتبرعات','التعليم والدروس والأنشطة','المصروفات النقدية الشهرية','شحن رصيد فوري','المرافق والخدمات – بولاق','المرافق والخدمات – العبور','الاتصالات وشحن الهواتف المحمولة','الصحة والرعاية الطبية','المستلزمات المنزلية والتموين','اللحوم والدواجن والأسماك','الطوارئ والاحتياطي النقدي','الصيانة والإصلاحات المنزلية','المواصلات والانتقالات','الترفيه والمناسبات الاجتماعية','مصاريف موسمية وسنوية','شحن محفظة','أقساط valU','مصاريف جامعات ومدارس','كازيون / العثيم','لحوم / أسماك / دواجن','توابل / خزين','خضروات','بقالة / فاكهة','منظفات','أدوية وكشف','مصروف نقدي','مصاريف وسلف شخصية','محافظ الكترونية','بنوك / فيزا / تمويل عقاري','تحويلات','أخرى']
+  expense:['الالتزامات البنكية والتمويلية','مصروفات المعيشة اليومية','مسحوبات محل هاني','الملابس والمستلزمات الشخصية','الزكاة والتبرعات','التعليم والدروس والأنشطة','المصروفات النقدية الشهرية','شحن رصيد فوري','المرافق والخدمات – بولاق','المرافق والخدمات – العبور','الاتصالات وشحن الهواتف المحمولة','الصحة والرعاية الطبية','المستلزمات المنزلية والتموين','اللحوم والدواجن والأسماك','الطوارئ والاحتياطي النقدي','الصيانة والإصلاحات المنزلية','المواصلات والانتقالات','الترفيه والمناسبات الاجتماعية','مصاريف موسمية وسنوية','شحن محفظة','أقساط valU','مصاريف جامعات ومدارس','كازيون / العثيم','لحوم / أسماك / دواجن','توابل / خزين','خضروات','بقالة / فاكهة','منظفات','أدوية وكشف','مصروف نقدي','مصاريف وسلف شخصية','محافظ الكترونية','بنوك / فيزا / تمويل عقاري','تحويلات','أخرى']
 };
 
 const DEFAULT_CARDS = [
@@ -386,7 +384,6 @@ const migrateData = (parsed) => {
   let { snapshots, closedMonths } = migrateSnapshotsAndClosed(parsed.monthlySnapshots, parsed.closedMonths);
   const incomingVersion = safeNumber(parsed.engineVersion, 1);
   if (incomingVersion < CURRENT_ENGINE_VERSION && Object.keys(snapshots).length > 0) {
-    console.warn('[Migration v5] snapshots قديمة أُلغيت');
     snapshots = {};
   }
 
@@ -400,7 +397,6 @@ const migrateData = (parsed) => {
     }
   });
 
-  /* ✅ تحويل "تكييف محمود" من مديونية إلى مستحق لنا */
   const withReceivable = (loans || []).map(l => {
     if (l && l.name && l.name.includes('تكييف محمود') && !l.isReceivable) {
       return { ...l, isReceivable: true, type: 'receivable', interest: 'مستحق لنا شهرياً' };
@@ -408,23 +404,9 @@ const migrateData = (parsed) => {
     return l;
   });
 
-  /* ✅ تحويل قيد "مسحوبات محل هاني" الثابت إلى قالب تلقائي شهري */
   const normalizedLoans = withReceivable.map(l => {
     if (l && l.name && l.name.includes('مسحوبات محل هاني') && !l.autoMonthly) {
-      return {
-        id: l.id || 15,
-        name: 'مسحوبات محل هاني',
-        autoMonthly: true,
-        dueNextMonth: true,
-        category: 'مسحوبات محل هاني',
-        totalAmount: 0,
-        prePaidAmount: 0,
-        monthlyInstallment: 0,
-        dueDay: 5,
-        interest: 'مستحق شهري',
-        description: 'مسحوبات يومية — تُحسب تلقائياً من قيود الشهر',
-        type: 'debt'
-      };
+      return { id: l.id || 15, name: 'مسحوبات محل هاني', autoMonthly: true, dueNextMonth: true, category: 'مسحوبات محل هاني', totalAmount: 0, prePaidAmount: 0, monthlyInstallment: 0, dueDay: 5, interest: 'مستحق شهري', description: 'مسحوبات يومية — تُحسب تلقائياً من قيود الشهر', type: 'debt' };
     }
     return l;
   });
@@ -433,7 +415,6 @@ const migrateData = (parsed) => {
   if (!parsed.recurringInitialized && recurring.length === 0) {
     recurringItems = DEFAULT_RECURRING;
   }
-  /* ✅ تحويل "قسط تكييف محمود" من مصروف إلى دخل */
   recurringItems = (recurringItems || []).map(r => {
     if (r && r.title && r.title.includes('تكييف محمود') && r.type !== 'income') {
       return { ...r, type: 'income', title: r.title.replace(/\s*\(دخل\)\s*$/, '') + ' (دخل)' };
@@ -513,8 +494,8 @@ const BankLogo = memo(({ type, size = 40, className = "" }) => {
 const WALLET_CONFIGS = {
   fawry: { id:'fawry', title:'محفظة فوري', subtitle:'تتبع الشحن والسداد', bgColor:'bg-yellow-50/50 dark:bg-yellow-900/10', icon: StoreIcon, headerClass:'bg-gradient-to-r from-yellow-50 to-yellow-100 dark:from-yellow-900/20 text-yellow-900 dark:text-yellow-100', gradient:'from-yellow-400 to-yellow-600', csvName:'فوري' },
   etisalat: { id:'etisalat', title:'سجل اتصالات كاش', subtitle:'تتبع الإيداع والسحب', bgColor:'bg-emerald-50/50 dark:bg-emerald-900/10', icon: Signal, headerClass:'bg-gradient-to-r from-emerald-50 to-emerald-100 dark:from-emerald-900/20 text-emerald-900', gradient:'from-emerald-400 to-emerald-600', csvName:'اتصالات' },
-  cib_savings: { id:'cib_savings', title:'سجل حساب توفير CIB', subtitle:'تتبع المعاملات', bgColor:'bg-blue-50/50 dark:bg-blue-900/10', icon: BuildingBank, headerClass:'bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900/20 text-cibBlue', gradient:'from-blue-400 to-blue-600', csvName:'CIB_توفير' },
-  aaib_savings: { id:'aaib_savings', title:'سجل حساب توفير AAIB', subtitle:'تتبع المعاملات', bgColor:'bg-red-50/50 dark:bg-red-900/10', icon: PiggyBank, headerClass:'bg-gradient-to-r from-red-50 to-red-100 dark:from-red-900/20 text-aaibRed', gradient:'from-red-400 to-red-600', csvName:'AAIB_توفير' }
+  cib_savings: { id:'cib_savings', title:'سجل حساب توفير CIB', subtitle:'تتبع المعاملات', bgColor:'bg-blue-50/50 dark:bg-blue-900/10', icon: BuildingBank, headerClass:'bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900/20 text-blue-900', gradient:'from-blue-400 to-blue-600', csvName:'CIB_توفير' },
+  aaib_savings: { id:'aaib_savings', title:'سجل حساب توفير AAIB', subtitle:'تتبع المعاملات', bgColor:'bg-red-50/50 dark:bg-red-900/10', icon: PiggyBank, headerClass:'bg-gradient-to-r from-red-50 to-red-100 dark:from-red-900/20 text-red-900', gradient:'from-red-400 to-red-600', csvName:'AAIB_توفير' }
 };
 
 const Toast = ({ notification, onClose }) => {
@@ -656,11 +637,11 @@ const DuplicateDetectionSystem = ({ transactions, data, dispatch, addNotificatio
   const handleDeleteAll = () => {
     let idsToDelete = [], protectedCount = 0;
     duplicates.forEach(d => { d.items.slice(1).forEach(item => { if (isMonthClosed(data, item.year || 2026, item.month)) protectedCount++; else idsToDelete.push(item.id); }); });
-    if (idsToDelete.length === 0) { addNotification({ type: protectedCount > 0 ? 'error' : 'info', title: protectedCount > 0 ? 'محظور' : 'لا يوجد', message: protectedCount > 0 ? 'جميع المكررات في أشهر مغلقة.' : '' }); return; }
+    if (idsToDelete.length === 0) { addNotification({ type: protectedCount > 0 ? 'error' : 'info', title: protectedCount > 0 ? 'محظور' : 'لا يوجد' }); return; }
     doDelete(idsToDelete, protectedCount);
   };
   const deleteSingle = (item) => {
-    if (isMonthClosed(data, item.year || 2026, item.month)) { addNotification({ type: 'error', title: 'محظور', message: 'الشهر مغلق — أعد فتحه أولاً' }); return; }
+    if (isMonthClosed(data, item.year || 2026, item.month)) { addNotification({ type: 'error', title: 'محظور', message: 'الشهر مغلق' }); return; }
     doDelete([item.id], 0);
   };
   return (
@@ -670,12 +651,12 @@ const DuplicateDetectionSystem = ({ transactions, data, dispatch, addNotificatio
         <button onClick={handleDeleteAll} disabled={duplicates.length === 0} className={`px-6 py-3 rounded-xl font-bold flex items-center gap-2 ${duplicates.length === 0 ? 'bg-slate-100 text-slate-500' : 'gradient-bg-danger text-white shadow-lg'}`}><Trash2 size={18} /> تنظيف السجل</button>
       </div>
       <div className="glass p-6 rounded-2xl grid grid-cols-1 md:grid-cols-2 gap-8">
-        <div><label className="block text-xs font-black mb-3 opacity-50 uppercase tracking-widest">نطاق البحث</label>
+        <div><label className="block text-xs font-black mb-3 opacity-50 uppercase">نطاق البحث</label>
           <select className="input-field" value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)}>
             <option value="all">جميع الشهور</option>
             {YEARS_LIST.flatMap(y => getMonthsForYear(y).map(m => <option key={makeMonthKey(y,m)} value={m}>{m} {y}</option>))}
           </select></div>
-        <div><label className="block text-xs font-black mb-3 opacity-50 uppercase tracking-widest">الحساسية</label>
+        <div><label className="block text-xs font-black mb-3 opacity-50 uppercase">الحساسية</label>
           <input type="range" min="2" max="10" className="w-full h-2 bg-slate-200 rounded-lg appearance-none" value={threshold} onChange={e => setThreshold(Number(e.target.value))} /></div>
       </div>
       <div className="space-y-4">
@@ -695,7 +676,7 @@ const DuplicateDetectionSystem = ({ transactions, data, dispatch, addNotificatio
                 {dup.items.map((item, idx) => (
                   <div key={item.id} className="py-4 flex justify-between items-center px-4">
                     <div className="text-sm font-bold flex items-center gap-2 flex-wrap">📅 {item.date} | 📝 {item.description || 'بدون وصف'}{isMonthClosed(data, item.year || 2026, item.month) && <span className="text-red-500 text-xs">(مغلق)</span>}</div>
-                    {idx !== 0 && <button onClick={() => deleteSingle(item)} aria-label="حذف المكرر" className="text-red-500 hover:bg-red-50 p-2 rounded-xl"><Trash2 size={16} /></button>}
+                    {idx !== 0 && <button onClick={() => deleteSingle(item)} aria-label="حذف" className="text-red-500 hover:bg-red-50 p-2 rounded-xl"><Trash2 size={16} /></button>}
                   </div>
                 ))}
               </div>
@@ -718,7 +699,7 @@ const ConfirmDialog = ({ confirmDialog, dispatch }) => {
           {isDanger ? <AlertTriangle size={40} /> : <Bell size={40} />}
         </div>
         <h3 className="text-2xl font-black mb-3">{confirmDialog.title}</h3>
-        <p className="text-slate-500 dark:text-slate-500 font-medium mb-8 leading-relaxed whitespace-pre-line">{confirmDialog.message}</p>
+        <p className="text-slate-500 font-medium mb-8 leading-relaxed whitespace-pre-line">{confirmDialog.message}</p>
         <div className="flex gap-4">
           <button autoFocus onClick={() => { confirmDialog.onCancel?.(); dispatch({ type: 'HIDE_CONFIRM' }); }} className="flex-1 bg-slate-100 dark:bg-slate-800 py-4 rounded-2xl font-bold active:scale-95">إلغاء</button>
           <button onClick={() => { confirmDialog.onConfirm?.(); dispatch({ type: 'HIDE_CONFIRM' }); }} className={`flex-1 ${isDanger ? 'gradient-bg-danger' : 'gradient-bg-primary'} text-white py-4 rounded-2xl font-bold shadow-lg active:scale-95`}>تأكيد</button>
@@ -735,7 +716,7 @@ const MonthSelector = memo(({ selectedYear, selectedMonth, onSelectYear, onSelec
       <div className="flex items-center gap-3 mb-4 flex-wrap">
         <div className="flex bg-slate-100 dark:bg-slate-800 p-1.5 rounded-2xl">
           {YEARS_LIST.map(year => (
-            <button key={year} type="button" onClick={() => onSelectYear(year)} className={`px-6 py-2 rounded-xl text-sm font-black transition-all ${selectedYear === year ? 'gradient-bg-primary text-white shadow-md' : 'text-slate-500 dark:text-slate-500'}`}>📅 {year}</button>
+            <button key={year} type="button" onClick={() => onSelectYear(year)} className={`px-6 py-2 rounded-xl text-sm font-black transition-all ${selectedYear === year ? 'gradient-bg-primary text-white shadow-md' : 'text-slate-500'}`}>📅 {year}</button>
           ))}
         </div>
         <span className="text-xs text-slate-500 font-bold mr-auto">{months.length} شهر متاح</span>
@@ -877,9 +858,9 @@ const DashboardView = memo(({ data, financeSnapshot, liveBalances, totalLiquidit
         </div>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 no-print">
-        <button onClick={() => dispatch({ type: 'SET_QUICK_TRANSFER_MODAL_OPEN', payload: true })} className="gradient-bg-primary text-white p-6 rounded-2xl flex items-center justify-center gap-3 hover:shadow-xl active:scale-[0.98] transition-all"><Layers size={24} /><span className="font-bold text-lg">تحويل فوري</span></button>
-        <button onClick={() => { dispatch({ type: 'SET_FORM_MODE', payload: 'add' }); dispatch({ type: 'SET_FORM_DATA', payload: { type: 'income', amount: '', date: getLocalISODate(), method: 'cash', subType: 'deposit', category: '', status: 'pending' } }); dispatch({ type: 'SET_FORM_OPEN', payload: true }); }} className="gradient-bg-success text-white p-6 rounded-2xl flex flex-col items-center justify-center gap-2 hover:shadow-xl active:scale-[0.98] transition-all"><TrendingUp size={28} /><span className="font-bold">تسجيل دخل</span><span className="text-[11px] opacity-80">⏳ معلق افتراضياً</span></button>
-        <button onClick={() => { dispatch({ type: 'SET_FORM_MODE', payload: 'add' }); dispatch({ type: 'SET_FORM_DATA', payload: { type: 'expense', amount: '', date: getLocalISODate(), method: 'cash', subType: 'withdrawal', category: '', status: 'pending' } }); dispatch({ type: 'SET_FORM_OPEN', payload: true }); }} className="gradient-bg-danger text-white p-6 rounded-2xl flex flex-col items-center justify-center gap-2 hover:shadow-xl active:scale-[0.98] transition-all"><TrendingDown size={28} /><span className="font-bold">تسجيل مصروف</span><span className="text-[11px] opacity-80">⏳ معلق افتراضياً</span></button>
+        <button onClick={() => dispatch({ type: 'SET_QUICK_TRANSFER_MODAL_OPEN', payload: true })} className="gradient-bg-primary text-white p-6 rounded-2xl flex items-center justify-center gap-3 hover:shadow-xl active:scale-[0.98]"><Layers size={24} /><span className="font-bold text-lg">تحويل فوري</span></button>
+        <button onClick={() => { dispatch({ type: 'SET_FORM_MODE', payload: 'add' }); dispatch({ type: 'SET_FORM_DATA', payload: { type: 'income', amount: '', date: getLocalISODate(), method: 'cash', subType: 'deposit', category: '', status: 'pending' } }); dispatch({ type: 'SET_FORM_OPEN', payload: true }); }} className="gradient-bg-success text-white p-6 rounded-2xl flex flex-col items-center justify-center gap-2 hover:shadow-xl active:scale-[0.98]"><TrendingUp size={28} /><span className="font-bold">تسجيل دخل</span><span className="text-[11px] opacity-80">⏳ معلق افتراضياً</span></button>
+        <button onClick={() => { dispatch({ type: 'SET_FORM_MODE', payload: 'add' }); dispatch({ type: 'SET_FORM_DATA', payload: { type: 'expense', amount: '', date: getLocalISODate(), method: 'cash', subType: 'withdrawal', category: '', status: 'pending' } }); dispatch({ type: 'SET_FORM_OPEN', payload: true }); }} className="gradient-bg-danger text-white p-6 rounded-2xl flex flex-col items-center justify-center gap-2 hover:shadow-xl active:scale-[0.98]"><TrendingDown size={28} /><span className="font-bold">تسجيل مصروف</span><span className="text-[11px] opacity-80">⏳ معلق افتراضياً</span></button>
       </div>
       <MonthSelector selectedYear={selectedYear} selectedMonth={selectedMonth} onSelectYear={onSelectYear} onSelectMonth={onSelectMonth} className="no-print" />
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
@@ -889,8 +870,8 @@ const DashboardView = memo(({ data, financeSnapshot, liveBalances, totalLiquidit
           <div className="p-3 rounded-xl bg-purple-50 dark:bg-purple-900/20 text-purple-600"><Coins size={24} /></div></div></div>
         <EnhancedStatCard title="دخل كاش محصل" amount={net.actualIncome} icon={TrendingUp} subtitle={net.pendingIncome > 0 ? `+${fmt(net.pendingIncome)} كاش معلق` : ' '} color="emerald" />
         <EnhancedStatCard title="مصاريف كاش معلقة" amount={-net.pendingCash} icon={Clock} subtitle={`مدفوع كاش: ${fmt(net.paidCash)}`} color="red" />
-        <div className="stat-card cursor-pointer hover-lift" onClick={() => dispatch({ type: 'SET_ACTIVE_TAB', payload: 'planner' })}>
-          <div className="flex justify-between items-center"><div><p className="text-sm font-bold text-slate-500 mb-1">الرصيد المتوقع</p><h3 className={`text-2xl font-black ${net.projectedClosingBalance >= 0 ? 'text-blue-600' : 'text-red-600'}`}>{fmt(net.projectedClosingBalance)}<span className="text-sm font-medium text-slate-500 mr-1">ج.م</span></h3></div><div className="p-3 rounded-xl bg-blue-50 dark:bg-blue-900/20 text-blue-600"><TrendingUp size={24} /></div></div>
+        <div className="stat-card cursor-pointer hover-lift" onClick={() => dispatch({ type: 'SET_ACTIVE_TAB', payload: 'forecast' })}>
+          <div className="flex justify-between items-center"><div><p className="text-sm font-bold text-slate-500 mb-1">توقع الشهر القادم</p><h3 className={`text-2xl font-black ${net.projectedClosingBalance >= 0 ? 'text-blue-600' : 'text-red-600'}`}>{fmt(net.projectedClosingBalance)}<span className="text-sm font-medium text-slate-500 mr-1">ج.م</span></h3></div><div className="p-3 rounded-xl bg-blue-50 dark:bg-blue-900/20 text-blue-600"><LineChart size={24} /></div></div>
           <div className="mt-4 text-xs text-slate-500">{net.projectedClosingBalance >= 0 ? '✅ آمن' : '⚠️ مراجعة'}</div></div>
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -942,12 +923,12 @@ const CategoryDetailModal = memo(({ activeCategoryDetail, detailedTransactions, 
                 <tr><th className="px-4 py-4">التاريخ</th><th className="px-4 py-4">الوصف</th><th className="px-4 py-4">الدفع</th><th className="px-4 py-4 text-center">الحالة</th><th className="px-4 py-4 text-left">المبلغ</th><th className="px-4 py-4 text-center">إجراءات</th></tr></thead>
                 <tbody className="text-sm font-bold">{detailedTransactions.map((t, idx) => (
                   <tr key={t.id} className={`hover:bg-blue-50 dark:hover:bg-blue-900/20 ${idx % 2 ? 'bg-slate-50/50 dark:bg-slate-800/30' : ''}`}>
-                    <td className="px-4 py-4 text-slate-500 whitespace-nowrap border-b border-slate-100 dark:border-slate-800">{t.date}</td>
-                    <td className="px-4 py-4 border-b border-slate-100 dark:border-slate-800">{t.description || '-'} <KindBadge tx={t} /></td>
-                    <td className="px-4 py-4 border-b border-slate-100 dark:border-slate-800"><span className="bg-slate-100 dark:bg-slate-700 px-3 py-1 rounded-lg text-xs">{PAYMENT_METHODS.find(p => p.id === t.method)?.label}</span></td>
-                    <td className="px-4 py-4 text-center border-b border-slate-100 dark:border-slate-800"><span className={`text-[11px] px-2 py-1 rounded-full font-black ${t.status === 'paid' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{t.status === 'paid' ? '✅ معتمد' : '⏳ معلق'}</span></td>
-                    <td className="px-4 py-4 text-left font-black border-b border-slate-100 dark:border-slate-800">{fmt(t.amount)}</td>
-                    <td className="px-4 py-4 text-center border-b border-slate-100 dark:border-slate-800"><div className="flex items-center justify-center gap-2">
+                    <td className="px-4 py-4 text-slate-500 whitespace-nowrap border-b">{t.date}</td>
+                    <td className="px-4 py-4 border-b">{t.description || '-'} <KindBadge tx={t} /></td>
+                    <td className="px-4 py-4 border-b"><span className="bg-slate-100 dark:bg-slate-700 px-3 py-1 rounded-lg text-xs">{PAYMENT_METHODS.find(p => p.id === t.method)?.label}</span></td>
+                    <td className="px-4 py-4 text-center border-b"><span className={`text-[11px] px-2 py-1 rounded-full font-black ${t.status === 'paid' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{t.status === 'paid' ? '✅ معتمد' : '⏳ معلق'}</span></td>
+                    <td className="px-4 py-4 text-left font-black border-b">{fmt(t.amount)}</td>
+                    <td className="px-4 py-4 text-center border-b"><div className="flex items-center justify-center gap-2">
                       <button type="button" aria-label="تعديل" onClick={() => { dispatch({ type: 'SET_FORM_MODE', payload: 'edit' }); dispatch({ type: 'SET_FORM_DATA', payload: t }); dispatch({ type: 'SET_FORM_OPEN', payload: true }); dispatch({ type: 'SET_ACTIVE_CATEGORY_DETAIL', payload: null }); }} className="p-2 text-blue-500 hover:bg-blue-100 rounded-lg"><Edit size={16} /></button>
                       <button type="button" aria-label="حذف" onClick={() => handleDelete(t.id)} className="p-2 text-red-500 hover:bg-red-100 rounded-lg"><Trash2 size={16} /></button></div></td></tr>))}
                 </tbody></table></div>
@@ -1005,16 +986,16 @@ const TransactionsView = memo(({ groupedTransactions, transactions, selectedMont
   const isClosed = isMonthClosed(data, selectedYear, selectedMonth);
 
   const approveOne = (t) => {
-    if (isMonthClosed(data, t.year || 2026, t.month)) { addNotification({ type: 'error', title: 'محظور', message: 'الشهر مغلق — أعد فتحه أولاً' }); return; }
+    if (isMonthClosed(data, t.year || 2026, t.month)) { addNotification({ type: 'error', title: 'محظور', message: 'الشهر مغلق' }); return; }
     dispatch({ type: 'UPDATE_TRANSACTIONS', payload: transactions.map(tr => tr.id === t.id ? { ...tr, status: 'paid' } : tr) });
     addNotification({ type: 'success', title: '✅ تم الاعتماد' });
   };
   const approveAll = () => {
-    if (isClosed) { addNotification({ type: 'error', title: 'محظور', message: 'الشهر مغلق — أعد فتحه أولاً' }); return; }
+    if (isClosed) { addNotification({ type: 'error', title: 'محظور' }); return; }
     dispatch({ type: 'SHOW_CONFIRM', danger: false, title: 'اعتماد الكل', message: `سيتم اعتماد ${totalPending} عملية`, onConfirm: () => { saveHistory(); const ids = new Set(pendingGroups.flatMap(g => g.items.map(i => i.id))); dispatch({ type: 'UPDATE_TRANSACTIONS', payload: transactions.map(t => ids.has(t.id) ? { ...t, status: 'paid' } : t) }); addNotification({ type: 'success', title: '✅ تم الاعتماد' }); }, onCancel: () => dispatch({ type: 'HIDE_CONFIRM' }) });
   };
   const reopenOne = (t) => {
-    if (isMonthClosed(data, t.year || 2026, t.month)) { addNotification({ type: 'error', title: 'محظور', message: 'الشهر مغلق — أعد فتحه أولاً' }); return; }
+    if (isMonthClosed(data, t.year || 2026, t.month)) { addNotification({ type: 'error', title: 'محظور' }); return; }
     dispatch({ type: 'UPDATE_TRANSACTIONS', payload: transactions.map(tr => tr.id === t.id ? { ...tr, status: 'pending' } : tr) });
     addNotification({ type: 'warning', title: '↩️ إعادة' });
   };
@@ -1030,15 +1011,15 @@ const TransactionsView = memo(({ groupedTransactions, transactions, selectedMont
         <div className="flex gap-2 items-center flex-wrap">
           {isClosed ? (<>
             <div className="bg-emerald-100 text-emerald-700 px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2 border border-emerald-200"><ShieldCheck size={14} /> مغلق</div>
-            <button onClick={() => dispatch({ type: 'SHOW_CONFIRM', danger: false, title: `🔓 إعادة فتح ${selectedMonth} ${selectedYear}`, message: 'سيتم إلغاء القفل وحذف snapshot الشهر وكل الشهور التالية.', onConfirm: () => { saveHistory(); dispatch({ type: 'OPEN_MONTH', payload: makeMonthKey(selectedYear, selectedMonth) }); addNotification({ type: 'success', title: '🔓 تم إعادة الفتح' }); }, onCancel: () => dispatch({ type: 'HIDE_CONFIRM' }) })} className="bg-amber-100 text-amber-700 hover:bg-amber-200 px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2 border border-amber-300 active:scale-95 no-print"><Unlock size={14} /> إعادة فتح</button>
+            <button onClick={() => dispatch({ type: 'SHOW_CONFIRM', danger: false, title: `🔓 إعادة فتح ${selectedMonth}`, message: 'سيتم إلغاء القفل وحذف snapshot الشهر وكل الشهور التالية.', onConfirm: () => { saveHistory(); dispatch({ type: 'OPEN_MONTH', payload: makeMonthKey(selectedYear, selectedMonth) }); addNotification({ type: 'success', title: '🔓 تم إعادة الفتح' }); }, onCancel: () => dispatch({ type: 'HIDE_CONFIRM' }) })} className="bg-amber-100 text-amber-700 hover:bg-amber-200 px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2 border border-amber-300 active:scale-95 no-print"><Unlock size={14} /> إعادة فتح</button>
           </>) : (
-            <button onClick={() => dispatch({ type: 'SHOW_CONFIRM', danger: false, title: `🔒 إقفال ${selectedMonth} ${selectedYear}`, message: 'سيتم تثبيت أرصدة كل الحسابات + إجمالي المديونية كنقطة ترحيل.', onConfirm: () => { saveHistory(); dispatch({ type: 'CLOSE_MONTH', payload: { year: selectedYear, month: selectedMonth } }); addNotification({ type: 'success', title: '✅ تم الإقفال' }); }, onCancel: () => dispatch({ type: 'HIDE_CONFIRM' }) })} className="gradient-bg-warning text-white px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2 no-print active:scale-95"><Lock size={14} /> اعتماد وإقفال</button>)}
+            <button onClick={() => dispatch({ type: 'SHOW_CONFIRM', danger: false, title: `🔒 إقفال ${selectedMonth}`, message: 'سيتم تثبيت أرصدة كل الحسابات + إجمالي المديونية كنقطة ترحيل.', onConfirm: () => { saveHistory(); dispatch({ type: 'CLOSE_MONTH', payload: { year: selectedYear, month: selectedMonth } }); addNotification({ type: 'success', title: '✅ تم الإقفال' }); }, onCancel: () => dispatch({ type: 'HIDE_CONFIRM' }) })} className="gradient-bg-warning text-white px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2 no-print active:scale-95"><Lock size={14} /> اعتماد وإقفال</button>)}
           {monthTxCount > 0 && (<button onClick={() => dispatch({ type: 'SHOW_CONFIRM', danger: true, title: `🗑️ حذف كل معاملات ${selectedMonth}`, message: `⚠️ سيتم حذف ${monthTxCount} معاملة نهائياً!`, onConfirm: () => { saveHistory(); dispatch({ type: 'DELETE_MONTH_TRANSACTIONS', payload: { year: selectedYear, month: selectedMonth } }); addNotification({ type: 'success', title: '🗑️ تم الحذف' }); }, onCancel: () => dispatch({ type: 'HIDE_CONFIRM' }) })} className="bg-red-50 hover:bg-red-100 text-red-600 px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2 border border-red-200 active:scale-95 no-print"><Trash2 size={14} /> حذف الشهر</button>)}</div></div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="glass p-5 rounded-2xl border-b-4 border-emerald-500"><p className="text-[11px] font-bold text-slate-500 uppercase mb-1">دخل محصل</p><p className="text-xl font-black text-emerald-600">{fmt(monthInsights.inc)}</p>{monthInsights.pendInc > 0 && <p className="text-[11px] text-amber-500 mt-1">+{fmt(monthInsights.pendInc)} معلق</p>}</div>
         <div className="glass p-5 rounded-2xl border-b-4 border-rose-500"><p className="text-[11px] font-bold text-slate-500 uppercase mb-1">مصاريف مدفوعة</p><p className="text-xl font-black text-rose-600">{fmt(monthInsights.exp)}</p>{monthInsights.pendExp > 0 && <p className="text-[11px] text-amber-500 mt-1">+{fmt(monthInsights.pendExp)} معلق</p>}</div>
         <div className="glass p-5 rounded-2xl border-b-4 border-blue-500"><p className="text-[11px] font-bold text-slate-500 uppercase mb-1">الصافي</p><p className={`text-xl font-black ${monthInsights.net >= 0 ? 'text-blue-600' : 'text-rose-500'}`}>{fmt(monthInsights.net)}</p></div>
-        <div className="glass p-5 rounded-2xl border-b-4 border-purple-500 flex items-center justify-center cursor-pointer hover:bg-purple-50" onClick={() => printReport(`تقرير ${selectedMonth} ${selectedYear}`, transactions.filter(t => t.month === selectedMonth && (t.year || 2026) === selectedYear))}><div className="text-center"><Printer size={20} className="mx-auto text-purple-600 mb-1" /><p className="text-[11px] font-black text-purple-600">طباعة</p></div></div></div>
+        <div className="glass p-5 rounded-2xl border-b-4 border-purple-500 flex items-center justify-center cursor-pointer hover:bg-purple-50" onClick={() => printReport(`تقرير ${selectedMonth}`, transactions.filter(t => t.month === selectedMonth && (t.year || 2026) === selectedYear))}><div className="text-center"><Printer size={20} className="mx-auto text-purple-600 mb-1" /><p className="text-[11px] font-black text-purple-600">طباعة</p></div></div></div>
       <div className="flex gap-2 justify-center flex-wrap px-2 no-print">
         {[['all', 'الكل', Filter], ['pending', 'معلق', Clock], ['paid', 'مدفوع', CheckCircle2]].map(([id, label, Icon]) => (
           <button key={id} type="button" onClick={() => dispatch({ type: 'SET_STATUS_FILTER', payload: id })} className={`px-3 py-1.5 rounded-xl text-[11px] font-bold border flex items-center gap-1 ${statusFilter === id ? (id === 'all' ? 'bg-slate-800 text-white' : id === 'pending' ? 'gradient-bg-warning text-white' : 'gradient-bg-success text-white') : 'bg-white dark:bg-slate-800'}`}><Icon size={12} /> {label}</button>))}</div>
@@ -1106,7 +1087,7 @@ const LoansView = memo(({ updatedLoans, cards, recurringItems, selectedYear, sel
     saveHistory();
     dispatch({ type: 'UPDATE_LOANS', payload: [...updatedLoans, { id: Date.now(), name: newLoan.name, totalAmount: safeNumber(newLoan.totalAmount), prePaidAmount: 0, monthlyInstallment: safeNumber(newLoan.monthlyInstallment), dueDay: safeNumber(newLoan.dueDay, 1), interest: '', description: newLoan.description || '', type: newLoan.isReceivable ? 'receivable' : 'debt', isReceivable: newLoan.isReceivable }] });
     setShowAdd(false); setNewLoan({ name: '', totalAmount: '', monthlyInstallment: '', dueDay: 1, description: '', isReceivable: false });
-    addNotification({ type: 'success', title: '✅ تمت إضافة الالتزام' });
+    addNotification({ type: 'success', title: '✅ تمت الإضافة' });
   };
   return (
     <div className="space-y-8 animate-fadeIn pb-24">
@@ -1138,7 +1119,6 @@ const LoansView = memo(({ updatedLoans, cards, recurringItems, selectedYear, sel
           </label>
           <button onClick={addLoan} className="w-full gradient-bg-primary text-white py-3 rounded-xl font-bold">إضافة</button></div></div></div>)}
 
-      {/* ✅ قسم المستحقات لنا */}
       {receivables.length > 0 && (
         <div className="space-y-4">
           <h3 className="font-black text-lg flex items-center gap-3 text-emerald-600 border-r-4 border-emerald-500 pr-3">
@@ -1183,7 +1163,6 @@ const LoansView = memo(({ updatedLoans, cards, recurringItems, selectedYear, sel
         </div>
       )}
 
-      {/* ✅ قسم المديونيات */}
       <div className="space-y-4">
         <h3 className="font-black text-lg flex items-center gap-3 text-red-600 border-r-4 border-red-500 pr-3">
           <TrendingDown size={22} /> مديونيات عليك
@@ -1240,7 +1219,7 @@ const WalletsAndCardsView = memo(({ cards, buildLedger, expandedLedgers, expande
     saveHistory();
     dispatch({ type: 'UPDATE_CARDS', payload: [...cards, { ...newCard, id: Date.now(), limit: safeNumber(newCard.limit), availableBalance: safeNumber(newCard.limit), openingDebt: 0 }] });
     setShowAddCard(false); setNewCard({ name: '', bank: '', limit: '', last4: '', expiry: '', holderName: '', dueDate: '05 من كل شهر', theme: 'silver' });
-    addNotification({ type: 'success', title: '✅ تمت إضافة البطاقة' });
+    addNotification({ type: 'success', title: '✅ تمت الإضافة' });
   };
   const lp = (key) => ({
     walletKey: key,
@@ -1261,7 +1240,7 @@ const WalletsAndCardsView = memo(({ cards, buildLedger, expandedLedgers, expande
         <div className="p-6 flex justify-between items-center border-b cursor-pointer" onClick={() => dispatch({ type: 'TOGGLE_CARDS_SECTION' })}>
           <div className="flex items-center gap-3"><CreditCard size={28} className="text-indigo-600" /><div><h3 className="text-xl font-black text-indigo-600">البطاقات الائتمانية ({cards.length})</h3><p className="text-xs text-slate-500 font-bold mt-1">المديونية تُحدَّث من كشف البنك عند كل تسوية</p></div></div>
           <div className="flex items-center gap-3">
-            <button type="button" aria-label="إضافة بطاقة" onClick={(e) => { e.stopPropagation(); setShowAddCard(true); }} className="gradient-bg-primary text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1"><Plus size={14} /> إضافة</button>
+            <button type="button" aria-label="إضافة" onClick={(e) => { e.stopPropagation(); setShowAddCard(true); }} className="gradient-bg-primary text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1"><Plus size={14} /> إضافة</button>
             <ChevronDown size={24} className={`text-slate-500 transition-transform ${expandedCardsSection ? 'rotate-180' : ''}`} /></div></div>
         {expandedCardsSection && (<div className="p-8 bg-gradient-to-b from-indigo-50/20 to-transparent dark:from-indigo-900/10">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-12 justify-items-center">
@@ -1269,7 +1248,7 @@ const WalletsAndCardsView = memo(({ cards, buildLedger, expandedLedgers, expande
               <div key={card.id} className="flex flex-col gap-8 w-full max-w-md">
                 <div className="relative group hover:-translate-y-2 transition-transform duration-500">
                   <div className="absolute top-2 right-2 z-20 flex gap-2">
-                    <button type="button" aria-label="كشف حساب" onClick={() => dispatch({ type: 'SET_VIEWING_CARD_STATEMENT', payload: card })} className="bg-white/90 dark:bg-slate-800 p-2.5 rounded-xl shadow-lg hover:scale-110 no-print"><FileSpreadsheet size={18} /></button>
+                    <button type="button" aria-label="كشف" onClick={() => dispatch({ type: 'SET_VIEWING_CARD_STATEMENT', payload: card })} className="bg-white/90 dark:bg-slate-800 p-2.5 rounded-xl shadow-lg hover:scale-110 no-print"><FileSpreadsheet size={18} /></button>
                     <button type="button" aria-label="تعديل" onClick={() => dispatch({ type: 'SET_EDITING_CARD', payload: card })} className="bg-white/90 dark:bg-slate-800 p-2.5 rounded-xl shadow-xl hover:scale-110 hover:rotate-12 no-print"><Edit size={18} /></button></div>
                   <div dir="ltr" className={`p-8 rounded-2xl relative overflow-hidden shadow-2xl min-h-[260px] flex flex-col justify-between ${themeCls} border`}>
                     <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-[50px] -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
@@ -1316,7 +1295,7 @@ const MonthlyPlanningView = memo(({ data, monthlyPlans, cards, loans, dispatch, 
   useEffect(() => { if (!hasChanges) return; const h = (e) => { e.preventDefault(); e.returnValue = ''; }; window.addEventListener('beforeunload', h); return () => window.removeEventListener('beforeunload', h); }, [hasChanges]);
   const grandDebt = cards.reduce((s, c) => s + safeNumber(c.openingDebt), 0) + loans.filter(l => !l.isReceivable).reduce((s, l) => s + l.remaining, 0);
   const handlePlanChange = (m, field, value) => { setLocalPlans(prev => ({ ...prev, [pk(m)]: { ...(prev[pk(m)] || {}), [field]: value } })); setHasChanges(true); };
-  const handleSave = () => { saveHistory(); const cleaned = {}; Object.entries(localPlans).forEach(([k, p]) => { if (!parseMonthKey(k)) return; cleaned[k] = { expectedSalary: safeNumber(p.expectedSalary), expectedRent: safeNumber(p.expectedRent), expectedCashback: safeNumber(p.expectedCashback), expectedEmakWE: safeNumber(p.expectedEmakWE), expectedZakat: safeNumber(p.expectedZakat), expectedCash: safeNumber(p.expectedCash), expectedCashExpenses: safeNumber(p.expectedCashExpenses), plannedPayments: safeNumber(p.plannedPayments), notes: p.notes || '' }; }); dispatch({ type: 'UPDATE_MONTHLY_PLANS', payload: cleaned }); addNotification({ type: 'success', title: '✅ تم حفظ التخطيط' }); setHasChanges(false); };
+  const handleSave = () => { saveHistory(); const cleaned = {}; Object.entries(localPlans).forEach(([k, p]) => { if (!parseMonthKey(k)) return; cleaned[k] = { expectedSalary: safeNumber(p.expectedSalary), expectedRent: safeNumber(p.expectedRent), expectedCashback: safeNumber(p.expectedCashback), expectedEmakWE: safeNumber(p.expectedEmakWE), expectedZakat: safeNumber(p.expectedZakat), expectedCash: safeNumber(p.expectedCash), expectedCashExpenses: safeNumber(p.expectedCashExpenses), plannedPayments: safeNumber(p.plannedPayments), notes: p.notes || '' }; }); dispatch({ type: 'UPDATE_MONTHLY_PLANS', payload: cleaned }); addNotification({ type: 'success', title: '✅ تم الحفظ' }); setHasChanges(false); };
   const computed = useMemo(() => { const r = {}; planningMonths.forEach(m => { const p = localPlans[pk(m)] || {}; const inc = safeNumber(p.expectedSalary) + safeNumber(p.expectedRent) + safeNumber(p.expectedCashback) + safeNumber(p.expectedEmakWE) + safeNumber(p.expectedZakat) + safeNumber(p.expectedCash); const out = safeNumber(p.expectedCashExpenses) + safeNumber(p.plannedPayments); r[pk(m)] = { inc, out, net: inc - out }; }); return r; }, [localPlans, planningMonths]);
   const debtRow = (m) => { const snap = data?.monthlySnapshots?.[pk(m)]; return snap && snap._totalDebt !== undefined ? snap._totalDebt : null; };
   const handleExportCSV = () => { const headers = ['البند', ...planningMonths.map(pk)]; const rows = [['راتب', ...planningMonths.map(m => safeNumber(localPlans[pk(m)]?.expectedSalary))], ['إيجار', ...planningMonths.map(m => safeNumber(localPlans[pk(m)]?.expectedRent))], ['CashBack', ...planningMonths.map(m => safeNumber(localPlans[pk(m)]?.expectedCashback))], ['إيماك', ...planningMonths.map(m => safeNumber(localPlans[pk(m)]?.expectedEmakWE))], ['زكاة', ...planningMonths.map(m => safeNumber(localPlans[pk(m)]?.expectedZakat))], ['نقدي', ...planningMonths.map(m => safeNumber(localPlans[pk(m)]?.expectedCash))], ['إجمالي الدخل', ...planningMonths.map(m => computed[pk(m)]?.inc || 0)], ['مصروفات', ...planningMonths.map(m => safeNumber(localPlans[pk(m)]?.expectedCashExpenses))], ['مدفوعات', ...planningMonths.map(m => safeNumber(localPlans[pk(m)]?.plannedPayments))], ['الصافي', ...planningMonths.map(m => computed[pk(m)]?.net || 0)]]; const csv = '\uFEFF' + [headers, ...rows].map(r => r.join(',')).join('\n'); const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `monthly_plan_${Date.now()}.csv`; a.click(); URL.revokeObjectURL(url); addNotification({ type: 'success', title: 'تم التصدير' }); };
@@ -1327,8 +1306,8 @@ const MonthlyPlanningView = memo(({ data, monthlyPlans, cards, loans, dispatch, 
         <div className="flex gap-3 flex-wrap">{hasChanges && <button onClick={handleSave} className="gradient-bg-success text-white px-8 py-4 rounded-2xl font-black shadow-lg flex items-center gap-3 active:scale-95"><Save size={20} /> حفظ</button>}
           <button onClick={handleExportCSV} className="bg-blue-50 text-blue-600 px-6 py-4 rounded-2xl font-bold flex items-center gap-2 active:scale-95"><FileSpreadsheet size={20} /> CSV</button></div></div>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="glass p-6 rounded-2xl border-r-4 border-r-blue-500"><p className="text-[11px] font-bold text-slate-500 uppercase">إجمالي دخل 6 أشهر</p><p className="text-2xl font-black text-blue-600 mt-2">{fmt(planningMonths.reduce((s, m) => s + (computed[pk(m)]?.inc || 0), 0))} ج.م</p></div>
-        <div className="glass p-6 rounded-2xl border-r-4 border-r-red-500"><p className="text-[11px] font-bold text-slate-500 uppercase">إجمالي مصروفات</p><p className="text-2xl font-black text-red-600 mt-2">{fmt(planningMonths.reduce((s, m) => s + (computed[pk(m)]?.out || 0), 0))} ج.م</p></div>
+        <div className="glass p-6 rounded-2xl border-r-4 border-r-blue-500"><p className="text-[11px] font-bold text-slate-500 uppercase">إجمالي الدخل</p><p className="text-2xl font-black text-blue-600 mt-2">{fmt(planningMonths.reduce((s, m) => s + (computed[pk(m)]?.inc || 0), 0))} ج.م</p></div>
+        <div className="glass p-6 rounded-2xl border-r-4 border-r-red-500"><p className="text-[11px] font-bold text-slate-500 uppercase">إجمالي المصروفات</p><p className="text-2xl font-black text-red-600 mt-2">{fmt(planningMonths.reduce((s, m) => s + (computed[pk(m)]?.out || 0), 0))} ج.م</p></div>
         <div className="glass p-6 rounded-2xl border-r-4 border-r-emerald-500"><p className="text-[11px] font-bold text-slate-500 uppercase">صافي التوفير</p><p className={`text-2xl font-black mt-2 ${planningMonths.reduce((s, m) => s + (computed[pk(m)]?.net || 0), 0) >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>{fmt(planningMonths.reduce((s, m) => s + (computed[pk(m)]?.net || 0), 0))} ج.م</p></div></div>
       <div className="glass rounded-2xl overflow-hidden">
         <div className="p-6 border-b bg-slate-50/50 dark:bg-slate-800/30"><h3 className="font-black text-lg flex items-center gap-3"><Calculator className="text-blue-500" /> جدول التخطيط اليدوي</h3></div>
@@ -1344,17 +1323,10 @@ const MonthlyPlanningView = memo(({ data, monthlyPlans, cards, loans, dispatch, 
             <tr><td className="planning-cell sticky right-0 bg-white dark:bg-slate-800 z-10 font-bold"><div className="flex items-center gap-2"><CreditCard size={14} className="text-red-600" /> مدفوعات مخططة</div></td>{planningMonths.map(m => <td key={'pp' + pk(m)} className="planning-cell"><input type="text" inputMode="decimal" className="planning-input" value={localPlans[pk(m)]?.plannedPayments ?? ''} onChange={e => handlePlanChange(m, 'plannedPayments', e.target.value)} /></td>)}</tr>
             <tr className="bg-red-50 dark:bg-red-900/20 border-t-2 border-red-500"><td className="planning-cell sticky right-0 bg-red-50 dark:bg-red-900/20 z-10 font-black text-red-700">إجمالي المصروف</td>{planningMonths.map(m => <td key={'o' + pk(m)} className="planning-cell font-black text-red-700">{fmt(computed[pk(m)]?.out)}</td>)}</tr>
             <tr className="bg-blue-50 dark:bg-blue-900/20 border-t-2"><td className="planning-cell sticky right-0 bg-white dark:bg-slate-800 z-10 font-black">الصافي</td>{planningMonths.map(m => { const n = computed[pk(m)]?.net || 0; return <td key={'n' + pk(m)} className={`planning-cell font-black ${n >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>{n >= 0 ? '+' : ''}{fmt(n)}</td>; })}</tr>
-            <tr className="bg-amber-50 dark:bg-amber-900/20 border-t-2 border-amber-500"><td className="planning-cell sticky right-0 bg-amber-50 dark:bg-amber-900/20 z-10 font-black text-amber-700"><div className="flex items-center gap-2"><Percent size={14} /> دين مثبت (snapshot)</div></td>{planningMonths.map(m => { const d = debtRow(m); return <td key={'d' + pk(m)} className={`planning-cell font-black ${d === null ? 'text-slate-500' : d > grandDebt ? 'text-amber-600' : 'text-emerald-600'}`}>{d === null ? '—' : fmt(d)}</td>; })}</tr>
+            <tr className="bg-amber-50 dark:bg-amber-900/20 border-t-2 border-amber-500"><td className="planning-cell sticky right-0 bg-amber-50 dark:bg-amber-900/20 z-10 font-black text-amber-700"><div className="flex items-center gap-2"><Percent size={14} /> دين مثبت</div></td>{planningMonths.map(m => { const d = debtRow(m); return <td key={'d' + pk(m)} className={`planning-cell font-black ${d === null ? 'text-slate-500' : d > grandDebt ? 'text-amber-600' : 'text-emerald-600'}`}>{d === null ? '—' : fmt(d)}</td>; })}</tr>
             <tr className="border-t"><td className="planning-cell sticky right-0 bg-white dark:bg-slate-800 z-10 font-bold text-slate-500">ملاحظات</td>{planningMonths.map(m => <td key={'no' + pk(m)} className="planning-cell"><input type="text" className="planning-input text-xs" value={localPlans[pk(m)]?.notes || ''} onChange={e => handlePlanChange(m, 'notes', e.target.value)} placeholder="..." /></td>)}</tr>
           </tbody></table></div></div>
-      <div className="glass p-6 rounded-2xl"><h3 className="font-black text-lg mb-4 flex items-center gap-2"><BarChart3 className="text-blue-500" /> توقعات الدخل والمصروف</h3>
-        <div className="h-72"><ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={planningMonths.map(m => ({ name: `${m.month} ${String(m.year).slice(2)}`, دخل: Math.round(computed[pk(m)]?.inc || 0), مصروف: Math.round(computed[pk(m)]?.out || 0) }))}>
-            <defs><linearGradient id="cI" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#10B981" stopOpacity={0.8} /><stop offset="95%" stopColor="#10B981" stopOpacity={0} /></linearGradient><linearGradient id="cE" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#EF4444" stopOpacity={0.8} /><stop offset="95%" stopColor="#EF4444" stopOpacity={0} /></linearGradient></defs>
-            <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.5} /><XAxis dataKey="name" fontSize={11} /><YAxis fontSize={11} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
-            <Tooltip formatter={(v) => `${fmt(v)} ج.م`} contentStyle={{ borderRadius: '12px', border: 'none' }} /><Legend />
-            <Area type="monotone" dataKey="دخل" stroke="#10B981" fill="url(#cI)" strokeWidth={2} /><Area type="monotone" dataKey="مصروف" stroke="#EF4444" fill="url(#cE)" strokeWidth={2} />
-          </AreaChart></ResponsiveContainer></div></div></div>
+    </div>
   );
 });
 
@@ -1391,6 +1363,245 @@ const PlannerView = memo(({ updatedLoans, cards, selectedMonth, selectedYear, mo
   );
 });
 
+/* ===================== توقع السيولة الذكي ===================== */
+const ForecastRow = ({ label, value, color, prefix = '' }) => (
+  <div className="flex justify-between items-center">
+    <span className="text-sm font-bold text-slate-500">{label}</span>
+    <span className={`text-lg font-black ${color}`}>{prefix}{fmt(value)} ج.م</span>
+  </div>
+);
+
+const LiquidityForecastView = memo(({ data, transactions, cards, updatedLoans, recurringItems, liveBalances, selectedYear, selectedMonth, monthlyPlans }) => {
+  const historical = useMemo(() => {
+    const months = [];
+    let y = selectedYear, mi = getMonthIndex(selectedMonth);
+    for (let i = 1; i <= 3; i++) {
+      mi--;
+      if (mi < 0) { mi = 11; y--; }
+      months.push({ year: y, month: ALL_MONTHS[mi] });
+    }
+    const catData = {};
+    months.forEach(({ year, month }) => {
+      transactions
+        .filter(t => t.type === 'expense' && t.status === 'paid' && t.month === month && (t.year || 2026) === year)
+        .forEach(t => {
+          const c = t.category || 'أخرى';
+          if (!catData[c]) catData[c] = { total: 0, samples: 0 };
+          catData[c].total += safeNumber(t.amount);
+          catData[c].samples++;
+        });
+    });
+    const avgPerCat = {};
+    let grandTotal = 0;
+    Object.entries(catData).forEach(([cat, d]) => {
+      avgPerCat[cat] = d.total / months.length;
+      grandTotal += avgPerCat[cat];
+    });
+    const monthsWithData = months.filter(m =>
+      transactions.some(t => t.type === 'expense' && t.status === 'paid' && t.month === m.month && (t.year || 2026) === m.year)
+    ).length;
+    return { months, avgPerCat, grandTotal, monthsWithData };
+  }, [transactions, selectedYear, selectedMonth]);
+
+  const committed = useMemo(() => {
+    const items = [];
+    updatedLoans.filter(l => !l.isReceivable && !l.autoGenerated && safeNumber(l.monthlyInstallment) > 0 && l.remaining > 0)
+      .forEach(l => items.push({ name: l.name, amount: safeNumber(l.monthlyInstallment), icon: Banknote }));
+    updatedLoans.filter(l => l.autoGenerated && l.remaining > 0)
+      .forEach(l => items.push({ name: l.name, amount: safeNumber(l.remaining), icon: StoreIcon }));
+    recurringItems.filter(r => r.type === 'expense')
+      .forEach(r => items.push({ name: r.title, amount: safeNumber(r.amount), icon: Repeat }));
+    const total = items.reduce((s, i) => s + i.amount, 0);
+    return { items, total };
+  }, [updatedLoans, recurringItems]);
+
+  const income = useMemo(() => {
+    const items = [];
+    recurringItems.filter(r => r.type === 'income')
+      .forEach(r => items.push({ name: r.title, amount: safeNumber(r.amount), icon: TrendingUp }));
+    const total = items.reduce((s, i) => s + i.amount, 0);
+    return { items, total };
+  }, [recurringItems]);
+
+  const projection = useMemo(() => {
+    const result = [];
+    let balance = ACCOUNT_KEYS.reduce((s, k) => s + safeNumber(liveBalances[k]), 0);
+    const committedCats = new Set();
+    updatedLoans.forEach(l => l.autoMonthly && committedCats.add(l.category));
+    recurringItems.filter(r => r.type === 'expense').forEach(r => committedCats.add(r.category));
+
+    let y = selectedYear, mi = getMonthIndex(selectedMonth);
+    for (let i = 1; i <= 2; i++) {
+      mi++;
+      if (mi > 11) { mi = 0; y++; }
+      const month = ALL_MONTHS[mi];
+      const plan = monthlyPlans?.[makeMonthKey(y, month)] || {};
+      const planInc = safeNumber(plan.expectedSalary) + safeNumber(plan.expectedRent) + safeNumber(plan.expectedCashback) + safeNumber(plan.expectedEmakWE) + safeNumber(plan.expectedZakat) + safeNumber(plan.expectedCash);
+      const inc = planInc > 0 ? planInc : income.total;
+      const comm = committed.total;
+      let variable = 0;
+      Object.entries(historical.avgPerCat).forEach(([cat, avg]) => {
+        if (!committedCats.has(cat)) variable += avg;
+      });
+      const exp = comm + variable;
+      const closing = balance + inc - exp;
+      result.push({ year: y, month, opening: balance, income: inc, committed: comm, variable, expenses: exp, closing, savings: inc - exp, safety: closing > 0 && (inc - exp) > 0 ? 'safe' : closing > 0 ? 'warn' : 'danger' });
+      balance = closing;
+    }
+    return result;
+  }, [selectedYear, selectedMonth, liveBalances, committed, income, historical, monthlyPlans, updatedLoans, recurringItems]);
+
+  const confidence = useMemo(() => {
+    const n = historical.monthsWithData;
+    if (n >= 3) return { level: 'مرتفعة', pct: 90, bg: 'bg-emerald-50 dark:bg-emerald-900/20', text: 'text-emerald-600' };
+    if (n >= 2) return { level: 'متوسطة', pct: 75, bg: 'bg-amber-50 dark:bg-amber-900/20', text: 'text-amber-600' };
+    if (n >= 1) return { level: 'منخفضة', pct: 60, bg: 'bg-orange-50 dark:bg-orange-900/20', text: 'text-orange-600' };
+    return { level: 'غير كافية', pct: 0, bg: 'bg-red-50 dark:bg-red-900/20', text: 'text-red-600' };
+  }, [historical.monthsWithData]);
+
+  const liveTotal = ACCOUNT_KEYS.reduce((s, k) => s + safeNumber(liveBalances[k]), 0);
+  const variableTotal = Object.entries(historical.avgPerCat)
+    .filter(([cat]) => !updatedLoans.some(l => l.autoMonthly && l.category === cat) && !recurringItems.some(r => r.type === 'expense' && r.category === cat))
+    .reduce((s, [, v]) => s + v, 0);
+
+  return (
+    <div className="space-y-8 animate-fadeIn pb-24">
+      <div className="glass p-8 rounded-2xl flex justify-between items-center flex-wrap gap-4">
+        <div className="flex items-center gap-4">
+          <div className="gradient-bg-primary p-4 rounded-2xl text-white shadow-lg"><LineChart size={32} /></div>
+          <div>
+            <h2 className="text-3xl font-black">توقع السيولة الذكي</h2>
+            <p className="text-slate-500 font-bold mt-1">محاكاة الشهرين القادمين بناءً على سلوكك الفعلي</p>
+          </div>
+        </div>
+        <div className={`px-6 py-4 rounded-2xl ${confidence.bg} border-2 border-dashed`}>
+          <p className="text-[11px] font-bold text-slate-500 uppercase text-center">دقة التوقع</p>
+          <p className={`text-3xl font-black ${confidence.text} text-center`}>{confidence.pct}%</p>
+          <p className="text-[11px] font-bold text-slate-500 text-center">ثقة {confidence.level}</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="glass p-6 rounded-2xl border-r-4 border-r-blue-500">
+          <p className="text-[11px] font-bold text-slate-500 uppercase">الرصيد الحي الآن</p>
+          <p className="text-2xl font-black text-blue-600 mt-2">{fmt(liveTotal)} ج.م</p>
+          <p className="text-[11px] text-slate-500 mt-1">مجموع الحسابات الخمسة</p>
+        </div>
+        <div className="glass p-6 rounded-2xl border-r-4 border-r-amber-500">
+          <p className="text-[11px] font-bold text-slate-500 uppercase">متوسط مصروف شهري</p>
+          <p className="text-2xl font-black text-amber-600 mt-2">{fmt(historical.grandTotal)} ج.م</p>
+          <p className="text-[11px] text-slate-500 mt-1">بناءً على {historical.monthsWithData} شهر سابق</p>
+        </div>
+        <div className="glass p-6 rounded-2xl border-r-4 border-r-emerald-500">
+          <p className="text-[11px] font-bold text-slate-500 uppercase">دخل متوقع شهري</p>
+          <p className="text-2xl font-black text-emerald-600 mt-2">{fmt(income.total)} ج.م</p>
+          <p className="text-[11px] text-slate-500 mt-1">من الالتزامات المتكررة</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {projection.map((p, idx) => (
+          <div key={idx} className={`glass rounded-2xl overflow-hidden border-2 ${p.safety === 'safe' ? 'border-emerald-300 dark:border-emerald-800' : p.safety === 'warn' ? 'border-amber-300 dark:border-amber-800' : 'border-red-300 dark:border-red-800'}`}>
+            <div className={`p-5 ${p.safety === 'safe' ? 'bg-emerald-50 dark:bg-emerald-900/20' : p.safety === 'warn' ? 'bg-amber-50 dark:bg-amber-900/20' : 'bg-red-50 dark:bg-red-900/20'}`}>
+              <div className="flex justify-between items-center">
+                <h3 className="text-2xl font-black">{p.month} {p.year}</h3>
+                <span className={`px-3 py-1 rounded-full text-xs font-black ${p.safety === 'safe' ? 'bg-emerald-100 text-emerald-700' : p.safety === 'warn' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>
+                  {p.safety === 'safe' ? '✅ آمن' : p.safety === 'warn' ? '⚠️ انتباه' : '❌ خطر'}
+                </span>
+              </div>
+            </div>
+            <div className="p-6 space-y-3">
+              <ForecastRow label="الرصيد الافتتاحي" value={p.opening} color="text-slate-600" />
+              <ForecastRow label="دخل متوقع" value={p.income} color="text-emerald-600" prefix="+" />
+              <ForecastRow label="التزامات ثابتة" value={p.committed} color="text-red-500" prefix="-" />
+              <ForecastRow label="مصروف متغير (تاريخي)" value={p.variable} color="text-orange-500" prefix="-" />
+              <div className="border-t-2 border-dashed pt-3">
+                <div className="flex justify-between items-center">
+                  <span className="font-black text-base">الرصيد المتوقع</span>
+                  <span className={`text-3xl font-black ${p.closing >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                    {fmt(p.closing)} <span className="text-base">ج.م</span>
+                  </span>
+                </div>
+                <div className="flex justify-between items-center mt-2 text-xs">
+                  <span className="text-slate-500 font-bold">صافي التوفير</span>
+                  <span className={`font-black ${p.savings >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                    {p.savings >= 0 ? '+' : ''}{fmt(p.savings)} ج.م
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="glass rounded-2xl overflow-hidden">
+          <div className="p-5 border-b bg-emerald-50 dark:bg-emerald-900/20">
+            <h3 className="font-black text-lg text-emerald-700 flex items-center gap-2"><TrendingUp size={20} /> الدخل المتوقع</h3>
+            <p className="text-2xl font-black text-emerald-600 mt-2">{fmt(income.total)} ج.م</p>
+          </div>
+          <div className="p-4 divide-y max-h-80 overflow-y-auto scroll-hide">
+            {income.items.map((it, i) => (
+              <div key={i} className="py-3 flex justify-between items-center gap-2">
+                <span className="font-bold text-sm flex items-center gap-2 truncate"><it.icon size={14} className="text-emerald-500 flex-shrink-0" /> <span className="truncate">{it.name}</span></span>
+                <span className="font-black text-emerald-600 flex-shrink-0">+{fmt(it.amount)}</span>
+              </div>
+            ))}
+            {income.items.length === 0 && <p className="p-4 text-center text-slate-500 font-bold text-sm">لا يوجد دخل مسجل</p>}
+          </div>
+        </div>
+
+        <div className="glass rounded-2xl overflow-hidden">
+          <div className="p-5 border-b bg-red-50 dark:bg-red-900/20">
+            <h3 className="font-black text-lg text-red-700 flex items-center gap-2"><Banknote size={20} /> الالتزامات الثابتة</h3>
+            <p className="text-2xl font-black text-red-600 mt-2">{fmt(committed.total)} ج.م</p>
+          </div>
+          <div className="p-4 divide-y max-h-80 overflow-y-auto scroll-hide">
+            {committed.items.map((it, i) => (
+              <div key={i} className="py-3 flex justify-between items-center gap-2">
+                <span className="font-bold text-sm flex items-center gap-2 truncate"><it.icon size={14} className="text-red-500 flex-shrink-0" /> <span className="truncate">{it.name}</span></span>
+                <span className="font-black text-red-600 flex-shrink-0">-{fmt(it.amount)}</span>
+              </div>
+            ))}
+            {committed.items.length === 0 && <p className="p-4 text-center text-slate-500 font-bold text-sm">لا التزامات ثابتة</p>}
+          </div>
+        </div>
+
+        <div className="glass rounded-2xl overflow-hidden">
+          <div className="p-5 border-b bg-orange-50 dark:bg-orange-900/20">
+            <h3 className="font-black text-lg text-orange-700 flex items-center gap-2"><Activity size={20} /> مصروف متغير</h3>
+            <p className="text-2xl font-black text-orange-600 mt-2">{fmt(variableTotal)} ج.م</p>
+            <p className="text-[11px] text-slate-500 font-bold">متوسط شهري بناءً على التاريخ</p>
+          </div>
+          <div className="p-4 divide-y max-h-80 overflow-y-auto scroll-hide">
+            {Object.entries(historical.avgPerCat)
+              .filter(([cat]) => !updatedLoans.some(l => l.autoMonthly && l.category === cat) && !recurringItems.some(r => r.type === 'expense' && r.category === cat))
+              .sort((a, b) => b[1] - a[1])
+              .map(([cat, avg], i) => (
+                <div key={i} className="py-3 flex justify-between items-center gap-2">
+                  <span className="font-bold text-sm truncate" style={{ color: CATEGORY_COLORS[cat] || '#666' }}>{cat}</span>
+                  <span className="font-black text-orange-600 flex-shrink-0">{fmt(avg)}</span>
+                </div>
+              ))}
+            {variableTotal === 0 && <p className="p-4 text-center text-slate-500 font-bold text-sm">لا توجد بيانات كافية</p>}
+          </div>
+        </div>
+      </div>
+
+      <div className="glass p-6 rounded-2xl bg-blue-50/50 dark:bg-blue-900/10 border-r-4 border-r-blue-500">
+        <h4 className="font-black text-sm text-blue-700 flex items-center gap-2 mb-3"><ShieldAlert size={16} /> منهجية الحساب</h4>
+        <ul className="text-xs font-bold text-slate-600 dark:text-slate-300 space-y-1.5 leading-relaxed">
+          <li>• <strong>الرصيد الافتتاحي:</strong> مجموع أرصدة الحسابات الخمسة (حي حتى نهاية اليوم)</li>
+          <li>• <strong>الدخل المتوقع:</strong> من التخطيط الشهري إن وُجد، وإلا من الالتزامات المتكررة</li>
+          <li>• <strong>الالتزامات الثابتة:</strong> أقساط القروض + مسحوبات هاني المتولدة + المتكررة (دقة 100%)</li>
+          <li>• <strong>المصروف المتغير:</strong> متوسط آخر 3 شهور فعلياً لكل فئة (دقة ~90%)</li>
+          <li>• <strong>دقة التوقع الكلية:</strong> تزيد مع تراكم بيانات الشهور السابقة (3 شهور أو أكثر = ثقة 90%)</li>
+        </ul>
+      </div>
+    </div>
+  );
+});
+
 /* ===================== الأجندة ===================== */
 const CalendarView = memo(({ data, getAgendaItems, transactions, dispatch, saveHistory, addNotification }) => {
   const [filterCat, setFilterCat] = useState('all');
@@ -1407,12 +1618,12 @@ const CalendarView = memo(({ data, getAgendaItems, transactions, dispatch, saveH
   const quickPay = (item) => {
     const d = new Date(item.date); if (isNaN(d)) return;
     const y = d.getFullYear(), m = ALL_MONTHS[d.getMonth()];
-    if (data && isMonthClosed(data, y, m)) { addNotification({ type: 'error', title: 'محظور', message: `شهر ${m} ${y} مغلق — أعد فتحه أولاً` }); return; }
+    if (data && isMonthClosed(data, y, m)) { addNotification({ type: 'error', title: 'محظور', message: `شهر ${m} ${y} مغلق` }); return; }
     saveHistory();
-    const isIncome = item.amount && item.desc && item.desc.includes('دخل');
+    const isIncome = item.desc && item.desc.includes('دخل');
     const tx = { id: getSafeId(), type: isIncome ? 'income' : 'expense', kind: KIND.FINANCIAL, category: isIncome ? 'تكييف محمود' : 'الالتزامات البنكية والتمويلية', amount: safeNumber(item.amount), description: item.title, method: 'instapay', date: item.date, month: m, year: y, monthIndex: d.getMonth(), subType: isIncome ? 'deposit' : 'withdrawal', status: 'paid' };
     dispatch({ type: 'UPDATE_TRANSACTIONS', payload: [tx, ...transactions].sort((a, b) => new Date(b.date) - new Date(a.date)) });
-    addNotification({ type: 'success', title: '✅ تم تسجيل العملية (معتمد)', message: `${item.title} — ${fmt(item.amount)} ج.م` });
+    addNotification({ type: 'success', title: '✅ تم تسجيل العملية', message: `${item.title} — ${fmt(item.amount)} ج.م` });
   };
   const filters = [{ id: 'all', label: 'الكل', icon: Layers }, { id: 'loans', label: 'قروض', icon: Banknote }, { id: 'cards', label: 'بطاقات', icon: CreditCard }, { id: 'personal', label: 'شخصي', icon: Users }, { id: 'recurring', label: 'شهري', icon: Repeat }];
   return (
@@ -1441,8 +1652,8 @@ const CalendarView = memo(({ data, getAgendaItems, transactions, dispatch, saveH
                         <span className={`text-[10px] px-2 py-0.5 rounded-full font-black ${isIncome ? 'bg-emerald-100 text-emerald-700' : 'bg-orange-100 text-orange-700'}`}>{isIncome ? '💰 دخل' : '💸 التزام'}</span></div></div></div>
                   <div className="flex items-center gap-3">
                     <p className={`font-black text-lg ${isIncome ? 'text-emerald-600' : ''}`}>{fmt(item.amount)}<span className="text-xs font-normal text-slate-500 mr-1">ج.م</span></p>
-                    <button onClick={() => quickPay(item)} title={isIncome ? "تسجيل تحصيل فوري" : "تسجيل سداد معتمد فوراً"} className={`p-3 rounded-xl no-print ${isIncome ? 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100' : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100'}`}><CheckCircle2 size={18} /></button>
-                    <button onClick={() => { dispatch({ type: 'SET_FORM_MODE', payload: 'add' }); dispatch({ type: 'SET_FORM_DATA', payload: { type: isIncome ? 'income' : 'expense', amount: item.amount, description: item.title, category: isIncome ? 'تكييف محمود' : 'الالتزامات البنكية والتمويلية', date: item.date, method: 'instapay', subType: isIncome ? 'deposit' : 'withdrawal', status: 'pending' } }); dispatch({ type: 'SET_FORM_OPEN', payload: true }); }} title="فتح نموذج التفاصيل" className="p-3 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-100 no-print"><Edit size={18} /></button></div></div></div>); })}
+                    <button onClick={() => quickPay(item)} title={isIncome ? "تسجيل تحصيل فوري" : "تسجيل سداد معتمد فوراً"} className="p-3 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-100 no-print"><CheckCircle2 size={18} /></button>
+                    <button onClick={() => { dispatch({ type: 'SET_FORM_MODE', payload: 'add' }); dispatch({ type: 'SET_FORM_DATA', payload: { type: isIncome ? 'income' : 'expense', amount: item.amount, description: item.title, category: isIncome ? 'تكييف محمود' : 'الالتزامات البنكية والتمويلية', date: item.date, method: 'instapay', subType: isIncome ? 'deposit' : 'withdrawal', status: 'pending' } }); dispatch({ type: 'SET_FORM_OPEN', payload: true }); }} className="p-3 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-100 no-print"><Edit size={18} /></button></div></div></div>); })}
           </div></div>))}
     </div>
   );
@@ -1472,20 +1683,15 @@ const SettingsView = memo(({ data, accountsData, cards, dispatch, saveHistory, a
     });
     dispatch({ type: 'UPDATE_ACCOUNTS', payload: cleaned });
     dispatch({ type: 'UPDATE_CARDS', payload: localCards.map(c => ({ ...c, limit: safeNumber(c.limit), openingDebt: safeNumber(c.openingDebt) })) });
-    addNotification({ type: 'success', title: '✅ تم الحفظ', message: 'الحسابات المُصحَّحة ثُبِّتت برصيد اليوم' });
+    addNotification({ type: 'success', title: '✅ تم الحفظ' });
     setHasChanges(false);
   };
 
   const handleDriveConnect = async () => {
     setDriveBusy(true); setDriveStatus('جاري الاتصال...');
-    try {
-      await ensureDriveToken();
-      setDriveStatus('✅ تم الاتصال بحساب Google بنجاح');
-      addNotification({ type: 'success', title: 'Drive متصل' });
-    } catch (e) {
-      setDriveStatus('❌ فشل الاتصال: ' + e.message);
-      addNotification({ type: 'error', title: 'فشل الاتصال بـ Drive', message: e.message });
-    } finally { setDriveBusy(false); }
+    try { await ensureDriveToken(); setDriveStatus('✅ تم الاتصال بحساب Google'); addNotification({ type: 'success', title: 'Drive متصل' }); }
+    catch (e) { setDriveStatus('❌ فشل: ' + e.message); addNotification({ type: 'error', title: 'فشل', message: e.message }); }
+    finally { setDriveBusy(false); }
   };
 
   const handleDriveBackupNow = async () => {
@@ -1496,21 +1702,15 @@ const SettingsView = memo(({ data, accountsData, cards, dispatch, saveHistory, a
       localStorage.setItem(AUTO_BACKUP_LS_KEY, String(Date.now()));
       setDriveStatus(`✅ تم الرفع: ${result.name}`);
       addNotification({ type: 'success', title: '✅ نسخة سحابية', message: result.name });
-    } catch (e) {
-      setDriveStatus('❌ ' + e.message);
-      addNotification({ type: 'error', title: 'فشل الرفع', message: e.message });
-    } finally { setDriveBusy(false); }
+    } catch (e) { setDriveStatus('❌ ' + e.message); addNotification({ type: 'error', title: 'فشل الرفع', message: e.message }); }
+    finally { setDriveBusy(false); }
   };
 
   const handleDriveRestore = async () => {
     setDriveBusy(true); setDriveStatus('جاري جلب القائمة...');
     try {
       const files = await listDriveBackups();
-      if (files.length === 0) {
-        setDriveStatus('لا توجد نسخ على Drive بعد');
-        addNotification({ type: 'info', title: 'لا توجد نسخ' });
-        setDriveBusy(false); return;
-      }
+      if (files.length === 0) { setDriveStatus('لا توجد نسخ'); addNotification({ type: 'info', title: 'لا توجد نسخ' }); setDriveBusy(false); return; }
       const labels = files.slice(0, 10).map((f, i) => `${i + 1}) ${f.name} — ${(safeNumber(f.size)/1024).toFixed(1)}KB`).join('\n');
       const choice = prompt(`اختر رقم النسخة للاستعادة:\n\n${labels}\n\n(اكتب رقم 1 لاستعادة الأحدث)`, '1');
       if (!choice) { setDriveBusy(false); setDriveStatus(''); return; }
@@ -1518,37 +1718,26 @@ const SettingsView = memo(({ data, accountsData, cards, dispatch, saveHistory, a
       const file = files[idx];
       setDriveStatus(`جاري تنزيل ${file.name}...`);
       const payload = await downloadBackupFromDrive(file.id);
-      if (!payload?.data) throw new Error('الملف لا يحتوي على بيانات صالحة');
-      dispatch({ type: 'SHOW_CONFIRM', danger: true, title: '⚠️ استعادة نسخة',
-        message: `سيتم استبدال كل بياناتك الحالية بنسخة:\n${file.name}\n\nهل أنت متأكد؟`,
-        onConfirm: () => {
-          saveHistory();
-          dispatch({ type: 'SET_DATA', payload: migrateData(payload.data) });
-          if (payload.budgets) dispatch({ type: 'SET_BUDGETS', payload: payload.budgets });
-          addNotification({ type: 'success', title: '✅ تمت الاستعادة' });
-          setDriveStatus('✅ تمت الاستعادة — أعد تحميل الصفحة للاطمئنان');
-          dispatch({ type: 'HIDE_CONFIRM' });
-        },
-        onCancel: () => { setDriveStatus('تم الإلغاء'); dispatch({ type: 'HIDE_CONFIRM' }); }
-      });
-    } catch (e) {
-      setDriveStatus('❌ ' + e.message);
-      addNotification({ type: 'error', title: 'فشل الاستعادة', message: e.message });
-    } finally { setDriveBusy(false); }
+      if (!payload?.data) throw new Error('الملف لا يحتوي على بيانات');
+      dispatch({ type: 'SHOW_CONFIRM', danger: true, title: '⚠️ استعادة نسخة', message: `سيتم استبدال كل بياناتك بنسخة:\n${file.name}\n\nهل أنت متأكد؟`,
+        onConfirm: () => { saveHistory(); dispatch({ type: 'SET_DATA', payload: migrateData(payload.data) }); if (payload.budgets) dispatch({ type: 'SET_BUDGETS', payload: payload.budgets }); addNotification({ type: 'success', title: '✅ تمت الاستعادة' }); setDriveStatus('✅ تمت الاستعادة'); dispatch({ type: 'HIDE_CONFIRM' }); },
+        onCancel: () => { setDriveStatus('تم الإلغاء'); dispatch({ type: 'HIDE_CONFIRM' }); } });
+    } catch (e) { setDriveStatus('❌ ' + e.message); addNotification({ type: 'error', title: 'فشل', message: e.message }); }
+    finally { setDriveBusy(false); }
   };
 
   const handleReset = () => dispatch({ type: 'SHOW_CONFIRM', danger: true, title: 'استرجاع الافتراضي', message: 'سيتم إرجاع كل الأرصدة والبطاقات لقيمها الأصلية', onConfirm: () => { setLocalAccounts(JSON.parse(JSON.stringify(DEFAULT_ACCOUNTS))); setLocalCards(DEFAULT_CARDS.map(c => ({ ...c }))); setHasChanges(true); dispatch({ type: 'HIDE_CONFIRM' }); }, onCancel: () => dispatch({ type: 'HIDE_CONFIRM' }) });
 
   const handleFreshStart = () => {
     dispatch({ type: 'SHOW_CONFIRM', danger: true, title: '🌱 بداية جديدة',
-      message: 'سيتم:\n• مسح كل المعاملات والافتتاحيات المحفوظة\n• تصفير الأرصدة الخمسة\n• تخبيز تقدم القروض تلقائياً\n• تصفير ديون البطاقات\n• إبقاء الالتزامات المتكررة والتخطيط\n\n⚠️ صدّر نسخة احتياطية أولاً!',
+      message: 'سيتم:\n• مسح كل المعاملات\n• تصفير الأرصدة\n• تخبيز تقدم القروض\n• تصفير ديون البطاقات\n\n⚠️ صدّر نسخة احتياطية أولاً!',
       onConfirm: () => {
         saveHistory();
         const zeroed = {};
         ACCOUNT_KEYS.forEach(k => { zeroed[k] = { ...(accountsData[k] || {}), balance: 0, lastUpdated: getLocalISODate() }; });
         const bakedLoans = (data.loans || []).map(l => ({ ...l, prePaidAmount: Math.max(0, safeNumber(l.totalAmount) - safeNumber(l.remaining)) }));
         dispatch({ type: 'SET_DATA', payload: { ...data, transactions: [], closedMonths: [], monthlySnapshots: {}, accountsData: zeroed, loans: bakedLoans, cards: (data.cards || []).map(c => ({ ...c, openingDebt: 0, availableBalance: safeNumber(c.limit) })) } });
-        addNotification({ type: 'success', title: '🌱 تم التصفير', message: 'انتظر 10 ثوانٍ (مزامنة السحابة) ثم أدخل الأرصدة الحقيقية' });
+        addNotification({ type: 'success', title: '🌱 تم التصفير' });
         dispatch({ type: 'HIDE_CONFIRM' });
       }, onCancel: () => dispatch({ type: 'HIDE_CONFIRM' }) });
   };
@@ -1597,39 +1786,27 @@ const SettingsView = memo(({ data, accountsData, cards, dispatch, saveHistory, a
                   <div><label className="block text-[11px] font-bold text-slate-500 mb-1">يوم الاستحقاق</label><input type="text" value={card.dueDate} onChange={e => handleCardChange(card.id, 'dueDate', e.target.value)} className="input-field text-center text-sm py-2" /></div></div></div></div>); })}
         </div></div>)}
 
-      {/* ✅ Google Drive Backup */}
       <div className="glass p-6 rounded-2xl border-2 border-blue-200 dark:border-blue-900/50">
         <div className="flex items-center gap-3 mb-5">
           <div className="p-3 bg-blue-100 dark:bg-blue-900/30 text-blue-600 rounded-xl"><Cloud size={24} /></div>
           <div>
             <h3 className="font-black text-lg">النسخ الاحتياطي — Google Drive</h3>
-            <p className="text-xs text-slate-500 font-bold mt-1">نسخة سحابية كاملة داخل مجلد "{DRIVE_FOLDER_NAME}" • نسخ تلقائي كل 24 ساعة</p>
+            <p className="text-xs text-slate-500 font-bold mt-1">نسخة سحابية داخل مجلد "{DRIVE_FOLDER_NAME}" • نسخ تلقائي كل 24 ساعة</p>
           </div>
         </div>
         <div className="flex flex-wrap gap-3">
-          <button type="button" onClick={handleDriveConnect} disabled={driveBusy}
-            className="gradient-bg-primary text-white px-5 py-3 rounded-xl font-bold flex items-center gap-2 active:scale-95 disabled:opacity-50">
-            <Cloud size={18} /> تفعيل Drive
-          </button>
-          <button type="button" onClick={handleDriveBackupNow} disabled={driveBusy}
-            className="gradient-bg-success text-white px-5 py-3 rounded-xl font-bold flex items-center gap-2 active:scale-95 disabled:opacity-50">
-            <Upload size={18} /> نسخة الآن
-          </button>
-          <button type="button" onClick={handleDriveRestore} disabled={driveBusy}
-            className="gradient-bg-warning text-white px-5 py-3 rounded-xl font-bold flex items-center gap-2 active:scale-95 disabled:opacity-50">
-            <Download size={18} /> استعادة نسخة
-          </button>
+          <button type="button" onClick={handleDriveConnect} disabled={driveBusy} className="gradient-bg-primary text-white px-5 py-3 rounded-xl font-bold flex items-center gap-2 active:scale-95 disabled:opacity-50"><Cloud size={18} /> تفعيل Drive</button>
+          <button type="button" onClick={handleDriveBackupNow} disabled={driveBusy} className="gradient-bg-success text-white px-5 py-3 rounded-xl font-bold flex items-center gap-2 active:scale-95 disabled:opacity-50"><Upload size={18} /> نسخة الآن</button>
+          <button type="button" onClick={handleDriveRestore} disabled={driveBusy} className="gradient-bg-warning text-white px-5 py-3 rounded-xl font-bold flex items-center gap-2 active:scale-95 disabled:opacity-50"><Download size={18} /> استعادة نسخة</button>
         </div>
-        {driveStatus && (
-          <p className="text-xs font-bold mt-3 text-slate-600 dark:text-slate-300 whitespace-pre-line">{driveStatus}</p>
-        )}
+        {driveStatus && (<p className="text-xs font-bold mt-3 text-slate-600 dark:text-slate-300 whitespace-pre-line">{driveStatus}</p>)}
       </div>
 
       <div className="glass p-6 rounded-2xl flex flex-wrap justify-between items-center gap-4 border-2 border-amber-200 dark:border-amber-900/50">
-        <div className="flex items-center gap-3"><ShieldAlert size={20} className="text-amber-500" /><div><p className="font-black text-sm">إجراءات احتياطية</p><p className="text-xs text-slate-500 font-bold">استرجع القيم الافتراضية، أو ابدأ دفتراً نظيفاً</p></div></div>
+        <div className="flex items-center gap-3"><ShieldAlert size={20} className="text-amber-500" /><div><p className="font-black text-sm">إجراءات احتياطية</p><p className="text-xs text-slate-500 font-bold">استرجع الافتراضي أو ابدأ دفتراً نظيفاً</p></div></div>
         <div className="flex gap-2 flex-wrap">
           <button onClick={handleReset} className="gradient-bg-warning text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 active:scale-95"><RotateCcw size={18} /> استرجاع الافتراضي</button>
-          <button onClick={handleFreshStart} className="gradient-bg-danger text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 active:scale-95"><Trash2 size={18} /> بداية جديدة (تصفير شامل)</button>
+          <button onClick={handleFreshStart} className="gradient-bg-danger text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 active:scale-95"><Trash2 size={18} /> بداية جديدة</button>
         </div>
       </div>
     </div>
@@ -1662,13 +1839,12 @@ const EnhancedSidebar = memo(({ activeTab, dispatch, canUndo, onUndo }) => (
   <aside className="w-80 glass hidden lg:flex flex-col p-6 z-40 relative no-print">
     <div className="flex items-center gap-4 mb-8 p-4 rounded-2xl"><div className="gradient-bg-primary p-3 rounded-2xl text-white shadow-lg"><Wallet size={28} /></div><div><h2 className="font-black text-xl">المحفظة الذكية</h2><p className="text-xs text-slate-500 font-bold">V68 Pro</p></div></div>
     <nav className="space-y-2 flex-1 scroll-hide overflow-y-auto">
-      {[{ id: 'dashboard', label: 'لوحة التحكم', icon: LayoutDashboard, color: 'text-blue-500' }, { id: 'transactions', label: 'سجل المعاملات', icon: ArrowUpRight, color: 'text-emerald-500' }, { id: 'categories', label: 'الفئات والميزانية', icon: Layers, color: 'text-purple-500' }, { id: 'loans', label: 'القروض والمستحقات', icon: Banknote, color: 'text-red-500' }, { id: 'cards', label: 'البطاقات والمحافظ', icon: CreditCard, color: 'text-amber-500' }, { id: 'planning', label: 'التخطيط الشهري', icon: Table, color: 'text-cyan-500' }, { id: 'planner', label: 'المخطط الاستراتيجي', icon: Target, color: 'text-indigo-500' }, { id: 'calendar', label: 'الأجندة والمواعيد', icon: CalendarDays, color: 'text-pink-500' }, { id: 'duplicates', label: 'كشف المكررات', icon: Filter, color: 'text-rose-500' }, { id: 'settings', label: 'الإعدادات', icon: Sliders, color: 'text-slate-500' }].map(item => (
+      {[{ id: 'dashboard', label: 'لوحة التحكم', icon: LayoutDashboard, color: 'text-blue-500' }, { id: 'transactions', label: 'سجل المعاملات', icon: ArrowUpRight, color: 'text-emerald-500' }, { id: 'categories', label: 'الفئات والميزانية', icon: Layers, color: 'text-purple-500' }, { id: 'loans', label: 'القروض والمستحقات', icon: Banknote, color: 'text-red-500' }, { id: 'cards', label: 'البطاقات والمحافظ', icon: CreditCard, color: 'text-amber-500' }, { id: 'planning', label: 'التخطيط الشهري', icon: Table, color: 'text-cyan-500' }, { id: 'planner', label: 'المخطط الاستراتيجي', icon: Target, color: 'text-indigo-500' }, { id: 'forecast', label: 'توقع السيولة', icon: LineChart, color: 'text-teal-500' }, { id: 'calendar', label: 'الأجندة والمواعيد', icon: CalendarDays, color: 'text-pink-500' }, { id: 'duplicates', label: 'كشف المكررات', icon: Filter, color: 'text-rose-500' }, { id: 'settings', label: 'الإعدادات', icon: Sliders, color: 'text-slate-500' }].map(item => (
         <button key={item.id} type="button" onClick={() => dispatch({ type: 'SET_ACTIVE_TAB', payload: item.id })} className={`w-full flex items-center gap-4 px-4 py-3 rounded-xl transition-all font-medium ${activeTab === item.id ? 'gradient-bg-primary text-white shadow-lg' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50'}`}>
           <item.icon size={20} className={activeTab === item.id ? 'text-white' : item.color} /><span className="text-sm">{item.label}</span>
           {activeTab === item.id && <div className="ml-auto w-2 h-2 bg-white rounded-full animate-pulse" />}</button>))}
     </nav>
-    <button onClick={onUndo} disabled={!canUndo} className={`mt-4 w-full py-3 rounded-xl font-bold flex items-center justify-center gap-2 ${canUndo ? 'bg-amber-100 text-amber-700 hover:bg-amber-200' : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-600'}`}><Undo2 size={18} /> تراجع عن آخر عملية</button>
-    <div className="mt-4 p-4 rounded-2xl bg-slate-50/50 dark:bg-slate-800/30"><h4 className="text-sm font-bold text-slate-500 mb-3">اختصارات</h4><div className="space-y-2 text-xs text-slate-500"><div className="flex justify-between"><span>حفظ النموذج</span><span className="kbd">Ctrl+S</span></div><div className="flex justify-between"><span>تراجع</span><span className="kbd">Ctrl+Z</span></div><div className="flex justify-between"><span>إغلاق</span><span className="kbd">Esc</span></div><div className="flex justify-between"><span>البحث</span><span className="kbd">Ctrl+K</span></div></div></div>
+    <button onClick={onUndo} disabled={!canUndo} className={`mt-4 w-full py-3 rounded-xl font-bold flex items-center justify-center gap-2 ${canUndo ? 'bg-amber-100 text-amber-700 hover:bg-amber-200' : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-600'}`}><Undo2 size={18} /> تراجع</button>
   </aside>
 ));
 
@@ -1676,7 +1852,7 @@ const ProfessionalHeader = memo(({ isDarkMode, dispatch, canUndo }) => (
   <header className="flex flex-col md:flex-row justify-between items-center gap-6 mb-8">
     <div className="flex-1"><div className="flex items-center gap-4"><div className="gradient-bg-primary p-3 rounded-2xl text-white shadow-lg"><Wallet size={28} /></div><div><h1 className="text-3xl font-black">محفظتي المالية</h1><p className="text-sm text-slate-500 font-medium mt-1">إدارة مالية ذكية • V68 Pro</p></div></div></div>
     <div className="flex flex-wrap gap-3">
-      <button type="button" onClick={() => dispatch({ type: 'UNDO' })} disabled={!canUndo} aria-label="تراجع" className={`px-4 py-3 rounded-xl font-bold shadow-md flex items-center gap-2 ${canUndo ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'}`}><Undo2 size={20} /> تراجع</button>
+      <button type="button" onClick={() => dispatch({ type: 'UNDO' })} disabled={!canUndo} className={`px-4 py-3 rounded-xl font-bold shadow-md flex items-center gap-2 ${canUndo ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'}`}><Undo2 size={20} /> تراجع</button>
       <button type="button" onClick={() => dispatch({ type: 'SET_AI_MODAL_OPEN', payload: true })} className="gradient-bg-primary text-white px-6 py-3 rounded-xl font-bold shadow-lg flex items-center gap-2"><Sparkles size={20} /> المساعد</button>
       <div className="flex bg-white dark:bg-slate-800 p-1 rounded-xl shadow-md">
         <button type="button" aria-label="فاتح" onClick={() => dispatch({ type: 'TOGGLE_DARK_MODE', payload: false })} className={`p-3 rounded-lg ${!isDarkMode ? 'bg-blue-50 text-blue-600' : 'text-slate-500'}`}><Sun size={20} /></button>
@@ -1788,8 +1964,7 @@ function dataReducer(state, action) {
 }
 
 /* ===================== Google Drive Backup ===================== */
-/* ⚠️ استبدل القيمة التالية بـ Client ID من Google Cloud Console */
-const DRIVE_CLIENT_ID = '190006477168-oofkt9ovmcvefusimkqo0lq5n71j9lph.apps.googleusercontent.com';
+const DRIVE_CLIENT_ID = '190006477168-ooft9ovmcvefusimkqo0lq5n71j9lph.apps.googleusercontent.com';
 const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
 const DRIVE_FOLDER_NAME = 'Finance Backups';
 
@@ -1800,11 +1975,7 @@ let _driveTokenExpiry = 0;
 const initDriveTokenClient = () => {
   if (_driveTokenClient) return _driveTokenClient;
   if (!window.google?.accounts?.oauth2) throw new Error('Google Identity Services لم يتم تحميله بعد');
-  _driveTokenClient = window.google.accounts.oauth2.initTokenClient({
-    client_id: DRIVE_CLIENT_ID,
-    scope: DRIVE_SCOPE,
-    callback: () => {}
-  });
+  _driveTokenClient = window.google.accounts.oauth2.initTokenClient({ client_id: DRIVE_CLIENT_ID, scope: DRIVE_SCOPE, callback: () => {} });
   return _driveTokenClient;
 };
 
@@ -1829,18 +2000,11 @@ const ensureDriveToken = async () => {
 const getOrCreateBackupFolder = async () => {
   const token = await ensureDriveToken();
   const q = encodeURIComponent(`mimeType='application/vnd.google-apps.folder' and name='${DRIVE_FOLDER_NAME}' and trashed=false`);
-  const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)&spaces=drive`, {
-    headers: { Authorization: `Bearer ${token}` }
-  });
+  const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)&spaces=drive`, { headers: { Authorization: `Bearer ${token}` } });
   if (!res.ok) throw new Error('فشل قراءة المجلدات: ' + res.status);
   const data = await res.json();
   if (data.files && data.files.length > 0) return data.files[0].id;
-
-  const createRes = await fetch('https://www.googleapis.com/drive/v3/files', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name: DRIVE_FOLDER_NAME, mimeType: 'application/vnd.google-apps.folder' })
-  });
+  const createRes = await fetch('https://www.googleapis.com/drive/v3/files', { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ name: DRIVE_FOLDER_NAME, mimeType: 'application/vnd.google-apps.folder' }) });
   if (!createRes.ok) throw new Error('فشل إنشاء المجلد: ' + createRes.status);
   const created = await createRes.json();
   return created.id;
@@ -1852,15 +2016,8 @@ const uploadBackupToDrive = async (payload, fileName) => {
   const name = fileName || `finance_backup_${getLocalISODate()}_${Date.now()}.json`;
   const metadata = { name, parents: [folderId], mimeType: 'application/json' };
   const boundary = '----V68DriveBoundary' + Date.now();
-  const body =
-    `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n` +
-    `--${boundary}\r\nContent-Type: application/json\r\n\r\n${JSON.stringify(payload)}\r\n` +
-    `--${boundary}--`;
-  const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,size,createdTime', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': `multipart/related; boundary=${boundary}` },
-    body
-  });
+  const body = `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n--${boundary}\r\nContent-Type: application/json\r\n\r\n${JSON.stringify(payload)}\r\n--${boundary}--`;
+  const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,size,createdTime', { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': `multipart/related; boundary=${boundary}` }, body });
   if (!res.ok) throw new Error('فشل الرفع: ' + res.status);
   return await res.json();
 };
@@ -1869,9 +2026,7 @@ const listDriveBackups = async () => {
   const token = await ensureDriveToken();
   const folderId = await getOrCreateBackupFolder();
   const q = encodeURIComponent(`'${folderId}' in parents and trashed=false and mimeType='application/json'`);
-  const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,size,createdTime)&orderBy=createdTime desc&pageSize=50`, {
-    headers: { Authorization: `Bearer ${token}` }
-  });
+  const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,size,createdTime)&orderBy=createdTime desc&pageSize=50`, { headers: { Authorization: `Bearer ${token}` } });
   if (!res.ok) throw new Error('فشل جلب القائمة: ' + res.status);
   const data = await res.json();
   return data.files || [];
@@ -1879,9 +2034,7 @@ const listDriveBackups = async () => {
 
 const downloadBackupFromDrive = async (fileId) => {
   const token = await ensureDriveToken();
-  const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
-    headers: { Authorization: `Bearer ${token}` }
-  });
+  const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, { headers: { Authorization: `Bearer ${token}` } });
   if (!res.ok) throw new Error('فشل التنزيل: ' + res.status);
   return await res.json();
 };
@@ -1941,7 +2094,6 @@ function App() {
     return () => unsub();
   }, [isAuthenticated]);
 
-  /* ✅ Auto Backup كل 24 ساعة */
   useEffect(() => {
     if (!isAuthenticated || !data) return;
     const DAY_MS = 24 * 60 * 60 * 1000;
@@ -1952,9 +2104,7 @@ function App() {
         await uploadBackupToDrive({ data, budgets, exportedAt: new Date().toISOString(), auto: true });
         localStorage.setItem(AUTO_BACKUP_LS_KEY, String(Date.now()));
         console.log('[Auto Backup] ✅ رُفعت نسخة تلقائية إلى Drive');
-      } catch (e) {
-        console.warn('[Auto Backup] تخطي:', e.message);
-      }
+      } catch (e) { console.warn('[Auto Backup] تخطي:', e.message); }
     };
     const t = setTimeout(maybeAutoBackup, 30000);
     const interval = setInterval(maybeAutoBackup, 6 * 60 * 60 * 1000);
@@ -2014,81 +2164,36 @@ function App() {
 
   const chartData = useMemo(() => getMonthsForYear(selectedYear).map(m => ({ name: m, دخل: transactions.filter(t => t.month === m && (t.year || 2026) === selectedYear && t.type === 'income').reduce((a, c) => a + safeNumber(c.amount), 0), مصروف: transactions.filter(t => t.month === m && (t.year || 2026) === selectedYear && t.type === 'expense').reduce((a, c) => a + safeNumber(c.amount), 0) })), [transactions, selectedYear]);
 
-  /* ✅ محرك موحد: القروض + المستحقات + التوليد التلقائي لمسحوبات هاني */
   const updatedLoans = useMemo(() => {
     const map = transactions.reduce((acc, t) => {
       if (t.linkedLoanId && t.status === 'paid') acc[t.linkedLoanId] = (acc[t.linkedLoanId] || 0) + safeNumber(t.amount);
       return acc;
     }, {});
-
-    /* 1) القروض العادية (مديونيات) */
-    const regular = loans.filter(l => !l.autoMonthly && !l.isReceivable).map(l => ({
-      ...l,
-      isReceivable: false,
-      totalPaid: safeNumber(l.prePaidAmount) + (map[l.id] || 0),
-      remaining: Math.max(0, safeNumber(l.totalAmount) - (safeNumber(l.prePaidAmount) + (map[l.id] || 0)))
-    }));
-
-    /* 2) المستحقات لنا (مثل: تكييف محمود) */
-    const receivables = loans.filter(l => l.isReceivable).map(l => ({
-      ...l,
-      isReceivable: true,
-      totalPaid: safeNumber(l.prePaidAmount) + (map[l.id] || 0),
-      remaining: Math.max(0, safeNumber(l.totalAmount) - (safeNumber(l.prePaidAmount) + (map[l.id] || 0)))
-    }));
-
-    /* 3) القوالب الشهرية التلقائية (مسحوبات هاني) */
+    const regular = loans.filter(l => !l.autoMonthly && !l.isReceivable).map(l => ({ ...l, isReceivable: false, totalPaid: safeNumber(l.prePaidAmount) + (map[l.id] || 0), remaining: Math.max(0, safeNumber(l.totalAmount) - (safeNumber(l.prePaidAmount) + (map[l.id] || 0))) }));
+    const receivables = loans.filter(l => l.isReceivable).map(l => ({ ...l, isReceivable: true, totalPaid: safeNumber(l.prePaidAmount) + (map[l.id] || 0), remaining: Math.max(0, safeNumber(l.totalAmount) - (safeNumber(l.prePaidAmount) + (map[l.id] || 0))) }));
     const autoMonthly = [];
     const allMonths = YEARS_LIST.flatMap(y => getMonthsForYear(y).map(m => ({ year: y, month: m })));
-
     loans.filter(l => l.autoMonthly).forEach(tpl => {
       allMonths.forEach(({ year, month }) => {
-        const monthTx = transactions.filter(t =>
-          t.category === tpl.category &&
-          t.month === month &&
-          (t.year || 2026) === year &&
-          t.type === 'expense'
-        );
+        const monthTx = transactions.filter(t => t.category === tpl.category && t.month === month && (t.year || 2026) === year && t.type === 'expense');
         if (monthTx.length === 0) return;
-
         const dueDay = safeNumber(tpl.dueDay, 5);
         let dueMonthIdx = getMonthIndex(month) + (tpl.dueNextMonth ? 1 : 0);
         let dueYear = year;
         if (dueMonthIdx > 11) { dueMonthIdx = 0; dueYear++; }
         const dueMonthName = ALL_MONTHS[dueMonthIdx];
         const dueDateISO = `${dueYear}-${String(dueMonthIdx + 1).padStart(2, '0')}-${String(dueDay).padStart(2, '0')}`;
-
         const total = monthTx.reduce((s, t) => s + safeNumber(t.amount), 0);
         const paidCount = monthTx.filter(t => t.status === 'paid').length;
         const compositeId = `auto-${tpl.id}-${year}-${month}`;
         const repayments = safeNumber(map[compositeId]);
-
-        autoMonthly.push({
-          ...tpl,
-          id: compositeId,
-          name: `${tpl.name} - ${month} ${year}`,
-          totalAmount: total,
-          prePaidAmount: 0,
-          monthlyInstallment: 0,
-          remaining: Math.max(0, total - repayments),
-          totalPaid: repayments,
-          dueDate: dueDateISO,
-          dueMonthName,
-          dueYear,
-          dueDay,
-          description: `${monthTx.length} مسحوبة (${paidCount} معتمد) — تستحق ${dueDay} ${dueMonthName} ${dueYear}`,
-          autoGenerated: true,
-          month,
-          year
-        });
+        autoMonthly.push({ ...tpl, id: compositeId, name: `${tpl.name} - ${month} ${year}`, totalAmount: total, prePaidAmount: 0, monthlyInstallment: 0, remaining: Math.max(0, total - repayments), totalPaid: repayments, dueDate: dueDateISO, dueMonthName, dueYear, dueDay, description: `${monthTx.length} مسحوبة (${paidCount} معتمد) — تستحق ${dueDay} ${dueMonthName} ${dueYear}`, autoGenerated: true, month, year });
       });
     });
-
     const sortedAuto = autoMonthly.sort((a, b) => {
       if (a.year !== b.year) return b.year - a.year;
       return getMonthIndex(b.month) - getMonthIndex(a.month);
     });
-
     return [...sortedAuto, ...receivables, ...regular];
   }, [transactions, loans]);
 
@@ -2132,18 +2237,15 @@ function App() {
     });
   }, [transactions]);
 
-  /* ✅ الأجندة تشمل القيود التلقائية */
   const getAgendaItems = useCallback(() => {
     try {
       const today = new Date(); const cd = today.getDate(); const cm = today.getMonth(); const cy = today.getFullYear();
       const items = [];
-
       cards.forEach(c => {
         const d = parseInt(c.dueDate) || 5; let tm = cm, ty = cy;
         if (d < cd) { tm++; if (tm > 11) { tm = 0; ty++; } }
         items.push({ id: `ag-card-${c.id}`, title: `سداد بطاقة ${c.bank} - ${c.name}`, date: new Date(ty, tm, d).toISOString().split('T')[0], amount: safeNumber(c.openingDebt), type: 'warning', icon: CreditCard, desc: 'استحقاق دوري' });
       });
-
       updatedLoans.forEach(l => {
         if (safeNumber(l.monthlyInstallment) > 0 && l.remaining > 0 && !l.autoGenerated && !l.isReceivable) {
           const d = parseInt(l.dueDay) || 1; let tm = cm, ty = cy;
@@ -2151,33 +2253,15 @@ function App() {
           items.push({ id: `ag-loan-${l.id}`, title: `قسط ${l.name}`, date: new Date(ty, tm, d).toISOString().split('T')[0], amount: safeNumber(l.monthlyInstallment), type: 'danger', icon: Banknote, desc: l.description });
         }
         if (l.autoGenerated && l.remaining > 0 && l.dueDate) {
-          items.push({
-            id: `ag-auto-${l.id}`,
-            title: l.name,
-            date: l.dueDate,
-            amount: l.remaining,
-            type: 'warning',
-            icon: Banknote,
-            desc: l.description
-          });
+          items.push({ id: `ag-auto-${l.id}`, title: l.name, date: l.dueDate, amount: l.remaining, type: 'warning', icon: Banknote, desc: l.description });
         }
       });
-
       recurringItems.forEach(r => {
         const d = parseInt(r.day) || 1; let tm = cm, ty = cy;
         if (d < cd) { tm++; if (tm > 11) { tm = 0; ty++; } }
         const isIncome = r.type === 'income';
-        items.push({
-          id: `ag-rec-${r.id}`,
-          title: r.title,
-          date: new Date(ty, tm, d).toISOString().split('T')[0],
-          amount: safeNumber(r.amount),
-          type: isIncome ? 'success' : 'warning',
-          icon: isIncome ? TrendingUp : Repeat,
-          desc: isIncome ? '💰 دخل شهري متكرر' : 'التزام شهري متكرر'
-        });
+        items.push({ id: `ag-rec-${r.id}`, title: r.title, date: new Date(ty, tm, d).toISOString().split('T')[0], amount: safeNumber(r.amount), type: isIncome ? 'success' : 'warning', icon: isIncome ? TrendingUp : Repeat, desc: isIncome ? '💰 دخل شهري متكرر' : 'التزام شهري متكرر' });
       });
-
       return items.sort((a, b) => new Date(a.date) - new Date(b.date));
     } catch (err) { console.error(err); return []; }
   }, [cards, updatedLoans, recurringItems]);
@@ -2273,7 +2357,7 @@ function App() {
   const handleManualReconciliation = useCallback((walletKey, actualAmount) => {
     const calc = computeBalance(data, walletKey);
     const diff = safeNumber(actualAmount) - calc;
-    if (!actualAmount || Math.abs(diff) < 0.005) { addNotification({ type: 'info', title: 'مطابقة ✅', message: 'الرصيد الحي مطابق تماماً' }); return; }
+    if (!actualAmount || Math.abs(diff) < 0.005) { addNotification({ type: 'info', title: 'مطابقة ✅', message: 'الرصيد مطابق' }); return; }
     const d = new Date(); const txYear = d.getFullYear(), txMonth = ALL_MONTHS[d.getMonth()];
     if (isMonthClosed(data, txYear, txMonth)) { addNotification({ type: 'error', title: 'محظور', message: 'شهر اليوم مغلق' }); return; }
     dispatch({ type: 'SHOW_CONFIRM', danger: false, title: 'تأكيد التسوية', message: `الحساب: ${DEFAULT_ACCOUNTS[walletKey]?.label}\nالمحسوب: ${fmt(calc)}\nالفعلي: ${fmt(safeNumber(actualAmount))}\n\nسيتم إنشاء قيد ${diff > 0 ? 'إيداع' : 'خصم'} ${fmt(Math.abs(diff))} ج.م`, onConfirm: () => { saveHistory(); const tx = { id: 'adj-' + getSafeId(), type: diff > 0 ? 'income' : 'expense', kind: KIND.ADJUSTMENT, category: 'أخرى', amount: Math.abs(diff), description: 'تسوية رصيد يدوية', method: walletKey, date: getLocalISODate(d), month: txMonth, year: txYear, monthIndex: d.getMonth(), subType: diff > 0 ? 'deposit' : 'withdrawal', status: 'paid' }; dispatch({ type: 'UPDATE_TRANSACTIONS', payload: [tx, ...transactions].sort((a, b) => new Date(b.date) - new Date(a.date)) }); addNotification({ type: 'success', title: '✅ تمت التسوية' }); }, onCancel: () => dispatch({ type: 'HIDE_CONFIRM' }) });
@@ -2352,6 +2436,7 @@ function App() {
       case 'cards': return <WalletsAndCardsView cards={cards} buildLedger={buildLedger} expandedLedgers={expandedLedgers} expandedCardsSection={expandedCardsSection} selectedMonth={selectedMonth} selectedYear={selectedYear} dispatch={dispatch} handleDelete={handleDelete} handleAddWalletDeposit={handleAddWalletDeposit} handleAddWalletWithdrawal={handleAddWalletWithdrawal} exportWalletCSV={exportWalletCSV} walletVisibility={walletVisibility} liveBalances={liveBalances} calculateCardHistory={calculateCardHistory} saveHistory={saveHistory} addNotification={addNotification} />;
       case 'planning': return <MonthlyPlanningView data={data} monthlyPlans={monthlyPlans} cards={cards} loans={updatedLoans} dispatch={dispatch} saveHistory={saveHistory} addNotification={addNotification} />;
       case 'planner': return <PlannerView updatedLoans={updatedLoans} cards={cards} selectedMonth={selectedMonth} selectedYear={selectedYear} monthlyPlans={monthlyPlans} totalLiquidityNow={totalLiquidity} />;
+      case 'forecast': return <LiquidityForecastView data={data} transactions={transactions} cards={cards} updatedLoans={updatedLoans} recurringItems={recurringItems} liveBalances={liveBalances} selectedYear={selectedYear} selectedMonth={selectedMonth} monthlyPlans={monthlyPlans} />;
       case 'calendar': return <CalendarView data={data} getAgendaItems={getAgendaItems} transactions={transactions} dispatch={dispatch} saveHistory={saveHistory} addNotification={addNotification} />;
       case 'duplicates': return <DuplicateDetectionSystem transactions={transactions} data={data} dispatch={dispatch} addNotification={addNotification} saveHistory={saveHistory} />;
       case 'settings': return <SettingsView data={data} accountsData={accountsData} cards={cards} dispatch={dispatch} saveHistory={saveHistory} addNotification={addNotification} walletVisibility={walletVisibility} onToggleVisibility={(k) => dispatch({ type: 'TOGGLE_WALLET_VISIBILITY', payload: k })} />;
@@ -2376,10 +2461,10 @@ function App() {
               <div className="flex justify-between items-start flex-wrap gap-3">
                 <div className="flex items-center gap-3"><BankLogo type={`${card.bank.toLowerCase()}_card`} size={40} /><div><h3 className="text-2xl font-black">{card.bank} - {card.name}</h3><p className="text-sm text-slate-500 font-bold mt-1">{selectedMonth} {selectedYear}</p></div></div>
                 <div className="flex gap-2">
-                  <button type="button" onClick={() => printReport(`كشف ${card.bank} - ${selectedMonth} ${selectedYear}`, cardTx)} className="bg-blue-50 text-blue-600 px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2"><Printer size={18} /> طباعة</button>
+                  <button type="button" onClick={() => printReport(`كشف ${card.bank}`, cardTx)} className="bg-blue-50 text-blue-600 px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2"><Printer size={18} /> طباعة</button>
                   <button type="button" aria-label="إغلاق" onClick={() => dispatch({ type: 'SET_VIEWING_CARD_STATEMENT', payload: null })} className="p-2 hover:bg-red-50 hover:text-red-500 text-slate-500 rounded-xl"><X size={24} /></button></div></div>
               <div className="grid grid-cols-2 gap-4 mt-4">
-                <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl border-r-4 border-amber-500"><p className="text-[11px] font-bold text-slate-500 uppercase">دين بداية الشهر (تقريبي)</p><p className="text-lg font-black">{fmt(monthData?.openingDebt || 0)} ج.م</p></div>
+                <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl border-r-4 border-amber-500"><p className="text-[11px] font-bold text-slate-500 uppercase">دين بداية الشهر</p><p className="text-lg font-black">{fmt(monthData?.openingDebt || 0)} ج.م</p></div>
                 <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl border-r-4 border-blue-500"><p className="text-[11px] font-bold text-slate-500 uppercase">دين نهاية الشهر</p><p className="text-lg font-black text-blue-600">{fmt(monthData?.closingDebt || 0)} ج.م</p></div></div></div>
             <div className="flex-1 overflow-y-auto p-6 scroll-hide" style={{ minHeight: 0 }}>
               <table className="w-full text-right"><thead className="bg-slate-50 dark:bg-slate-800 sticky top-0"><tr><th className="p-4 border-b text-xs">التاريخ</th><th className="p-4 border-b text-xs">الوصف</th><th className="p-4 border-b text-xs">الفئة</th><th className="p-4 border-b text-xs text-left">المبلغ</th></tr></thead>
@@ -2388,7 +2473,7 @@ function App() {
                   {cardTx.length === 0 && <tr><td colSpan="4" className="p-12 text-center text-slate-500">لا توجد عمليات</td></tr>}</tbody></table></div></div></div>);
       })()}
       {!isLocked && (<div className="bottom-nav-container no-print"><div className="scrollable-nav scroll-hide" ref={navRef}>
-        {[{ id: 'dashboard', label: 'الرئيسية', icon: LayoutDashboard }, { id: 'transactions', label: 'المعاملات', icon: ArrowUpRight }, { id: 'cards', label: 'المحافظ', icon: CreditCard }, { id: 'loans', label: 'القروض', icon: Banknote }, { id: 'planning', label: 'التخطيط', icon: Table }, { id: 'planner', label: 'المخطط', icon: Target }, { id: 'calendar', label: 'الأجندة', icon: CalendarDays }, { id: 'duplicates', label: 'المكررات', icon: Filter }, { id: 'settings', label: 'الإعدادات', icon: Sliders }, { id: 'categories', label: 'الفئات', icon: Layers }].map(item => (
+        {[{ id: 'dashboard', label: 'الرئيسية', icon: LayoutDashboard }, { id: 'transactions', label: 'المعاملات', icon: ArrowUpRight }, { id: 'cards', label: 'المحافظ', icon: CreditCard }, { id: 'loans', label: 'القروض', icon: Banknote }, { id: 'planning', label: 'التخطيط', icon: Table }, { id: 'planner', label: 'المخطط', icon: Target }, { id: 'forecast', label: 'التوقع', icon: LineChart }, { id: 'calendar', label: 'الأجندة', icon: CalendarDays }, { id: 'duplicates', label: 'المكررات', icon: Filter }, { id: 'settings', label: 'الإعدادات', icon: Sliders }, { id: 'categories', label: 'الفئات', icon: Layers }].map(item => (
           <button key={item.id} type="button" onClick={() => dispatch({ type: 'SET_ACTIVE_TAB', payload: item.id })} className={`nav-btn ${activeTab === item.id ? 'active' : ''}`}><item.icon size={24} /><span>{item.label}</span></button>))}
         <div className="v-line"></div>
         <button type="button" onClick={handleExportCSV} className="nav-btn text-emerald-600"><FileSpreadsheet size={24} /><span>CSV</span></button>
@@ -2399,7 +2484,7 @@ function App() {
         <button type="button" onClick={() => dispatch({ type: 'SET_IS_LOCKED', payload: true })} className="nav-btn text-amber-500"><Lock size={24} /><span>قفل</span></button>
         <button type="button" onClick={() => { firebase.auth().signOut(); setIsAuthenticated(false); }} className="nav-btn text-red-600"><LogOut size={24} /><span>خروج</span></button>
       </div></div>)}
-      {!isLocked && (<button type="button" aria-label="إضافة عملية" onClick={() => { dispatch({ type: 'SET_FORM_MODE', payload: 'add' }); dispatch({ type: 'SET_FORM_DATA', payload: { type: 'expense', category: '', amount: '', date: getLocalISODate(), method: 'cash', subType: 'withdrawal', status: 'pending' } }); dispatch({ type: 'SET_FORM_OPEN', payload: true }); }} className="fab no-print"><Plus size={32} /></button>)}
+      {!isLocked && (<button type="button" aria-label="إضافة" onClick={() => { dispatch({ type: 'SET_FORM_MODE', payload: 'add' }); dispatch({ type: 'SET_FORM_DATA', payload: { type: 'expense', category: '', amount: '', date: getLocalISODate(), method: 'cash', subType: 'withdrawal', status: 'pending' } }); dispatch({ type: 'SET_FORM_OPEN', payload: true }); }} className="fab no-print"><Plus size={32} /></button>)}
       <EnhancedSidebar activeTab={activeTab} dispatch={dispatch} canUndo={history.length > 0} onUndo={() => dispatch({ type: 'UNDO' })} />
       <main ref={mainContentRef} className="flex-1 overflow-y-auto p-4 lg:p-8 pt-12">
         {isLocked ? (
@@ -2431,7 +2516,7 @@ function App() {
               <div className="grid grid-cols-2 gap-3">
                 <label className={`flex items-center justify-center gap-2 p-3 rounded-xl cursor-pointer border-2 font-bold text-sm ${formData.status !== 'paid' ? 'bg-white border-amber-500 shadow-md text-amber-700 dark:bg-slate-800' : 'border-transparent bg-white/50 text-slate-500'}`}>
                   <input type="radio" name="status" value="pending" className="hidden" checked={formData.status !== 'paid'} onChange={() => dispatch({ type: 'SET_FORM_DATA', payload: { ...formData, status: 'pending' } })} />
-                  <Clock size={18} /><div className="text-right"><div>⏳ معلق</div><div className="text-[11px] opacity-70">لا يؤثر على الرصيد</div></div></label>
+                  <Clock size={18} /><div className="text-right"><div>⏳ معلق</div><div className="text-[11px] opacity-70">لا يؤثر</div></div></label>
                 <label className={`flex items-center justify-center gap-2 p-3 rounded-xl cursor-pointer border-2 font-bold text-sm ${formData.status === 'paid' ? 'bg-white border-emerald-500 shadow-md text-emerald-700 dark:bg-slate-800' : 'border-transparent bg-white/50 text-slate-500'}`}>
                   <input type="radio" name="status" value="paid" className="hidden" checked={formData.status === 'paid'} onChange={() => dispatch({ type: 'SET_FORM_DATA', payload: { ...formData, status: 'paid' } })} />
                   <CheckCircle2 size={18} /><div className="text-right"><div>✅ معتمد</div><div className="text-[11px] opacity-70">يدخل الرصيد</div></div></label></div></div>
@@ -2503,7 +2588,7 @@ function App() {
               <select className="input-field text-sm" value={quickTransferData.from} onChange={e => dispatch({ type: 'SET_QUICK_TRANSFER_DATA', payload: { from: e.target.value } })}>{PAYMENT_METHODS.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}</select>
               <div className="text-blue-300"><ArrowRight size={20} /></div>
               <select className="input-field text-sm" value={quickTransferData.to} onChange={e => dispatch({ type: 'SET_QUICK_TRANSFER_DATA', payload: { to: e.target.value } })}>{PAYMENT_METHODS.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}</select></div>
-            {ACCOUNT_METHOD_IDS.includes(quickTransferData.from) && <p className="text-[11px] text-blue-500 font-bold mt-2">المتاح من المصدر: {fmt(computeBalance(data, quickTransferData.from))} ج.م</p>}</div>
+            {ACCOUNT_METHOD_IDS.includes(quickTransferData.from) && <p className="text-[11px] text-blue-500 font-bold mt-2">المتاح: {fmt(computeBalance(data, quickTransferData.from))} ج.م</p>}</div>
           <input type="text" inputMode="decimal" required className="input-field text-xl font-black text-blue-600" value={quickTransferData.amount} onChange={e => dispatch({ type: 'SET_QUICK_TRANSFER_DATA', payload: { amount: e.target.value } })} placeholder="المبلغ" />
           <button type="submit" className="w-full gradient-bg-primary text-white py-4 rounded-2xl font-bold">تنفيذ التحويل</button></form></div></div>)}
       {isRecurringModalOpen && (<div className="modal-backdrop no-print"><div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl shadow-2xl border border-blue-500/50">
@@ -2519,12 +2604,8 @@ function App() {
           <div><label className="text-xs font-bold text-slate-500 block mb-2">الفئة</label>
             <select className="input-field" value={recurringFormData.category} onChange={e => dispatch({ type: 'SET_RECURRING_FORM_DATA', payload: { ...recurringFormData, category: e.target.value } })}>
               <option value="أخرى">أخرى</option>
-              <optgroup label="💰 دخل">
-                {CATEGORIES.income.map(c => <option key={'i-'+c} value={c}>{c}</option>)}
-              </optgroup>
-              <optgroup label="💸 مصروف">
-                {CATEGORIES.expense.map(c => <option key={'e-'+c} value={c}>{c}</option>)}
-              </optgroup>
+              <optgroup label="💰 دخل">{CATEGORIES.income.map(c => <option key={'i-'+c} value={c}>{c}</option>)}</optgroup>
+              <optgroup label="💸 مصروف">{CATEGORIES.expense.map(c => <option key={'e-'+c} value={c}>{c}</option>)}</optgroup>
             </select></div>
           <button type="submit" className="w-full gradient-bg-primary text-white py-3 rounded-xl font-bold">إضافة</button></form></div></div>)}
     </div>
