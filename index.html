@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>المحفظة المالية - V66 Pro</title>
+<title>المحفظة المالية - V68 Pro</title>
 <meta name="theme-color" content="#0f172a">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -21,7 +21,7 @@ tailwind.config = {
       slideInBottom: { '0%': { opacity: '0', transform: 'translateY(50px)' }, '100%': { opacity: '1', transform: 'translateY(0)' } },
       'bounce-slight': { '0%, 100%': { transform: 'translateY(0)' }, '50%': { transform: 'translateY(-5px)' } },
       'ticker-scroll': { '0%': { transform: 'translateX(0)' }, '100%': { transform: 'translateX(-50%)' } },
-      'spin': { 'to': { transform: 'rotate(360deg)' } },
+      'spin': { to: { transform: 'rotate(360deg)' } },
       'shake': { '0%, 100%': { transform: 'translateX(0)' }, '25%': { transform: 'translateX(-5px)' }, '75%': { transform: 'translateX(5px)' } }
     },
     boxShadow: { 'glass': '0 8px 32px 0 rgba(31, 38, 135, 0.15)', 'classic': '0 -4px 25px rgba(0,0,0,0.1)', 'card-hover': '0 20px 60px -15px rgba(0,0,0,0.15)' }
@@ -62,7 +62,7 @@ body { @apply text-slate-800 transition-colors duration-300 font-sans antialiase
 .bottom-nav-container { position: fixed; bottom: 0; left: 0; right: 0; z-index: 1000; padding-bottom: env(safe-area-inset-bottom); background: rgba(255,255,255,0.96); backdrop-filter: blur(20px); @apply border-t border-slate-200/60 dark:border-slate-800/60 shadow-classic; }
 .dark .bottom-nav-container { background: rgba(15,23,42,0.96); }
 .scrollable-nav { display: flex; align-items: center; gap: 6px; overflow-x: auto; padding: 8px 12px; -webkit-overflow-scrolling: touch; scroll-behavior: smooth; }
-.nav-btn { @apply flex flex-col items-center justify-center min-w-[60px] h-[56px] rounded-2xl text-slate-500 dark:text-slate-500 transition-all duration-200 relative flex-shrink-0; }
+.nav-btn { @apply flex flex-col items-center justify-center min-w-[60px] h-[56px] rounded-2xl text-slate-500 dark:text-slate-400 transition-all duration-200 relative flex-shrink-0; }
 .nav-btn:hover { @apply bg-slate-100 dark:bg-slate-800/50; }
 .nav-btn.active { background: var(--primary-gradient); @apply text-white shadow-md scale-105; }
 .nav-btn span { font-size: 11px; margin-top: 3px; font-weight: 700; white-space: nowrap; }
@@ -102,7 +102,7 @@ body { @apply text-slate-800 transition-colors duration-300 font-sans antialiase
 <div id="root"></div>
 <div id="loading" style="position:fixed;inset:0;background:#0f172a;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;color:white;font-family:'Cairo',sans-serif;">
   <div style="width:60px;height:60px;border:4px solid rgba(255,255,255,0.3);border-radius:50%;border-top-color:#3B82F6;animation:spin 1s linear infinite;"></div>
-  <p style="margin-top:20px;font-weight:bold;">جاري تحميل التطبيق V66...</p>
+  <p style="margin-top:20px;font-weight:bold;">جاري تحميل التطبيق V68...</p>
 </div>
 <script type="text/babel" data-type="module">
 import React, { useState, useMemo, useEffect, useCallback, useReducer, useRef, memo } from 'react';
@@ -123,7 +123,7 @@ if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 
 /* ===================== ثوابت ===================== */
-const CURRENT_ENGINE_VERSION = 3;
+const CURRENT_ENGINE_VERSION = 5;
 const KIND = { OPERATIONAL: 'operational', FINANCIAL: 'financial', ADJUSTMENT: 'adjustment' };
 const KIND_LABELS = { operational: 'تشغيلي', financial: 'تمويلي', adjustment: 'تسوية' };
 
@@ -136,6 +136,10 @@ const getLocalISODate = (d = new Date()) => `${d.getFullYear()}-${String(d.getMo
 const calculateDaysLeft = (d) => { if (!d) return null; try { const t = new Date(); t.setHours(0,0,0,0); const g = new Date(d); g.setHours(0,0,0,0); return Math.ceil((g-t)/86400000); } catch { return null; } };
 const safeNumber = (v, f = 0) => { const n = Number(v); return isNaN(n) || !isFinite(n) ? f : n; };
 
+/* ✅ V67: أدوات اليوم */
+const dayStart = (d) => { const x = new Date(d); x.setHours(0,0,0,0); return x; };
+const endOfToday = () => { const x = new Date(); x.setHours(23,59,59,999); return x; };
+
 const toEnglishDigits = (s) => { if (s === null || s === undefined) return s; const map = { '٠':'0','١':'1','٢':'2','٣':'3','٤':'4','٥':'5','٦':'6','٧':'7','٨':'8','٩':'9','۰':'0','۱':'1','۲':'2','۳':'3','۴':'4','۵':'5','۶':'6','۷':'7','۸':'8','۹':'9' }; return String(s).replace(/[٠-٩۰-۹]/g, d => map[d]); };
 const parseNumberInput = (v) => { const cleaned = toEnglishDigits(v).replace(/[^\d.\-]/g, ''); const n = Number(cleaned); return isNaN(n) ? 0 : n; };
 const fmt = (n, dec = 0) => safeNumber(n).toLocaleString('en-US', { minimumFractionDigits: dec, maximumFractionDigits: dec });
@@ -143,8 +147,8 @@ const fmt = (n, dec = 0) => safeNumber(n).toLocaleString('en-US', { minimumFract
 const makeMonthKey = (year, month) => `${year}-${month}`;
 const parseMonthKey = (key) => { if (!key || typeof key !== 'string' || !key.includes('-')) return null; const [y, ...rest] = key.split('-'); const year = Number(y); if (isNaN(year)) return null; return { year, month: rest.join('-') }; };
 
-const STORAGE_KEY = 'finance_tracker_V66_SECURE';
-const LEGACY_KEYS = ['finance_tracker_V65_SECURE', 'finance_tracker_V64_SECURE', 'finance_tracker_V63_SECURE', 'finance_tracker_V62_SECURE', 'finance_tracker_V61_SECURE'];
+const STORAGE_KEY = 'finance_tracker_V68_SECURE';
+const LEGACY_KEYS = ['finance_tracker_V67_SECURE', 'finance_tracker_V66_SECURE', 'finance_tracker_V65_SECURE', 'finance_tracker_V64_SECURE', 'finance_tracker_V63_SECURE', 'finance_tracker_V62_SECURE', 'finance_tracker_V61_SECURE'];
 const ALL_MONTHS = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
 const YEARS_CONFIG = { 2026: ['سبتمبر','أكتوبر','نوفمبر','ديسمبر'], 2027: ALL_MONTHS, 2028: ALL_MONTHS };
 const YEARS_LIST = [2026, 2027, 2028];
@@ -265,14 +269,14 @@ const invalidateSnapshotsFrom = (snapshots, year, month) => {
   const newSnaps = { ...(snapshots || {}) };
   let invalidated = 0;
   Object.keys(newSnaps).forEach(key => {
-    const parsed = parseMonthKey(key);
-    if (!parsed) { delete newSnaps[key]; invalidated++; return; }
-    if (parsed.year > year || (parsed.year === year && getMonthIndex(parsed.month) >= startIdx)) { delete newSnaps[key]; invalidated++; }
+    const parsedKey = parseMonthKey(key);
+    if (!parsedKey) { delete newSnaps[key]; invalidated++; return; }
+    if (parsedKey.year > year || (parsedKey.year === year && getMonthIndex(parsedKey.month) >= startIdx)) { delete newSnaps[key]; invalidated++; }
   });
   return { snapshots: newSnaps, invalidated };
 };
 
-/* ===================== محرك الأرصدة الموحد — ثنائي الاتجاه (V66) ===================== */
+/* ===================== محرك الأرصدة الموحد — V67 ===================== */
 const getAccountCutoff = (accountsData, key) => {
   const iso = accountsData?.[key]?.lastUpdated;
   if (!iso) return new Date(0);
@@ -280,15 +284,13 @@ const getAccountCutoff = (accountsData, key) => {
   return isNaN(d) ? new Date(0) : d;
 };
 
-/* ✅ V66 — محرك ثنائي الاتجاه:
-   - إذا asOfDate > cutoff (الحاضر): الرصيد = base + كل الحركات بين المرساة والتاريخ المطلوب
-   - إذا asOfDate < cutoff (الماضي): الرصيد = base − كل الحركات الواقعة بين التاريخ المطلوب والمرساة */
+/* ✅ V67 — محرك ثنائي الاتجاه + سقف اليوم */
 const computeBalance = (data, key, asOfDate) => {
   const accountsData = data?.accountsData || DEFAULT_ACCOUNTS;
   const base = safeNumber(accountsData[key]?.balance);
-  const cutoff = getAccountCutoff(accountsData, key);
-  const upper = asOfDate ? new Date(asOfDate) : null;
-  const backward = upper && upper < cutoff;
+  const cutoffDay = dayStart(getAccountCutoff(accountsData, key));
+  const upper = asOfDate ? new Date(asOfDate) : endOfToday();
+  const backward = upper < cutoffDay;
   let bal = base;
   (data?.transactions || []).forEach(t => {
     if (t.status !== 'paid' || t.method !== key) return;
@@ -296,11 +298,8 @@ const computeBalance = (data, key, asOfDate) => {
     if (isNaN(d)) return;
     const amt = safeNumber(t.amount);
     const signed = (t.subType === 'deposit') ? amt : -amt;
-    if (backward) {
-      if (d > upper && d <= cutoff) bal -= signed;
-    } else {
-      if (d > cutoff && (!upper || d <= upper)) bal += signed;
-    }
+    if (backward) { if (d > upper && d < cutoffDay) bal -= signed; }
+    else { if (d >= cutoffDay && d <= upper) bal += signed; }
   });
   return bal;
 };
@@ -357,6 +356,7 @@ const migrateSnapshotsAndClosed = (snapshots, closedMonths) => {
   return { snapshots: snaps, closedMonths: closed };
 };
 
+/* ✅ V68: تطبيع أسماء الشهور — يمنع فقدان قيود بصمت */
 const migrateTransaction = (t) => {
   if (!t) return t;
   const kind = inferKind(t);
@@ -367,6 +367,11 @@ const migrateTransaction = (t) => {
   }
   if (!year) year = 2026;
   if (monthIndex === undefined || monthIndex === null || monthIndex < 0) monthIndex = getMonthIndex(month);
+  /* ✅ تطبيع الشهر — "اكتوبر " → "أكتوبر" */
+  if (monthIndex < 0 && month) {
+    const norm = ALL_MONTHS.find(m => normalizeText(m) === normalizeText(month));
+    if (norm) { month = norm; monthIndex = getMonthIndex(norm); }
+  }
   return { ...t, kind, year, month, monthIndex };
 };
 
@@ -383,7 +388,7 @@ const migrateData = (parsed) => {
   let { snapshots, closedMonths } = migrateSnapshotsAndClosed(parsed.monthlySnapshots, parsed.closedMonths);
   const incomingVersion = safeNumber(parsed.engineVersion, 1);
   if (incomingVersion < CURRENT_ENGINE_VERSION && Object.keys(snapshots).length > 0) {
-    console.warn('[Migration v3] snapshots قديمة أُلغيت — المحرك صار ثنائي الاتجاه');
+    console.warn('[Migration v5] snapshots قديمة أُلغيت — المحرك موحد مع دلالة "بداية اليوم"');
     snapshots = {};
   }
 
@@ -818,7 +823,7 @@ const DashboardView = memo(({ data, financeSnapshot, liveBalances, totalLiquidit
       <QuickBalanceOverview balances={liveBalances} walletVisibility={walletVisibility} onToggleVisibility={onToggleVisibility} />
       <div className={`glass p-6 rounded-2xl border-r-4 ${netPosition >= 0 ? 'border-r-emerald-500' : 'border-r-red-500'}`}>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div><p className="text-xs font-bold text-slate-500 uppercase">إجمالي السيولة (حي)</p><p className="text-2xl font-black text-emerald-600 mt-2">+{fmt(totalLiquidity)}</p><p className="text-[11px] text-slate-500 mt-1">رصيد + قيود معتمدة بعد آخر تحديث</p></div>
+          <div><p className="text-xs font-bold text-slate-500 uppercase">إجمالي السيولة (حي)</p><p className="text-2xl font-black text-emerald-600 mt-2">+{fmt(totalLiquidity)}</p><p className="text-[11px] text-slate-500 mt-1">رصيد + قيود معتمدة حتى نهاية اليوم</p></div>
           <div><p className="text-xs font-bold text-slate-500 uppercase">إجمالي المديونية</p><p className="text-2xl font-black text-red-600 mt-2">-{fmt(grandTotalDebt)}</p><p className="text-[11px] text-slate-500 mt-1">قروض: {fmt(totalLoanDebt)} | بطاقات: {fmt(totalCardDebt)}</p></div>
           <div><p className="text-xs font-bold text-slate-500 uppercase">صافي المركز</p><p className={`text-2xl font-black mt-2 ${netPosition >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>{netPosition >= 0 ? '+' : ''}{fmt(netPosition)}</p><p className={`text-[11px] font-bold mt-1 ${netPosition >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>{netPosition >= 0 ? '✅ وضع آمن' : '⚠️ ديون > سيولة'}</p></div>
         </div>
@@ -841,7 +846,7 @@ const DashboardView = memo(({ data, financeSnapshot, liveBalances, totalLiquidit
       </div>
       <MonthSelector selectedYear={selectedYear} selectedMonth={selectedMonth} onSelectYear={onSelectYear} onSelectMonth={onSelectMonth} className="no-print" />
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
-        <EnhancedStatCard title="الكاش في اليد" amount={net.actualCashInHand} icon={Wallet} subtitle={`افتتاحي الشهر: ${fmt(net.opening)}`} isPrivate={!walletVisibility.cash} color="emerald" />
+        <EnhancedStatCard title="الكاش في اليد" amount={net.actualCashInHand} icon={Wallet} subtitle={`من المحرك — حتى نهاية اليوم`} isPrivate={!walletVisibility.cash} color="emerald" />
         <div className="stat-card border-r-4 border-r-purple-500 hover-lift"><div className="flex justify-between items-start mb-4">
           <div><p className="text-sm font-bold text-slate-500 mb-1">السيولة الشاملة</p><h3 className="text-2xl font-black text-purple-600">{fmt(totalLiquidity)}<span className="text-sm font-medium text-slate-500 mr-1">ج.م</span></h3><p className="text-xs text-slate-500 mt-1">كاش + بنوك + محافظ</p></div>
           <div className="p-3 rounded-xl bg-purple-50 dark:bg-purple-900/20 text-purple-600"><Coins size={24} /></div></div></div>
@@ -1340,7 +1345,7 @@ const SettingsView = memo(({ data, accountsData, cards, dispatch, saveHistory, a
   const handleAccountChange = (key, field, value) => { setLocalAccounts(prev => ({ ...prev, [key]: { ...prev[key], [field]: value } })); setHasChanges(true); };
   const handleCardChange = (id, field, value) => { setLocalCards(prev => prev.map(c => { if (c.id !== id) return c; const u = { ...c, [field]: value }; if (field === 'limit') u.availableBalance = Math.max(0, safeNumber(value) - safeNumber(u.openingDebt)); return u; })); setHasChanges(true); };
 
-  /* ✅ V66 FIX — إذا تغيّر الرصيد → المرساة تصبح اليوم */
+  /* ✅ V67: إذا تغيّر الرصيد → المرساة تصبح اليوم */
   const handleSave = () => {
     saveHistory();
     const cleaned = {}; const today = getLocalISODate();
@@ -1356,6 +1361,23 @@ const SettingsView = memo(({ data, accountsData, cards, dispatch, saveHistory, a
   };
 
   const handleReset = () => dispatch({ type: 'SHOW_CONFIRM', danger: true, title: 'استرجاع الافتراضي', message: 'سيتم إرجاع كل الأرصدة والبطاقات لقيمها الأصلية', onConfirm: () => { setLocalAccounts(JSON.parse(JSON.stringify(DEFAULT_ACCOUNTS))); setLocalCards(DEFAULT_CARDS.map(c => ({ ...c }))); setHasChanges(true); dispatch({ type: 'HIDE_CONFIRM' }); }, onCancel: () => dispatch({ type: 'HIDE_CONFIRM' }) });
+
+  /* ✅ V68: بداية جديدة — تصفير شامل مع خبز تقدم القروض */
+  const handleFreshStart = () => {
+    dispatch({ type: 'SHOW_CONFIRM', danger: true, title: '🌱 بداية جديدة',
+      message: 'سيتم:\n• مسح كل المعاملات والافتتاحيات المحفوظة\n• تصفير الأرصدة الخمسة (ستدخل الحقيقية بعدها)\n• تخبيز تقدم القروض تلقائياً (المتبقي لن يتأثر)\n• تصفير ديون البطاقات\n• إبقاء الالتزامات المتكررة والتخطيط\n\n⚠️ صدّر نسخة احتياطية أولاً!',
+      onConfirm: () => {
+        saveHistory();
+        const zeroed = {};
+        ACCOUNT_KEYS.forEach(k => { zeroed[k] = { ...(accountsData[k] || {}), balance: 0, lastUpdated: getLocalISODate() }; });
+        /* ✅ خبز تقدم القروض قبل مسح معاملاتها */
+        const bakedLoans = (data.loans || []).map(l => ({ ...l, prePaidAmount: Math.max(0, safeNumber(l.totalAmount) - safeNumber(l.remaining)) }));
+        dispatch({ type: 'SET_DATA', payload: { ...data, transactions: [], closedMonths: [], monthlySnapshots: {}, accountsData: zeroed, loans: bakedLoans, cards: (data.cards || []).map(c => ({ ...c, openingDebt: 0, availableBalance: safeNumber(c.limit) })) } });
+        addNotification({ type: 'success', title: '🌱 تم التصفير', message: 'انتظر 10 ثوانٍ (مزامنة السحابة) ثم أدخل الأرصدة الحقيقية من هذه الشاشة' });
+        dispatch({ type: 'HIDE_CONFIRM' });
+      }, onCancel: () => dispatch({ type: 'HIDE_CONFIRM' }) });
+  };
+
   const sections = [{ id: 'accounts', label: 'الحسابات والمحافظ', icon: Wallet }, { id: 'cards', label: 'البطاقات', icon: CreditCard }];
   return (
     <div className="space-y-8 animate-fadeIn pb-24">
@@ -1366,7 +1388,7 @@ const SettingsView = memo(({ data, accountsData, cards, dispatch, saveHistory, a
       <div className="glass p-2 rounded-2xl flex gap-2 no-print">{sections.map(s => { const Icon = s.icon; return <button key={s.id} onClick={() => setActiveSection(s.id)} className={`flex-1 py-4 rounded-xl font-bold flex items-center justify-center gap-3 ${activeSection === s.id ? 'gradient-bg-primary text-white shadow-md' : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'}`}><Icon size={20} /> {s.label}</button>; })}</div>
       {activeSection === 'accounts' && (<div className="space-y-6">
         <div className="glass p-4 rounded-2xl bg-blue-50/50 dark:bg-blue-900/10 text-xs font-bold text-blue-800 dark:text-blue-200 leading-relaxed">
-          📌 <strong>دلالة الرصيد:</strong> الرقم الذي تدخله = رصيدك الفعلي الآن، ويُثبَّت بتاريخ اليوم عند الحفظ. كل الحركات اللاحقة تُضاف فوقه تلقائياً، والحركات السابقة تُحتسب للخلف منه في تقارير الشهور.
+          📌 <strong>دلالة الرصيد (V68):</strong> الرصيد المدخل = <strong>رصيدك قبل حركات يوم آخر التحديث</strong>. الأفضل: صحّح قبل أول حركة في اليوم، أو اطرح حركات يومك من الرقم المدخل. القيود اللاحقة (من يوم المرساة) تُحتسب تلقائياً، والقيود المستقبلية لا تؤثر على الرصيد الحي حتى يحل موعدها.
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {ACCOUNT_KEYS.map(key => { const acc = localAccounts[key] || {}; const Icon = ACCOUNT_ICONS[key] || Wallet; const isVisible = walletVisibility?.[key]; const gradientMap = { cib_savings: 'from-blue-500 to-blue-700', aaib_savings: 'from-red-500 to-red-700', cash: 'from-emerald-500 to-emerald-700', fawry: 'from-yellow-500 to-yellow-700', etisalat: 'from-emerald-500 to-teal-700' }; return (
@@ -1375,9 +1397,9 @@ const SettingsView = memo(({ data, accountsData, cards, dispatch, saveHistory, a
                 <div className="flex items-center gap-3"><Icon size={28} /><h4 className="font-black text-lg">{acc.label || key}</h4></div>
                 <button onClick={() => onToggleVisibility?.(key)} aria-label="إظهار/إخفاء" className="p-2 bg-white/20 rounded-xl hover:bg-white/30">{isVisible ? <EyeOff size={16} /> : <Eye size={16} />}</button></div></div>
               <div className="p-6 space-y-4">
-                <div><label className="block text-xs font-black mb-2 text-slate-500 uppercase">الرصيد الفعلي الآن</label><input type="text" inputMode="decimal" value={acc.balance ?? ''} onChange={e => handleAccountChange(key, 'balance', e.target.value)} className="input-field text-2xl font-black text-blue-600 text-center" /></div>
-                <div><label className="block text-xs font-black mb-2 text-slate-500 uppercase">تاريخ التثبيت (auto)</label><input type="date" value={acc.lastUpdated || ''} onChange={e => handleAccountChange(key, 'lastUpdated', e.target.value)} className="input-field text-center font-bold" /></div>
-                <div className="bg-slate-50 dark:bg-slate-800 p-3 rounded-xl text-center"><p className="text-slate-500 font-bold text-xs mb-1">الرصيد الحي المحسوب</p><p className="font-black text-emerald-600">{fmt(computeBalance({ ...data, accountsData: localAccounts }, key))} ج.م</p></div></div></div>); })}
+                <div><label className="block text-xs font-black mb-2 text-slate-500 uppercase">الرصيد قبل حركات يوم المرساة</label><input type="text" inputMode="decimal" value={acc.balance ?? ''} onChange={e => handleAccountChange(key, 'balance', e.target.value)} className="input-field text-2xl font-black text-blue-600 text-center" /></div>
+                <div><label className="block text-xs font-black mb-2 text-slate-500 uppercase">تاريخ التثبيت (auto = اليوم عند التصحيح)</label><input type="date" value={acc.lastUpdated || ''} onChange={e => handleAccountChange(key, 'lastUpdated', e.target.value)} className="input-field text-center font-bold" /></div>
+                <div className="bg-slate-50 dark:bg-slate-800 p-3 rounded-xl text-center"><p className="text-slate-500 font-bold text-xs mb-1">الرصيد الحي المحسوب (حتى نهاية اليوم)</p><p className="font-black text-emerald-600">{fmt(computeBalance({ ...data, accountsData: localAccounts }, key))} ج.م</p></div></div></div>); })}
         </div></div>)}
       {activeSection === 'cards' && (<div className="space-y-6">
         <div className="glass p-6 rounded-2xl border-r-4 border-r-purple-500"><div className="flex items-center gap-3"><div className="p-3 bg-purple-100 dark:bg-purple-900/30 text-purple-600 rounded-xl"><CreditCard size={24} /></div><div><h3 className="font-black text-lg">البطاقات — نقاط تثبيت بنكية</h3><p className="text-xs text-slate-500 font-bold mt-1">حدّث "المديونية" من كشف البنك شهرياً — هي مصدر الأرقام في كل الشاشات</p></div></div></div>
@@ -1399,9 +1421,14 @@ const SettingsView = memo(({ data, accountsData, cards, dispatch, saveHistory, a
                   <div><label className="block text-[11px] font-bold text-slate-500 mb-1">الانتهاء</label><input type="text" value={card.expiry} onChange={e => handleCardChange(card.id, 'expiry', e.target.value)} className="input-field text-center text-sm py-2" /></div>
                   <div><label className="block text-[11px] font-bold text-slate-500 mb-1">يوم الاستحقاق</label><input type="text" value={card.dueDate} onChange={e => handleCardChange(card.id, 'dueDate', e.target.value)} className="input-field text-center text-sm py-2" /></div></div></div></div>); })}
         </div></div>)}
-      <div className="glass p-6 rounded-2xl flex flex-wrap justify-between items-center gap-4">
-        <div className="flex items-center gap-3"><ShieldAlert size={20} className="text-amber-500" /><div><p className="font-black text-sm">إجراءات احتياطية</p><p className="text-xs text-slate-500 font-bold">استرجع القيم الافتراضية</p></div></div>
-        <button onClick={handleReset} className="gradient-bg-warning text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 active:scale-95"><RotateCcw size={18} /> استرجاع الافتراضي</button></div></div>
+      <div className="glass p-6 rounded-2xl flex flex-wrap justify-between items-center gap-4 border-2 border-amber-200 dark:border-amber-900/50">
+        <div className="flex items-center gap-3"><ShieldAlert size={20} className="text-amber-500" /><div><p className="font-black text-sm">إجراءات احتياطية</p><p className="text-xs text-slate-500 font-bold">استرجع القيم الافتراضية، أو ابدأ دفتراً نظيفاً</p></div></div>
+        <div className="flex gap-2 flex-wrap">
+          <button onClick={handleReset} className="gradient-bg-warning text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 active:scale-95"><RotateCcw size={18} /> استرجاع الافتراضي</button>
+          <button onClick={handleFreshStart} className="gradient-bg-danger text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 active:scale-95"><Trash2 size={18} /> بداية جديدة (تصفير شامل)</button>
+        </div>
+      </div>
+    </div>
   );
 });
 
@@ -1427,10 +1454,10 @@ const ProfessionalTicker = memo(({ updatedLoans, cards, liveBalances, walletVisi
 
 const EnhancedSidebar = memo(({ activeTab, dispatch, canUndo, onUndo }) => (
   <aside className="w-80 glass hidden lg:flex flex-col p-6 z-40 relative no-print">
-    <div className="flex items-center gap-4 mb-8 p-4 rounded-2xl"><div className="gradient-bg-primary p-3 rounded-2xl text-white shadow-lg"><Wallet size={28} /></div><div><h2 className="font-black text-xl">المحفظة الذكية</h2><p className="text-xs text-slate-500 font-bold">V66 Pro</p></div></div>
+    <div className="flex items-center gap-4 mb-8 p-4 rounded-2xl"><div className="gradient-bg-primary p-3 rounded-2xl text-white shadow-lg"><Wallet size={28} /></div><div><h2 className="font-black text-xl">المحفظة الذكية</h2><p className="text-xs text-slate-500 font-bold">V68 Pro</p></div></div>
     <nav className="space-y-2 flex-1 scroll-hide overflow-y-auto">
       {[{ id: 'dashboard', label: 'لوحة التحكم', icon: LayoutDashboard, color: 'text-blue-500' }, { id: 'transactions', label: 'سجل المعاملات', icon: ArrowUpRight, color: 'text-emerald-500' }, { id: 'categories', label: 'الفئات والميزانية', icon: Layers, color: 'text-purple-500' }, { id: 'loans', label: 'القروض والديون', icon: Banknote, color: 'text-red-500' }, { id: 'cards', label: 'البطاقات والمحافظ', icon: CreditCard, color: 'text-amber-500' }, { id: 'planning', label: 'التخطيط الشهري', icon: Table, color: 'text-cyan-500' }, { id: 'planner', label: 'المخطط الاستراتيجي', icon: Target, color: 'text-indigo-500' }, { id: 'calendar', label: 'الأجندة والمواعيد', icon: CalendarDays, color: 'text-pink-500' }, { id: 'duplicates', label: 'كشف المكررات', icon: Filter, color: 'text-rose-500' }, { id: 'settings', label: 'الإعدادات', icon: Sliders, color: 'text-slate-500' }].map(item => (
-        <button key={item.id} type="button" onClick={() => dispatch({ type: 'SET_ACTIVE_TAB', payload: item.id })} className={`w-full flex items-center gap-4 px-4 py-3 rounded-xl transition-all font-medium ${activeTab === item.id ? 'gradient-bg-primary text-white shadow-lg' : 'text-slate-500 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800/50'}`}>
+        <button key={item.id} type="button" onClick={() => dispatch({ type: 'SET_ACTIVE_TAB', payload: item.id })} className={`w-full flex items-center gap-4 px-4 py-3 rounded-xl transition-all font-medium ${activeTab === item.id ? 'gradient-bg-primary text-white shadow-lg' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50'}`}>
           <item.icon size={20} className={activeTab === item.id ? 'text-white' : item.color} /><span className="text-sm">{item.label}</span>
           {activeTab === item.id && <div className="ml-auto w-2 h-2 bg-white rounded-full animate-pulse" />}</button>))}
     </nav>
@@ -1441,7 +1468,7 @@ const EnhancedSidebar = memo(({ activeTab, dispatch, canUndo, onUndo }) => (
 
 const ProfessionalHeader = memo(({ isDarkMode, dispatch, canUndo }) => (
   <header className="flex flex-col md:flex-row justify-between items-center gap-6 mb-8">
-    <div className="flex-1"><div className="flex items-center gap-4"><div className="gradient-bg-primary p-3 rounded-2xl text-white shadow-lg"><Wallet size={28} /></div><div><h1 className="text-3xl font-black">محفظتي المالية</h1><p className="text-sm text-slate-500 font-medium mt-1">إدارة مالية ذكية • V66 Pro</p></div></div></div>
+    <div className="flex-1"><div className="flex items-center gap-4"><div className="gradient-bg-primary p-3 rounded-2xl text-white shadow-lg"><Wallet size={28} /></div><div><h1 className="text-3xl font-black">محفظتي المالية</h1><p className="text-sm text-slate-500 font-medium mt-1">إدارة مالية ذكية • V68 Pro</p></div></div></div>
     <div className="flex flex-wrap gap-3">
       <button type="button" onClick={() => dispatch({ type: 'UNDO' })} disabled={!canUndo} aria-label="تراجع" className={`px-4 py-3 rounded-xl font-bold shadow-md flex items-center gap-2 ${canUndo ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'}`}><Undo2 size={20} /> تراجع</button>
       <button type="button" onClick={() => dispatch({ type: 'SET_AI_MODAL_OPEN', payload: true })} className="gradient-bg-primary text-white px-6 py-3 rounded-xl font-bold shadow-lg flex items-center gap-2"><Sparkles size={20} /> المساعد</button>
@@ -1466,7 +1493,7 @@ const LoginScreen = ({ onLogin }) => {
       <div className="bg-slate-900/60 backdrop-blur-xl p-8 rounded-2xl border border-slate-700/50 shadow-2xl flex flex-col items-center max-w-sm w-full mx-4">
         <div className="w-24 h-24 bg-gradient-to-br from-blue-500/20 to-indigo-500/20 rounded-full flex items-center justify-center mb-8 text-blue-500 animate-bounce-slight border border-blue-500/10"><ShieldCheck size={48} /></div>
         <h2 className="text-3xl font-black mb-2 bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent text-center">المحفظة المالية</h2>
-        <p className="text-slate-500 text-sm mb-8 text-center opacity-80">V66 Pro</p>
+        <p className="text-slate-500 text-sm mb-8 text-center opacity-80">V68 Pro</p>
         <button onClick={handleGoogleLogin} disabled={isLoading} className="w-full bg-white text-slate-900 py-4 px-8 rounded-2xl font-black flex items-center justify-center gap-4 hover:bg-slate-100 active:scale-95 shadow-xl mb-4 disabled:opacity-50">
           {isLoading ? (<><div className="w-5 h-5 border-2 border-slate-900 border-t-transparent rounded-full animate-spin"></div> جاري تسجيل الدخول...</>) : (<><img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-6 h-6" alt="Google" />تسجيل الدخول بحساب جوجل</>)}</button>
         <p className="text-xs text-slate-500">محمي ومشفر بالكامل</p></div></div>);
@@ -1506,15 +1533,12 @@ function dataReducer(state, action) {
     case 'UPDATE_LOANS': return { ...state, data: { ...state.data, loans: action.payload } };
     case 'UPDATE_CARDS': return { ...state, data: { ...state.data, cards: action.payload } };
     case 'UPDATE_RECURRING_ITEMS': return { ...state, data: { ...state.data, recurringItems: action.payload } };
-
-    /* ✅ V66 FIX — تغيير الرصيد يُبطل كل snapshots (كاش محسوب) */
     case 'UPDATE_ACCOUNTS': {
       const oldA = state.data.accountsData || {};
       let changed = false;
       ACCOUNT_KEYS.forEach(k => { if (safeNumber(oldA[k]?.balance) !== safeNumber(action.payload[k]?.balance)) changed = true; });
       return { ...state, data: { ...state.data, accountsData: action.payload, ...(changed ? { monthlySnapshots: {} } : {}) } };
     }
-
     case 'UPDATE_MONTHLY_PLANS': return { ...state, data: { ...state.data, monthlyPlans: action.payload } };
     case 'ADD_TO_HISTORY': { const limited = [...state.history].slice(-19); return { ...state, history: [...limited, action.payload], future: [] }; }
     case 'UNDO': { if (state.history.length === 0) return state; const prev = state.history[state.history.length - 1]; return { ...state, data: prev, history: state.history.slice(0, -1), future: [state.data, ...state.future] }; }
@@ -1537,9 +1561,9 @@ function dataReducer(state, action) {
     }
     case 'OPEN_MONTH': {
       const monthKey = action.payload;
-      const parsed = parseMonthKey(monthKey);
-      if (!parsed) return { ...state, data: { ...state.data, closedMonths: (state.data.closedMonths || []).filter(m => m !== monthKey) } };
-      const { snapshots } = invalidateSnapshotsFrom(state.data.monthlySnapshots, parsed.year, parsed.month);
+      const parsedKey = parseMonthKey(monthKey);
+      if (!parsedKey) return { ...state, data: { ...state.data, closedMonths: (state.data.closedMonths || []).filter(m => m !== monthKey) } };
+      const { snapshots } = invalidateSnapshotsFrom(state.data.monthlySnapshots, parsedKey.year, parsedKey.month);
       return { ...state, data: { ...state.data, closedMonths: (state.data.closedMonths || []).filter(m => m !== monthKey), monthlySnapshots: snapshots } };
     }
     case 'DELETE_MONTH_TRANSACTIONS': {
@@ -1652,12 +1676,13 @@ function App() {
 
   const financeSnapshot = useMemo(() => {
     const opening = getOpeningBalance(data, 'cash', selectedYear, selectedMonth);
+    const actualCashInHand = computeBalance(data, 'cash', endOfToday());
+    const today = endOfToday();
     const curMonth = transactions.filter(t => t.month === selectedMonth && (t.year || new Date(t.date).getFullYear()) === selectedYear);
-    const actualIncome = curMonth.filter(t => t.type === 'income' && t.status === 'paid' && t.method === 'cash').reduce((s, t) => s + safeNumber(t.amount), 0);
+    const actualIncome = curMonth.filter(t => t.type === 'income' && t.status === 'paid' && t.method === 'cash' && new Date(t.date) <= today).reduce((s, t) => s + safeNumber(t.amount), 0);
     const pendingIncome = curMonth.filter(t => t.type === 'income' && t.status !== 'paid' && t.method === 'cash').reduce((s, t) => s + safeNumber(t.amount), 0);
-    const paidCash = curMonth.filter(t => t.type === 'expense' && t.status === 'paid' && t.method === 'cash').reduce((s, t) => s + safeNumber(t.amount), 0);
+    const paidCash = curMonth.filter(t => t.type === 'expense' && t.status === 'paid' && t.method === 'cash' && new Date(t.date) <= today).reduce((s, t) => s + safeNumber(t.amount), 0);
     const pendingCash = curMonth.filter(t => t.type === 'expense' && t.status !== 'paid' && t.method === 'cash').reduce((s, t) => s + safeNumber(t.amount), 0);
-    const actualCashInHand = opening + actualIncome - paidCash;
     return { opening, actualIncome, pendingIncome, paidCash, pendingCash, actualCashInHand, projectedClosingBalance: actualCashInHand + pendingIncome - pendingCash };
   }, [data, transactions, selectedYear, selectedMonth]);
 
@@ -1690,8 +1715,8 @@ function App() {
   }, [transactions, selectedYear, selectedMonth, transViewMode, searchTerm, statusFilter]);
 
   const buildLedger = useCallback((methodId) => {
-    const cutoff = getAccountCutoff(accountsData, methodId);
-    const acc = transactions.filter(t => t.method === methodId && t.status === 'paid' && new Date(t.date) > cutoff).sort((a, b) => new Date(a.date) - new Date(b.date));
+    const cutoffDay = dayStart(getAccountCutoff(accountsData, methodId));
+    const acc = transactions.filter(t => t.method === methodId && t.status === 'paid' && new Date(t.date) >= cutoffDay).sort((a, b) => new Date(a.date) - new Date(b.date));
     let bal = safeNumber(accountsData?.[methodId]?.balance);
     return acc.map(t => { const a = safeNumber(t.amount); bal += (t.subType === 'deposit') ? a : -a; return { ...t, runningBalance: bal }; }).reverse();
   }, [transactions, accountsData]);
