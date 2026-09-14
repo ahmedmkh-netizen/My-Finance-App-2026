@@ -31,6 +31,8 @@ tailwind.config = {
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+<!-- ✅ Patch 1: Google Identity Services for Drive -->
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <script type="importmap">
 { "imports": {
 "react": "https://esm.sh/react@18.2.0",
@@ -114,7 +116,7 @@ import {
   ArrowUp, Undo2, LogOut, Lock, Unlock, Moon, Sun, ShieldCheck, RefreshCcw,
   Search, FileSpreadsheet, Settings as SettingsIcon, Target, CalendarDays, BarChart3, Bell, Sparkles, Bot,
   AlertTriangle, Clock, CheckCircle2, Zap, Hash, Coins, Filter, Eye, EyeOff, ShieldAlert,
-  Download, Upload, Signal, PiggyBank, Landmark as BuildingBank, ArrowDownCircle, ArrowUpCircle, Wifi, Store as StoreIcon, Users, Activity, Sliders, Table, RotateCcw, Percent
+  Download, Upload, Cloud, Signal, PiggyBank, Landmark as BuildingBank, ArrowDownCircle, ArrowUpCircle, Wifi, Store as StoreIcon, Users, Activity, Sliders, Table, RotateCcw, Percent
 } from 'lucide-react';
 
 /* إعدادات Firebase — كما هي */
@@ -1339,6 +1341,9 @@ const SettingsView = memo(({ data, accountsData, cards, dispatch, saveHistory, a
   const [localCards, setLocalCards] = useState(() => cards.map(c => ({ ...c })));
   const [activeSection, setActiveSection] = useState('accounts');
   const [hasChanges, setHasChanges] = useState(false);
+  /* ✅ Patch 3b: حالات Drive */
+  const [driveBusy, setDriveBusy] = useState(false);
+  const [driveStatus, setDriveStatus] = useState('');
   useEffect(() => { setLocalAccounts(JSON.parse(JSON.stringify(accountsData))); setHasChanges(false); }, [accountsData]);
   useEffect(() => { setLocalCards(cards.map(c => ({ ...c }))); setHasChanges(false); }, [cards]);
   useEffect(() => { if (!hasChanges) return; const h = (e) => { e.preventDefault(); e.returnValue = ''; }; window.addEventListener('beforeunload', h); return () => window.removeEventListener('beforeunload', h); }, [hasChanges]);
@@ -1358,6 +1363,69 @@ const SettingsView = memo(({ data, accountsData, cards, dispatch, saveHistory, a
     dispatch({ type: 'UPDATE_CARDS', payload: localCards.map(c => ({ ...c, limit: safeNumber(c.limit), openingDebt: safeNumber(c.openingDebt) })) });
     addNotification({ type: 'success', title: '✅ تم الحفظ', message: 'الحسابات المُصحَّحة ثُبِّتت برصيد اليوم' });
     setHasChanges(false);
+  };
+
+  /* ✅ Patch 3c: معالجات Drive */
+  const handleDriveConnect = async () => {
+    setDriveBusy(true); setDriveStatus('جاري الاتصال...');
+    try {
+      await ensureDriveToken();
+      setDriveStatus('✅ تم الاتصال بحساب Google بنجاح');
+      addNotification({ type: 'success', title: 'Drive متصل' });
+    } catch (e) {
+      setDriveStatus('❌ فشل الاتصال: ' + e.message);
+      addNotification({ type: 'error', title: 'فشل الاتصال بـ Drive', message: e.message });
+    } finally { setDriveBusy(false); }
+  };
+
+  const handleDriveBackupNow = async () => {
+    setDriveBusy(true); setDriveStatus('جاري رفع النسخة...');
+    try {
+      const payload = { data, budgets, exportedAt: new Date().toISOString(), version: 'V68' };
+      const result = await uploadBackupToDrive(payload);
+      localStorage.setItem(AUTO_BACKUP_LS_KEY, String(Date.now()));
+      setDriveStatus(`✅ تم الرفع: ${result.name}`);
+      addNotification({ type: 'success', title: '✅ نسخة سحابية', message: result.name });
+    } catch (e) {
+      setDriveStatus('❌ ' + e.message);
+      addNotification({ type: 'error', title: 'فشل الرفع', message: e.message });
+    } finally { setDriveBusy(false); }
+  };
+
+  const handleDriveRestore = async () => {
+    setDriveBusy(true); setDriveStatus('جاري جلب القائمة...');
+    try {
+      const files = await listDriveBackups();
+      if (files.length === 0) {
+        setDriveStatus('لا توجد نسخ على Drive بعد');
+        addNotification({ type: 'info', title: 'لا توجد نسخ' });
+        setDriveBusy(false); return;
+      }
+      const latest = files[0];
+      const labels = files.slice(0, 10).map((f, i) => `${i + 1}) ${f.name} — ${(safeNumber(f.size)/1024).toFixed(1)}KB`).join('\n');
+      const choice = prompt(`اختر رقم النسخة للاستعادة:\n\n${labels}\n\n(اكتب رقم 1 لاستعادة الأحدث)`, '1');
+      if (!choice) { setDriveBusy(false); setDriveStatus(''); return; }
+      const idx = Math.max(1, Math.min(files.length, parseInt(choice, 10) || 1)) - 1;
+      const file = files[idx];
+      setDriveStatus(`جاري تنزيل ${file.name}...`);
+      const payload = await downloadBackupFromDrive(file.id);
+      if (!payload?.data) throw new Error('الملف لا يحتوي على بيانات صالحة');
+      dispatch({ type: 'SHOW_CONFIRM', danger: true, title: '⚠️ استعادة نسخة',
+        message: `سيتم استبدال كل بياناتك الحالية بنسخة:\n${file.name}\n\nهل أنت متأكد؟`,
+        onConfirm: () => {
+          saveHistory();
+          dispatch({ type: 'SET_DATA', payload: migrateData(payload.data) });
+          if (payload.budgets) dispatch({ type: 'SET_BUDGETS', payload: payload.budgets });
+          addNotification({ type: 'success', title: '✅ تمت الاستعادة' });
+          setDriveStatus('✅ تمت الاستعادة — أعد تحميل الصفحة للاطمئنان');
+          dispatch({ type: 'HIDE_CONFIRM' });
+        },
+        onCancel: () => { setDriveStatus('تم الإلغاء'); dispatch({ type: 'HIDE_CONFIRM' }); }
+      });
+    } catch (e) {
+      setDriveStatus('❌ ' + e.message);
+      addNotification({ type: 'error', title: 'فشل الاستعادة', message: e.message });
+    } finally { setDriveBusy(false); }
   };
 
   const handleReset = () => dispatch({ type: 'SHOW_CONFIRM', danger: true, title: 'استرجاع الافتراضي', message: 'سيتم إرجاع كل الأرصدة والبطاقات لقيمها الأصلية', onConfirm: () => { setLocalAccounts(JSON.parse(JSON.stringify(DEFAULT_ACCOUNTS))); setLocalCards(DEFAULT_CARDS.map(c => ({ ...c }))); setHasChanges(true); dispatch({ type: 'HIDE_CONFIRM' }); }, onCancel: () => dispatch({ type: 'HIDE_CONFIRM' }) });
@@ -1421,6 +1489,35 @@ const SettingsView = memo(({ data, accountsData, cards, dispatch, saveHistory, a
                   <div><label className="block text-[11px] font-bold text-slate-500 mb-1">الانتهاء</label><input type="text" value={card.expiry} onChange={e => handleCardChange(card.id, 'expiry', e.target.value)} className="input-field text-center text-sm py-2" /></div>
                   <div><label className="block text-[11px] font-bold text-slate-500 mb-1">يوم الاستحقاق</label><input type="text" value={card.dueDate} onChange={e => handleCardChange(card.id, 'dueDate', e.target.value)} className="input-field text-center text-sm py-2" /></div></div></div></div>); })}
         </div></div>)}
+
+      {/* ✅ Patch 3d: صندوق Google Drive Backup */}
+      <div className="glass p-6 rounded-2xl border-2 border-blue-200 dark:border-blue-900/50">
+        <div className="flex items-center gap-3 mb-5">
+          <div className="p-3 bg-blue-100 dark:bg-blue-900/30 text-blue-600 rounded-xl"><Cloud size={24} /></div>
+          <div>
+            <h3 className="font-black text-lg">النسخ الاحتياطي — Google Drive</h3>
+            <p className="text-xs text-slate-500 font-bold mt-1">نسخة سحابية كاملة داخل مجلد "{DRIVE_FOLDER_NAME}" • نسخ تلقائي كل 24 ساعة</p>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-3">
+          <button type="button" onClick={handleDriveConnect} disabled={driveBusy}
+            className="gradient-bg-primary text-white px-5 py-3 rounded-xl font-bold flex items-center gap-2 active:scale-95 disabled:opacity-50">
+            <Cloud size={18} /> تفعيل Drive
+          </button>
+          <button type="button" onClick={handleDriveBackupNow} disabled={driveBusy}
+            className="gradient-bg-success text-white px-5 py-3 rounded-xl font-bold flex items-center gap-2 active:scale-95 disabled:opacity-50">
+            <Upload size={18} /> نسخة الآن
+          </button>
+          <button type="button" onClick={handleDriveRestore} disabled={driveBusy}
+            className="gradient-bg-warning text-white px-5 py-3 rounded-xl font-bold flex items-center gap-2 active:scale-95 disabled:opacity-50">
+            <Download size={18} /> استعادة نسخة
+          </button>
+        </div>
+        {driveStatus && (
+          <p className="text-xs font-bold mt-3 text-slate-600 dark:text-slate-300 whitespace-pre-line">{driveStatus}</p>
+        )}
+      </div>
+
       <div className="glass p-6 rounded-2xl flex flex-wrap justify-between items-center gap-4 border-2 border-amber-200 dark:border-amber-900/50">
         <div className="flex items-center gap-3"><ShieldAlert size={20} className="text-amber-500" /><div><p className="font-black text-sm">إجراءات احتياطية</p><p className="text-xs text-slate-500 font-bold">استرجع القيم الافتراضية، أو ابدأ دفتراً نظيفاً</p></div></div>
         <div className="flex gap-2 flex-wrap">
@@ -1582,6 +1679,109 @@ function dataReducer(state, action) {
   }
 }
 
+/* ===================== Google Drive Backup (V68 Patch) ===================== */
+/* ⚠️ استبدل القيمة التالية بـ Client ID من Google Cloud Console */
+const DRIVE_CLIENT_ID = 'YOUR_CLIENT_ID.apps.googleusercontent.com';
+const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
+const DRIVE_FOLDER_NAME = 'Finance Backups';
+
+let _driveTokenClient = null;
+let _driveAccessToken = null;
+let _driveTokenExpiry = 0;
+
+const initDriveTokenClient = () => {
+  if (_driveTokenClient) return _driveTokenClient;
+  if (!window.google?.accounts?.oauth2) throw new Error('Google Identity Services لم يتم تحميله بعد');
+  _driveTokenClient = window.google.accounts.oauth2.initTokenClient({
+    client_id: DRIVE_CLIENT_ID,
+    scope: DRIVE_SCOPE,
+    callback: () => {}
+  });
+  return _driveTokenClient;
+};
+
+const requestDriveToken = () => new Promise((resolve, reject) => {
+  try {
+    const client = initDriveTokenClient();
+    client.callback = (resp) => {
+      if (resp.error) return reject(new Error(resp.error));
+      _driveAccessToken = resp.access_token;
+      _driveTokenExpiry = Date.now() + (safeNumber(resp.expires_in, 3600) * 1000) - 60000;
+      resolve(_driveAccessToken);
+    };
+    client.requestAccessToken({ prompt: _driveAccessToken ? '' : 'consent' });
+  } catch (e) { reject(e); }
+});
+
+const ensureDriveToken = async () => {
+  if (_driveAccessToken && Date.now() < _driveTokenExpiry) return _driveAccessToken;
+  return requestDriveToken();
+};
+
+const getOrCreateBackupFolder = async () => {
+  const token = await ensureDriveToken();
+  const q = encodeURIComponent(`mimeType='application/vnd.google-apps.folder' and name='${DRIVE_FOLDER_NAME}' and trashed=false`);
+  const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)&spaces=drive`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  if (!res.ok) throw new Error('فشل قراءة المجلدات: ' + res.status);
+  const data = await res.json();
+  if (data.files && data.files.length > 0) return data.files[0].id;
+
+  const createRes = await fetch('https://www.googleapis.com/drive/v3/files', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: DRIVE_FOLDER_NAME, mimeType: 'application/vnd.google-apps.folder' })
+  });
+  if (!createRes.ok) throw new Error('فشل إنشاء المجلد: ' + createRes.status);
+  const created = await createRes.json();
+  return created.id;
+};
+
+const uploadBackupToDrive = async (payload, fileName) => {
+  const token = await ensureDriveToken();
+  const folderId = await getOrCreateBackupFolder();
+  const name = fileName || `finance_backup_${getLocalISODate()}_${Date.now()}.json`;
+  const metadata = { name, parents: [folderId], mimeType: 'application/json' };
+  const boundary = '----V68DriveBoundary' + Date.now();
+  const body =
+    `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n` +
+    `--${boundary}\r\nContent-Type: application/json\r\n\r\n${JSON.stringify(payload)}\r\n` +
+    `--${boundary}--`;
+  const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,size,createdTime', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': `multipart/related; boundary=${boundary}` },
+    body
+  });
+  if (!res.ok) throw new Error('فشل الرفع: ' + res.status);
+  return await res.json();
+};
+
+const listDriveBackups = async () => {
+  const token = await ensureDriveToken();
+  const folderId = await getOrCreateBackupFolder();
+  const q = encodeURIComponent(`'${folderId}' in parents and trashed=false and mimeType='application/json'`);
+  const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,size,createdTime)&orderBy=createdTime desc&pageSize=50`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  if (!res.ok) throw new Error('فشل جلب القائمة: ' + res.status);
+  const data = await res.json();
+  return data.files || [];
+};
+
+const downloadBackupFromDrive = async (fileId) => {
+  const token = await ensureDriveToken();
+  const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  if (!res.ok) throw new Error('فشل التنزيل: ' + res.status);
+  return await res.json();
+};
+
+/* مرجع لمزامنة آخر نسخة تلقائية */
+const AUTO_BACKUP_LS_KEY = 'v68_last_drive_backup_ts';
+/* ===================== نهاية كتلة Drive ===================== */
+
 /* ===================== App ===================== */
 function App() {
   const defMY = useMemo(() => getDefaultMonthYear(), []);
@@ -1634,6 +1834,29 @@ function App() {
     });
     return () => unsub();
   }, [isAuthenticated]);
+
+  /* ✅ Patch 4: نسخ تلقائي إلى Drive كل 24 ساعة */
+  useEffect(() => {
+    if (!isAuthenticated || !data) return;
+    const DAY_MS = 24 * 60 * 60 * 1000;
+
+    const maybeAutoBackup = async () => {
+      try {
+        const last = safeNumber(localStorage.getItem(AUTO_BACKUP_LS_KEY), 0);
+        if (Date.now() - last < DAY_MS) return;
+        await uploadBackupToDrive({ data, budgets, exportedAt: new Date().toISOString(), auto: true });
+        localStorage.setItem(AUTO_BACKUP_LS_KEY, String(Date.now()));
+        console.log('[Auto Backup] ✅ رُفعت نسخة تلقائية إلى Drive');
+      } catch (e) {
+        /* فشل صامت — غالباً المستخدم لم يفعّل Drive بعد */
+        console.warn('[Auto Backup] تخطي:', e.message);
+      }
+    };
+
+    const t = setTimeout(maybeAutoBackup, 30000);
+    const interval = setInterval(maybeAutoBackup, 6 * 60 * 60 * 1000);
+    return () => { clearTimeout(t); clearInterval(interval); };
+  }, [isAuthenticated, data, budgets]);
 
   useEffect(() => {
     if (isAuthenticated && data && data.transactions) {
