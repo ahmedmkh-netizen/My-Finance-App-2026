@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>المحفظة المالية - V65 Pro</title>
+<title>المحفظة المالية - V66 Pro</title>
 <meta name="theme-color" content="#0f172a">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -102,7 +102,7 @@ body { @apply text-slate-800 transition-colors duration-300 font-sans antialiase
 <div id="root"></div>
 <div id="loading" style="position:fixed;inset:0;background:#0f172a;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;color:white;font-family:'Cairo',sans-serif;">
   <div style="width:60px;height:60px;border:4px solid rgba(255,255,255,0.3);border-radius:50%;border-top-color:#3B82F6;animation:spin 1s linear infinite;"></div>
-  <p style="margin-top:20px;font-weight:bold;">جاري تحميل التطبيق V65...</p>
+  <p style="margin-top:20px;font-weight:bold;">جاري تحميل التطبيق V66...</p>
 </div>
 <script type="text/babel" data-type="module">
 import React, { useState, useMemo, useEffect, useCallback, useReducer, useRef, memo } from 'react';
@@ -123,7 +123,7 @@ if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 
 /* ===================== ثوابت ===================== */
-const CURRENT_ENGINE_VERSION = 2;
+const CURRENT_ENGINE_VERSION = 3;
 const KIND = { OPERATIONAL: 'operational', FINANCIAL: 'financial', ADJUSTMENT: 'adjustment' };
 const KIND_LABELS = { operational: 'تشغيلي', financial: 'تمويلي', adjustment: 'تسوية' };
 
@@ -143,8 +143,8 @@ const fmt = (n, dec = 0) => safeNumber(n).toLocaleString('en-US', { minimumFract
 const makeMonthKey = (year, month) => `${year}-${month}`;
 const parseMonthKey = (key) => { if (!key || typeof key !== 'string' || !key.includes('-')) return null; const [y, ...rest] = key.split('-'); const year = Number(y); if (isNaN(year)) return null; return { year, month: rest.join('-') }; };
 
-const STORAGE_KEY = 'finance_tracker_V65_SECURE';
-const LEGACY_KEYS = ['finance_tracker_V64_SECURE', 'finance_tracker_V63_SECURE', 'finance_tracker_V62_SECURE', 'finance_tracker_V61_SECURE'];
+const STORAGE_KEY = 'finance_tracker_V66_SECURE';
+const LEGACY_KEYS = ['finance_tracker_V65_SECURE', 'finance_tracker_V64_SECURE', 'finance_tracker_V63_SECURE', 'finance_tracker_V62_SECURE', 'finance_tracker_V61_SECURE'];
 const ALL_MONTHS = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
 const YEARS_CONFIG = { 2026: ['سبتمبر','أكتوبر','نوفمبر','ديسمبر'], 2027: ALL_MONTHS, 2028: ALL_MONTHS };
 const YEARS_LIST = [2026, 2027, 2028];
@@ -272,7 +272,7 @@ const invalidateSnapshotsFrom = (snapshots, year, month) => {
   return { snapshots: newSnaps, invalidated };
 };
 
-/* ===================== محرك الأرصدة الموحد ===================== */
+/* ===================== محرك الأرصدة الموحد — ثنائي الاتجاه (V66) ===================== */
 const getAccountCutoff = (accountsData, key) => {
   const iso = accountsData?.[key]?.lastUpdated;
   if (!iso) return new Date(0);
@@ -280,21 +280,28 @@ const getAccountCutoff = (accountsData, key) => {
   return isNaN(d) ? new Date(0) : d;
 };
 
+/* ✅ V66 — محرك ثنائي الاتجاه:
+   - إذا asOfDate > cutoff (الحاضر): الرصيد = base + كل الحركات بين المرساة والتاريخ المطلوب
+   - إذا asOfDate < cutoff (الماضي): الرصيد = base − كل الحركات الواقعة بين التاريخ المطلوب والمرساة */
 const computeBalance = (data, key, asOfDate) => {
   const accountsData = data?.accountsData || DEFAULT_ACCOUNTS;
   const base = safeNumber(accountsData[key]?.balance);
   const cutoff = getAccountCutoff(accountsData, key);
   const upper = asOfDate ? new Date(asOfDate) : null;
-  const txs = (data?.transactions || []).filter(t => {
-    if (t.status !== 'paid') return false;
-    if (t.method !== key) return false;
-    const d = new Date(t.date);
-    if (isNaN(d) || d <= cutoff) return false;
-    if (upper && d > upper) return false;
-    return true;
-  });
+  const backward = upper && upper < cutoff;
   let bal = base;
-  txs.forEach(t => { const amt = safeNumber(t.amount); bal += (t.subType === 'deposit') ? amt : -amt; });
+  (data?.transactions || []).forEach(t => {
+    if (t.status !== 'paid' || t.method !== key) return;
+    const d = new Date(t.date);
+    if (isNaN(d)) return;
+    const amt = safeNumber(t.amount);
+    const signed = (t.subType === 'deposit') ? amt : -amt;
+    if (backward) {
+      if (d > upper && d <= cutoff) bal -= signed;
+    } else {
+      if (d > cutoff && (!upper || d <= upper)) bal += signed;
+    }
+  });
   return bal;
 };
 
@@ -376,7 +383,7 @@ const migrateData = (parsed) => {
   let { snapshots, closedMonths } = migrateSnapshotsAndClosed(parsed.monthlySnapshots, parsed.closedMonths);
   const incomingVersion = safeNumber(parsed.engineVersion, 1);
   if (incomingVersion < CURRENT_ENGINE_VERSION && Object.keys(snapshots).length > 0) {
-    console.warn('[Migration] snapshots قديمة أُلغيت — الافتتاحيات تُحتسب من القيود');
+    console.warn('[Migration v3] snapshots قديمة أُلغيت — المحرك صار ثنائي الاتجاه');
     snapshots = {};
   }
 
@@ -1332,7 +1339,22 @@ const SettingsView = memo(({ data, accountsData, cards, dispatch, saveHistory, a
   useEffect(() => { if (!hasChanges) return; const h = (e) => { e.preventDefault(); e.returnValue = ''; }; window.addEventListener('beforeunload', h); return () => window.removeEventListener('beforeunload', h); }, [hasChanges]);
   const handleAccountChange = (key, field, value) => { setLocalAccounts(prev => ({ ...prev, [key]: { ...prev[key], [field]: value } })); setHasChanges(true); };
   const handleCardChange = (id, field, value) => { setLocalCards(prev => prev.map(c => { if (c.id !== id) return c; const u = { ...c, [field]: value }; if (field === 'limit') u.availableBalance = Math.max(0, safeNumber(value) - safeNumber(u.openingDebt)); return u; })); setHasChanges(true); };
-  const handleSave = () => { saveHistory(); const cleaned = {}; ACCOUNT_KEYS.forEach(k => { cleaned[k] = { ...localAccounts[k], balance: parseNumberInput(localAccounts[k]?.balance), lastUpdated: localAccounts[k]?.lastUpdated || getLocalISODate() }; }); dispatch({ type: 'UPDATE_ACCOUNTS', payload: cleaned }); dispatch({ type: 'UPDATE_CARDS', payload: localCards.map(c => ({ ...c, limit: safeNumber(c.limit), openingDebt: safeNumber(c.openingDebt) })) }); addNotification({ type: 'success', title: '✅ تم الحفظ', message: 'الأرصدة الحية أُعيد احتسابها' }); setHasChanges(false); };
+
+  /* ✅ V66 FIX — إذا تغيّر الرصيد → المرساة تصبح اليوم */
+  const handleSave = () => {
+    saveHistory();
+    const cleaned = {}; const today = getLocalISODate();
+    ACCOUNT_KEYS.forEach(k => {
+      const oldBal = safeNumber(accountsData[k]?.balance);
+      const newBal = parseNumberInput(localAccounts[k]?.balance);
+      cleaned[k] = { ...localAccounts[k], balance: newBal, lastUpdated: (oldBal !== newBal) ? today : (localAccounts[k]?.lastUpdated || today) };
+    });
+    dispatch({ type: 'UPDATE_ACCOUNTS', payload: cleaned });
+    dispatch({ type: 'UPDATE_CARDS', payload: localCards.map(c => ({ ...c, limit: safeNumber(c.limit), openingDebt: safeNumber(c.openingDebt) })) });
+    addNotification({ type: 'success', title: '✅ تم الحفظ', message: 'الحسابات المُصحَّحة ثُبِّتت برصيد اليوم' });
+    setHasChanges(false);
+  };
+
   const handleReset = () => dispatch({ type: 'SHOW_CONFIRM', danger: true, title: 'استرجاع الافتراضي', message: 'سيتم إرجاع كل الأرصدة والبطاقات لقيمها الأصلية', onConfirm: () => { setLocalAccounts(JSON.parse(JSON.stringify(DEFAULT_ACCOUNTS))); setLocalCards(DEFAULT_CARDS.map(c => ({ ...c }))); setHasChanges(true); dispatch({ type: 'HIDE_CONFIRM' }); }, onCancel: () => dispatch({ type: 'HIDE_CONFIRM' }) });
   const sections = [{ id: 'accounts', label: 'الحسابات والمحافظ', icon: Wallet }, { id: 'cards', label: 'البطاقات', icon: CreditCard }];
   return (
@@ -1344,7 +1366,7 @@ const SettingsView = memo(({ data, accountsData, cards, dispatch, saveHistory, a
       <div className="glass p-2 rounded-2xl flex gap-2 no-print">{sections.map(s => { const Icon = s.icon; return <button key={s.id} onClick={() => setActiveSection(s.id)} className={`flex-1 py-4 rounded-xl font-bold flex items-center justify-center gap-3 ${activeSection === s.id ? 'gradient-bg-primary text-white shadow-md' : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'}`}><Icon size={20} /> {s.label}</button>; })}</div>
       {activeSection === 'accounts' && (<div className="space-y-6">
         <div className="glass p-4 rounded-2xl bg-blue-50/50 dark:bg-blue-900/10 text-xs font-bold text-blue-800 dark:text-blue-200 leading-relaxed">
-          📌 <strong>دلالة الرصيد:</strong> الرصيد المدخل يشمل حركات <strong>يوم "آخر تحديث" نفسه</strong>. القيود اللاحقة تُضاف عليه تلقائياً. حدّث الرصيد من كشف البنك عند كل تسوية.
+          📌 <strong>دلالة الرصيد:</strong> الرقم الذي تدخله = رصيدك الفعلي الآن، ويُثبَّت بتاريخ اليوم عند الحفظ. كل الحركات اللاحقة تُضاف فوقه تلقائياً، والحركات السابقة تُحتسب للخلف منه في تقارير الشهور.
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {ACCOUNT_KEYS.map(key => { const acc = localAccounts[key] || {}; const Icon = ACCOUNT_ICONS[key] || Wallet; const isVisible = walletVisibility?.[key]; const gradientMap = { cib_savings: 'from-blue-500 to-blue-700', aaib_savings: 'from-red-500 to-red-700', cash: 'from-emerald-500 to-emerald-700', fawry: 'from-yellow-500 to-yellow-700', etisalat: 'from-emerald-500 to-teal-700' }; return (
@@ -1353,8 +1375,8 @@ const SettingsView = memo(({ data, accountsData, cards, dispatch, saveHistory, a
                 <div className="flex items-center gap-3"><Icon size={28} /><h4 className="font-black text-lg">{acc.label || key}</h4></div>
                 <button onClick={() => onToggleVisibility?.(key)} aria-label="إظهار/إخفاء" className="p-2 bg-white/20 rounded-xl hover:bg-white/30">{isVisible ? <EyeOff size={16} /> : <Eye size={16} />}</button></div></div>
               <div className="p-6 space-y-4">
-                <div><label className="block text-xs font-black mb-2 text-slate-500 uppercase">الرصيد حتى آخر تحديث</label><input type="text" inputMode="decimal" value={acc.balance ?? ''} onChange={e => handleAccountChange(key, 'balance', e.target.value)} className="input-field text-2xl font-black text-blue-600 text-center" /></div>
-                <div><label className="block text-xs font-black mb-2 text-slate-500 uppercase">آخر تحديث (يشمل حركات يومه)</label><input type="date" value={acc.lastUpdated || ''} onChange={e => handleAccountChange(key, 'lastUpdated', e.target.value)} className="input-field text-center font-bold" /></div>
+                <div><label className="block text-xs font-black mb-2 text-slate-500 uppercase">الرصيد الفعلي الآن</label><input type="text" inputMode="decimal" value={acc.balance ?? ''} onChange={e => handleAccountChange(key, 'balance', e.target.value)} className="input-field text-2xl font-black text-blue-600 text-center" /></div>
+                <div><label className="block text-xs font-black mb-2 text-slate-500 uppercase">تاريخ التثبيت (auto)</label><input type="date" value={acc.lastUpdated || ''} onChange={e => handleAccountChange(key, 'lastUpdated', e.target.value)} className="input-field text-center font-bold" /></div>
                 <div className="bg-slate-50 dark:bg-slate-800 p-3 rounded-xl text-center"><p className="text-slate-500 font-bold text-xs mb-1">الرصيد الحي المحسوب</p><p className="font-black text-emerald-600">{fmt(computeBalance({ ...data, accountsData: localAccounts }, key))} ج.م</p></div></div></div>); })}
         </div></div>)}
       {activeSection === 'cards' && (<div className="space-y-6">
@@ -1405,7 +1427,7 @@ const ProfessionalTicker = memo(({ updatedLoans, cards, liveBalances, walletVisi
 
 const EnhancedSidebar = memo(({ activeTab, dispatch, canUndo, onUndo }) => (
   <aside className="w-80 glass hidden lg:flex flex-col p-6 z-40 relative no-print">
-    <div className="flex items-center gap-4 mb-8 p-4 rounded-2xl"><div className="gradient-bg-primary p-3 rounded-2xl text-white shadow-lg"><Wallet size={28} /></div><div><h2 className="font-black text-xl">المحفظة الذكية</h2><p className="text-xs text-slate-500 font-bold">V65 Pro</p></div></div>
+    <div className="flex items-center gap-4 mb-8 p-4 rounded-2xl"><div className="gradient-bg-primary p-3 rounded-2xl text-white shadow-lg"><Wallet size={28} /></div><div><h2 className="font-black text-xl">المحفظة الذكية</h2><p className="text-xs text-slate-500 font-bold">V66 Pro</p></div></div>
     <nav className="space-y-2 flex-1 scroll-hide overflow-y-auto">
       {[{ id: 'dashboard', label: 'لوحة التحكم', icon: LayoutDashboard, color: 'text-blue-500' }, { id: 'transactions', label: 'سجل المعاملات', icon: ArrowUpRight, color: 'text-emerald-500' }, { id: 'categories', label: 'الفئات والميزانية', icon: Layers, color: 'text-purple-500' }, { id: 'loans', label: 'القروض والديون', icon: Banknote, color: 'text-red-500' }, { id: 'cards', label: 'البطاقات والمحافظ', icon: CreditCard, color: 'text-amber-500' }, { id: 'planning', label: 'التخطيط الشهري', icon: Table, color: 'text-cyan-500' }, { id: 'planner', label: 'المخطط الاستراتيجي', icon: Target, color: 'text-indigo-500' }, { id: 'calendar', label: 'الأجندة والمواعيد', icon: CalendarDays, color: 'text-pink-500' }, { id: 'duplicates', label: 'كشف المكررات', icon: Filter, color: 'text-rose-500' }, { id: 'settings', label: 'الإعدادات', icon: Sliders, color: 'text-slate-500' }].map(item => (
         <button key={item.id} type="button" onClick={() => dispatch({ type: 'SET_ACTIVE_TAB', payload: item.id })} className={`w-full flex items-center gap-4 px-4 py-3 rounded-xl transition-all font-medium ${activeTab === item.id ? 'gradient-bg-primary text-white shadow-lg' : 'text-slate-500 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800/50'}`}>
@@ -1419,7 +1441,7 @@ const EnhancedSidebar = memo(({ activeTab, dispatch, canUndo, onUndo }) => (
 
 const ProfessionalHeader = memo(({ isDarkMode, dispatch, canUndo }) => (
   <header className="flex flex-col md:flex-row justify-between items-center gap-6 mb-8">
-    <div className="flex-1"><div className="flex items-center gap-4"><div className="gradient-bg-primary p-3 rounded-2xl text-white shadow-lg"><Wallet size={28} /></div><div><h1 className="text-3xl font-black">محفظتي المالية</h1><p className="text-sm text-slate-500 font-medium mt-1">إدارة مالية ذكية • V65 Pro</p></div></div></div>
+    <div className="flex-1"><div className="flex items-center gap-4"><div className="gradient-bg-primary p-3 rounded-2xl text-white shadow-lg"><Wallet size={28} /></div><div><h1 className="text-3xl font-black">محفظتي المالية</h1><p className="text-sm text-slate-500 font-medium mt-1">إدارة مالية ذكية • V66 Pro</p></div></div></div>
     <div className="flex flex-wrap gap-3">
       <button type="button" onClick={() => dispatch({ type: 'UNDO' })} disabled={!canUndo} aria-label="تراجع" className={`px-4 py-3 rounded-xl font-bold shadow-md flex items-center gap-2 ${canUndo ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'}`}><Undo2 size={20} /> تراجع</button>
       <button type="button" onClick={() => dispatch({ type: 'SET_AI_MODAL_OPEN', payload: true })} className="gradient-bg-primary text-white px-6 py-3 rounded-xl font-bold shadow-lg flex items-center gap-2"><Sparkles size={20} /> المساعد</button>
@@ -1444,7 +1466,7 @@ const LoginScreen = ({ onLogin }) => {
       <div className="bg-slate-900/60 backdrop-blur-xl p-8 rounded-2xl border border-slate-700/50 shadow-2xl flex flex-col items-center max-w-sm w-full mx-4">
         <div className="w-24 h-24 bg-gradient-to-br from-blue-500/20 to-indigo-500/20 rounded-full flex items-center justify-center mb-8 text-blue-500 animate-bounce-slight border border-blue-500/10"><ShieldCheck size={48} /></div>
         <h2 className="text-3xl font-black mb-2 bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent text-center">المحفظة المالية</h2>
-        <p className="text-slate-500 text-sm mb-8 text-center opacity-80">V65 Pro</p>
+        <p className="text-slate-500 text-sm mb-8 text-center opacity-80">V66 Pro</p>
         <button onClick={handleGoogleLogin} disabled={isLoading} className="w-full bg-white text-slate-900 py-4 px-8 rounded-2xl font-black flex items-center justify-center gap-4 hover:bg-slate-100 active:scale-95 shadow-xl mb-4 disabled:opacity-50">
           {isLoading ? (<><div className="w-5 h-5 border-2 border-slate-900 border-t-transparent rounded-full animate-spin"></div> جاري تسجيل الدخول...</>) : (<><img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-6 h-6" alt="Google" />تسجيل الدخول بحساب جوجل</>)}</button>
         <p className="text-xs text-slate-500">محمي ومشفر بالكامل</p></div></div>);
@@ -1484,7 +1506,15 @@ function dataReducer(state, action) {
     case 'UPDATE_LOANS': return { ...state, data: { ...state.data, loans: action.payload } };
     case 'UPDATE_CARDS': return { ...state, data: { ...state.data, cards: action.payload } };
     case 'UPDATE_RECURRING_ITEMS': return { ...state, data: { ...state.data, recurringItems: action.payload } };
-    case 'UPDATE_ACCOUNTS': return { ...state, data: { ...state.data, accountsData: action.payload } };
+
+    /* ✅ V66 FIX — تغيير الرصيد يُبطل كل snapshots (كاش محسوب) */
+    case 'UPDATE_ACCOUNTS': {
+      const oldA = state.data.accountsData || {};
+      let changed = false;
+      ACCOUNT_KEYS.forEach(k => { if (safeNumber(oldA[k]?.balance) !== safeNumber(action.payload[k]?.balance)) changed = true; });
+      return { ...state, data: { ...state.data, accountsData: action.payload, ...(changed ? { monthlySnapshots: {} } : {}) } };
+    }
+
     case 'UPDATE_MONTHLY_PLANS': return { ...state, data: { ...state.data, monthlyPlans: action.payload } };
     case 'ADD_TO_HISTORY': { const limited = [...state.history].slice(-19); return { ...state, history: [...limited, action.payload], future: [] }; }
     case 'UNDO': { if (state.history.length === 0) return state; const prev = state.history[state.history.length - 1]; return { ...state, data: prev, history: state.history.slice(0, -1), future: [state.data, ...state.future] }; }
