@@ -544,6 +544,27 @@ const RecurringBadge = memo(({ tx }) => {
   return <span className="text-[10px] px-2 py-0.5 rounded-full font-black bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">🔁 متكرر</span>;
 });
 
+// ⭐ جديد: مكوّنات العيلة
+const FAMILY_MEMBERS = {
+  ans:         { name: 'أنس',        bg: 'bg-blue-100 dark:bg-blue-900/40',       text: 'text-blue-800 dark:text-blue-300',       border: 'border-blue-200 dark:border-blue-800',       rowBg: 'bg-blue-50/60 dark:bg-blue-900/10',       rowBorder: 'border-blue-400' },
+  abdelrahman: { name: 'عبد الرحمن', bg: 'bg-emerald-100 dark:bg-emerald-900/40', text: 'text-emerald-800 dark:text-emerald-300', border: 'border-emerald-200 dark:border-emerald-800', rowBg: 'bg-emerald-50/60 dark:bg-emerald-900/10', rowBorder: 'border-emerald-400' },
+  salma:       { name: 'سلمى',       bg: 'bg-purple-100 dark:bg-purple-900/40',   text: 'text-purple-800 dark:text-purple-300',   border: 'border-purple-200 dark:border-purple-800',   rowBg: 'bg-purple-50/60 dark:bg-purple-900/10',   rowBorder: 'border-purple-400' },
+  om_abdo:     { name: 'أم عبده',    bg: 'bg-pink-100 dark:bg-pink-900/40',       text: 'text-pink-800 dark:text-pink-300',       border: 'border-pink-200 dark:border-pink-800',       rowBg: 'bg-pink-50/60 dark:bg-pink-900/10',       rowBorder: 'border-pink-400' }
+};
+
+const getFamilyMember = (tx) => FAMILY_MEMBERS[tx?.createdBy] || null;
+const isFamilyTx = (tx) => tx?.source === 'family-app' || !!FAMILY_MEMBERS[tx?.createdBy];
+
+const FamilyBadge = memo(({ tx }) => {
+  const m = getFamilyMember(tx);
+  if (!m) return null;
+  return (
+    <span className={`text-[10px] px-2 py-0.5 rounded-full font-black ${m.bg} ${m.text} border ${m.border} inline-flex items-center gap-1`}>
+      🛒 {m.name}
+    </span>
+  );
+});
+
 const GenericLedgerComponent = memo(({ walletKey, ledgerData, liveBalance, isExpanded, onToggle, onDelete, onEditTransaction, theme, onAddDeposit, onAddWithdrawal, onExportCSV, walletVisibility, onToggleVisibility }) => {
   const [filter, setFilter] = useState('all');
   const [dateFilter, setDateFilter] = useState('');
@@ -608,7 +629,7 @@ const GenericLedgerComponent = memo(({ walletKey, ledgerData, liveBalance, isExp
                   {filteredLedger.length > 0 ? filteredLedger.map((t, idx) => (
                     <tr key={t.id} className={`hover:bg-white/40 dark:hover:bg-black/10 group ${idx % 2 === 0 ? 'bg-slate-50/30 dark:bg-slate-900/20' : ''}`}>
                       <td className="p-4 text-slate-500 whitespace-nowrap">{t.date}</td>
-                      <td className="p-4 font-bold">{t.description} <KindBadge tx={t} /></td>
+                      <td className="p-4 font-bold">{t.description} <KindBadge tx={t} /> <FamilyBadge tx={t} /></td>
                       <td className="p-4 text-center"><span className={`badge ${t.subType === 'deposit' ? 'badge-success' : 'badge-danger'}`}>{t.subType === 'deposit' ? 'إيداع' : 'سحب'}</span></td>
                       <td className={`p-4 text-left font-black ${t.subType === 'deposit' ? 'text-emerald-600' : 'text-red-500'}`}>{t.subType === 'deposit' ? '+' : '-'}{mask(t.amount)} ج.م</td>
                       <td className="p-4 text-left font-black text-blue-600">{mask(t.runningBalance)} ج.م</td>
@@ -687,7 +708,7 @@ const DuplicateDetectionSystem = ({ transactions, data, dispatch, addNotificatio
               <div className="p-4 bg-white/50 dark:bg-black/20 divide-y">
                 {dup.items.map((item, idx) => (
                   <div key={item.id} className="py-4 flex justify-between items-center px-4">
-                    <div className="text-sm font-bold flex items-center gap-2 flex-wrap">📅 {item.date} | 📝 {item.description || 'بدون وصف'}{isMonthClosed(data, item.year || 2026, item.month) && <span className="text-red-500 text-xs">(مغلق)</span>}</div>
+                    <div className="text-sm font-bold flex items-center gap-2 flex-wrap">📅 {item.date} | 📝 {item.description || 'بدون وصف'} <FamilyBadge tx={item} /> {isMonthClosed(data, item.year || 2026, item.month) && <span className="text-red-500 text-xs">(مغلق)</span>}</div>
                     {idx !== 0 && <button onClick={() => deleteSingle(item)} aria-label="حذف" className="text-red-500 hover:bg-red-50 p-2 rounded-xl"><Trash2 size={16} /></button>}
                   </div>
                 ))}
@@ -1000,21 +1021,21 @@ const CategoryDetailModal = memo(({ activeCategoryDetail, detailedTransactions, 
             <div className="hidden md:block">
               <table className="w-full text-right"><thead className="text-xs text-slate-500 uppercase font-bold sticky top-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md z-10 border-b">
                 <tr><th className="px-4 py-4">#</th><th className="px-4 py-4">التاريخ</th><th className="px-4 py-4">الوصف</th><th className="px-4 py-4">الدفع</th><th className="px-4 py-4 text-center">الحالة</th><th className="px-4 py-4 text-left">المبلغ</th><th className="px-4 py-4 text-center">إجراءات</th></tr></thead>
-                <tbody className="text-sm font-bold">{detailedTransactions.map((t, idx) => (
-                  <tr key={t.id} className={`hover:bg-blue-50 dark:hover:bg-blue-900/20 ${idx % 2 ? 'bg-slate-50/50 dark:bg-slate-800/30' : ''}`}>
+                <tbody className="text-sm font-bold">{detailedTransactions.map((t, idx) => { const m = getFamilyMember(t); return (
+                  <tr key={t.id} className={`hover:bg-blue-50 dark:hover:bg-blue-900/20 ${m ? `${m.rowBg} border-r-4 ${m.rowBorder}` : idx % 2 ? 'bg-slate-50/50 dark:bg-slate-800/30' : ''}`}>
                     <td className="px-4 py-4 text-slate-400 text-xs">{idx + 1}</td>
                     <td className="px-4 py-4 text-slate-500 whitespace-nowrap border-b">{t.date}</td>
-                    <td className="px-4 py-4 border-b">{t.description || '-'} <KindBadge tx={t} /> <RecurringBadge tx={t} /></td>
+                    <td className="px-4 py-4 border-b">{t.description || '-'} <KindBadge tx={t} /> <RecurringBadge tx={t} /> <FamilyBadge tx={t} /></td>
                     <td className="px-4 py-4 border-b"><span className="bg-slate-100 dark:bg-slate-700 px-3 py-1 rounded-lg text-xs">{PAYMENT_METHODS.find(p => p.id === t.method)?.label}</span></td>
                     <td className="px-4 py-4 text-center border-b"><span className={`text-[11px] px-2 py-1 rounded-full font-black ${t.status === 'paid' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{t.status === 'paid' ? '✅ معتمد' : '⏳ معلق'}</span></td>
                     <td className="px-4 py-4 text-left font-black border-b">{fmt(t.amount)}</td>
                     <td className="px-4 py-4 text-center border-b"><div className="flex items-center justify-center gap-2">
                       <button type="button" aria-label="تعديل" onClick={() => { dispatch({ type: 'SET_FORM_MODE', payload: 'edit' }); dispatch({ type: 'SET_FORM_DATA', payload: t }); dispatch({ type: 'SET_FORM_OPEN', payload: true }); dispatch({ type: 'SET_ACTIVE_CATEGORY_DETAIL', payload: null }); }} className="p-2 text-blue-500 hover:bg-blue-100 rounded-lg"><Edit size={16} /></button>
-                      <button type="button" aria-label="حذف" onClick={() => handleDelete(t.id)} className="p-2 text-red-500 hover:bg-red-100 rounded-lg"><Trash2 size={16} /></button></div></td></tr>))}
+                      <button type="button" aria-label="حذف" onClick={() => handleDelete(t.id)} className="p-2 text-red-500 hover:bg-red-100 rounded-lg"><Trash2 size={16} /></button></div></td></tr>); })}
                 </tbody></table></div>
-            <div className="md:hidden divide-y">{detailedTransactions.map(t => (
+            <div className="md:hidden divide-y">{detailedTransactions.map(t => ( 
               <div key={t.id} className="p-4 flex justify-between items-center gap-3">
-                <div className="min-w-0 flex-1"><p className="font-bold text-sm truncate">{t.description || t.category} <RecurringBadge tx={t} /></p><p className="text-[11px] text-slate-500 mt-1">{t.date} • {PAYMENT_METHODS.find(p => p.id === t.method)?.label}</p>
+                <div className="min-w-0 flex-1"><p className="font-bold text-sm truncate">{t.description || t.category} <RecurringBadge tx={t} /> <FamilyBadge tx={t} /></p><p className="text-[11px] text-slate-500 mt-1">{t.date} • {PAYMENT_METHODS.find(p => p.id === t.method)?.label}</p>
                   <div className="flex gap-2 mt-1 items-center"><span className={`text-[11px] px-2 py-0.5 rounded-full font-black ${t.status === 'paid' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{t.status === 'paid' ? 'معتمد' : 'معلق'}</span><KindBadge tx={t} /></div></div>
                 <div className="flex items-center gap-2 flex-shrink-0"><p className="font-black">{fmt(t.amount)}</p>
                   <button type="button" aria-label="تعديل" onClick={() => { dispatch({ type: 'SET_FORM_MODE', payload: 'edit' }); dispatch({ type: 'SET_FORM_DATA', payload: t }); dispatch({ type: 'SET_FORM_OPEN', payload: true }); dispatch({ type: 'SET_ACTIVE_CATEGORY_DETAIL', payload: null }); }} className="p-2 text-blue-500"><Edit size={16} /></button>
@@ -1065,8 +1086,14 @@ const CategoriesView = memo(({ transactions, selectedMonth, selectedYear, catVie
 });
 
 const TransactionsView = memo(({ groupedTransactions, transactions, selectedMonth, selectedYear, transViewMode, statusFilter, searchTerm, expandedGroup, data, monthInsights, dispatch, handleDelete, printReport, exportPdf, addNotification, onSelectYear, onSelectMonth, saveHistory, onPrintMonthlyReport }) => {
-  const pendingGroups = groupedTransactions.map(g => ({ ...g, items: g.items.filter(t => t.status !== 'paid') })).filter(g => g.items.length > 0);
-  const paidArchive = transactions.filter(t => t.month === selectedMonth && (t.year || 2026) === selectedYear && t.status === 'paid' && t.type === transViewMode).sort((a, b) => new Date(b.date) - new Date(a.date));
+  const [sourceFilter, setSourceFilter] = useState('all');
+  const filterBySource = (list) => {
+    if (sourceFilter === 'all') return list;
+    if (sourceFilter === 'self') return list.filter(t => !isFamilyTx(t));
+    return list.filter(t => t.createdBy === sourceFilter);
+  };
+  const pendingGroups = groupedTransactions.map(g => ({ ...g, items: filterBySource(g.items.filter(t => t.status !== 'paid')) })).filter(g => g.items.length > 0);
+  const paidArchive = filterBySource(transactions.filter(t => t.month === selectedMonth && (t.year || 2026) === selectedYear && t.status === 'paid' && t.type === transViewMode)).sort((a, b) => new Date(b.date) - new Date(a.date));
   const totalPending = pendingGroups.reduce((s, g) => s + g.items.length, 0);
   const monthTxCount = transactions.filter(t => t.month === selectedMonth && (t.year || 2026) === selectedYear).length;
   const isClosed = isMonthClosed(data, selectedYear, selectedMonth);
@@ -1096,6 +1123,20 @@ const TransactionsView = memo(({ groupedTransactions, transactions, selectedMont
         <div className="glass p-5 rounded-2xl border-b-4 border-rose-500"><p className="text-[11px] font-bold text-slate-500 uppercase mb-1">مصاريف مدفوعة</p><p className="text-xl font-black text-rose-600">{fmt(monthInsights.exp)}</p>{monthInsights.pendExp > 0 && <p className="text-[11px] text-amber-500 mt-1">+{fmt(monthInsights.pendExp)} معلق</p>}</div>
         <div className="glass p-5 rounded-2xl border-b-4 border-blue-500"><p className="text-[11px] font-bold text-slate-500 uppercase mb-1">الصافي</p><p className={`text-xl font-black ${monthInsights.net >= 0 ? 'text-blue-600' : 'text-rose-500'}`}>{fmt(monthInsights.net)}</p></div>
         <div className="glass p-5 rounded-2xl border-b-4 border-purple-500 flex items-center justify-center cursor-pointer hover:bg-purple-50" onClick={onPrintMonthlyReport}><div className="text-center"><FileText size={20} className="mx-auto text-purple-600 mb-1" /><p className="text-[11px] font-black text-purple-600">تقرير PDF</p></div></div></div>
+      <div className="flex gap-2 justify-center flex-wrap px-2 no-print mb-2">
+        {[
+          ['all', 'الكل', Layers],
+          ['self', '👤 أنا', Users],
+          ['ans', '🛒 أنس', StoreIcon],
+          ['abdelrahman', '🛒 عبد الرحمن', StoreIcon],
+          ['salma', '🛒 سلمى', StoreIcon],
+          ['om_abdo', '🛒 أم عبده', StoreIcon]
+        ].map(([id, label, Icon]) => (
+          <button key={id} type="button" onClick={() => setSourceFilter(id)} className={`px-3 py-1.5 rounded-xl text-[11px] font-bold border flex items-center gap-1 ${sourceFilter === id ? 'gradient-bg-warning text-white' : 'bg-white dark:bg-slate-800'}`}>
+            <Icon size={12} /> {label}
+          </button>
+        ))}
+      </div>
       <div className="flex gap-2 justify-center flex-wrap px-2 no-print">
         {[['all', 'الكل', Filter], ['pending', 'معلق', Clock], ['paid', 'مدفوع', CheckCircle2]].map(([id, label, Icon]) => (
           <button key={id} type="button" onClick={() => dispatch({ type: 'SET_STATUS_FILTER', payload: id })} className={`px-3 py-1.5 rounded-xl text-[11px] font-bold border flex items-center gap-1 ${statusFilter === id ? (id === 'all' ? 'bg-slate-800 text-white' : id === 'pending' ? 'gradient-bg-warning text-white' : 'gradient-bg-success text-white') : 'bg-white dark:bg-slate-800'}`}><Icon size={12} /> {label}</button>))}</div>
@@ -1115,15 +1156,15 @@ const TransactionsView = memo(({ groupedTransactions, transactions, selectedMont
                     <td className="p-6 font-bold flex items-center gap-4"><span className="p-3 rounded-2xl" style={{ backgroundColor: `${CATEGORY_COLORS[g.category]}20`, color: CATEGORY_COLORS[g.category] }}><Layers size={20} /></span>{g.category}</td>
                     <td className="p-6 text-center text-slate-500">{g.items.length}</td>
                     <td className="p-6 font-black text-left text-lg">{fmt(g.items.reduce((s, i) => s + safeNumber(i.amount), 0))}</td><td></td></tr>
-                  {isExpanded && g.items.map(t => (
-                    <tr key={t.id} className="bg-slate-50/50 dark:bg-slate-900/30 text-xs border-r-4 border-r-amber-500">
+                  {isExpanded && g.items.map(t => { const m = getFamilyMember(t); return (
+                    <tr key={t.id} className={`text-xs border-r-4 ${m ? `${m.rowBg} ${m.rowBorder}` : 'bg-slate-50/50 dark:bg-slate-900/30 border-r-amber-500'}`}>
                       <td className="py-4 text-center"><button type="button" aria-label="اعتماد" onClick={(e) => { e.stopPropagation(); approveOne(t); }} className="flex flex-col items-center px-2 py-1 rounded-lg hover:bg-slate-100 no-print active:scale-90"><Clock className="text-amber-500 w-6 h-6 animate-pulse" /><span className="text-[11px] font-black text-amber-600">اعتماد</span></button></td>
-                      <td className="pr-20 py-4 font-bold"><div className="text-slate-800 dark:text-slate-200 text-base mb-1">{t.description || 'بدون وصف'} <KindBadge tx={t} /> <RecurringBadge tx={t} /></div><div className="flex gap-3 items-center flex-wrap"><span className="bg-white dark:bg-slate-800 px-3 py-1 border rounded-lg">{t.date}</span><span className="bg-blue-50 text-blue-600 px-3 py-1 rounded-lg">{PAYMENT_METHODS.find(p => p.id === t.method)?.label}</span></div></td>
+                      <td className="pr-20 py-4 font-bold"><div className="text-slate-800 dark:text-slate-200 text-base mb-1">{t.description || 'بدون وصف'} <KindBadge tx={t} /> <RecurringBadge tx={t} /> <FamilyBadge tx={t} /></div><div className="flex gap-3 items-center flex-wrap"><span className="bg-white dark:bg-slate-800 px-3 py-1 border rounded-lg">{t.date}</span><span className="bg-blue-50 text-blue-600 px-3 py-1 rounded-lg">{PAYMENT_METHODS.find(p => p.id === t.method)?.label}</span></div></td>
                       <td className="py-4 text-center text-slate-500">-</td>
                       <td className="py-4 font-black text-left text-base">{fmt(t.amount)}</td>
                       <td className="py-4 text-center"><div className="flex gap-2 justify-center no-print">
                         <button type="button" aria-label="تعديل" onClick={() => { dispatch({ type: 'SET_FORM_MODE', payload: 'edit' }); dispatch({ type: 'SET_FORM_DATA', payload: t }); dispatch({ type: 'SET_FORM_OPEN', payload: true }); }} className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg"><Edit size={16} /></button>
-                        <button type="button" aria-label="حذف" onClick={() => handleDelete(t.id)} className="p-2 text-red-500 hover:bg-red-50 rounded-lg"><Trash2 size={16} /></button></div></td></tr>))}
+                        <button type="button" aria-label="حذف" onClick={() => handleDelete(t.id)} className="p-2 text-red-500 hover:bg-red-50 rounded-lg"><Trash2 size={16} /></button></div></td></tr>); })}
                 </React.Fragment>); })}
               {pendingGroups.length === 0 && (<tr><td colSpan="5" className="p-8 text-center text-slate-500 font-bold">لا توجد التزامات ✅</td></tr>)}
             </tbody></table></div>
@@ -1133,7 +1174,7 @@ const TransactionsView = memo(({ groupedTransactions, transactions, selectedMont
             {g.items.map(t => (<div key={t.id} className="glass p-4 rounded-2xl flex justify-between items-center border">
               <div className="flex items-center gap-3 flex-1 min-w-0">
                 <button aria-label="اعتماد" onClick={() => approveOne(t)} className="p-2 rounded-xl bg-amber-50 text-amber-600"><Clock size={18} /></button>
-                <div className="flex-1 min-w-0"><p className="font-bold text-sm truncate">{t.description || 'بدون وصف'} <RecurringBadge tx={t} /></p><p className="text-[11px] text-slate-500">{t.date}</p></div></div>
+                <div className="flex-1 min-w-0"><p className="font-bold text-sm truncate">{t.description || 'بدون وصف'} <RecurringBadge tx={t} /> <FamilyBadge tx={t} /></p><p className="text-[11px] text-slate-500">{t.date}</p></div></div>
               <div className="text-left flex items-center gap-2"><p className="font-black text-base">{fmt(t.amount)}</p>
                 <button aria-label="تعديل" onClick={() => { dispatch({ type: 'SET_FORM_MODE', payload: 'edit' }); dispatch({ type: 'SET_FORM_DATA', payload: t }); dispatch({ type: 'SET_FORM_OPEN', payload: true }); }} className="text-blue-500"><Edit size={16} /></button>
                 <button aria-label="حذف" onClick={() => handleDelete(t.id)} className="text-rose-500"><Trash2 size={14} /></button></div></div>))}</div>))}</div>
@@ -1141,9 +1182,10 @@ const TransactionsView = memo(({ groupedTransactions, transactions, selectedMont
       {paidArchive.length > 0 && (<details className="group"><summary className="cursor-pointer list-none mb-6">
         <div className="glass p-4 rounded-2xl flex items-center justify-between"><h3 className="text-emerald-600 font-black flex items-center gap-3"><div className="bg-emerald-100 p-2 rounded-lg"><CheckCircle2 size={20} /></div>سجل المدفوعات ({paidArchive.length})</h3><ChevronDown className="text-slate-500 group-open:rotate-180 transition-transform" size={24} /></div></summary>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {paidArchive.map(t => (<div key={t.id} className={`glass p-4 rounded-2xl flex justify-between items-center border-r-4 ${t.type === 'income' ? 'border-emerald-500' : 'border-red-500'}`}>
-            <div className="min-w-0 flex-1 pl-4"><p className="font-bold text-sm truncate">{t.type === 'income' ? '💰' : '💸'} {t.description || t.category} <RecurringBadge tx={t} /></p><p className="text-[11px] text-slate-500">{t.date}</p></div>
-            <div className="flex items-center gap-2"><p className="font-black text-sm">{fmt(t.amount)}</p><button aria-label="إعادة تعليق" onClick={() => reopenOne(t)} className="p-2 text-amber-500 hover:bg-amber-50 rounded-xl no-print"><Undo2 size={18} /></button></div></div>))}
+          {paidArchive.map(t => { const m = getFamilyMember(t); return (
+            <div key={t.id} className={`glass p-4 rounded-2xl flex justify-between items-center border-r-4 ${m ? `${m.rowBorder} ${m.rowBg}` : t.type === 'income' ? 'border-emerald-500' : 'border-red-500'}`}>
+              <div className="min-w-0 flex-1 pl-4"><p className="font-bold text-sm truncate">{t.type === 'income' ? '💰' : '💸'} {t.description || t.category} <RecurringBadge tx={t} /> <FamilyBadge tx={t} /></p><p className="text-[11px] text-slate-500">{t.date}</p></div>
+              <div className="flex items-center gap-2"><p className="font-black text-sm">{fmt(t.amount)}</p><button aria-label="إعادة تعليق" onClick={() => reopenOne(t)} className="p-2 text-amber-500 hover:bg-amber-50 rounded-xl no-print"><Undo2 size={18} /></button></div></div>); })}
         </div></details>)}
     </div>
   );
@@ -2235,7 +2277,6 @@ function App() {
     addNotification({ type: 'success', title: 'تم التصدير' });
   }, [buildLedger, addNotification]);
 
-  // ✅ الطباعة المباشرة
   const printReport = useCallback((title, items) => {
     try {
       const w = window.open('', '_blank', 'width=900,height=700');
@@ -2249,7 +2290,6 @@ function App() {
     } catch (e) { console.error('Print error:', e); addNotification({ type: 'error', title: 'فشل الطباعة', message: e.message }); }
   }, [addNotification]);
 
-  // ✅ تصدير PDF مباشر (نسخة مُصلحة)
   const exportPdf = useCallback(async (title, items) => {
     if (!window.html2pdf) { addNotification({ type: 'error', title: 'خطأ', message: 'مكتبة PDF غير محمّلة — تحقق من الاتصال وأعد المحاولة' }); return; }
     const overlay = document.createElement('div');
@@ -2421,11 +2461,13 @@ function App() {
       const totalDebt = updatedLoans.filter(l => !l.isReceivable).reduce((s, l) => s + l.remaining, 0) + cards.reduce((s, c) => s + safeNumber(c.openingDebt), 0);
       const totalReceivable = updatedLoans.filter(l => l.isReceivable).reduce((s, l) => s + l.remaining, 0);
       const feesSum = m.filter(t => t.category === 'رسوم تحويلات' && t.status === 'paid').reduce((s, t) => s + safeNumber(t.amount), 0);
+      const hanySum = m.filter(t => t.category === 'مسحوبات محل هاني' && t.status === 'paid').reduce((s, t) => s + safeNumber(t.amount), 0);
       let text = `📊 تحليل ${selectedMonth} ${selectedYear}:\n\n• الدخل التشغيلي: ${fmt(inc)} ج.م\n• المصروف التشغيلي: ${fmt(exp)} ج.م\n\n`;
       text += savings > 0 ? `✅ وفر: ${fmt(savings)} ج.م\n\n` : savings < 0 ? `⚠️ عجز: ${fmt(Math.abs(savings))} ج.م\n\n` : `⚖️ متعادل\n\n`;
       text += `💳 إجمالي المديونية: ${fmt(totalDebt)} ج.م\n`;
       if (totalReceivable > 0) text += `➕ مستحقات لك: ${fmt(totalReceivable)} ج.م\n`;
       if (feesSum > 0) text += `💸 رسوم التحويلات هذا الشهر: ${fmt(feesSum)} ج.م\n`;
+      if (hanySum > 0) text += `🛒 مسحوبات محل هاني: ${fmt(hanySum)} ج.م\n`;
       dispatch({ type: 'SET_AI_RESPONSE', payload: text });
       dispatch({ type: 'SET_AI_LOADING', payload: false });
     }, 800);
@@ -2472,7 +2514,7 @@ function App() {
         const cardTx = transactions.filter(t => t.method === cardMethod && t.month === selectedMonth && (t.year || 2026) === selectedYear).sort((a, b) => new Date(b.date) - new Date(a.date));
         return (<div className="modal-backdrop z-[3500] no-print"><div className="bg-white dark:bg-slate-900 w-full max-w-4xl rounded-2xl shadow-2xl overflow-hidden flex flex-col" style={{ maxHeight: 'calc(100dvh - 24px)' }}>
           <div className="p-6 border-b bg-slate-50/50 dark:bg-slate-800/30"><div className="flex justify-between items-start flex-wrap gap-3"><div className="flex items-center gap-3"><BankLogo type={`${card.bank.toLowerCase()}_card`} size={40} /><div><h3 className="text-2xl font-black">{card.bank} - {card.name}</h3><p className="text-sm text-slate-500 font-bold mt-1">{selectedMonth} {selectedYear}</p></div></div><div className="flex gap-2"><button type="button" onClick={() => exportPdf(`كشف ${card.bank} - ${selectedMonth} ${selectedYear}`, cardTx)} className="gradient-bg-danger text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2"><FileText size={18} /> PDF</button><button type="button" aria-label="إغلاق" onClick={() => dispatch({ type: 'SET_VIEWING_CARD_STATEMENT', payload: null })} className="p-2 hover:bg-red-50 hover:text-red-500 text-slate-500 rounded-xl"><X size={24} /></button></div></div><div className="grid grid-cols-2 gap-4 mt-4"><div className="bg-white dark:bg-slate-800 p-4 rounded-2xl border-r-4 border-amber-500"><p className="text-[11px] font-bold text-slate-500 uppercase">دين بداية الشهر</p><p className="text-lg font-black">{fmt(monthData?.openingDebt || 0)} ج.م</p></div><div className="bg-white dark:bg-slate-800 p-4 rounded-2xl border-r-4 border-blue-500"><p className="text-[11px] font-bold text-slate-500 uppercase">دين نهاية الشهر</p><p className="text-lg font-black text-blue-600">{fmt(monthData?.closingDebt || 0)} ج.م</p></div></div></div>
-          <div className="flex-1 overflow-y-auto p-6 scroll-hide" style={{ minHeight: 0 }}><table className="w-full text-right"><thead className="bg-slate-50 dark:bg-slate-800 sticky top-0"><tr><th className="p-4 border-b text-xs">التاريخ</th><th className="p-4 border-b text-xs">الوصف</th><th className="p-4 border-b text-xs">الفئة</th><th className="p-4 border-b text-xs text-left">المبلغ</th></tr></thead><tbody className="divide-y text-sm font-bold">{cardTx.map(t => (<tr key={t.id} className="hover:bg-blue-50/50"><td className="p-4 text-slate-500">{t.date}</td><td className="p-4">{t.description || '-'}</td><td className="p-4"><span className="bg-white dark:bg-slate-800 px-2 py-1 rounded text-xs border">{t.category}</span></td><td className="p-4 text-left font-black">{fmt(t.amount)}</td></tr>))}{cardTx.length === 0 && <tr><td colSpan="4" className="p-12 text-center text-slate-500">لا توجد عمليات</td></tr>}</tbody></table></div></div></div>);
+          <div className="flex-1 overflow-y-auto p-6 scroll-hide" style={{ minHeight: 0 }}><table className="w-full text-right"><thead className="bg-slate-50 dark:bg-slate-800 sticky top-0"><tr><th className="p-4 border-b text-xs">التاريخ</th><th className="p-4 border-b text-xs">الوصف</th><th className="p-4 border-b text-xs">الفئة</th><th className="p-4 border-b text-xs text-left">المبلغ</th></tr></thead><tbody className="divide-y text-sm font-bold">{cardTx.map(t => (<tr key={t.id} className="hover:bg-blue-50/50"><td className="p-4 text-slate-500">{t.date}</td><td className="p-4">{t.description || '-'} <FamilyBadge tx={t} /></td><td className="p-4"><span className="bg-white dark:bg-slate-800 px-2 py-1 rounded text-xs border">{t.category}</span></td><td className="p-4 text-left font-black">{fmt(t.amount)}</td></tr>))}{cardTx.length === 0 && <tr><td colSpan="4" className="p-12 text-center text-slate-500">لا توجد عمليات</td></tr>}</tbody></table></div></div></div>);
       })()}
       {!isLocked && (<div className="bottom-nav-container no-print"><div className="scrollable-nav scroll-hide" ref={navRef}>
         {[{ id: 'dashboard', label: 'الرئيسية', icon: LayoutDashboard }, { id: 'transactions', label: 'المعاملات', icon: ArrowUpRight }, { id: 'cards', label: 'المحافظ', icon: CreditCard }, { id: 'loans', label: 'القروض', icon: Banknote }, { id: 'planning', label: 'التخطيط', icon: Table }, { id: 'planner', label: 'المخطط', icon: Target }, { id: 'forecast', label: 'التوقع', icon: LineChart }, { id: 'comparison', label: 'المقارنة', icon: Activity }, { id: 'calendar', label: 'الأجندة', icon: CalendarDays }, { id: 'duplicates', label: 'المكررات', icon: Filter }, { id: 'settings', label: 'الإعدادات', icon: Sliders }, { id: 'categories', label: 'الفئات', icon: Layers }].map(item => (
