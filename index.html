@@ -136,7 +136,7 @@ import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Toolti
 import {
   LayoutDashboard, Wallet, CreditCard, Banknote, Plus, Trash2, Repeat, TrendingUp, TrendingDown,
   Calendar, ArrowUpRight, Edit, X, Save, Layers, ArrowRight, Printer, ChevronDown, Calculator,
-  ArrowUp, Undo2, LogOut, Lock, Unlock, Moon, Sun, ShieldCheck, RefreshCcw,
+  ArrowUp, Undo2, LogOut, Lock, Unlock, Moon, Sun, ShieldCheck, RefreshCcw, Menu,
   Search, FileSpreadsheet, Settings as SettingsIcon, Target, CalendarDays, BarChart3, Bell, Sparkles, Bot,
   AlertTriangle, Clock, CheckCircle2, Zap, Hash, Coins, Filter, Eye, EyeOff, ShieldAlert,
   Download, Upload, Cloud, Signal, PiggyBank, Landmark as BuildingBank, ArrowDownCircle, ArrowUpCircle, Wifi, Store as StoreIcon, Users, Activity, Sliders, Table, RotateCcw, Percent, LineChart, Delete, FileText
@@ -544,7 +544,6 @@ const RecurringBadge = memo(({ tx }) => {
   return <span className="text-[10px] px-2 py-0.5 rounded-full font-black bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">🔁 متكرر</span>;
 });
 
-// ⭐ مكوّنات العيلة
 const FAMILY_MEMBERS = {
   ans:         { name: 'أنس',        bg: 'bg-blue-100 dark:bg-blue-900/40',       text: 'text-blue-800 dark:text-blue-300',       border: 'border-blue-200 dark:border-blue-800',       rowBg: 'bg-blue-50/60 dark:bg-blue-900/10',       rowBorder: 'border-blue-400',       freq: 880 },
   abdelrahman: { name: 'عبد الرحمن', bg: 'bg-emerald-100 dark:bg-emerald-900/40', text: 'text-emerald-800 dark:text-emerald-300', border: 'border-emerald-200 dark:border-emerald-800', rowBg: 'bg-emerald-50/60 dark:bg-emerald-900/10', rowBorder: 'border-emerald-400', freq: 660 },
@@ -1101,7 +1100,6 @@ const CategoriesView = memo(({ transactions, selectedMonth, selectedYear, catVie
     </div>
   );
 });
-
 const TransactionsView = memo(({ groupedTransactions, transactions, selectedMonth, selectedYear, transViewMode, statusFilter, searchTerm, expandedGroup, data, monthInsights, dispatch, handleDelete, printReport, exportPdf, addNotification, onSelectYear, onSelectMonth, saveHistory, onPrintMonthlyReport }) => {
   const [sourceFilter, setSourceFilter] = useState('all');
   const filterBySource = (list) => {
@@ -1218,7 +1216,7 @@ const LoansView = memo(({ updatedLoans, cards, recurringItems, transactions, dis
     const monthLabel = `${loan.month} ${loan.year}`;
     const alreadyCarried = transactions.some(t => t.source === 'carryover' && t.carryoverFrom === monthLabel);
     if (alreadyCarried) {
-      addNotification({ type: 'info', title: '✅ تمت التسوية مسبقاً', message: `الباقي مرحّل إلى الشهر التالي — راجعه هناك`, duration: 6000 });
+      addNotification({ type: 'info', title: '✅ تمت التسوية مسبقاً', message: `الباقي مرحّل إلى الشهر التالي`, duration: 6000 });
       return;
     }
 
@@ -1845,8 +1843,8 @@ const ProfessionalTicker = memo(({ updatedLoans, cards, liveBalances, walletVisi
     <span className="ticker-item text-purple-200">💎 {quote}</span><span className="text-white/20 mx-2">•</span>
   </>);
   return (
-    <div className="fixed top-0 left-0 right-0 z-[2000] gradient-bg-primary text-white h-10 shadow-lg flex items-center overflow-hidden no-print">
-      <div className="bg-white/20 h-full w-10 flex items-center justify-center flex-shrink-0"><Zap size={18} className="animate-pulse" /></div>
+    <div className="fixed top-0 left-0 right-0 z-[2000] gradient-bg-primary text-white h-8 shadow-lg flex items-center overflow-hidden no-print">
+      <div className="bg-white/20 h-full w-8 flex items-center justify-center flex-shrink-0"><Zap size={14} className="animate-pulse" /></div>
       <div className="ticker-wrap flex-1 h-full flex items-center overflow-hidden"><div className="ticker-content h-full items-center whitespace-nowrap animate-ticker-scroll">{items}{items}</div></div></div>
   );
 });
@@ -1896,38 +1894,92 @@ const LoginScreen = ({ onLogin }) => {
 const PinLockScreen = ({ onSuccess, onLogout }) => {
   const [pin, setPin] = useState('');
   const [error, setError] = useState(false);
+  const [success, setSuccess] = useState(false);
   const [attempts, setAttempts] = useState(0);
-  const shakeRef = useRef(null);
+  const [lastPressed, setLastPressed] = useState(null);
+
   const handleDigit = (d) => {
-    if (pin.length >= 4) return;
+    if (pin.length >= 4 || success) return;
     const next = pin + d;
     setPin(next);
+    setLastPressed(d);
+    setTimeout(() => setLastPressed(null), 180);
     if (next.length === 4) {
-      if (next === CORRECT_PIN) setTimeout(() => onSuccess(), 250);
-      else {
-        setError(true);
-        setAttempts(a => a + 1);
-        if (shakeRef.current) { shakeRef.current.style.animation = 'none'; setTimeout(() => { if (shakeRef.current) shakeRef.current.style.animation = 'shake 0.4s ease-in-out'; }, 10); }
-        setTimeout(() => { setPin(''); setError(false); }, 800);
-      }
+      setTimeout(() => {
+        if (next === CORRECT_PIN) {
+          setSuccess(true);
+          setTimeout(() => onSuccess(), 600);
+        } else {
+          setError(true);
+          setAttempts(a => a + 1);
+          setTimeout(() => { setPin(''); setError(false); }, 700);
+        }
+      }, 180);
     }
   };
-  const handleDelete = () => setPin(p => p.slice(0, -1));
+
+  const handleDelete = () => { if (!success) setPin(p => p.slice(0, -1)); };
+
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-slate-900 via-indigo-950 to-black p-6">
-      <div ref={shakeRef} className="flex flex-col items-center max-w-sm w-full">
-        <div className="w-24 h-24 bg-gradient-to-br from-blue-500/20 to-indigo-500/20 rounded-full flex items-center justify-center mb-8 text-blue-400 border border-blue-500/20"><Lock size={44} /></div>
-        <h2 className="text-2xl font-black text-white mb-2">التطبيق مقفل</h2>
-        <p className="text-slate-400 text-sm mb-8">أدخل رمز الحماية (4 أرقام)</p>
-        <div className="flex gap-4 mb-10">{[0,1,2,3].map(i => (<div key={i} className={`pin-dot ${pin.length > i ? 'filled' : ''} ${error ? '!bg-red-500 !border-red-500' : ''}`}></div>))}</div>
-        {error && <p className="text-red-400 text-xs mb-4 font-bold">رمز خاطئ — حاول مجدداً ({attempts})</p>}
-        <div className="grid grid-cols-3 gap-4 mb-6 w-full max-w-xs">
-          {['1','2','3','4','5','6','7','8','9'].map(d => (<button key={d} type="button" onClick={() => handleDigit(d)} className="pin-btn">{d}</button>))}
-          <div></div>
-          <button type="button" onClick={() => handleDigit('0')} className="pin-btn">0</button>
-          <button type="button" onClick={handleDelete} className="pin-btn text-red-400"><Delete size={28} /></button>
+    <div className="min-h-screen flex items-center justify-center p-6 relative overflow-hidden"
+         style={{ background: 'radial-gradient(ellipse at top, #1e293b 0%, #0f172a 55%, #020617 100%)' }}>
+      <div className="absolute -top-40 left-1/2 -translate-x-1/2 w-[600px] h-[600px] bg-blue-500/10 rounded-full blur-[140px] pointer-events-none"></div>
+      <div className="absolute -bottom-20 right-0 w-[400px] h-[400px] bg-indigo-500/10 rounded-full blur-[120px] pointer-events-none"></div>
+
+      <div className={`relative w-full max-w-sm ${error ? 'animate-shake' : ''}`}>
+        <div className="flex flex-col items-center mb-9">
+          <div className={`w-20 h-20 rounded-[28px] flex items-center justify-center mb-5 transition-all duration-500 ${
+            success ? 'bg-gradient-to-br from-emerald-400 to-emerald-600 shadow-2xl shadow-emerald-500/40 scale-110' :
+            error ? 'bg-gradient-to-br from-red-500/20 to-red-700/20 border border-red-500/30' :
+            'bg-gradient-to-br from-blue-500/15 to-indigo-500/15 border border-blue-500/20'
+          }`}>
+            {success ? <CheckCircle2 size={38} className="text-white" /> :
+             error ? <AlertTriangle size={34} className="text-red-400" /> :
+             <Lock size={34} className="text-blue-400" />}
+          </div>
+          <h1 className="text-2xl font-black text-white mb-1.5 tracking-tight">
+            {success ? 'تم التحقق ✓' : error ? 'رمز غير صحيح' : 'أهلاً بعودتك'}
+          </h1>
+          <p className="text-sm text-slate-400 font-medium">
+            {success ? 'جارٍ فتح التطبيق...' : error ? `محاولة ${attempts} — أعد المحاولة` : 'أدخل رمز الحماية المكوّن من 4 أرقام'}
+          </p>
         </div>
-        <button type="button" onClick={onLogout} className="text-slate-400 hover:text-red-400 text-xs font-bold flex items-center gap-2"><LogOut size={14} /> تسجيل خروج</button>
+
+        <div className="flex justify-center gap-4 mb-10 h-4">
+          {[0, 1, 2, 3].map(i => (
+            <div key={i} className={`w-3.5 h-3.5 rounded-full transition-all duration-300 ${
+              success ? 'bg-emerald-400 border-2 border-emerald-400 scale-125 shadow-lg shadow-emerald-400/50' :
+              error ? 'bg-red-500 border-2 border-red-500 scale-110' :
+              pin.length > i ? 'bg-blue-400 border-2 border-blue-400 scale-125 shadow-lg shadow-blue-400/50' :
+              'bg-transparent border-2 border-slate-600'
+            }`}></div>
+          ))}
+        </div>
+
+        <div className="grid grid-cols-3 gap-3.5 mb-8">
+          {['1','2','3','4','5','6','7','8','9'].map(d => (
+            <button key={d} type="button" onClick={() => handleDigit(d)}
+                    className={`aspect-square rounded-2xl font-black text-2xl transition-all duration-150 active:scale-90 select-none ${
+                      lastPressed === d ? 'bg-blue-500 text-white scale-95 shadow-lg shadow-blue-500/40' :
+                      'bg-white/[0.04] border border-white/[0.08] text-white hover:bg-white/[0.09] hover:border-white/[0.15]'
+                    }`}>{d}</button>
+          ))}
+          <div className="aspect-square"></div>
+          <button type="button" onClick={() => handleDigit('0')}
+                  className={`aspect-square rounded-2xl font-black text-2xl transition-all duration-150 active:scale-90 select-none ${
+                    lastPressed === '0' ? 'bg-blue-500 text-white scale-95 shadow-lg shadow-blue-500/40' :
+                    'bg-white/[0.04] border border-white/[0.08] text-white hover:bg-white/[0.09] hover:border-white/[0.15]'
+                  }`}>0</button>
+          <button type="button" onClick={handleDelete}
+                  className="aspect-square rounded-2xl flex items-center justify-center text-slate-500 hover:bg-red-500/10 hover:text-red-400 transition-all duration-150 active:scale-90">
+            <Delete size={24} />
+          </button>
+        </div>
+
+        <button type="button" onClick={onLogout}
+                className="w-full py-3 text-slate-500 hover:text-red-400 text-xs font-bold flex items-center justify-center gap-2 transition-colors">
+          <LogOut size={14} /> تسجيل الخروج
+        </button>
       </div>
     </div>
   );
@@ -2107,7 +2159,6 @@ const BACKUP_REMINDER_LS_KEY = 'v71_last_backup_reminder_ts';
 const HOUR_MS = 60 * 60 * 1000;
 const WEEK_MS = 7 * 24 * HOUR_MS;
 
-// ⭐ دالة صوت التنبيه
 function playFamilyAlert(freq = 880) {
   try {
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -2152,6 +2203,7 @@ function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
   const [pinVerified, setPinVerified] = useState(() => sessionStorage.getItem('pin_verified') === 'yes');
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const mainContentRef = useRef(null);
   const saveTimeoutRef = useRef(null);
   const processingTimeoutRef = useRef(null);
@@ -2180,55 +2232,29 @@ function App() {
     return () => unsub();
   }, [isAuthenticated]);
 
-  // ⭐ إشعارات عمليات العيلة
   useEffect(() => {
     if (!isAuthenticated || !data?.transactions) return;
-
-    const familyTx = data.transactions.filter(t =>
-      t.source === 'family-app' || (t.createdBy && t.createdBy !== 'ahmed')
-    );
-
+    const familyTx = data.transactions.filter(t => t.source === 'family-app' || (t.createdBy && t.createdBy !== 'ahmed'));
     if (!familyInitRef.current) {
       familyTx.forEach(t => familySeenRef.current.add(t.id));
       familyInitRef.current = true;
       return;
     }
-
     const newOnes = familyTx.filter(t => !familySeenRef.current.has(t.id));
     if (newOnes.length === 0) return;
-
     newOnes.forEach(t => {
       familySeenRef.current.add(t.id);
       const memberName = FAMILY_MEMBERS[t.createdBy]?.name || t.createdByName || '؟';
-
-      dispatch({
-        type: 'ADD_NOTIFICATION',
-        payload: {
-          type: 'info',
-          title: `🛒 ${memberName} سجّل عملية`,
-          message: `${t.description || t.category} — ${fmt(t.amount)} ج.م`,
-          duration: 8000
-        }
-      });
-
+      dispatch({ type: 'ADD_NOTIFICATION', payload: { type: 'info', title: `🛒 ${memberName} سجّل عملية`, message: `${t.description || t.category} — ${fmt(t.amount)} ج.م`, duration: 8000 } });
       if ('Notification' in window && Notification.permission === 'granted') {
-        try {
-          new Notification(`🛒 ${memberName} سجّل عملية`, {
-            body: `${t.description || t.category} — ${fmt(t.amount)} ج.م`,
-            tag: 'family-tx-' + t.id,
-            requireInteraction: false,
-            silent: false
-          });
-        } catch (e) { console.warn('Notification error:', e); }
+        try { new Notification(`🛒 ${memberName} سجّل عملية`, { body: `${t.description || t.category} — ${fmt(t.amount)} ج.م`, tag: 'family-tx-' + t.id, requireInteraction: false, silent: false }); } catch (e) { console.warn('Notification error:', e); }
       }
     });
-
     const lastNew = newOnes[0];
     const freq = FAMILY_MEMBERS[lastNew.createdBy]?.freq || 880;
     playFamilyAlert(freq);
   }, [data?.transactions, isAuthenticated]);
 
-  // ⭐ طلب إذن الإشعارات
   useEffect(() => {
     if (!isAuthenticated) return;
     if (!('Notification' in window)) return;
@@ -2284,7 +2310,7 @@ function App() {
       const lastBackup = safeNumber(localStorage.getItem(AUTO_BACKUP_LS_KEY), 0);
       const lastReminder = safeNumber(localStorage.getItem(BACKUP_REMINDER_LS_KEY), 0);
       if (lastBackup > 0 && (Date.now() - lastBackup) > WEEK_MS && (Date.now() - lastReminder) > WEEK_MS) {
-        dispatch({ type: 'ADD_NOTIFICATION', payload: { type: 'info', title: '☁️ تذكير النسخ الاحتياطي', message: 'مر أسبوع منذ آخر نسخة سحابية — يُفضل رفع نسخة الآن', duration: 12000 } });
+        dispatch({ type: 'ADD_NOTIFICATION', payload: { type: 'info', title: '☁️ تذكير النسخ الاحتياطي', message: 'مر أسبوع منذ آخر نسخة سحابية', duration: 12000 } });
         localStorage.setItem(BACKUP_REMINDER_LS_KEY, String(Date.now()));
       }
     } catch(e){}
@@ -2331,12 +2357,13 @@ function App() {
         if (activeCategoryDetail) dispatch({ type: 'SET_ACTIVE_CATEGORY_DETAIL', payload: null });
         if (viewingCardStatement) dispatch({ type: 'SET_VIEWING_CARD_STATEMENT', payload: null });
         if (isRecurringModalOpen) dispatch({ type: 'SET_RECURRING_MODAL_OPEN', payload: false });
+        if (isDrawerOpen) setIsDrawerOpen(false);
       }
       if ((e.ctrlKey || e.metaKey) && e.key === 'k') { e.preventDefault(); document.querySelector('input[placeholder*="ابحث"]')?.focus(); }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [isFormOpen, isAiModalOpen, editingCard, editingLoan, isQuickTransferModalOpen, activeCategoryDetail, viewingCardStatement, isRecurringModalOpen]);
+  }, [isFormOpen, isAiModalOpen, editingCard, editingLoan, isQuickTransferModalOpen, activeCategoryDetail, viewingCardStatement, isRecurringModalOpen, isDrawerOpen]);
 
   const removeNotification = useCallback((id) => dispatch({ type: 'REMOVE_NOTIFICATION', payload: id }), []);
   const addNotification = useCallback((notification) => dispatch({ type: 'ADD_NOTIFICATION', payload: notification }), []);
@@ -2481,7 +2508,6 @@ function App() {
     addNotification({ type: 'success', title: 'تم التصدير' });
   }, [buildLedger, addNotification]);
 
-  // ✅ الطباعة المباشرة (بدون كلمة معلق)
   const printReport = useCallback((title, items) => {
     try {
       const w = window.open('', '_blank', 'width=900,height=700');
@@ -2494,70 +2520,41 @@ function App() {
     } catch (e) { console.error('Print error:', e); addNotification({ type: 'error', title: 'فشل الطباعة', message: e.message }); }
   }, [addNotification]);
 
-  // ✅ تصدير PDF (مُصلح لمشكلة الصفحة البيضاء)
   const exportPdf = useCallback(async (title, items) => {
-    if (!window.html2pdf) { addNotification({ type: 'error', title: 'خطأ', message: 'مكتبة PDF غير محمّلة — تحقق من الاتصال وأعد المحاولة' }); return; }
-
-    const container = document.createElement('div');
-    container.setAttribute('data-pdf-container', '1');
-    container.dir = 'rtl';
-    container.style.cssText = `position:absolute; top:0; left:0; width:794px; padding:30px; font-family:Cairo,"Segoe UI",sans-serif; background:#ffffff; color:#1e293b; direction:rtl; z-index:1; box-sizing:border-box; line-height:1.5;`;
-
-    const sorted = [...items].sort((a, b) => { const d = new Date(a.date) - new Date(b.date); if (d !== 0) return d; return String(a.id).localeCompare(String(b.id)); });
-    const total = sorted.reduce((s, i) => s + safeNumber(i.amount), 0);
-
-    container.innerHTML = `<div style="text-align:center;margin-bottom:24px;border-bottom:3px solid #3B82F6;padding-bottom:16px;"><h1 style="color:#1D4ED8;font-size:22px;margin:0;font-weight:900;">${escapeHtml(title)}</h1><p style="color:#64748b;font-size:12px;margin:6px 0 0 0;">${new Date().toLocaleDateString('ar-EG', {weekday:'long',year:'numeric',month:'long',day:'numeric'})}</p></div><table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:20px;table-layout:fixed;"><thead><tr style="background:#f1f5f9;"><th style="padding:8px;border:1px solid #cbd5e1;text-align:right;width:30px;">#</th><th style="padding:8px;border:1px solid #cbd5e1;text-align:right;width:90px;">التاريخ</th><th style="padding:8px;border:1px solid #cbd5e1;text-align:right;">البند</th><th style="padding:8px;border:1px solid #cbd5e1;text-align:right;">الوصف</th><th style="padding:8px;border:1px solid #cbd5e1;text-align:left;width:90px;">المبلغ</th></tr></thead><tbody>${sorted.map((i, idx) => `<tr style="background:${idx % 2 ? '#f8fafc' : '#ffffff'};"><td style="padding:6px;border:1px solid #e2e8f0;">${idx + 1}</td><td style="padding:6px;border:1px solid #e2e8f0;">${escapeHtml(i.date || '')}</td><td style="padding:6px;border:1px solid #e2e8f0;">${escapeHtml(i.category || '')}</td><td style="padding:6px;border:1px solid #e2e8f0;word-break:break-word;">${escapeHtml(i.description || '-')}</td><td style="padding:6px;border:1px solid #e2e8f0;font-weight:900;text-align:left;">${fmt(i.amount)}</td></tr>`).join('')}</tbody></table><div style="padding:14px;background:#f1f5f9;border-radius:10px;display:flex;justify-content:space-between;font-weight:900;font-size:15px;"><span>الإجمالي</span><span style="color:#1D4ED8;">${fmt(total)} ج.م</span></div><div style="margin-top:10px;color:#64748b;font-size:11px;text-align:center;">📋 عدد العمليات: ${sorted.length}</div>`;
-
-    document.body.appendChild(container);
+    if (!window.html2pdf) { addNotification({ type: 'error', title: 'خطأ', message: 'مكتبة PDF غير محمّلة' }); return; }
 
     const overlay = document.createElement('div');
-    overlay.setAttribute('data-pdf-overlay', '1');
     overlay.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.85);backdrop-filter:blur(8px);z-index:9999999;display:flex;align-items:center;justify-content:center;color:white;font-family:Cairo,sans-serif;direction:rtl;';
-    overlay.innerHTML = `<div style="text-align:center;"><div style="width:60px;height:60px;border:4px solid rgba(255,255,255,0.3);border-radius:50%;border-top-color:#3B82F6;animation:v71spin 1s linear infinite;margin:0 auto 20px;"></div><p style="font-weight:900;font-size:18px;margin:0;">⏳ جاري إنشاء ملف PDF...</p><p style="font-size:12px;opacity:0.7;margin-top:8px;">قد يستغرق بضع ثواني</p></div>`;
+    overlay.innerHTML = `<div style="text-align:center;"><div style="width:60px;height:60px;border:4px solid rgba(255,255,255,0.3);border-radius:50%;border-top-color:#3B82F6;animation:v71spin 1s linear infinite;margin:0 auto 20px;"></div><p style="font-weight:900;font-size:18px;margin:0;">⏳ جاري إنشاء PDF...</p></div>`;
     const styleTag = document.createElement('style'); styleTag.textContent = '@keyframes v71spin{to{transform:rotate(360deg)}}';
     document.head.appendChild(styleTag);
     document.body.appendChild(overlay);
 
-    try { if (document.fonts && document.fonts.ready) await document.fonts.ready; } catch(e){}
-    await new Promise(r => setTimeout(r, 500));
-
+    const sorted = [...items].sort((a, b) => { const d = new Date(a.date) - new Date(b.date); if (d !== 0) return d; return String(a.id).localeCompare(String(b.id)); });
+    const total = sorted.reduce((s, i) => s + safeNumber(i.amount), 0);
     const cleanName = title.replace(/[^\u0600-\u06FF\w]+/g, '_').slice(0, 50) || 'report';
     const filename = `${cleanName}_${getLocalISODate()}.pdf`;
 
+    const iframeHtml = `<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap" rel="stylesheet"><script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"><\/script><style>*{box-sizing:border-box;margin:0;padding:0;} body{font-family:Cairo,"Segoe UI",sans-serif;padding:30px;direction:rtl;background:#ffffff;color:#1e293b;} h1{color:#1D4ED8;font-size:22px;text-align:center;margin-bottom:6px;font-weight:900;} .date{color:#64748b;font-size:12px;text-align:center;margin-bottom:20px;} .divider{border-bottom:3px solid #3B82F6;padding-bottom:16px;margin-bottom:20px;} table{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:20px;table-layout:fixed;} th{background:#f1f5f9;padding:8px;border:1px solid #cbd5e1;text-align:right;font-weight:900;} td{padding:6px;border:1px solid #e2e8f0;text-align:right;word-break:break-word;} tr:nth-child(even) td{background:#f8fafc;} .amount{font-weight:900;text-align:left;} .summary{padding:14px;background:#f1f5f9;border-radius:10px;display:flex;justify-content:space-between;font-weight:900;font-size:15px;} .summary .val{color:#1D4ED8;} .footer{margin-top:10px;color:#64748b;font-size:11px;text-align:center;}</style></head><body><div class="divider"><h1>${escapeHtml(title)}</h1><p class="date">${new Date().toLocaleDateString('ar-EG', {weekday:'long',year:'numeric',month:'long',day:'numeric'})}</p></div><table><thead><tr><th style="width:30px;">#</th><th style="width:90px;">التاريخ</th><th>البند</th><th>الوصف</th><th style="width:90px; text-align:left;">المبلغ</th></tr></thead><tbody>${sorted.map((i, idx) => `<tr><td>${idx + 1}</td><td>${escapeHtml(i.date || '')}</td><td>${escapeHtml(i.category || '')}</td><td>${escapeHtml(i.description || '-')}</td><td class="amount">${fmt(i.amount)} ج.م</td></tr>`).join('')}</tbody></table><div class="summary"><span>الإجمالي</span><span class="val">${fmt(total)} ج.م</span></div><div class="footer">📋 عدد العمليات: ${sorted.length}</div><script>window.generatePdf = async function(filename) { try { for (let i = 0; i < 60; i++) { if (window.html2pdf) break; await new Promise(r => setTimeout(r, 100)); } if (!window.html2pdf) throw new Error('html2pdf not loaded'); try { if (document.fonts && document.fonts.ready) await document.fonts.ready; } catch(e){} await new Promise(r => setTimeout(r, 500)); await window.html2pdf().from(document.body).set({ margin: [10, 10, 10, 10], filename: filename, image: { type: 'jpeg', quality: 0.98 }, html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff', logging: false }, jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }, pagebreak: { mode: ['css', 'legacy'] } }).save(); return true; } catch(e) { throw e; } };<\/script></body></html>`;
+
+    const iframe = document.createElement('iframe');
+    iframe.style.cssText = 'position:fixed; left:-9999px; top:0; width:794px; height:1123px; border:0; visibility:hidden;';
+    document.body.appendChild(iframe);
+
     try {
-      await window.html2pdf().from(container).set({
-        margin: [8, 8, 8, 8],
-        filename,
-        image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: {
-          scale: 2,
-          useCORS: true,
-          backgroundColor: '#ffffff',
-          logging: false,
-          width: 794,
-          windowWidth: 794,
-          scrollX: 0,
-          scrollY: 0,
-          onclone: (clonedDoc) => {
-            clonedDoc.querySelectorAll('[data-pdf-overlay]').forEach(el => el.remove());
-            const c = clonedDoc.querySelector('[data-pdf-container]');
-            if (c) {
-              c.style.position = 'static';
-              c.style.zIndex = '1';
-              c.style.margin = '0 auto';
-              c.style.width = '794px';
-            }
-          }
-        },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-        pagebreak: { mode: ['css', 'legacy'] }
-      }).save();
+      const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+      iframeDoc.open();
+      iframeDoc.write(iframeHtml);
+      iframeDoc.close();
+      await new Promise(r => setTimeout(r, 700));
+      if (typeof iframe.contentWindow.generatePdf !== 'function') throw new Error('PDF generator not initialized');
+      await iframe.contentWindow.generatePdf(filename);
       addNotification({ type: 'success', title: '✅ تم تصدير PDF', message: filename });
     } catch (e) {
       console.error('PDF Export Error:', e);
       addNotification({ type: 'error', title: 'فشل تصدير PDF', message: e.message || 'خطأ غير معروف' });
     } finally {
-      if (container.parentNode) container.parentNode.removeChild(container);
+      if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
       if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
       if (styleTag.parentNode) styleTag.parentNode.removeChild(styleTag);
     }
@@ -2671,7 +2668,7 @@ function App() {
 
   const deleteRecurring = useCallback((id) => {
     const target = recurringItems.find(i => i.id === id);
-    dispatch({ type: 'SHOW_CONFIRM', danger: true, title: 'حذف الالتزام المتكرر', message: `سيتم حذف "${target?.title || 'البند'}" من القوالب، وحذف كل المعاملات المعلقة المرتبطة به في كل الشهور.\n\n(المعاملات المعتمدة لن تُحذف)`, onConfirm: () => { saveHistory(); const newRecurring = recurringItems.filter(i => i.id !== id); const newTx = (data.transactions || []).filter(t => !(t.sourceRecurringId === id && t.status !== 'paid')); const newMat = {}; Object.entries(data.materializedRecurring || {}).forEach(([k, ids]) => { newMat[k] = (ids || []).filter(x => x !== id); }); dispatch({ type: 'SET_DATA', payload: { ...data, recurringItems: newRecurring, transactions: newTx, materializedRecurring: newMat } }); addNotification({ type: 'success', title: '✅ تم الحذف' }); }, onCancel: () => dispatch({ type: 'HIDE_CONFIRM' }) });
+    dispatch({ type: 'SHOW_CONFIRM', danger: true, title: 'حذف الالتزام المتكرر', message: `سيتم حذف "${target?.title || 'البند'}" من القوالب.`, onConfirm: () => { saveHistory(); const newRecurring = recurringItems.filter(i => i.id !== id); const newTx = (data.transactions || []).filter(t => !(t.sourceRecurringId === id && t.status !== 'paid')); const newMat = {}; Object.entries(data.materializedRecurring || {}).forEach(([k, ids]) => { newMat[k] = (ids || []).filter(x => x !== id); }); dispatch({ type: 'SET_DATA', payload: { ...data, recurringItems: newRecurring, transactions: newTx, materializedRecurring: newMat } }); addNotification({ type: 'success', title: '✅ تم الحذف' }); }, onCancel: () => dispatch({ type: 'HIDE_CONFIRM' }) });
   }, [recurringItems, data, saveHistory, addNotification]);
 
   const handleExportCSV = useCallback(() => {
@@ -2770,21 +2767,94 @@ function App() {
           <div className="p-6 border-b bg-slate-50/50 dark:bg-slate-800/30"><div className="flex justify-between items-start flex-wrap gap-3"><div className="flex items-center gap-3"><BankLogo type={`${card.bank.toLowerCase()}_card`} size={40} /><div><h3 className="text-2xl font-black">{card.bank} - {card.name}</h3><p className="text-sm text-slate-500 font-bold mt-1">{selectedMonth} {selectedYear}</p></div></div><div className="flex gap-2"><button type="button" onClick={() => exportPdf(`كشف ${card.bank} - ${selectedMonth} ${selectedYear}`, cardTx)} className="gradient-bg-danger text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2"><FileText size={18} /> PDF</button><button type="button" aria-label="إغلاق" onClick={() => dispatch({ type: 'SET_VIEWING_CARD_STATEMENT', payload: null })} className="p-2 hover:bg-red-50 hover:text-red-500 text-slate-500 rounded-xl"><X size={24} /></button></div></div><div className="grid grid-cols-2 gap-4 mt-4"><div className="bg-white dark:bg-slate-800 p-4 rounded-2xl border-r-4 border-amber-500"><p className="text-[11px] font-bold text-slate-500 uppercase">دين بداية الشهر</p><p className="text-lg font-black">{fmt(monthData?.openingDebt || 0)} ج.م</p></div><div className="bg-white dark:bg-slate-800 p-4 rounded-2xl border-r-4 border-blue-500"><p className="text-[11px] font-bold text-slate-500 uppercase">دين نهاية الشهر</p><p className="text-lg font-black text-blue-600">{fmt(monthData?.closingDebt || 0)} ج.م</p></div></div></div>
           <div className="flex-1 overflow-y-auto p-6 scroll-hide" style={{ minHeight: 0 }}><table className="w-full text-right"><thead className="bg-slate-50 dark:bg-slate-800 sticky top-0"><tr><th className="p-4 border-b text-xs">التاريخ</th><th className="p-4 border-b text-xs">الوصف</th><th className="p-4 border-b text-xs">الفئة</th><th className="p-4 border-b text-xs text-left">المبلغ</th></tr></thead><tbody className="divide-y text-sm font-bold">{cardTx.map(t => (<tr key={t.id} className="hover:bg-blue-50/50"><td className="p-4 text-slate-500">{t.date}</td><td className="p-4">{t.description || '-'} <FamilyBadge tx={t} /></td><td className="p-4"><span className="bg-white dark:bg-slate-800 px-2 py-1 rounded text-xs border">{t.category}</span></td><td className="p-4 text-left font-black">{fmt(t.amount)}</td></tr>))}{cardTx.length === 0 && <tr><td colSpan="4" className="p-12 text-center text-slate-500">لا توجد عمليات</td></tr>}</tbody></table></div></div></div>);
       })()}
-      {!isLocked && (<div className="bottom-nav-container no-print"><div className="scrollable-nav scroll-hide" ref={navRef}>
-        {[{ id: 'dashboard', label: 'الرئيسية', icon: LayoutDashboard }, { id: 'transactions', label: 'المعاملات', icon: ArrowUpRight }, { id: 'cards', label: 'المحافظ', icon: CreditCard }, { id: 'loans', label: 'القروض', icon: Banknote }, { id: 'planning', label: 'التخطيط', icon: Table }, { id: 'planner', label: 'المخطط', icon: Target }, { id: 'forecast', label: 'التوقع', icon: LineChart }, { id: 'comparison', label: 'المقارنة', icon: Activity }, { id: 'calendar', label: 'الأجندة', icon: CalendarDays }, { id: 'duplicates', label: 'المكررات', icon: Filter }, { id: 'settings', label: 'الإعدادات', icon: Sliders }, { id: 'categories', label: 'الفئات', icon: Layers }].map(item => (
-          <button key={item.id} type="button" onClick={() => dispatch({ type: 'SET_ACTIVE_TAB', payload: item.id })} className={`nav-btn ${activeTab === item.id ? 'active' : ''}`}><item.icon size={24} /><span>{item.label}</span></button>))}
+      {!isLocked && (<div className="bottom-nav-container no-print"><div className="scrollable-nav scroll-hide justify-center" ref={navRef}>
+        {[
+          { id: 'dashboard', label: 'الرئيسية', icon: LayoutDashboard },
+          { id: 'transactions', label: 'المعاملات', icon: ArrowUpRight },
+          { id: 'categories', label: 'الفئات', icon: Layers },
+          { id: 'cards', label: 'المحافظ', icon: CreditCard },
+          { id: 'settings', label: 'الإعدادات', icon: Sliders }
+        ].map(item => (
+          <button key={item.id} type="button" onClick={() => dispatch({ type: 'SET_ACTIVE_TAB', payload: item.id })} className={`nav-btn ${activeTab === item.id ? 'active' : ''}`} style={{ minWidth: '68px' }}>
+            <item.icon size={22} /><span>{item.label}</span>
+          </button>
+        ))}
         <div className="v-line"></div>
-        <button type="button" onClick={handleExportCSV} className="nav-btn text-emerald-600"><FileSpreadsheet size={24} /><span>CSV</span></button>
-        <button type="button" onClick={handleExport} className="nav-btn text-blue-600"><Download size={24} /><span>حفظ</span></button>
-        <label className="nav-btn cursor-pointer text-purple-600"><input type="file" accept=".json" onChange={handleImport} className="hidden" aria-label="استيراد" /><Upload size={24} /><span>جلب</span></label>
-        <div className="v-line"></div>
-        <button type="button" onClick={() => mainContentRef.current?.scrollTo({ top: 0, behavior: 'smooth' })} className="nav-btn"><ArrowUp size={24} /><span>أعلى</span></button>
-        <button type="button" onClick={() => { sessionStorage.removeItem('pin_verified'); setPinVerified(false); }} className="nav-btn text-amber-500"><Lock size={24} /><span>قفل</span></button>
-        <button type="button" onClick={() => { firebase.auth().signOut(); setIsAuthenticated(false); sessionStorage.removeItem('pin_verified'); setPinVerified(false); }} className="nav-btn text-red-600"><LogOut size={24} /><span>خروج</span></button>
+        <button type="button" onClick={() => setIsDrawerOpen(true)} className="nav-btn text-indigo-600" style={{ minWidth: '68px' }}>
+          <Menu size={22} /><span>المزيد</span>
+        </button>
       </div></div>)}
+
+      {isDrawerOpen && (
+        <div className="fixed inset-0 z-[4000] no-print">
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-fadeIn" onClick={() => setIsDrawerOpen(false)}></div>
+          <div className="absolute bottom-0 left-0 right-0 bg-white dark:bg-slate-900 rounded-t-3xl shadow-2xl max-h-[85vh] overflow-y-auto scroll-hide animate-slideInBottom" style={{ paddingBottom: 'calc(24px + env(safe-area-inset-bottom))' }}>
+            <div className="pt-3 pb-2 flex justify-center"><div className="w-12 h-1.5 bg-slate-300 dark:bg-slate-600 rounded-full"></div></div>
+            <div className="px-6 py-3 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center">
+              <h3 className="font-black text-lg">القائمة الكاملة</h3>
+              <button onClick={() => setIsDrawerOpen(false)} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl"><X size={20} /></button>
+            </div>
+            <div className="px-4 py-4 space-y-6">
+              <div>
+                <p className="text-[11px] font-black text-slate-500 uppercase mb-3 px-3 tracking-wider">📊 التقارير والتحليل</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { id: 'planning', label: 'التخطيط الشهري', icon: Table, color: 'text-cyan-500' },
+                    { id: 'planner', label: 'المخطط الاستراتيجي', icon: Target, color: 'text-indigo-500' },
+                    { id: 'forecast', label: 'توقع السيولة', icon: LineChart, color: 'text-teal-500' },
+                    { id: 'comparison', label: 'مقارنة الشهور', icon: Activity, color: 'text-violet-500' },
+                    { id: 'duplicates', label: 'كشف المكررات', icon: Filter, color: 'text-rose-500' }
+                  ].map(item => (
+                    <button key={item.id} onClick={() => { dispatch({ type: 'SET_ACTIVE_TAB', payload: item.id }); setIsDrawerOpen(false); }} className="flex items-center gap-2 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 text-sm font-bold active:scale-[0.97] transition-all">
+                      <item.icon size={18} className={item.color} /><span className="truncate">{item.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <p className="text-[11px] font-black text-slate-500 uppercase mb-3 px-3 tracking-wider">💼 الحسابات</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { id: 'loans', label: 'القروض والمستحقات', icon: Banknote, color: 'text-red-500' },
+                    { id: 'calendar', label: 'الأجندة والمواعيد', icon: CalendarDays, color: 'text-pink-500' }
+                  ].map(item => (
+                    <button key={item.id} onClick={() => { dispatch({ type: 'SET_ACTIVE_TAB', payload: item.id }); setIsDrawerOpen(false); }} className="flex items-center gap-2 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 text-sm font-bold active:scale-[0.97] transition-all">
+                      <item.icon size={18} className={item.color} /><span className="truncate">{item.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <p className="text-[11px] font-black text-slate-500 uppercase mb-3 px-3 tracking-wider">🛠️ الأدوات</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <button onClick={() => { handleExportCSV(); setIsDrawerOpen(false); }} className="flex items-center gap-2 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 text-sm font-bold active:scale-[0.97] transition-all">
+                    <FileSpreadsheet size={18} className="text-emerald-500" /><span className="truncate">تصدير CSV</span>
+                  </button>
+                  <button onClick={() => { handleExport(); setIsDrawerOpen(false); }} className="flex items-center gap-2 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 text-sm font-bold active:scale-[0.97] transition-all">
+                    <Download size={18} className="text-blue-500" /><span className="truncate">حفظ نسخة</span>
+                  </button>
+                  <label className="flex items-center gap-2 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 text-sm font-bold cursor-pointer active:scale-[0.97] transition-all">
+                    <Upload size={18} className="text-purple-500" /><span className="truncate">استيراد JSON</span>
+                    <input type="file" accept=".json" onChange={(e) => { handleImport(e); setIsDrawerOpen(false); }} className="hidden" />
+                  </label>
+                  <button onClick={() => { sessionStorage.removeItem('pin_verified'); setPinVerified(false); setIsDrawerOpen(false); }} className="flex items-center gap-2 p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 hover:bg-amber-100 text-amber-700 text-sm font-bold active:scale-[0.97] transition-all">
+                    <Lock size={18} /><span className="truncate">قفل التطبيق</span>
+                  </button>
+                  <button onClick={() => { firebase.auth().signOut(); setIsAuthenticated(false); sessionStorage.removeItem('pin_verified'); setPinVerified(false); setIsDrawerOpen(false); }} className="col-span-2 flex items-center justify-center gap-2 p-3 rounded-xl bg-red-50 dark:bg-red-900/20 hover:bg-red-100 text-red-600 text-sm font-bold active:scale-[0.97] transition-all">
+                    <LogOut size={18} /><span>تسجيل الخروج</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {!isLocked && (<button type="button" aria-label="إضافة" onClick={() => { dispatch({ type: 'SET_FORM_MODE', payload: 'add' }); dispatch({ type: 'SET_FORM_DATA', payload: { type: 'expense', category: '', amount: '', date: getLocalISODate(), method: 'cash', subType: 'withdrawal', status: 'pending' } }); dispatch({ type: 'SET_FORM_OPEN', payload: true }); }} className="fab no-print"><Plus size={32} /></button>)}
       <EnhancedSidebar activeTab={activeTab} dispatch={dispatch} canUndo={history.length > 0} onUndo={() => dispatch({ type: 'UNDO' })} />
-      <main ref={mainContentRef} className="flex-1 overflow-y-auto p-4 lg:p-8 pt-12">
+      <main ref={mainContentRef} className="flex-1 overflow-y-auto p-4 lg:p-8 pt-10">
         {isLocked ? (<div className="min-h-screen flex flex-col items-center justify-center backdrop-blur-3xl no-print"><Lock size={80} className="mb-8 text-blue-500 animate-bounce-slight" /><h2 className="text-4xl font-black mb-8">التطبيق مقفل</h2><button type="button" onClick={() => dispatch({ type: 'SET_IS_LOCKED', payload: false })} className="gradient-bg-primary text-white px-16 py-5 rounded-full font-bold shadow-2xl flex items-center gap-3 hover:scale-105"><Unlock size={24} /> فتح التطبيق</button></div>) : (<div className="max-w-7xl mx-auto space-y-8 animate-fadeIn pb-24"><ProfessionalHeader isDarkMode={isDarkMode} dispatch={dispatch} canUndo={history.length > 0} />{renderActiveView()}</div>)}
       </main>
 
