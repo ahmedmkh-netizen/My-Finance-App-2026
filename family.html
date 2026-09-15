@@ -3,10 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>مسحوبات العيلة</title>
-<meta name="theme-color" content="#F59E0B">شيب
+<title>مسحوبات محل هاني</title>
+<meta name="theme-color" content="#F59E0B">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="مسحوبات العيلة">
+<meta name="apple-mobile-web-app-title" content="محل هاني">
 <meta name="mobile-web-app-capable" content="yes">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap" rel="stylesheet">
@@ -23,7 +23,6 @@
     padding-bottom: calc(12px + env(safe-area-inset-bottom));
     transition: background 0.4s;
   }
-  /* ثيمات حسب المستخدم */
   body.theme-ans { background: linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%); color: #1E3A8A; }
   body.theme-abdelrahman { background: linear-gradient(135deg, #ECFDF5 0%, #D1FAE5 100%); color: #065F46; }
   body.theme-salma { background: linear-gradient(135deg, #F5F3FF 0%, #EDE9FE 100%); color: #5B21B6; }
@@ -53,10 +52,23 @@
   }
 
   .section-title { font-size: 13px; font-weight: 900; margin-bottom: 10px; display: flex; align-items: center; gap: 6px; opacity: 0.85; }
+
+  /* فئات */
+  .categories-row { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 8px; -webkit-overflow-scrolling: touch; scroll-behavior: smooth; }
+  .categories-row::-webkit-scrollbar { display: none; }
+  .cat-btn { flex-shrink: 0; padding: 10px 16px; border-radius: 14px; border: 2px solid #E2E8F0; background: #F8FAFC; color: #64748B; font-family: 'Cairo', sans-serif; font-size: 13px; font-weight: 900; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
+  .cat-btn:active { transform: scale(0.95); }
+  .cat-btn.active { background: linear-gradient(135deg, #F59E0B, #D97706); color: white; border-color: #D97706; box-shadow: 0 4px 14px rgba(245,158,11,0.4); transform: scale(1.02); }
+  body.theme-ans .cat-btn.active { background: linear-gradient(135deg, #3B82F6, #1D4ED8); border-color: #1D4ED8; box-shadow: 0 4px 14px rgba(59,130,246,0.4); }
+  body.theme-abdelrahman .cat-btn.active { background: linear-gradient(135deg, #10B981, #059669); border-color: #059669; box-shadow: 0 4px 14px rgba(16,185,129,0.4); }
+  body.theme-salma .cat-btn.active { background: linear-gradient(135deg, #8B5CF6, #6D28D9); border-color: #6D28D9; box-shadow: 0 4px 14px rgba(139,92,246,0.4); }
+  body.theme-om_abdo .cat-btn.active { background: linear-gradient(135deg, #EC4899, #BE185D); border-color: #BE185D; box-shadow: 0 4px 14px rgba(236,72,153,0.4); }
+
+  /* بنود */
   .items-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
   .item-btn {
     background: #F8FAFC; border: 2px solid #E2E8F0; border-radius: 14px;
-    padding: 14px 6px; font-family: 'Cairo', sans-serif; font-size: 14px;
+    padding: 14px 6px; font-family: 'Cairo', sans-serif; font-size: 13px;
     font-weight: 900; color: #334155; cursor: pointer; transition: all 0.15s;
     min-height: 60px;
   }
@@ -187,7 +199,7 @@
 <!-- شاشة القفل -->
 <div class="pin-screen" id="pinScreen">
   <div class="pin-logo">🔒</div>
-  <h2>مسحوبات العيلة</h2>
+  <h2>مسحوبات محل هاني</h2>
   <p>أدخل رمزك الشخصي</p>
   <div class="pin-dots">
     <div class="pin-dot" data-i="0"></div>
@@ -216,13 +228,18 @@
 <div id="mainScreen" style="display:none">
   <div class="header" style="position:relative">
     <button class="logout-btn" id="logoutBtn" title="خروج">🚪</button>
-    <h1>🛒 مسحوبات العيلة</h1>
+    <h1>🛒 مسحوبات محل هاني</h1>
     <div class="greeting" id="greeting">—</div>
     <p id="todayDate">—</p>
   </div>
 
   <div class="card">
-    <div class="section-title">📌 اختر البند</div>
+    <div class="section-title">📂 اختر الفئة</div>
+    <div class="categories-row" id="categoriesRow"></div>
+  </div>
+
+  <div class="card">
+    <div class="section-title" id="itemsSectionTitle">📌 اختر البند</div>
     <div class="items-grid" id="itemsGrid"></div>
   </div>
 
@@ -258,15 +275,50 @@
 
 // 👥 أفراد العيلة — كل واحد بكوده الشخصي
 const USERS = {
-  '1111': { id: 'ans',        name: 'أنس',         color: 'blue',    emoji: '👤' },
-  '2222': { id: 'abdelrahman', name: 'عبد الرحمن',  color: 'emerald', emoji: '👤' },
-  '3333': { id: 'salma',      name: 'سلمى',        color: 'purple',  emoji: '👤' },
-  '4444': { id: 'om_abdo',    name: 'أم عبده',     color: 'pink',    emoji: '👤' }
+  '1111': { id: 'ans',         name: 'أنس',        color: 'blue',    emoji: '👤' },
+  '2222': { id: 'abdelrahman', name: 'عبد الرحمن', color: 'emerald', emoji: '👤' },
+  '3333': { id: 'salma',       name: 'سلمى',       color: 'purple',  emoji: '👤' },
+  '4444': { id: 'om_abdo',     name: 'أم عبده',    color: 'pink',    emoji: '👤' }
 };
 
 const FIREBASE_PROJECT = 'finance-app-2026-3e318';
-const CATEGORY_NAME = 'مسحوبات محل هاني';  // ← الفئة الثابتة
-const ITEMS = ['سجاير','بيبسي','شيبسي','عصير','لبن','أنس','عبده','زبادي','رايب','بسكويت','مولتو','اندومي','فرق سجائر'];
+const CATEGORY_NAME = 'مسحوبات محل هاني';
+
+// 🛒 الفئات والبنود
+const CATEGORIES = {
+  smokes: {
+    icon: '🚬', label: 'سجاير',
+    items: ['سجاير','مارلبورو','ميريت','LM','كليوباترا','كليوباترا بوكس','نكست','وينستون','PINE','بال مال','إل إم أزرق','إل إم أحمر','ميريت أصفر','ميريت أزرق']
+  },
+  drinks: {
+    icon: '🥤', label: 'مشروبات',
+    items: ['بيبسي','كوكاكولا','سفن أب','ميرندا','عصير','جوافة','مانجو','برتقال','مياه','شاي','نسكافيه','قهوة','ميلو','ريد بُل','حليب معلب']
+  },
+  snacks: {
+    icon: '🍫', label: 'سناكس',
+    items: ['شيبسي','شيتوس','دوريتوس','ليز','تايجر','بسكويت','كراكرز','مولتو','كادبوري','جالاكسي','اندومي','نودلز','بونبون']
+  },
+  dairy: {
+    icon: '🥛', label: 'ألبان وأجبان',
+    items: ['لبن','زبادي','رايب','جبنة بيضاء','جبنة رومي','جبنة شيدر','بيض','زبدة','قشطة','لبنة','جبنة كيري']
+  },
+  basics: {
+    icon: '🍞', label: 'بقالة',
+    items: ['عيش','سكر','زيت','أرز','مكرونة','دقيق','ملح','عدس','فول','صلصة','خل','حمص','سكر ناعم','مربي']
+  },
+  cleaning: {
+    icon: '🧴', label: 'منظفات',
+    items: ['صابون','شامبو','معجون','فرشاة','مناديل','كلور','ديتول','مسحوق غسيل','سائل أطباق','معطر']
+  },
+  sweets: {
+    icon: '🍬', label: 'حلويات',
+    items: ['شوكولاتة','بونبون','لبان','مصاصة','كيك','جيلي','ويفر','بسكويت محشي']
+  },
+  special: {
+    icon: '👤', label: 'طلبات خاصة',
+    items: ['أنس','عبده','أم عبده','سلمى','عبد الرحمن']
+  }
+};
 
 const MONTHS_AR = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
 
@@ -286,8 +338,9 @@ const db = firebase.firestore();
 const docRef = db.collection('finance_2026').doc('user_ahmed_data');
 
 // State
-let currentUser = null;      // { id, name, color, emoji }
+let currentUser = null;
 let selectedItem = '';
+let selectedCategory = 'smokes';
 let currentPin = '';
 let unsubscribe = null;
 let cachedTx = [];
@@ -384,19 +437,40 @@ function init() {
     location.reload();
   });
 
+  renderCategories();
   renderItems();
   bindEvents();
   subscribeToData();
 }
 
+function renderCategories() {
+  const row = document.getElementById('categoriesRow');
+  row.innerHTML = Object.entries(CATEGORIES).map(([key, cat]) =>
+    `<button class="cat-btn ${key === selectedCategory ? 'active' : ''}" data-cat="${key}">${cat.icon} ${cat.label}</button>`
+  ).join('');
+}
+
 function renderItems() {
+  const cat = CATEGORIES[selectedCategory];
+  document.getElementById('itemsSectionTitle').textContent = `${cat.icon} ${cat.label} (${cat.items.length})`;
   const grid = document.getElementById('itemsGrid');
-  grid.innerHTML = ITEMS.map(item =>
+  grid.innerHTML = cat.items.map(item =>
     `<button class="item-btn ${item === selectedItem ? 'selected' : ''}" data-item="${item}">${item}</button>`
   ).join('');
 }
 
 function bindEvents() {
+  // التنقل بين الفئات
+  document.getElementById('categoriesRow').addEventListener('click', (e) => {
+    const btn = e.target.closest('.cat-btn');
+    if (!btn) return;
+    selectedCategory = btn.dataset.cat;
+    renderCategories();
+    renderItems();
+    document.getElementById('amountInput').focus();
+  });
+
+  // اختيار بند
   document.getElementById('itemsGrid').addEventListener('click', (e) => {
     const btn = e.target.closest('.item-btn');
     if (!btn) return;
@@ -429,12 +503,14 @@ async function saveTransaction() {
   const note = noteInput.value.trim();
   const now = new Date();
   const iso = getLocalISODate(now);
+  const categoryLabel = CATEGORIES[selectedCategory].label;
 
   const tx = {
     id: 'fam-' + Date.now() + '-' + Math.random().toString(36).slice(2,9),
     type: 'expense',
     kind: 'operational',
     category: CATEGORY_NAME,
+    subCategory: categoryLabel,
     amount: amount,
     description: note ? `${selectedItem} — ${note}` : selectedItem,
     method: 'cash',
@@ -444,7 +520,6 @@ async function saveTransaction() {
     monthIndex: now.getMonth(),
     subType: 'withdrawal',
     status: 'pending',
-    // ⭐ العلامات المميزة للشخص
     source: 'family-app',
     createdBy: currentUser.id,
     createdByName: currentUser.name,
@@ -524,7 +599,6 @@ function renderTodayLog(txList) {
   totalEl.style.display = 'flex';
   pendingCountEl.textContent = `${pendingCount} معلق • أنا: ${fmt(myTotal)} ج.م`;
 
-  // زر الحذف — يظهر فقط للعمليات الخاصة بالمستخدم
   log.querySelectorAll('.del-btn').forEach(btn => {
     btn.addEventListener('click', () => deleteTransaction(btn.dataset.id));
   });
