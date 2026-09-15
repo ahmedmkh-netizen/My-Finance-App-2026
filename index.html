@@ -544,12 +544,12 @@ const RecurringBadge = memo(({ tx }) => {
   return <span className="text-[10px] px-2 py-0.5 rounded-full font-black bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">🔁 متكرر</span>;
 });
 
-// ⭐ جديد: مكوّنات العيلة
+// ⭐ مكوّنات العيلة
 const FAMILY_MEMBERS = {
-  ans:         { name: 'أنس',        bg: 'bg-blue-100 dark:bg-blue-900/40',       text: 'text-blue-800 dark:text-blue-300',       border: 'border-blue-200 dark:border-blue-800',       rowBg: 'bg-blue-50/60 dark:bg-blue-900/10',       rowBorder: 'border-blue-400' },
-  abdelrahman: { name: 'عبد الرحمن', bg: 'bg-emerald-100 dark:bg-emerald-900/40', text: 'text-emerald-800 dark:text-emerald-300', border: 'border-emerald-200 dark:border-emerald-800', rowBg: 'bg-emerald-50/60 dark:bg-emerald-900/10', rowBorder: 'border-emerald-400' },
-  salma:       { name: 'سلمى',       bg: 'bg-purple-100 dark:bg-purple-900/40',   text: 'text-purple-800 dark:text-purple-300',   border: 'border-purple-200 dark:border-purple-800',   rowBg: 'bg-purple-50/60 dark:bg-purple-900/10',   rowBorder: 'border-purple-400' },
-  om_abdo:     { name: 'أم عبده',    bg: 'bg-pink-100 dark:bg-pink-900/40',       text: 'text-pink-800 dark:text-pink-300',       border: 'border-pink-200 dark:border-pink-800',       rowBg: 'bg-pink-50/60 dark:bg-pink-900/10',       rowBorder: 'border-pink-400' }
+  ans:         { name: 'أنس',        bg: 'bg-blue-100 dark:bg-blue-900/40',       text: 'text-blue-800 dark:text-blue-300',       border: 'border-blue-200 dark:border-blue-800',       rowBg: 'bg-blue-50/60 dark:bg-blue-900/10',       rowBorder: 'border-blue-400',       freq: 880 },
+  abdelrahman: { name: 'عبد الرحمن', bg: 'bg-emerald-100 dark:bg-emerald-900/40', text: 'text-emerald-800 dark:text-emerald-300', border: 'border-emerald-200 dark:border-emerald-800', rowBg: 'bg-emerald-50/60 dark:bg-emerald-900/10', rowBorder: 'border-emerald-400', freq: 660 },
+  salma:       { name: 'سلمى',       bg: 'bg-purple-100 dark:bg-purple-900/40',   text: 'text-purple-800 dark:text-purple-300',   border: 'border-purple-200 dark:border-purple-800',   rowBg: 'bg-purple-50/60 dark:bg-purple-900/10',   rowBorder: 'border-purple-400', freq: 990 },
+  om_abdo:     { name: 'أم عبده',    bg: 'bg-pink-100 dark:bg-pink-900/40',       text: 'text-pink-800 dark:text-pink-300',       border: 'border-pink-200 dark:border-pink-800',       rowBg: 'bg-pink-50/60 dark:bg-pink-900/10',       rowBorder: 'border-pink-400',       freq: 770 }
 };
 
 const getFamilyMember = (tx) => FAMILY_MEMBERS[tx?.createdBy] || null;
@@ -934,9 +934,18 @@ const DashboardView = memo(({ data, financeSnapshot, liveBalances, totalLiquidit
     return [...top, { name: 'أخرى مجمعة', value: restVal }];
   }, [transactions, selectedMonth, selectedYear]);
   const net = financeSnapshot;
+  const hanyToday = useMemo(() => {
+    const today = getLocalISODate();
+    return transactions.filter(t => t.date === today && t.category === 'مسحوبات محل هاني' && t.status === 'paid').reduce((s, t) => s + safeNumber(t.amount), 0);
+  }, [transactions]);
   return (
     <div className="space-y-8 animate-fadeIn">
       <QuickBalanceOverview balances={liveBalances} walletVisibility={walletVisibility} onToggleVisibility={onToggleVisibility} />
+      {hanyToday > 0 && (
+        <div className="glass p-4 rounded-2xl border-r-4 border-r-orange-500 flex justify-between items-center">
+          <div className="flex items-center gap-3"><div className="p-3 bg-orange-100 dark:bg-orange-900/30 text-orange-600 rounded-xl"><StoreIcon size={24} /></div><div><p className="text-xs font-bold text-slate-500 uppercase">مسحوبات هاني اليوم</p><p className="text-lg font-black text-orange-600">{fmt(hanyToday)} ج.م</p></div></div>
+        </div>
+      )}
       <div className={`glass p-6 rounded-2xl border-r-4 ${netPosition >= 0 ? 'border-r-emerald-500' : 'border-r-red-500'}`}>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div><p className="text-xs font-bold text-slate-500 uppercase">إجمالي السيولة (حي)</p><p className="text-2xl font-black text-emerald-600 mt-2">+{fmt(totalLiquidity)}</p><p className="text-[11px] text-slate-500 mt-1">رصيد + قيود معتمدة حتى نهاية اليوم</p></div>
@@ -1033,7 +1042,7 @@ const CategoryDetailModal = memo(({ activeCategoryDetail, detailedTransactions, 
                       <button type="button" aria-label="تعديل" onClick={() => { dispatch({ type: 'SET_FORM_MODE', payload: 'edit' }); dispatch({ type: 'SET_FORM_DATA', payload: t }); dispatch({ type: 'SET_FORM_OPEN', payload: true }); dispatch({ type: 'SET_ACTIVE_CATEGORY_DETAIL', payload: null }); }} className="p-2 text-blue-500 hover:bg-blue-100 rounded-lg"><Edit size={16} /></button>
                       <button type="button" aria-label="حذف" onClick={() => handleDelete(t.id)} className="p-2 text-red-500 hover:bg-red-100 rounded-lg"><Trash2 size={16} /></button></div></td></tr>); })}
                 </tbody></table></div>
-            <div className="md:hidden divide-y">{detailedTransactions.map(t => ( 
+            <div className="md:hidden divide-y">{detailedTransactions.map(t => (
               <div key={t.id} className="p-4 flex justify-between items-center gap-3">
                 <div className="min-w-0 flex-1"><p className="font-bold text-sm truncate">{t.description || t.category} <RecurringBadge tx={t} /> <FamilyBadge tx={t} /></p><p className="text-[11px] text-slate-500 mt-1">{t.date} • {PAYMENT_METHODS.find(p => p.id === t.method)?.label}</p>
                   <div className="flex gap-2 mt-1 items-center"><span className={`text-[11px] px-2 py-0.5 rounded-full font-black ${t.status === 'paid' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{t.status === 'paid' ? 'معتمد' : 'معلق'}</span><KindBadge tx={t} /></div></div>
@@ -1124,18 +1133,10 @@ const TransactionsView = memo(({ groupedTransactions, transactions, selectedMont
         <div className="glass p-5 rounded-2xl border-b-4 border-blue-500"><p className="text-[11px] font-bold text-slate-500 uppercase mb-1">الصافي</p><p className={`text-xl font-black ${monthInsights.net >= 0 ? 'text-blue-600' : 'text-rose-500'}`}>{fmt(monthInsights.net)}</p></div>
         <div className="glass p-5 rounded-2xl border-b-4 border-purple-500 flex items-center justify-center cursor-pointer hover:bg-purple-50" onClick={onPrintMonthlyReport}><div className="text-center"><FileText size={20} className="mx-auto text-purple-600 mb-1" /><p className="text-[11px] font-black text-purple-600">تقرير PDF</p></div></div></div>
       <div className="flex gap-2 justify-center flex-wrap px-2 no-print mb-2">
-        {[
-          ['all', 'الكل', Layers],
-          ['self', '👤 أنا', Users],
-          ['ans', '🛒 أنس', StoreIcon],
-          ['abdelrahman', '🛒 عبد الرحمن', StoreIcon],
-          ['salma', '🛒 سلمى', StoreIcon],
-          ['om_abdo', '🛒 أم عبده', StoreIcon]
-        ].map(([id, label, Icon]) => (
+        {[['all', 'الكل', Layers],['self', '👤 أنا', Users],['ans', '🛒 أنس', StoreIcon],['abdelrahman', '🛒 عبد الرحمن', StoreIcon],['salma', '🛒 سلمى', StoreIcon],['om_abdo', '🛒 أم عبده', StoreIcon]].map(([id, label, Icon]) => (
           <button key={id} type="button" onClick={() => setSourceFilter(id)} className={`px-3 py-1.5 rounded-xl text-[11px] font-bold border flex items-center gap-1 ${sourceFilter === id ? 'gradient-bg-warning text-white' : 'bg-white dark:bg-slate-800'}`}>
             <Icon size={12} /> {label}
-          </button>
-        ))}
+          </button>))}
       </div>
       <div className="flex gap-2 justify-center flex-wrap px-2 no-print">
         {[['all', 'الكل', Filter], ['pending', 'معلق', Clock], ['paid', 'مدفوع', CheckCircle2]].map(([id, label, Icon]) => (
@@ -1985,6 +1986,23 @@ const BACKUP_REMINDER_LS_KEY = 'v71_last_backup_reminder_ts';
 const HOUR_MS = 60 * 60 * 1000;
 const WEEK_MS = 7 * 24 * HOUR_MS;
 
+// ⭐ دالة تشغيل صوت التنبيه
+function playFamilyAlert(freq = 880) {
+  try {
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.frequency.value = freq;
+    osc.type = 'sine';
+    gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.35);
+    osc.start(audioCtx.currentTime);
+    osc.stop(audioCtx.currentTime + 0.35);
+  } catch (e) { /* audio not supported */ }
+}
+
 function App() {
   const defMY = useMemo(() => getDefaultMonthYear(), []);
   const [state, dispatch] = useReducer(dataReducer, {
@@ -2018,6 +2036,9 @@ function App() {
   const processingTimeoutRef = useRef(null);
   const lastRemoteRef = useRef(null);
   const navRef = useRef(null);
+  // ⭐ متغيرات تتبع إشعارات العيلة
+  const familySeenRef = useRef(new Set());
+  const familyInitRef = useRef(false);
 
   const { data, activeTab, selectedYear, selectedMonth, transViewMode, catViewType, isFormOpen, formMode, formData, activeCategoryDetail, isLocked, isDarkMode, expandedGroup, budgets, editingCard, editingLoan, searchTerm, editingBudgetCategory, budgetAmount, isRecurringModalOpen, recurringFormData, notifications, isAiModalOpen, aiResponse, isAiLoading, history, expandedLedgers, expandedCardsSection, statusFilter, confirmDialog, isQuickTransferModalOpen, quickTransferData, viewingCardStatement, walletVisibility, isProcessing, formErrors } = state;
   const { transactions = [], loans = [], cards = [], recurringItems = [], accountsData = DEFAULT_ACCOUNTS, monthlyPlans = {}, monthlySnapshots = {}, materializedRecurring = {} } = data || {};
@@ -2037,6 +2058,73 @@ function App() {
       }
     });
     return () => unsub();
+  }, [isAuthenticated]);
+
+  // ⭐ إشعارات عمليات العيلة
+  useEffect(() => {
+    if (!isAuthenticated || !data?.transactions) return;
+
+    const familyTx = data.transactions.filter(t =>
+      t.source === 'family-app' || (t.createdBy && t.createdBy !== 'ahmed')
+    );
+
+    // أول مرة — نملأ القائمة بدون إشعار
+    if (!familyInitRef.current) {
+      familyTx.forEach(t => familySeenRef.current.add(t.id));
+      familyInitRef.current = true;
+      return;
+    }
+
+    // البحث عن الجديدة
+    const newOnes = familyTx.filter(t => !familySeenRef.current.has(t.id));
+    if (newOnes.length === 0) return;
+
+    newOnes.forEach(t => {
+      familySeenRef.current.add(t.id);
+      const memberName = FAMILY_MEMBERS[t.createdBy]?.name || t.createdByName || '؟';
+
+      dispatch({
+        type: 'ADD_NOTIFICATION',
+        payload: {
+          type: 'info',
+          title: `🛒 ${memberName} سجّل عملية`,
+          message: `${t.description || t.category} — ${fmt(t.amount)} ج.م`,
+          duration: 8000
+        }
+      });
+
+      // إشعار نظام (لو الإذن ممنوح)
+      if ('Notification' in window && Notification.permission === 'granted') {
+        try {
+          new Notification(`🛒 ${memberName} سجّل عملية`, {
+            body: `${t.description || t.category} — ${fmt(t.amount)} ج.م`,
+            tag: 'family-tx-' + t.id,
+            requireInteraction: false,
+            silent: false
+          });
+        } catch (e) { console.warn('Notification error:', e); }
+      }
+    });
+
+    // صوت تنبيه خفيف (نبرة مختلفة حسب الشخص)
+    const lastNew = newOnes[0];
+    const freq = FAMILY_MEMBERS[lastNew.createdBy]?.freq || 880;
+    playFamilyAlert(freq);
+  }, [data?.transactions, isAuthenticated]);
+
+  // ⭐ طلب إذن الإشعارات (مرة واحدة بعد 15 ثانية)
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    if (!('Notification' in window)) return;
+    if (Notification.permission !== 'default') return;
+    const t = setTimeout(() => {
+      Notification.requestPermission().then(perm => {
+        if (perm === 'granted') {
+          dispatch({ type: 'ADD_NOTIFICATION', payload: { type: 'success', title: '🔔 تم تفعيل الإشعارات', message: 'هتوصلك تنبيهات فورية لما حد من العيلة يسجل' } });
+        }
+      });
+    }, 15000);
+    return () => clearTimeout(t);
   }, [isAuthenticated]);
 
   useEffect(() => {
@@ -2428,8 +2516,8 @@ function App() {
   }, [recurringItems, data, saveHistory, addNotification]);
 
   const handleExportCSV = useCallback(() => {
-    const header = "التاريخ,النوع,الفئة,الوصف,المبلغ,الطريقة,الحالة,الشهر,السنة\n";
-    const rows = transactions.map(t => `${t.date},${t.type},${t.category},"${escapeHtml(t.description || '')}",${safeNumber(t.amount)},${t.method},${t.status || 'pending'},${t.month},${t.year || 2026}`).join("\n");
+    const header = "التاريخ,النوع,الفئة,الوصف,المبلغ,الطريقة,الحالة,الشهر,السنة,المُسجِّل\n";
+    const rows = transactions.map(t => `${t.date},${t.type},${t.category},"${escapeHtml(t.description || '')}",${safeNumber(t.amount)},${t.method},${t.status || 'pending'},${t.month},${t.year || 2026},${t.createdByName || 'أنا'}`).join("\n");
     const blob = new Blob(["\uFEFF" + header + rows], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a'); a.href = url; a.download = `transactions_${getLocalISODate()}.csv`; a.click();
@@ -2462,12 +2550,19 @@ function App() {
       const totalReceivable = updatedLoans.filter(l => l.isReceivable).reduce((s, l) => s + l.remaining, 0);
       const feesSum = m.filter(t => t.category === 'رسوم تحويلات' && t.status === 'paid').reduce((s, t) => s + safeNumber(t.amount), 0);
       const hanySum = m.filter(t => t.category === 'مسحوبات محل هاني' && t.status === 'paid').reduce((s, t) => s + safeNumber(t.amount), 0);
+      const familyByPerson = {};
+      m.filter(t => t.source === 'family-app' && t.status === 'paid').forEach(t => { const n = FAMILY_MEMBERS[t.createdBy]?.name || t.createdByName || '؟'; familyByPerson[n] = (familyByPerson[n] || 0) + safeNumber(t.amount); });
       let text = `📊 تحليل ${selectedMonth} ${selectedYear}:\n\n• الدخل التشغيلي: ${fmt(inc)} ج.م\n• المصروف التشغيلي: ${fmt(exp)} ج.م\n\n`;
       text += savings > 0 ? `✅ وفر: ${fmt(savings)} ج.م\n\n` : savings < 0 ? `⚠️ عجز: ${fmt(Math.abs(savings))} ج.م\n\n` : `⚖️ متعادل\n\n`;
       text += `💳 إجمالي المديونية: ${fmt(totalDebt)} ج.م\n`;
       if (totalReceivable > 0) text += `➕ مستحقات لك: ${fmt(totalReceivable)} ج.م\n`;
-      if (feesSum > 0) text += `💸 رسوم التحويلات هذا الشهر: ${fmt(feesSum)} ج.م\n`;
+      if (feesSum > 0) text += `💸 رسوم التحويلات: ${fmt(feesSum)} ج.م\n`;
       if (hanySum > 0) text += `🛒 مسحوبات محل هاني: ${fmt(hanySum)} ج.م\n`;
+      const familyEntries = Object.entries(familyByPerson);
+      if (familyEntries.length > 0) {
+        text += `\n👨‍👩‍👧‍👦 تفاصيل العيلة:\n`;
+        familyEntries.forEach(([name, amt]) => { text += `   • ${name}: ${fmt(amt)} ج.م\n`; });
+      }
       dispatch({ type: 'SET_AI_RESPONSE', payload: text });
       dispatch({ type: 'SET_AI_LOADING', payload: false });
     }, 800);
