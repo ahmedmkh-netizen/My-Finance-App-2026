@@ -256,6 +256,11 @@ if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 const storage = firebase.storage();
 
+// ============ Cloudinary Config ============
+const CLOUDINARY_CLOUD_NAME = 'rs4dgpc';
+const CLOUDINARY_UPLOAD_PRESET = 'finance_receipts';
+const CLOUDINARY_UPLOAD_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`;
+
 const CURRENT_ENGINE_VERSION = 9;
 const DEFAULT_PIN = '1033';
 const PIN_HASH_KEY = 'finance_pin_hash_v1';
@@ -328,14 +333,30 @@ const compressImage = (file, maxWidth = 1280, quality = 0.75) => new Promise((re
 });
 const uploadReceipt = async (txId, file) => {
   const blob = await compressImage(file);
-  const path = `receipts/${txId}/${Date.now()}_${Math.random().toString(36).slice(2,8)}.jpg`;
-  const ref = storage.ref(path);
-  await ref.put(blob);
-  const url = await ref.getDownloadURL();
-  return { url, path, name: file.name, size: blob.size };
+  const formData = new FormData();
+  formData.append('file', blob, `${txId}_${Date.now()}.jpg`);
+  formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+  formData.append('folder', `receipts/${txId}`);
+  formData.append('public_id', `${Date.now()}_${Math.random().toString(36).slice(2,8)}`);
+
+  const res = await fetch(CLOUDINARY_UPLOAD_URL, { method: 'POST', body: formData });
+  if (!res.ok) {
+    const errText = await res.text();
+    console.error('Cloudinary Error:', errText);
+    throw new Error('فشل رفع الصورة');
+  }
+  const data = await res.json();
+  return {
+    url: data.secure_url,
+    path: data.public_id,
+    name: file.name,
+    size: data.bytes
+  };
 };
 const deleteReceipt = async (path) => {
-  try { await storage.ref(path).delete(); } catch (e) { console.warn('Delete failed:', e); }
+  // Cloudinary file preserved (no secret key needed)
+  console.log('Receipt removed from DB:', path);
+  return Promise.resolve();
 };
 
 const STORAGE_KEY = 'finance_tracker_V75_SECURE';
