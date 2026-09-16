@@ -252,7 +252,7 @@ const firebaseConfig = { apiKey: "AIzaSyCEq-Trf1oFsvPF5tlMvqU83ea_J2DLZjs", auth
 if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 
-const CURRENT_ENGINE_VERSION = 7;
+const CURRENT_ENGINE_VERSION = 8;
 const CORRECT_PIN = '1033';
 const KIND = { OPERATIONAL: 'operational', FINANCIAL: 'financial', ADJUSTMENT: 'adjustment' };
 const KIND_LABELS = { operational: 'تشغيلي', financial: 'تمويلي', adjustment: 'تسوية' };
@@ -278,14 +278,14 @@ const endOfToday = () => { const x = new Date(); x.setHours(23,59,59,999); retur
 const toEnglishDigits = (s) => { if (s === null || s === undefined) return s; const map = { '٠':'0','١':'1','٢':'2','٣':'3','٤':'4','٥':'5','٦':'6','٧':'7','٨':'8','٩':'9','۰':'0','۱':'1','۲':'2','۳':'3','۴':'4','۵':'5','۶':'6','۷':'7','۸':'8','۹':'9' }; return String(s).replace(/[٠-٩۰-۹]/g, d => map[d]); };
 const parseNumberInput = (v) => { const cleaned = toEnglishDigits(v).replace(/[^\d.\-]/g, ''); const n = Number(cleaned); return isNaN(n) ? 0 : n; };
 
-// ⭐ التعديل الرئيسي: كل الأرقام بتظهر دائمًا بكسور عشرية (2 خانة)
+// ⭐ كل الأرقام بكسور عشرية
 const fmt = (n) => safeNumber(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 const makeMonthKey = (year, month) => `${year}-${month}`;
 const parseMonthKey = (key) => { if (!key || typeof key !== 'string' || !key.includes('-')) return null; const [y, ...rest] = key.split('-'); const year = Number(y); if (isNaN(year)) return null; return { year, month: rest.join('-') }; };
 
-const STORAGE_KEY = 'finance_tracker_V73_SECURE';
-const LEGACY_KEYS = ['finance_tracker_V72_SECURE', 'finance_tracker_V71_SECURE', 'finance_tracker_V68_SECURE'];
+const STORAGE_KEY = 'finance_tracker_V74_SECURE';
+const LEGACY_KEYS = ['finance_tracker_V73_SECURE', 'finance_tracker_V72_SECURE', 'finance_tracker_V71_SECURE'];
 const ALL_MONTHS = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
 const YEARS_CONFIG = { 2026: ['أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'], 2027: ALL_MONTHS, 2028: ALL_MONTHS };
 const YEARS_LIST = [2026, 2027, 2028];
@@ -311,6 +311,7 @@ const PAYMENT_METHODS = [
   { id:'telda', label:'Telda' },{ id:'orange', label:'أورنج' },{ id:'we', label:'WE' }
 ];
 const ACCOUNT_METHOD_IDS = ['cash','fawry','etisalat','cib_savings','aaib_savings'];
+const CREDIT_CARD_METHOD_IDS = ['cib_card','cib_swype','aaib_card'];
 
 const FINANCIAL_CATEGORIES = new Set([
   'الالتزامات البنكية والتمويلية','تكييف محمود','أقساط valU','تحويلات','بنوك / فيزا / تمويل عقاري',
@@ -456,6 +457,50 @@ const computeBalance = (data, key, asOfDate) => {
     else { if (d >= cutoffDay && d <= upper) bal += signed; }
   });
   return bal;
+};
+
+// ============ ✅ دوال بطاقات الائتمان الجديدة ============
+const getCardMethod = (card) => {
+  if (!card) return null;
+  if (card.bank === 'CIB' && card.name === 'SWYPE') return 'cib_swype';
+  if (card.bank === 'AAIB') return 'aaib_card';
+  return 'cib_card';
+};
+
+// حساب المديونية الحية للبطاقة = openingDebt + مشتريات - سدادات - استردادات
+const computeCardDebt = (data, card, asOfDate) => {
+  if (!card) return 0;
+  const method = getCardMethod(card);
+  const upper = asOfDate ? new Date(asOfDate) : endOfToday();
+  let debt = safeNumber(card.openingDebt);
+  (data?.transactions || []).forEach(t => {
+    if (t.status !== 'paid') return;
+    const d = new Date(t.date);
+    if (isNaN(d) || d > upper) return;
+    const amt = safeNumber(t.amount);
+
+    // 1) سداد للبطاقة (linkedCardId === card.id) → يقلل المديونية
+    if (t.linkedCardId === card.id && t.type === 'expense' && !t.linkedLoanId) {
+      debt -= amt;
+      return;
+    }
+    // 2) مشتريات على البطاقة (method === cardMethod) → تزيد المديونية
+    if (t.type === 'expense' && t.method === method) {
+      debt += amt;
+      return;
+    }
+    // 3) استرداد على البطاقة (income + deposit) → يقلل المديونية
+    if (t.type === 'income' && t.method === method && t.subType === 'deposit') {
+      debt -= amt;
+      return;
+    }
+  });
+  return Math.max(0, debt);
+};
+
+const computeCardAvailable = (data, card, asOfDate) => {
+  if (!card) return 0;
+  return Math.max(0, safeNumber(card.limit) - computeCardDebt(data, card, asOfDate));
 };
 
 const getClosingBalance = (data, key, year, month) => {
@@ -1044,7 +1089,7 @@ const CashbackView = memo(({ data, dispatch, saveHistory, addNotification, cards
   const autoExpected = useMemo(() => {
     const map = {};
     cards.forEach(card => {
-      const cardMethod = card.name === 'SWYPE' ? 'cib_swype' : (card.bank === 'AAIB' ? 'aaib_card' : 'cib_card');
+      const cardMethod = getCardMethod(card);
       const spent = (data?.transactions || []).filter(t => t.status === 'paid' && t.type === 'expense' && t.method === cardMethod && t.month === selectedMonth && (t.year || 2026) === selectedYear).reduce((s, t) => s + safeNumber(t.amount), 0);
       map[card.id] = spent * (safeNumber(card.cashbackRate, 1) / 100);
     });
@@ -1471,8 +1516,9 @@ const MonthComparisonView = memo(({ transactions, selectedYear, selectedMonth })
   );
 });
 
+// ✅ DashboardView مع computeCardDebt
 const DashboardView = memo(({ data, financeSnapshot, liveBalances, totalLiquidity, walletVisibility, onToggleVisibility, dispatch, selectedYear, selectedMonth, transactions, cards, updatedLoans, chartData, isDarkMode, handleManualReconciliation, addNotification, onSelectYear, onSelectMonth }) => {
-  const totalCardDebt = cards.reduce((s, c) => s + safeNumber(c.openingDebt), 0);
+  const totalCardDebt = cards.reduce((s, c) => s + computeCardDebt(data, c), 0);
   const totalLoanDebt = updatedLoans.filter(l => !l.isReceivable).reduce((s, l) => s + l.remaining, 0);
   const grandTotalDebt = totalCardDebt + totalLoanDebt;
   const netPosition = totalLiquidity - grandTotalDebt;
@@ -1967,7 +2013,7 @@ const LoansView = memo(({ updatedLoans, cards, recurringItems, transactions, dis
   const totalReceivable = updatedLoans.filter(l => l.isReceivable).reduce((s, l) => s + l.remaining, 0);
   const payables = updatedLoans.filter(l => !l.isReceivable);
   const receivables = updatedLoans.filter(l => l.isReceivable);
-  const totalCards = cards.reduce((acc, c) => acc + safeNumber(c.openingDebt), 0);
+  const totalCards = cards.reduce((acc, c) => acc + computeCardDebt(data, c), 0);
   const custodySummary = useMemo(() => computeCustodyBalance(data?.custodyEntries), [data?.custodyEntries]);
 
   const addLoan = () => {
@@ -2227,6 +2273,7 @@ const LoansView = memo(({ updatedLoans, cards, recurringItems, transactions, dis
   );
 });
 
+// ✅ WalletsAndCardsView مع computeCardDebt
 const WalletsAndCardsView = memo(({ cards, buildLedger, expandedLedgers, expandedCardsSection, selectedMonth, selectedYear, dispatch, handleDelete, handleAddWalletDeposit, handleAddWalletWithdrawal, exportWalletCSV, walletVisibility, liveBalances, cardHistoryMap, saveHistory, addNotification, data }) => {
   const [activeTab, setActiveTab] = useState('wallets');
   const [showAddCard, setShowAddCard] = useState(false);
@@ -2295,6 +2342,8 @@ const WalletsAndCardsView = memo(({ cards, buildLedger, expandedLedgers, expande
               <div className="px-4 pb-4 grid grid-cols-1 md:grid-cols-2 gap-3" style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '16px' }}>
                 {cards.map(card => {
                   const themeCls = { silver: 'bg-gradient-to-br from-slate-100 via-slate-200 to-slate-300 border-slate-300 text-slate-800', gold: 'bg-gradient-to-br from-amber-100 via-yellow-200 to-amber-300 border-amber-300 text-amber-900', platinum: 'bg-gradient-to-br from-slate-200 via-gray-100 to-slate-300 border-slate-300 text-slate-700', black: 'bg-gradient-to-br from-slate-800 via-slate-900 to-black border-slate-700 text-white', blue: 'bg-gradient-to-br from-blue-200 via-blue-300 to-blue-500 border-blue-400 text-blue-950' }[card.theme] || 'bg-gradient-to-br from-slate-100 to-slate-300';
+                  const liveDebt = computeCardDebt(data, card);
+                  const liveAvailable = Math.max(0, safeNumber(card.limit) - liveDebt);
                   return (
                     <div key={card.id} className="space-y-2">
                       <div className="relative">
@@ -2320,11 +2369,11 @@ const WalletsAndCardsView = memo(({ cards, buildLedger, expandedLedgers, expande
                       <div className="grid grid-cols-4 gap-1.5">
                         <div className="p-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 text-center">
                           <p className="text-[9px] font-bold text-emerald-700 dark:text-emerald-400">متاح</p>
-                          <p className="text-[10px] font-black text-emerald-600">{fmt(safeNumber(card.limit) - safeNumber(card.openingDebt))}</p>
+                          <p className="text-[10px] font-black text-emerald-600">{fmt(liveAvailable)}</p>
                         </div>
                         <div className="p-1.5 rounded-lg bg-red-50 dark:bg-red-950/30 text-center">
                           <p className="text-[9px] font-bold text-red-700 dark:text-red-400">مديونية</p>
-                          <p className="text-[10px] font-black text-red-600">{fmt(card.openingDebt)}</p>
+                          <p className="text-[10px] font-black text-red-600">{fmt(liveDebt)}</p>
                         </div>
                         <div className="p-1.5 rounded-lg bg-blue-50 dark:bg-blue-950/30 text-center">
                           <p className="text-[9px] font-bold text-blue-700 dark:text-blue-400">حد</p>
@@ -2702,6 +2751,7 @@ const CalendarView = memo(({ data, getAgendaItems, transactions, dispatch, saveH
   );
 });
 
+// ✅ SettingsView مع المديونية الحية
 const SettingsView = memo(({ data, accountsData, cards, budgets, dispatch, saveHistory, addNotification, walletVisibility, onToggleVisibility }) => {
   const [localAccounts, setLocalAccounts] = useState(() => JSON.parse(JSON.stringify(accountsData)));
   const [localCards, setLocalCards] = useState(() => cards.map(c => ({ ...c })));
@@ -2715,7 +2765,7 @@ const SettingsView = memo(({ data, accountsData, cards, budgets, dispatch, saveH
   const handleCardChange = (id, field, value) => { setLocalCards(prev => prev.map(c => { if (c.id !== id) return c; const u = { ...c, [field]: value }; if (field === 'limit') u.availableBalance = Math.max(0, safeNumber(value) - safeNumber(u.openingDebt)); return u; })); setHasChanges(true); };
   const handleSave = () => { saveHistory(); const cleaned = {}; const today = getLocalISODate(); ACCOUNT_KEYS.forEach(k => { const oldBal = safeNumber(accountsData[k]?.balance); const newBal = parseNumberInput(localAccounts[k]?.balance); cleaned[k] = { ...localAccounts[k], balance: newBal, lastUpdated: (oldBal !== newBal) ? today : (localAccounts[k]?.lastUpdated || today) }; }); dispatch({ type: 'UPDATE_ACCOUNTS', payload: cleaned }); dispatch({ type: 'UPDATE_CARDS', payload: localCards.map(c => ({ ...c, limit: safeNumber(c.limit), openingDebt: safeNumber(c.openingDebt), cashbackRate: safeNumber(c.cashbackRate, 1) })) }); addNotification({ type: 'success', title: 'تم الحفظ' }); setHasChanges(false); };
   const handleDriveConnect = async () => { setDriveBusy(true); setDriveStatus('جاري الاتصال...'); try { await ensureDriveToken(); setDriveStatus('متصل'); addNotification({ type: 'success', title: 'Drive متصل' }); } catch (e) { setDriveStatus('فشل: ' + e.message); } finally { setDriveBusy(false); } };
-  const handleDriveBackupNow = async () => { setDriveBusy(true); setDriveStatus('جاري الرفع...'); try { const payload = { data, budgets, exportedAt: new Date().toISOString(), version: 'V73' }; const result = await uploadBackupToDrive(payload); localStorage.setItem(AUTO_BACKUP_LS_KEY, String(Date.now())); setDriveStatus(`تم الرفع: ${result.name}`); addNotification({ type: 'success', title: 'نسخة سحابية' }); } catch (e) { setDriveStatus('فشل: ' + e.message); } finally { setDriveBusy(false); } };
+  const handleDriveBackupNow = async () => { setDriveBusy(true); setDriveStatus('جاري الرفع...'); try { const payload = { data, budgets, exportedAt: new Date().toISOString(), version: 'V74' }; const result = await uploadBackupToDrive(payload); localStorage.setItem(AUTO_BACKUP_LS_KEY, String(Date.now())); setDriveStatus(`تم الرفع: ${result.name}`); addNotification({ type: 'success', title: 'نسخة سحابية' }); } catch (e) { setDriveStatus('فشل: ' + e.message); } finally { setDriveBusy(false); } };
   const handleDriveRestore = async () => { setDriveBusy(true); setDriveStatus('جاري الجلب...'); try { const files = await listDriveBackups(); if (files.length === 0) { setDriveStatus('لا توجد نسخ'); setDriveBusy(false); return; } const labels = files.slice(0, 10).map((f, i) => `${i + 1}) ${f.name}`).join('\n'); const choice = prompt(`اختر رقم النسخة:\n\n${labels}`, '1'); if (!choice) { setDriveBusy(false); setDriveStatus(''); return; } const idx = Math.max(1, Math.min(files.length, parseInt(choice, 10) || 1)) - 1; const file = files[idx]; const payload = await downloadBackupFromDrive(file.id); if (!payload?.data) throw new Error('الملف لا يحتوي بيانات'); dispatch({ type: 'SHOW_CONFIRM', danger: true, title: 'استعادة نسخة', message: `سيتم استبدال بياناتك`, onConfirm: () => { saveHistory(); dispatch({ type: 'SET_DATA', payload: migrateData(payload.data) }); if (payload.budgets) dispatch({ type: 'SET_BUDGETS', payload: payload.budgets }); addNotification({ type: 'success', title: 'تمت الاستعادة' }); }, onCancel: () => dispatch({ type: 'HIDE_CONFIRM' }) }); } catch (e) { setDriveStatus('فشل: ' + e.message); } finally { setDriveBusy(false); } };
   const handleFreshStart = () => { dispatch({ type: 'SHOW_CONFIRM', danger: true, title: 'بداية جديدة', message: 'سيتم مسح كل المعاملات', onConfirm: () => { saveHistory(); const zeroed = {}; ACCOUNT_KEYS.forEach(k => { zeroed[k] = { ...(accountsData[k] || {}), balance: 0, lastUpdated: getLocalISODate() }; }); dispatch({ type: 'SET_DATA', payload: { ...data, transactions: [], closedMonths: [], monthlySnapshots: {}, accountsData: zeroed, cards: (data.cards || []).map(c => ({ ...c, openingDebt: 0, availableBalance: safeNumber(c.limit) })), materializedRecurring: {}, notifiedItems: {}, custodyEntries: [], cashbackTrackers: [] } }); addNotification({ type: 'success', title: 'تم التصفير' }); dispatch({ type: 'HIDE_CONFIRM' }); }, onCancel: () => dispatch({ type: 'HIDE_CONFIRM' }) }); };
   return (
@@ -2768,7 +2818,8 @@ const SettingsView = memo(({ data, accountsData, cards, budgets, dispatch, saveH
       {activeSection === 'cards' && (
         <div className="space-y-3">
           {localCards.map(card => {
-            const debtPct = safeNumber(card.limit) > 0 ? (safeNumber(card.openingDebt) / safeNumber(card.limit)) * 100 : 0;
+            const liveDebt = computeCardDebt(data, card);
+            const debtPct = safeNumber(card.limit) > 0 ? (liveDebt / safeNumber(card.limit)) * 100 : 0;
             return (
               <div key={card.id} className="card">
                 <div className="flex items-center gap-2 mb-3">
@@ -2777,10 +2828,15 @@ const SettingsView = memo(({ data, accountsData, cards, budgets, dispatch, saveH
                 </div>
                 <div className="grid grid-cols-3 gap-2 mb-3">
                   <div><label className="block text-[10px] font-bold mb-1" style={{ color: 'var(--text-muted)' }}>الحد</label><input type="text" inputMode="decimal" value={card.limit} onChange={e => handleCardChange(card.id, 'limit', e.target.value)} className="input-field font-black text-blue-600 text-center text-xs py-2" /></div>
-                  <div><label className="block text-[10px] font-bold mb-1" style={{ color: 'var(--text-muted)' }}>المديونية</label><input type="text" inputMode="decimal" value={card.openingDebt} onChange={e => handleCardChange(card.id, 'openingDebt', e.target.value)} className="input-field font-black text-red-600 text-center text-xs py-2" /></div>
+                  <div><label className="block text-[10px] font-bold mb-1" style={{ color: 'var(--text-muted)' }}>مديونية أساسية</label><input type="text" inputMode="decimal" value={card.openingDebt} onChange={e => handleCardChange(card.id, 'openingDebt', e.target.value)} className="input-field font-black text-red-600 text-center text-xs py-2" /></div>
                   <div><label className="block text-[10px] font-bold mb-1" style={{ color: 'var(--text-muted)' }}>كاش باك %</label><input type="text" inputMode="decimal" value={card.cashbackRate || 1} onChange={e => handleCardChange(card.id, 'cashbackRate', e.target.value)} className="input-field font-black text-amber-600 text-center text-xs py-2" /></div>
                 </div>
-                <div className="w-full rounded-full h-1 overflow-hidden" style={{ background: 'var(--bg-muted)' }}>
+                <div className="p-2 rounded-lg text-center mt-2" style={{ background: 'var(--bg-muted)' }}>
+                  <p className="text-[10px] font-semibold" style={{ color: 'var(--text-muted)' }}>المديونية الحية (شاملة كل المعاملات)</p>
+                  <p className="font-black text-red-600 text-sm">{fmt(liveDebt)} ج.م</p>
+                  <p className="text-[10px] font-semibold mt-1" style={{ color: 'var(--text-muted)' }}>المتاح: {fmt(Math.max(0, safeNumber(card.limit) - liveDebt))} ج.م</p>
+                </div>
+                <div className="w-full rounded-full h-1 overflow-hidden mt-2" style={{ background: 'var(--bg-muted)' }}>
                   <div className={`h-full ${debtPct > 70 ? 'bg-red-500' : debtPct > 40 ? 'bg-amber-500' : 'bg-emerald-500'}`} style={{ width: `${Math.min(100, debtPct)}%` }}></div>
                 </div>
               </div>
@@ -2816,9 +2872,10 @@ const SettingsView = memo(({ data, accountsData, cards, budgets, dispatch, saveH
   );
 });
 
-const ProfessionalTicker = memo(({ updatedLoans, cards, liveBalances, walletVisibility, custodyBalance }) => {
+// ✅ ProfessionalTicker مع computeCardDebt
+const ProfessionalTicker = memo(({ updatedLoans, cards, liveBalances, walletVisibility, custodyBalance, data }) => {
   const [quote] = useState(() => DAILY_DHIKR[Math.floor(Math.random() * DAILY_DHIKR.length)]);
-  const totalDebt = updatedLoans.filter(l => !l.isReceivable).reduce((a, l) => a + l.remaining, 0) + cards.reduce((a, c) => a + safeNumber(c.openingDebt), 0);
+  const totalDebt = updatedLoans.filter(l => !l.isReceivable).reduce((a, l) => a + l.remaining, 0) + cards.reduce((a, c) => a + computeCardDebt(data, c), 0);
   const cashNow = safeNumber(liveBalances?.cash);
   const items = (
     <>
@@ -2867,7 +2924,7 @@ const EnhancedSidebar = memo(({ activeTab, dispatch, canUndo, onUndo }) => {
         <div className="p-2 rounded-lg text-white" style={{ background: 'var(--brand)' }}><Wallet size={18} /></div>
         <div>
           <h2 className="font-black text-sm">المحفظة الذكية</h2>
-          <p className="text-[10px] font-semibold" style={{ color: 'var(--text-muted)' }}>V73</p>
+          <p className="text-[10px] font-semibold" style={{ color: 'var(--text-muted)' }}>V74</p>
         </div>
       </div>
       <nav className="flex-1 scroll-hide overflow-y-auto -mx-1 px-1">
@@ -3041,7 +3098,7 @@ function dataReducer(state, action) {
       const monthEnd = new Date(year, getMonthIndex(month) + 1, 0, 23, 59, 59);
       const snap = {};
       ACCOUNT_KEYS.forEach(k => { snap[k] = computeBalance(state.data, k, monthEnd); });
-      snap._totalDebt = state.data.cards.reduce((s, c) => s + safeNumber(c.openingDebt), 0) + state.data.loans.filter(l => !l.isReceivable).reduce((s, l) => s + Math.max(0, safeNumber(l.totalAmount) - safeNumber(l.prePaidAmount)), 0);
+      snap._totalDebt = state.data.cards.reduce((s, c) => s + computeCardDebt(state.data, c, monthEnd), 0) + state.data.loans.filter(l => !l.isReceivable).reduce((s, l) => s + Math.max(0, safeNumber(l.totalAmount) - safeNumber(l.prePaidAmount)), 0);
       return { ...state, data: { ...state.data, closedMonths: [...(state.data.closedMonths || []), monthKey], monthlySnapshots: { ...(state.data.monthlySnapshots || {}), [monthKey]: snap } } };
     }
     case 'OPEN_MONTH': {
@@ -3117,7 +3174,7 @@ const uploadBackupToDrive = async (payload, fileName) => {
   const folderId = await getOrCreateBackupFolder();
   const name = fileName || `finance_backup_${getLocalISODate()}_${Date.now()}.json`;
   const metadata = { name, parents: [folderId], mimeType: 'application/json' };
-  const boundary = '----V73DriveBoundary' + Date.now();
+  const boundary = '----V74DriveBoundary' + Date.now();
   const body = `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n--${boundary}\r\nContent-Type: application/json\r\n\r\n${JSON.stringify(payload)}\r\n--${boundary}--`;
   const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,size,createdTime', { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': `multipart/related; boundary=${boundary}` }, body });
   if (!res.ok) throw new Error('فشل الرفع');
@@ -3141,7 +3198,7 @@ const downloadBackupFromDrive = async (fileId) => {
   return await res.json();
 };
 
-const AUTO_BACKUP_LS_KEY = 'v73_last_drive_backup_ts';
+const AUTO_BACKUP_LS_KEY = 'v74_last_drive_backup_ts';
 
 function App() {
   const defMY = useMemo(() => getDefaultMonthYear(), []);
@@ -3386,17 +3443,27 @@ function App() {
     return acc.map(t => { const a = safeNumber(t.amount); bal += (t.subType === 'deposit') ? a : -a; return { ...t, runningBalance: bal }; }).reverse();
   }, [transactions, accountsData]);
 
+  // ✅ cardHistoryMap بعد إصلاح double counting
   const cardHistoryMap = useMemo(() => {
     const result = {};
     cards.forEach(card => {
+      const method = getCardMethod(card);
       let debt = safeNumber(card.openingDebt);
-      const cardMethod = card.name === 'SWYPE' ? 'cib_swype' : (card.bank === 'AAIB' ? 'aaib_card' : 'cib_card');
       result[card.id] = YEARS_LIST.flatMap(y => getMonthsForYear(y).map(m => ({ year: y, month: m }))).map(({ year, month }) => {
-        const expenses = transactions.filter(t => t.status === 'paid' && t.type === 'expense' && t.method === cardMethod && t.month === month && (t.year || 2026) === year).reduce((a, b) => a + safeNumber(b.amount), 0);
-        const payments = transactions.filter(t => t.status === 'paid' && t.linkedCardId === card.id && !t.linkedLoanId && t.month === month && (t.year || 2026) === year).reduce((a, b) => a + safeNumber(b.amount), 0);
+        let expenses = 0, payments = 0, refunds = 0;
+        transactions.forEach(t => {
+          if (t.status !== 'paid' || t.month !== month || (t.year || 2026) !== year) return;
+          const amt = safeNumber(t.amount);
+          // سداد للبطاقة (linkedCardId === card.id) → يقلل المديونية
+          if (t.linkedCardId === card.id && t.type === 'expense' && !t.linkedLoanId) { payments += amt; return; }
+          // مشتريات على البطاقة (method === cardMethod) → تزيد المديونية
+          if (t.type === 'expense' && t.method === method) { expenses += amt; return; }
+          // استرداد على البطاقة
+          if (t.type === 'income' && t.method === method && t.subType === 'deposit') { refunds += amt; return; }
+        });
         const openingDebt = debt;
-        debt = debt + expenses - payments;
-        return { year, month, openingDebt, expenses, payments, closingDebt: debt, available: safeNumber(card.limit) - debt };
+        debt = debt + expenses - payments - refunds;
+        return { year, month, openingDebt, expenses, payments: payments + refunds, closingDebt: debt, available: Math.max(0, safeNumber(card.limit) - debt) };
       });
     });
     return result;
@@ -3406,7 +3473,7 @@ function App() {
     try {
       const today = new Date(); const cd = today.getDate(); const cm = today.getMonth(); const cy = today.getFullYear();
       const items = [];
-      cards.forEach(c => { const d = parseInt(c.dueDate) || 5; let tm = cm, ty = cy; if (d < cd) { tm++; if (tm > 11) { tm = 0; ty++; } } items.push({ id: `ag-card-${c.id}`, title: `سداد ${c.bank} - ${c.name}`, date: new Date(ty, tm, d).toISOString().split('T')[0], amount: safeNumber(c.openingDebt), type: 'warning', icon: CreditCard, desc: 'استحقاق دوري' }); });
+      cards.forEach(c => { const d = parseInt(c.dueDate) || 5; let tm = cm, ty = cy; if (d < cd) { tm++; if (tm > 11) { tm = 0; ty++; } } items.push({ id: `ag-card-${c.id}`, title: `سداد ${c.bank} - ${c.name}`, date: new Date(ty, tm, d).toISOString().split('T')[0], amount: computeCardDebt(data, c), type: 'warning', icon: CreditCard, desc: 'استحقاق دوري' }); });
       updatedLoans.forEach(l => {
         if (safeNumber(l.monthlyInstallment) > 0 && l.remaining > 0 && !l.autoGenerated && !l.isReceivable) { const d = parseInt(l.dueDay) || 1; let tm = cm, ty = cy; if (d < cd) { tm++; if (tm > 11) { tm = 0; ty++; } } items.push({ id: `ag-loan-${l.id}`, title: `قسط ${l.name}`, date: new Date(ty, tm, d).toISOString().split('T')[0], amount: safeNumber(l.monthlyInstallment), type: 'danger', icon: Banknote, desc: l.description }); }
         if (l.isReceivable && !l.paused && l.remaining > 0 && safeNumber(l.monthlyInstallment) > 0) { const d = parseInt(l.dueDay) || 1; let tm = cm, ty = cy; if (d < cd) { tm++; if (tm > 11) { tm = 0; ty++; } } items.push({ id: `ag-recv-${l.id}`, title: `تحصيل ${l.name}`, date: new Date(ty, tm, d).toISOString().split('T')[0], amount: safeNumber(l.monthlyInstallment), type: 'success', icon: TrendingUp, desc: '💰 مستحق لك' }); }
@@ -3415,7 +3482,7 @@ function App() {
       recurringItems.forEach(r => { const d = parseInt(r.day) || 1; let tm = cm, ty = cy; if (d < cd) { tm++; if (tm > 11) { tm = 0; ty++; } } const isIncome = r.type === 'income'; const isFee = BANK_FEE_CATEGORIES.has(r.category); items.push({ id: `ag-rec-${r.id}`, title: r.title, date: new Date(ty, tm, d).toISOString().split('T')[0], amount: safeNumber(r.amount), type: isIncome ? 'success' : 'warning', icon: isIncome ? TrendingUp : isFee ? Receipt : Repeat, desc: isIncome ? '💰 دخل شهري متكرر' : isFee ? '🏦 رسم بنكي شهري' : 'التزام شهري متكرر' }); });
       return items.sort((a, b) => new Date(a.date) - new Date(b.date));
     } catch (err) { console.error(err); return []; }
-  }, [cards, updatedLoans, recurringItems]);
+  }, [cards, updatedLoans, recurringItems, data]);
 
   const openWalletForm = useCallback((walletKey, kind) => {
     const w = WALLET_CONFIGS[walletKey]?.csvName || walletKey;
@@ -3454,8 +3521,8 @@ function App() {
     if (!window.html2pdf) { addNotification({ type: 'error', title: 'مكتبة PDF غير محمّلة' }); return; }
     const overlay = document.createElement('div');
     overlay.style.cssText = 'position:fixed;inset:0;background:rgba(42,36,24,0.85);backdrop-filter:blur(8px);z-index:9999999;display:flex;align-items:center;justify-content:center;color:white;font-family:Cairo,sans-serif;direction:rtl;';
-    overlay.innerHTML = `<div style="text-align:center;"><div style="width:50px;height:50px;border:3px solid rgba(255,255,255,0.2);border-radius:50%;border-top-color:#3B82F6;animation:v73spin 0.8s linear infinite;margin:0 auto 16px;"></div><p style="font-weight:800;font-size:15px;margin:0;">جاري إنشاء PDF...</p></div>`;
-    const styleTag = document.createElement('style'); styleTag.textContent = '@keyframes v73spin{to{transform:rotate(360deg)}}';
+    overlay.innerHTML = `<div style="text-align:center;"><div style="width:50px;height:50px;border:3px solid rgba(255,255,255,0.2);border-radius:50%;border-top-color:#3B82F6;animation:v74spin 0.8s linear infinite;margin:0 auto 16px;"></div><p style="font-weight:800;font-size:15px;margin:0;">جاري إنشاء PDF...</p></div>`;
+    const styleTag = document.createElement('style'); styleTag.textContent = '@keyframes v74spin{to{transform:rotate(360deg)}}';
     document.head.appendChild(styleTag); document.body.appendChild(overlay);
     const sorted = [...items].sort((a, b) => { const d = new Date(a.date) - new Date(b.date); if (d !== 0) return d; return String(a.id).localeCompare(String(b.id)); });
     const total = sorted.reduce((s, i) => s + safeNumber(i.amount), 0);
@@ -3488,6 +3555,7 @@ function App() {
     exportPdf(`التقرير الشامل — ${selectedMonth} ${selectedYear}`, enriched);
   }, [transactions, selectedMonth, selectedYear, exportPdf]);
 
+  // ✅ handleSaveTransaction مع منع السداد الذاتي للبطاقة
   const handleSaveTransaction = useCallback((e) => {
     e.preventDefault(); if (isProcessing) return;
     const errors = {}; const amount = parseNumberInput(formData.amount);
@@ -3497,6 +3565,16 @@ function App() {
     if (Object.keys(errors).length > 0) { dispatch({ type: 'SET_FORM_ERRORS', payload: errors }); addNotification({ type: 'error', title: 'خطأ', message: Object.values(errors)[0] }); return; }
     const d = new Date(formData.date); if (isNaN(d)) { addNotification({ type: 'error', title: 'تاريخ غير صالح' }); return; }
     const txYear = d.getFullYear(), txMonth = ALL_MONTHS[d.getMonth()];
+
+    // ✅ منع السداد الذاتي: نفس البطاقة كمصدر وهدف
+    if (formData.type === 'expense' && formData.linkedCardId && CREDIT_CARD_METHOD_IDS.includes(formData.method)) {
+      const linkedCard = cards.find(c => c.id === Number(formData.linkedCardId));
+      if (linkedCard && getCardMethod(linkedCard) === formData.method) {
+        addNotification({ type: 'warning', title: 'تحذير', message: 'لا يمكن ربط العملية بنفس البطاقة كمصدر وهدف في نفس الوقت' });
+        return;
+      }
+    }
+
     if (formMode === 'edit') { const orig = transactions.find(t => t.id === formData.id); if (orig && isMonthClosed(data, orig.year || 2026, orig.month)) { addNotification({ type: 'error', title: 'محظور', message: 'الشهر مغلق' }); return; } }
     if (isMonthClosed(data, txYear, txMonth)) { addNotification({ type: 'error', title: 'محظور', message: `شهر ${txMonth} مغلق` }); return; }
     dispatch({ type: 'SET_IS_PROCESSING', payload: true });
@@ -3515,7 +3593,7 @@ function App() {
       dispatch({ type: 'SET_IS_PROCESSING', payload: false });
       processingTimeoutRef.current = null;
     }, 300);
-  }, [formData, formMode, transactions, data, saveHistory, addNotification, isProcessing]);
+  }, [formData, formMode, transactions, data, cards, saveHistory, addNotification, isProcessing]);
 
   const handleSaveAndNext = useCallback(() => {
     if (isProcessing) return;
@@ -3648,7 +3726,7 @@ function App() {
       const m = transactions.filter(t => t.month === selectedMonth && (t.year || 2026) === selectedYear);
       const op = (type) => m.filter(t => t.type === type && inferKind(t) === KIND.OPERATIONAL).reduce((a, c) => a + safeNumber(c.amount), 0);
       const inc = op('income'), exp = op('expense'); const savings = inc - exp;
-      const totalDebt = updatedLoans.filter(l => !l.isReceivable).reduce((s, l) => s + l.remaining, 0) + cards.reduce((s, c) => s + safeNumber(c.openingDebt), 0);
+      const totalDebt = updatedLoans.filter(l => !l.isReceivable).reduce((s, l) => s + l.remaining, 0) + cards.reduce((s, c) => s + computeCardDebt(data, c), 0);
       const totalReceivable = updatedLoans.filter(l => l.isReceivable).reduce((s, l) => s + l.remaining, 0);
       const bankFees = m.filter(t => t.status === 'paid' && BANK_FEE_CATEGORIES.has(t.category)).reduce((s, t) => s + safeNumber(t.amount), 0);
       let text = `تحليل ${selectedMonth} ${selectedYear}\n\n`;
@@ -3663,7 +3741,7 @@ function App() {
       dispatch({ type: 'SET_AI_RESPONSE', payload: text });
       dispatch({ type: 'SET_AI_LOADING', payload: false });
     }, 800);
-  }, [transactions, selectedYear, selectedMonth, updatedLoans, cards, custodySummary]);
+  }, [transactions, selectedYear, selectedMonth, updatedLoans, cards, custodySummary, data]);
 
   useEffect(() => { localStorage.setItem('budgets', JSON.stringify(budgets)); }, [budgets]);
   useEffect(() => { document.documentElement.classList.toggle('dark', isDarkMode); localStorage.setItem('theme', isDarkMode ? 'dark' : 'light'); }, [isDarkMode]);
@@ -3694,14 +3772,14 @@ function App() {
 
   return (
     <div className="flex h-screen overflow-hidden font-sans">
-      <ProfessionalTicker updatedLoans={updatedLoans} cards={cards} liveBalances={liveBalances} walletVisibility={walletVisibility} custodyBalance={custodySummary.balance} />
+      <ProfessionalTicker updatedLoans={updatedLoans} cards={cards} liveBalances={liveBalances} walletVisibility={walletVisibility} custodyBalance={custodySummary.balance} data={data} />
       <ToastContainer notifications={notifications} removeNotification={removeNotification} />
       <ConfirmDialog confirmDialog={confirmDialog} dispatch={dispatch} />
       {isProcessing && (<div className="processing-overlay"><div className="processing-spinner mb-4"></div><h3 className="text-base font-bold mb-2">جاري تطبيق العملية</h3><button onClick={cancelProcessing} className="btn btn-secondary bg-red-500 text-white mt-3 text-xs">إلغاء</button></div>)}
       {viewingCardStatement && (() => {
         const card = viewingCardStatement;
         const monthData = (cardHistoryMap[card.id] || []).find(h => h.month === selectedMonth && h.year === selectedYear);
-        const cardMethod = card.name === 'SWYPE' ? 'cib_swype' : (card.bank === 'CIB' ? 'cib_card' : 'aaib_card');
+        const cardMethod = getCardMethod(card);
         const cardTx = transactions.filter(t => t.method === cardMethod && t.month === selectedMonth && (t.year || 2026) === selectedYear).sort((a, b) => new Date(b.date) - new Date(a.date));
         return (<div className="modal-backdrop z-[3500] no-print"><div className="w-full max-w-3xl rounded-2xl shadow-2xl overflow-hidden flex flex-col" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', maxHeight: 'calc(100dvh - 24px)' }}>
           <div className="p-4" style={{ borderBottom: '1px solid var(--border-subtle)' }}><div className="flex justify-between items-start flex-wrap gap-2"><div className="flex items-center gap-2"><BankLogo type={`${card.bank.toLowerCase()}_card`} size={32} /><div><h3 className="text-base font-black">{card.bank} - {card.name}</h3><p className="text-[11px] font-semibold mt-0.5" style={{ color: 'var(--text-muted)' }}>{selectedMonth} {selectedYear}</p></div></div><div className="flex gap-1.5"><button type="button" onClick={() => exportPdf(`كشف ${card.bank}`, cardTx)} className="btn btn-primary text-[11px] py-1.5 px-2.5"><FileText size={12} /> PDF</button><button type="button" aria-label="إغلاق" onClick={() => dispatch({ type: 'SET_VIEWING_CARD_STATEMENT', payload: null })} className="btn btn-ghost p-1.5"><X size={16} /></button></div></div><div className="grid grid-cols-2 gap-2 mt-3"><div className="p-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/30"><p className="text-[10px] font-bold text-amber-700 dark:text-amber-400">بداية</p><p className="text-sm font-black mt-0.5">{fmt(monthData?.openingDebt || 0)}</p></div><div className="p-2.5 rounded-lg bg-blue-50 dark:bg-blue-950/30"><p className="text-[10px] font-bold text-blue-700 dark:text-blue-400">نهاية</p><p className="text-sm font-black text-blue-600 mt-0.5">{fmt(monthData?.closingDebt || 0)}</p></div></div></div>
@@ -3825,13 +3903,16 @@ function App() {
               </div>
             </div>)}
             <div><label className="block text-[11px] font-bold mb-1" style={{ color: 'var(--text-muted)' }}>الوصف</label><input type="text" className={`input-field font-bold text-sm py-2.5 ${formErrors.description ? 'error' : ''}`} value={formData.description || ''} onChange={e => dispatch({ type: 'SET_FORM_DATA', payload: { ...formData, description: e.target.value } })} placeholder="تفاصيل..." /></div>
+            {formData.type === 'expense' && (<details className="rounded-lg overflow-hidden" style={{ background: 'var(--bg-muted)' }}><summary className="p-2.5 cursor-pointer text-[11px] font-bold flex items-center justify-between" style={{ color: 'var(--text-secondary)' }}><span className="flex items-center gap-2"><Hash size={12} /> ربط بقرض أو بطاقة</span><ChevronDown size={12} /></summary>
+              <div className="p-2.5 space-y-2" style={{ borderTop: '1px solid var(--border-subtle)' }}><select className="input-field text-[11px] font-bold w-full py-2" value={formData.linkedLoanId || ''} onChange={e => dispatch({ type: 'SET_FORM_DATA', payload: { ...formData, linkedLoanId: e.target.value || '' } })}><option value="">بدون قرض</option>{updatedLoans.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}</select>
+                <select className="input-field text-[11px] font-bold w-full py-2" value={formData.linkedCardId || ''} onChange={e => dispatch({ type: 'SET_FORM_DATA', payload: { ...formData, linkedCardId: e.target.value ? Number(e.target.value) : '' } })}><option value="">بدون بطاقة</option>{cards.map(c => <option key={c.id} value={c.id}>{c.name} - {c.bank}</option>)}</select></div></details>)}
             {formData.category === 'مسحوبات محل هاني' && formMode === 'add' ? (<div className="grid grid-cols-2 gap-2"><button type="button" onClick={handleSaveAndNext} disabled={isProcessing} className="btn btn-secondary py-2.5 text-sm"><Zap size={14} /> حفظ + التالي</button><button type="submit" disabled={isProcessing} className="btn btn-primary py-2.5 text-sm"><Save size={14} /> حفظ</button></div>) : (<button type="submit" className="btn btn-primary w-full py-2.5 text-sm" disabled={isProcessing}>{isProcessing ? 'جاري الحفظ...' : <><Save size={14} /> {formData.status === 'paid' ? 'حفظ واعتماد' : 'حفظ كمعلق'}</>}</button>)}
           </form></div></div>)}
       {isAiModalOpen && (<div className="modal-backdrop no-print"><div className="w-full max-w-xl rounded-2xl shadow-2xl overflow-hidden animate-slideInBottom" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)' }}><div className="p-4 flex justify-between items-center" style={{ borderBottom: '1px solid var(--border-subtle)' }}><h3 className="text-sm font-black flex items-center gap-2"><Sparkles size={14} className="text-blue-500" /> المساعد</h3><button type="button" onClick={() => dispatch({ type: 'SET_AI_MODAL_OPEN', payload: false })} className="btn btn-ghost p-1.5"><X size={16} /></button></div><div className="p-4"><button type="button" onClick={handleAnalyzeFinances} disabled={isAiLoading} className="btn btn-primary w-full py-2.5 text-sm mb-3">{isAiLoading ? 'جاري التحليل...' : <><Sparkles size={14} /> تحليل الوضع المالي</>}</button>{aiResponse && <div className="p-3 rounded-lg whitespace-pre-line text-xs font-medium leading-relaxed" style={{ background: 'var(--bg-muted)' }}>{aiResponse}</div>}</div></div></div>)}
       {editingCard && (<div className="modal-backdrop no-print"><div className="w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden animate-slideInBottom max-h-[90dvh] flex flex-col" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)' }}><div className="p-4 flex justify-between items-center" style={{ borderBottom: '1px solid var(--border-subtle)' }}><h3 className="text-sm font-black">تعديل البطاقة</h3><button type="button" onClick={() => dispatch({ type: 'SET_EDITING_CARD', payload: null })} className="btn btn-ghost p-1.5"><X size={16} /></button></div>
         <form onSubmit={handleUpdateCard} className="p-4 space-y-2.5 overflow-y-auto scroll-hide">
           <div className="grid grid-cols-2 gap-2.5"><div><label className="text-[11px] font-bold" style={{ color: 'var(--text-muted)' }}>الاسم</label><input type="text" required className="input-field text-sm" value={editingCard.name} onChange={e => dispatch({ type: 'SET_EDITING_CARD', payload: { ...editingCard, name: e.target.value } })} /></div><div><label className="text-[11px] font-bold" style={{ color: 'var(--text-muted)' }}>البنك</label><input type="text" required className="input-field text-sm" value={editingCard.bank} onChange={e => dispatch({ type: 'SET_EDITING_CARD', payload: { ...editingCard, bank: e.target.value } })} /></div></div>
-          <div className="grid grid-cols-3 gap-2.5"><div><label className="text-[11px] font-bold" style={{ color: 'var(--text-muted)' }}>الحد</label><input type="text" inputMode="decimal" className="input-field text-blue-600 font-bold text-sm" value={editingCard.limit} onChange={e => dispatch({ type: 'SET_EDITING_CARD', payload: { ...editingCard, limit: e.target.value, availableBalance: Math.max(0, parseNumberInput(e.target.value) - safeNumber(editingCard.openingDebt)) } })} /></div><div><label className="text-[11px] font-bold" style={{ color: 'var(--text-muted)' }}>المديونية</label><input type="text" inputMode="decimal" className="input-field text-red-500 font-bold text-sm" value={editingCard.openingDebt} onChange={e => dispatch({ type: 'SET_EDITING_CARD', payload: { ...editingCard, openingDebt: e.target.value, availableBalance: Math.max(0, safeNumber(editingCard.limit) - parseNumberInput(e.target.value)) } })} /></div><div><label className="text-[11px] font-bold" style={{ color: 'var(--text-muted)' }}>كاش باك %</label><input type="text" inputMode="decimal" className="input-field text-amber-600 font-black text-sm text-center" value={editingCard.cashbackRate || 1} onChange={e => dispatch({ type: 'SET_EDITING_CARD', payload: { ...editingCard, cashbackRate: e.target.value } })} /></div></div>
+          <div className="grid grid-cols-3 gap-2.5"><div><label className="text-[11px] font-bold" style={{ color: 'var(--text-muted)' }}>الحد</label><input type="text" inputMode="decimal" className="input-field text-blue-600 font-bold text-sm" value={editingCard.limit} onChange={e => dispatch({ type: 'SET_EDITING_CARD', payload: { ...editingCard, limit: e.target.value, availableBalance: Math.max(0, parseNumberInput(e.target.value) - safeNumber(editingCard.openingDebt)) } })} /></div><div><label className="text-[11px] font-bold" style={{ color: 'var(--text-muted)' }}>مديونية أساسية</label><input type="text" inputMode="decimal" className="input-field text-red-500 font-bold text-sm" value={editingCard.openingDebt} onChange={e => dispatch({ type: 'SET_EDITING_CARD', payload: { ...editingCard, openingDebt: e.target.value, availableBalance: Math.max(0, safeNumber(editingCard.limit) - parseNumberInput(e.target.value)) } })} /></div><div><label className="text-[11px] font-bold" style={{ color: 'var(--text-muted)' }}>كاش باك %</label><input type="text" inputMode="decimal" className="input-field text-amber-600 font-black text-sm text-center" value={editingCard.cashbackRate || 1} onChange={e => dispatch({ type: 'SET_EDITING_CARD', payload: { ...editingCard, cashbackRate: e.target.value } })} /></div></div>
           <button type="submit" className="btn btn-primary w-full py-2.5 text-sm">حفظ</button></form></div></div>)}
       {editingLoan && (<div className="modal-backdrop no-print"><div className="w-full max-w-md rounded-2xl shadow-2xl animate-slideInBottom" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)' }}><div className="p-4 flex justify-between items-center" style={{ borderBottom: '1px solid var(--border-subtle)' }}><h3 className="text-sm font-black">تعديل الالتزام</h3><button type="button" onClick={() => dispatch({ type: 'SET_EDITING_LOAN', payload: null })} className="btn btn-ghost p-1.5"><X size={16} /></button></div>
         <form onSubmit={handleUpdateLoan} className="p-4 space-y-2.5">
