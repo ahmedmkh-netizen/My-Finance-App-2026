@@ -3,11 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>مسحوبات محل هاني</title>
+<title>محل هاني — v3.0</title>
 <meta name="theme-color" content="#F59E0B">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="محل هاني">
 <meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
@@ -15,367 +16,306 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
 <style>
 :root {
-  --bg-app: #FFF7ED;
-  --bg-app-end: #FEF3C7;
-  --bg-card: #FFFFFF;
-  --bg-muted: #F8FAFC;
+  --bg-app: #FFF7ED; --bg-app-end: #FEF3C7;
+  --bg-card: #FFFFFF; --bg-muted: #F8FAFC; --bg-elevated: #FFFFFF;
   --border-subtle: rgba(120, 90, 40, 0.08);
   --border-default: rgba(120, 90, 40, 0.15);
-  --text-primary: #78350F;
-  --text-secondary: #92400E;
-  --text-muted: #A16207;
-  --brand: #F59E0B;
-  --brand-dark: #D97706;
-  --brand-light: #FBBF24;
+  --border-strong: rgba(120, 90, 40, 0.25);
+  --text-primary: #78350F; --text-secondary: #92400E; --text-muted: #A16207;
+  --text-inverse: #FFFFFF;
+  --brand: #F59E0B; --brand-dark: #D97706; --brand-light: #FBBF24;
   --brand-soft: rgba(245, 158, 11, 0.12);
-  --success: #10B981;
-  --danger: #DC2626;
-  --danger-soft: rgba(220, 38, 38, 0.08);
+  --success: #10B981; --success-soft: rgba(16, 185, 129, 0.12);
+  --danger: #DC2626; --danger-soft: rgba(220, 38, 38, 0.08);
+  --warning: #F59E0B; --warning-soft: rgba(245, 158, 11, 0.12);
+  --info: #3B82F6; --info-soft: rgba(59, 130, 246, 0.12);
   --shadow-sm: 0 2px 8px rgba(120, 90, 40, 0.06);
   --shadow-md: 0 6px 20px rgba(120, 90, 40, 0.10);
   --shadow-lg: 0 16px 40px rgba(120, 90, 40, 0.15);
   --shadow-xl: 0 24px 60px rgba(120, 90, 40, 0.20);
-  --radius-sm: 10px;
-  --radius-md: 14px;
-  --radius-lg: 18px;
-  --radius-xl: 24px;
+  --radius-sm: 10px; --radius-md: 14px; --radius-lg: 18px; --radius-xl: 24px;
+  --font: 'Cairo', system-ui, -apple-system, sans-serif;
 }
 body.theme-ans { --bg-app: #EFF6FF; --bg-app-end: #DBEAFE; --text-primary: #1E3A8A; --text-secondary: #1E40AF; --text-muted: #3B82F6; --brand: #3B82F6; --brand-dark: #1D4ED8; --brand-light: #60A5FA; --brand-soft: rgba(59, 130, 246, 0.12); }
 body.theme-abdelrahman { --bg-app: #ECFDF5; --bg-app-end: #D1FAE5; --text-primary: #065F46; --text-secondary: #047857; --text-muted: #10B981; --brand: #10B981; --brand-dark: #059669; --brand-light: #34D399; --brand-soft: rgba(16, 185, 129, 0.12); }
 body.theme-salma { --bg-app: #F5F3FF; --bg-app-end: #EDE9FE; --text-primary: #5B21B6; --text-secondary: #6D28D9; --text-muted: #8B5CF6; --brand: #8B5CF6; --brand-dark: #6D28D9; --brand-light: #A78BFA; --brand-soft: rgba(139, 92, 246, 0.12); }
 body.theme-om_abdo { --bg-app: #FDF2F8; --bg-app-end: #FCE7F3; --text-primary: #9F1239; --text-secondary: #BE185D; --text-muted: #EC4899; --brand: #EC4899; --brand-dark: #BE185D; --brand-light: #F472B6; --brand-soft: rgba(236, 72, 153, 0.12); }
 body.dark {
-  --bg-app: #0F172A;
-  --bg-app-end: #1E293B;
-  --bg-card: #1E293B;
-  --bg-muted: #334155;
+  --bg-app: #0F172A; --bg-app-end: #1E293B;
+  --bg-card: #1E293B; --bg-muted: #334155; --bg-elevated: #334155;
   --border-subtle: rgba(255, 255, 255, 0.06);
   --border-default: rgba(255, 255, 255, 0.12);
-  --text-primary: #F1F5F9;
-  --text-secondary: #CBD5E1;
-  --text-muted: #94A3B8;
+  --border-strong: rgba(255, 255, 255, 0.20);
+  --text-primary: #F1F5F9; --text-secondary: #CBD5E1; --text-muted: #94A3B8;
   --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.4);
   --shadow-md: 0 6px 20px rgba(0, 0, 0, 0.5);
   --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.6);
+  --shadow-xl: 0 24px 60px rgba(0, 0, 0, 0.7);
 }
 * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
 html { -webkit-text-size-adjust: 100%; }
 body {
-  font-family: 'Cairo', system-ui, -apple-system, sans-serif;
-  font-weight: 600;
-  color: var(--text-primary);
+  font-family: var(--font); font-weight: 600; color: var(--text-primary);
   background: linear-gradient(135deg, var(--bg-app) 0%, var(--bg-app-end) 100%);
-  min-height: 100dvh;
-  padding: 0 0 calc(90px + env(safe-area-inset-bottom)) 0;
-  transition: background 0.3s ease, color 0.3s ease;
-  -webkit-font-smoothing: antialiased;
-  overflow-x: hidden;
+  min-height: 100dvh; padding: 0 0 calc(90px + env(safe-area-inset-bottom)) 0;
+  transition: background 0.3s, color 0.3s;
+  -webkit-font-smoothing: antialiased; overflow-x: hidden;
 }
 ::-webkit-scrollbar { width: 4px; height: 4px; }
-::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border-default); border-radius: 999px; }
+::-webkit-scrollbar-track { background: transparent; }
+button { font-family: var(--font); }
+input, textarea { font-family: var(--font); }
+
+/* ═══ OFFLINE BANNER ═══ */
+.offline-banner {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 2000;
+  background: linear-gradient(90deg, #DC2626, #991B1B);
+  color: white; text-align: center;
+  font-size: 11px; font-weight: 900; padding: 6px;
+  display: none; letter-spacing: 0.05em;
+  animation: slideDown 0.3s;
+}
+.offline-banner.show { display: block; }
+@keyframes slideDown { from { transform: translateY(-100%); } to { transform: translateY(0); } }
 
 /* ═══ HEADER ═══ */
 .app-header {
-  position: sticky;
-  top: 0;
-  z-index: 100;
+  position: sticky; top: 0; z-index: 100;
   padding: 16px 16px 14px;
   border-radius: 0 0 var(--radius-xl) var(--radius-xl);
   background: linear-gradient(135deg, var(--brand), var(--brand-dark));
-  color: white;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.15);
-  margin-bottom: 12px;
-  transition: background 0.3s;
+  color: white; box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+  margin-bottom: 12px; transition: background 0.3s;
 }
-.app-header .row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 10px;
-}
+.app-header .row { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
 .app-header h1 { font-size: 17px; font-weight: 900; letter-spacing: -0.02em; }
 .app-header .greeting { font-size: 13px; font-weight: 700; opacity: 0.95; margin-top: 2px; }
 .app-header .date-line { font-size: 10px; font-weight: 600; opacity: 0.8; margin-top: 4px; }
 .icon-btn {
-  width: 38px; height: 38px;
-  border-radius: 12px;
-  background: rgba(255,255,255,0.18);
-  border: 1px solid rgba(255,255,255,0.12);
-  color: white; font-size: 16px;
-  cursor: pointer; display: flex; align-items: center; justify-content: center;
-  transition: all 0.15s;
-  backdrop-filter: blur(8px);
+  width: 38px; height: 38px; border-radius: 12px;
+  background: rgba(255,255,255,0.18); border: 1px solid rgba(255,255,255,0.12);
+  color: white; font-size: 16px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.15s; backdrop-filter: blur(8px);
 }
 .icon-btn:active { transform: scale(0.9); background: rgba(255,255,255,0.28); }
 .header-actions { display: flex; gap: 6px; }
 
+/* ═══ BUDGET BAR IN HEADER ═══ */
+.budget-strip {
+  margin-top: 12px;
+  background: rgba(255,255,255,0.15);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255,255,255,0.15);
+}
+.budget-strip .row-1 {
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 10px; font-weight: 900; opacity: 0.95; margin-bottom: 6px;
+}
+.budget-strip .bar {
+  height: 6px; border-radius: 999px;
+  background: rgba(255,255,255,0.2); overflow: hidden;
+}
+.budget-strip .bar-fill {
+  height: 100%; border-radius: 999px;
+  background: linear-gradient(90deg, #10B981, #34D399);
+  transition: width 0.5s cubic-bezier(0.16, 1, 0.3, 1), background 0.3s;
+}
+.budget-strip.over .bar-fill { background: linear-gradient(90deg, #DC2626, #F87171); }
+.budget-strip.warn .bar-fill { background: linear-gradient(90deg, #F59E0B, #FBBF24); }
+
 /* ═══ CARD ═══ */
 .card {
-  background: var(--bg-card);
-  border-radius: var(--radius-lg);
-  padding: 16px;
-  box-shadow: var(--shadow-sm);
+  background: var(--bg-card); border-radius: var(--radius-lg);
+  padding: 16px; box-shadow: var(--shadow-sm);
   border: 1px solid var(--border-subtle);
   margin: 0 12px 12px;
-  transition: box-shadow 0.25s;
 }
 .card-title {
-  font-size: 12px; font-weight: 900;
-  margin-bottom: 12px;
+  font-size: 12px; font-weight: 900; margin-bottom: 12px;
   display: flex; align-items: center; gap: 6px;
-  color: var(--text-secondary);
-  text-transform: uppercase;
+  color: var(--text-secondary); text-transform: uppercase;
   letter-spacing: 0.04em;
 }
 .card-title .count {
-  background: var(--brand-soft);
-  color: var(--brand);
-  padding: 2px 8px;
-  border-radius: 999px;
-  font-size: 10px;
-  margin-right: auto;
+  background: var(--brand-soft); color: var(--brand);
+  padding: 2px 8px; border-radius: 999px;
+  font-size: 10px; margin-right: auto;
 }
 
 /* ═══ SEARCH ═══ */
-.search-wrap {
-  position: relative;
-  margin-bottom: 12px;
-}
+.search-wrap { position: relative; margin-bottom: 12px; }
 .search-input {
-  width: 100%;
-  padding: 12px 40px 12px 14px;
-  border-radius: var(--radius-md);
-  border: 2px solid var(--border-default);
-  background: var(--bg-muted);
-  color: var(--text-primary);
-  font-family: inherit;
-  font-size: 14px;
-  font-weight: 700;
-  outline: none;
-  transition: all 0.15s;
+  width: 100%; padding: 12px 78px 12px 14px;
+  border-radius: var(--radius-md); border: 2px solid var(--border-default);
+  background: var(--bg-muted); color: var(--text-primary);
+  font-size: 14px; font-weight: 700; outline: none; transition: all 0.15s;
 }
 .search-input:focus { border-color: var(--brand); background: var(--bg-card); }
-.search-icon {
-  position: absolute;
-  right: 14px; top: 50%;
-  transform: translateY(-50%);
-  font-size: 16px;
-  opacity: 0.5;
-  pointer-events: none;
+.search-icon { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); font-size: 16px; opacity: 0.5; pointer-events: none; }
+.search-clear, .search-voice {
+  position: absolute; top: 50%; transform: translateY(-50%);
+  width: 30px; height: 30px; border-radius: 50%; border: none;
+  cursor: pointer; font-size: 14px; font-weight: 900;
+  display: none; align-items: center; justify-content: center;
+  transition: all 0.15s;
 }
-.search-clear {
-  position: absolute;
-  left: 8px; top: 50%;
-  transform: translateY(-50%);
-  background: var(--bg-muted);
-  border: none;
-  width: 26px; height: 26px;
-  border-radius: 50%;
-  color: var(--text-muted);
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 900;
-  display: none;
-  align-items: center; justify-content: center;
-}
+.search-clear { left: 42px; background: var(--bg-muted); color: var(--text-muted); }
 .search-clear.show { display: flex; }
+.search-voice {
+  left: 8px; background: var(--brand-soft); color: var(--brand);
+  display: flex; border: 1px solid var(--brand);
+}
+.search-voice:active { transform: translateY(-50%) scale(0.9); }
+.search-voice.listening {
+  background: var(--danger); color: white; border-color: var(--danger);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+@keyframes pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(220,38,38,0.5); } 50% { box-shadow: 0 0 0 8px rgba(220,38,38,0); } }
 
-/* ═══ CATEGORIES ROW ═══ */
+/* ═══ CATEGORIES ═══ */
 .categories-row {
-  display: flex; gap: 8px;
-  overflow-x: auto;
-  padding: 4px 4px 8px;
-  margin: -4px -4px 0;
-  -webkit-overflow-scrolling: touch;
-  scroll-behavior: smooth;
+  display: flex; gap: 8px; overflow-x: auto;
+  padding: 4px 4px 8px; margin: -4px -4px 0;
+  -webkit-overflow-scrolling: touch; scroll-behavior: smooth;
 }
 .categories-row::-webkit-scrollbar { display: none; }
 .cat-btn {
-  flex-shrink: 0;
-  padding: 9px 16px;
-  border-radius: var(--radius-md);
-  border: 2px solid var(--border-default);
-  background: var(--bg-muted);
-  color: var(--text-secondary);
-  font-family: inherit;
-  font-size: 12px;
-  font-weight: 900;
-  cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-  white-space: nowrap;
-  display: flex; align-items: center; gap: 6px;
+  flex-shrink: 0; padding: 9px 16px; border-radius: var(--radius-md);
+  border: 2px solid var(--border-default); background: var(--bg-muted);
+  color: var(--text-secondary); font-size: 12px; font-weight: 900;
+  cursor: pointer; transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  white-space: nowrap; display: flex; align-items: center; gap: 6px;
 }
 .cat-btn:active { transform: scale(0.95); }
 .cat-btn.active {
   background: linear-gradient(135deg, var(--brand), var(--brand-dark));
-  color: white;
-  border-color: var(--brand-dark);
-  box-shadow: 0 6px 16px var(--brand-soft);
-  transform: scale(1.02);
+  color: white; border-color: var(--brand-dark);
+  box-shadow: 0 6px 16px var(--brand-soft); transform: scale(1.02);
 }
 
 /* ═══ ITEMS GRID ═══ */
-.items-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
-}
+.items-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .item-btn {
-  background: var(--bg-muted);
-  border: 2px solid var(--border-default);
-  border-radius: var(--radius-md);
-  padding: 12px 6px;
-  font-family: inherit;
-  font-size: 12px;
-  font-weight: 900;
-  color: var(--text-primary);
-  cursor: pointer;
-  transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
-  min-height: 56px;
-  display: flex; align-items: center; justify-content: center;
-  text-align: center;
-  position: relative;
-  overflow: hidden;
+  background: var(--bg-muted); border: 2px solid var(--border-default);
+  border-radius: var(--radius-md); padding: 12px 6px;
+  font-size: 12px; font-weight: 900; color: var(--text-primary);
+  cursor: pointer; transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+  min-height: 56px; display: flex; align-items: center; justify-content: center;
+  text-align: center; position: relative; overflow: hidden;
 }
 .item-btn:active { transform: scale(0.94); }
 .item-btn.selected {
   background: linear-gradient(135deg, var(--brand), var(--brand-dark));
-  color: white;
-  border-color: var(--brand-dark);
-  box-shadow: 0 4px 14px var(--brand-soft);
-  transform: scale(1.02);
+  color: white; border-color: var(--brand-dark);
+  box-shadow: 0 4px 14px var(--brand-soft); transform: scale(1.02);
 }
 .item-btn .badge-recent {
-  position: absolute;
-  top: 4px; right: 4px;
-  background: rgba(255,255,255,0.25);
-  color: white;
-  font-size: 8px;
-  padding: 1px 4px;
-  border-radius: 4px;
-  font-weight: 900;
+  position: absolute; top: 4px; right: 4px;
+  background: rgba(255,255,255,0.3); color: white;
+  font-size: 8px; padding: 1px 4px; border-radius: 4px; font-weight: 900;
 }
+.item-btn .fav-star {
+  position: absolute; top: 3px; left: 3px;
+  font-size: 11px; color: #FBBF24;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.2);
+  pointer-events: none;
+}
+.item-btn .fav-toggle {
+  position: absolute; top: 2px; left: 2px;
+  background: transparent; border: none; cursor: pointer;
+  font-size: 12px; padding: 3px; opacity: 0.4;
+  transition: opacity 0.15s, transform 0.15s;
+}
+.item-btn .fav-toggle:hover { opacity: 1; }
+.item-btn .fav-toggle.on { opacity: 1; }
+.item-btn .fav-toggle:active { transform: scale(0.8); }
 
-/* ═══ AMOUNT INPUT ═══ */
-.amount-display {
-  display: flex;
-  align-items: center;
-  background: var(--bg-muted);
-  border-radius: var(--radius-lg);
-  padding: 16px 20px;
-  border: 2px solid var(--border-default);
-  transition: all 0.2s;
-  margin-bottom: 12px;
+/* ═══ FAVORITES ROW ═══ */
+.fav-row { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 8px; margin-bottom: 6px; }
+.fav-row::-webkit-scrollbar { display: none; }
+.fav-chip {
+  flex-shrink: 0; padding: 8px 14px;
+  background: linear-gradient(135deg, #FEF3C7, #FDE68A);
+  border: 1.5px solid #FBBF24; border-radius: 999px;
+  font-size: 12px; font-weight: 900; color: #78350F;
+  cursor: pointer; transition: all 0.15s; white-space: nowrap;
+  display: flex; align-items: center; gap: 5px;
 }
-.amount-display:focus-within { border-color: var(--brand); background: var(--bg-card); box-shadow: 0 0 0 4px var(--brand-soft); }
+.fav-chip:active { transform: scale(0.94); }
+body.dark .fav-chip { background: linear-gradient(135deg, #78350F, #92400E); color: #FEF3C7; }
+
+/* ═══ AMOUNT ═══ */
+.amount-display {
+  display: flex; align-items: center;
+  background: var(--bg-muted); border-radius: var(--radius-lg);
+  padding: 16px 20px; border: 2px solid var(--border-default);
+  transition: all 0.2s; margin-bottom: 12px;
+}
+.amount-display:focus-within {
+  border-color: var(--brand); background: var(--bg-card);
+  box-shadow: 0 0 0 4px var(--brand-soft);
+}
 .amount-input {
-  flex: 1;
-  background: transparent;
-  border: none;
-  outline: none;
-  font-family: inherit;
-  font-size: 34px;
-  font-weight: 900;
-  color: var(--text-primary);
-  text-align: center;
-  letter-spacing: -0.02em;
-  min-width: 0;
+  flex: 1; background: transparent; border: none; outline: none;
+  font-size: 34px; font-weight: 900; color: var(--text-primary);
+  text-align: center; letter-spacing: -0.02em; min-width: 0;
 }
 .amount-input::placeholder { color: var(--text-muted); opacity: 0.4; }
-.amount-unit {
-  font-size: 14px;
-  font-weight: 900;
-  color: var(--text-muted);
-  white-space: nowrap;
-}
+.amount-unit { font-size: 14px; font-weight: 900; color: var(--text-muted); white-space: nowrap; }
 
 /* ═══ QUICK AMOUNTS ═══ */
-.quick-amounts {
-  display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  gap: 6px;
-  margin-bottom: 12px;
-}
+.quick-amounts { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; margin-bottom: 12px; }
 .quick-amt-btn {
-  padding: 10px 4px;
-  border-radius: var(--radius-sm);
-  background: var(--bg-muted);
-  border: 1.5px solid var(--border-default);
-  color: var(--text-secondary);
-  font-family: inherit;
-  font-size: 11px;
-  font-weight: 900;
-  cursor: pointer;
-  transition: all 0.15s;
+  padding: 10px 4px; border-radius: var(--radius-sm);
+  background: var(--bg-muted); border: 1.5px solid var(--border-default);
+  color: var(--text-secondary); font-size: 11px; font-weight: 900;
+  cursor: pointer; transition: all 0.15s;
 }
 .quick-amt-btn:active { transform: scale(0.9); background: var(--brand-soft); color: var(--brand); border-color: var(--brand); }
 
-/* ═══ NOTE INPUT ═══ */
+/* ═══ NOTE ═══ */
 .note-input {
-  width: 100%;
-  padding: 12px 14px;
-  border: 2px solid var(--border-default);
-  border-radius: var(--radius-md);
-  font-family: inherit;
-  font-size: 13px;
-  font-weight: 700;
-  background: var(--bg-muted);
-  color: var(--text-primary);
-  outline: none;
-  transition: all 0.15s;
+  width: 100%; padding: 12px 14px;
+  border: 2px solid var(--border-default); border-radius: var(--radius-md);
+  font-size: 13px; font-weight: 700; background: var(--bg-muted);
+  color: var(--text-primary); outline: none; transition: all 0.15s;
   margin-bottom: 12px;
 }
 .note-input:focus { border-color: var(--brand); background: var(--bg-card); }
 
 /* ═══ BUTTONS ═══ */
 .save-btn {
-  width: 100%;
-  padding: 18px;
-  color: white;
-  border: none;
-  border-radius: var(--radius-lg);
-  font-family: inherit;
-  font-size: 16px;
-  font-weight: 900;
-  cursor: pointer;
-  transition: all 0.2s;
+  width: 100%; padding: 18px; color: white; border: none;
+  border-radius: var(--radius-lg); font-size: 16px; font-weight: 900;
+  cursor: pointer; transition: all 0.2s;
   background: linear-gradient(135deg, var(--success), #059669);
   box-shadow: 0 8px 22px rgba(16,185,129,0.35);
   display: flex; align-items: center; justify-content: center; gap: 8px;
 }
 .save-btn:active:not(:disabled) { transform: scale(0.98); }
 .save-btn:disabled { opacity: 0.6; cursor: not-allowed; }
-
 .add-cart-btn {
-  width: 100%;
-  padding: 14px;
-  color: var(--brand);
-  border: 2px dashed var(--brand);
-  border-radius: var(--radius-md);
-  font-family: inherit;
-  font-size: 13px;
-  font-weight: 900;
-  cursor: pointer;
-  transition: all 0.15s;
-  background: var(--brand-soft);
-  margin-top: 10px;
+  width: 100%; padding: 14px; color: var(--brand);
+  border: 2px dashed var(--brand); border-radius: var(--radius-md);
+  font-size: 13px; font-weight: 900; cursor: pointer;
+  transition: all 0.15s; background: var(--brand-soft); margin-top: 10px;
 }
 .add-cart-btn:active { transform: scale(0.97); }
 
 /* ═══ BOTTOM NAV ═══ */
 .bottom-nav {
-  position: fixed;
-  bottom: 0; left: 0; right: 0;
-  z-index: 500;
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 500;
   background: rgba(255, 247, 237, 0.96);
   backdrop-filter: blur(24px) saturate(180%);
   -webkit-backdrop-filter: blur(24px) saturate(180%);
   border-top: 1px solid var(--border-subtle);
   padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
   box-shadow: 0 -4px 20px rgba(120, 90, 40, 0.08);
-  display: flex;
-  gap: 4px;
+  display: flex; gap: 4px;
 }
 body.dark .bottom-nav { background: rgba(15, 23, 42, 0.96); }
 body.theme-ans .bottom-nav { background: rgba(239, 246, 255, 0.96); }
@@ -383,161 +323,142 @@ body.theme-abdelrahman .bottom-nav { background: rgba(236, 253, 245, 0.96); }
 body.theme-salma .bottom-nav { background: rgba(245, 243, 255, 0.96); }
 body.theme-om_abdo .bottom-nav { background: rgba(253, 242, 248, 0.96); }
 .nav-btn {
-  flex: 1;
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  padding: 8px 4px;
-  border-radius: var(--radius-md);
-  background: transparent;
-  border: none;
-  color: var(--text-muted);
-  font-family: inherit;
-  font-size: 9px;
-  font-weight: 900;
-  cursor: pointer;
-  transition: all 0.2s;
-  gap: 3px;
+  flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 8px 4px; border-radius: var(--radius-md);
+  background: transparent; border: none; color: var(--text-muted);
+  font-size: 9px; font-weight: 900; cursor: pointer; transition: all 0.2s; gap: 3px;
 }
-.nav-btn.active {
-  background: var(--brand-soft);
-  color: var(--brand);
-}
+.nav-btn.active { background: var(--brand-soft); color: var(--brand); }
 .nav-btn .nav-icon { font-size: 20px; line-height: 1; }
 .nav-btn.active .nav-icon { transform: scale(1.1); }
 
 /* ═══ LOG ITEM ═══ */
 .log-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px 0;
-  border-bottom: 1px solid var(--border-subtle);
-  font-size: 13px;
-  gap: 8px;
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 12px 0; border-bottom: 1px solid var(--border-subtle);
+  font-size: 13px; gap: 8px;
 }
 .log-item:last-child { border-bottom: none; }
 .log-item.mine {
-  background: var(--brand-soft);
-  border-radius: var(--radius-sm);
-  padding: 12px 10px;
-  margin: 4px 0;
-  border-bottom: none;
+  background: var(--brand-soft); border-radius: var(--radius-sm);
+  padding: 12px 10px; margin: 4px 0; border-bottom: none;
 }
 .log-item .desc {
-  font-weight: 700;
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-weight: 700; flex: 1; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   color: var(--text-primary);
 }
-.log-item .amount {
-  font-weight: 900;
-  color: var(--danger);
-  flex-shrink: 0;
-  font-size: 14px;
-}
+.log-item .amount { font-weight: 900; color: var(--danger); flex-shrink: 0; font-size: 14px; }
 .who {
-  display: inline-block;
-  padding: 2px 7px;
-  border-radius: 6px;
-  font-size: 9px;
-  font-weight: 900;
-  margin-left: 6px;
+  display: inline-block; padding: 2px 7px; border-radius: 6px;
+  font-size: 9px; font-weight: 900; margin-left: 6px;
 }
 .who-ans { background: #DBEAFE; color: #1E40AF; }
 .who-abdelrahman { background: #D1FAE5; color: #065F46; }
 .who-salma { background: #EDE9FE; color: #5B21B6; }
 .who-om_abdo { background: #FCE7F3; color: #9F1239; }
 .del-btn {
-  background: var(--danger-soft);
-  border: none;
-  color: var(--danger);
-  width: 30px; height: 30px;
-  border-radius: 10px;
-  font-size: 15px;
-  cursor: pointer;
-  flex-shrink: 0;
-  font-family: inherit;
-  font-weight: 900;
-  transition: all 0.15s;
+  background: var(--danger-soft); border: none; color: var(--danger);
+  width: 30px; height: 30px; border-radius: 10px; font-size: 15px;
+  cursor: pointer; flex-shrink: 0; font-weight: 900; transition: all 0.15s;
 }
 .del-btn:active { background: rgba(220, 38, 38, 0.2); transform: scale(0.85); }
 
 /* ═══ TOTALS ═══ */
 .today-total {
-  background: var(--bg-muted);
-  padding: 14px;
-  border-radius: var(--radius-md);
-  display: flex;
-  justify-content: space-between;
-  font-weight: 900;
-  margin-top: 12px;
-  border: 2px dashed var(--border-default);
-  font-size: 14px;
+  background: var(--bg-muted); padding: 14px; border-radius: var(--radius-md);
+  display: flex; justify-content: space-between; font-weight: 900;
+  margin-top: 12px; border: 2px dashed var(--border-default); font-size: 14px;
 }
 .today-total .lbl { color: var(--text-muted); font-size: 12px; }
 .today-total .val { color: var(--text-primary); font-size: 16px; font-weight: 900; }
 
 /* ═══ STATS ═══ */
-.stats-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 10px;
-  margin-bottom: 12px;
-}
+.stats-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 12px; }
 .stat-box {
-  background: var(--bg-muted);
-  border-radius: var(--radius-md);
-  padding: 14px;
-  border: 1px solid var(--border-subtle);
-  text-align: center;
+  background: var(--bg-muted); border-radius: var(--radius-md);
+  padding: 14px; border: 1px solid var(--border-subtle); text-align: center;
 }
 .stat-box .lbl {
-  font-size: 10px;
-  font-weight: 900;
-  color: var(--text-muted);
-  margin-bottom: 6px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  font-size: 10px; font-weight: 900; color: var(--text-muted);
+  margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.04em;
 }
-.stat-box .val {
-  font-size: 20px;
-  font-weight: 900;
-  color: var(--text-primary);
-  letter-spacing: -0.02em;
-}
+.stat-box .val { font-size: 20px; font-weight: 900; color: var(--text-primary); letter-spacing: -0.02em; }
 .stat-box.primary { background: linear-gradient(135deg, var(--brand), var(--brand-dark)); border: none; }
 .stat-box.primary .lbl { color: rgba(255,255,255,0.85); }
 .stat-box.primary .val { color: white; }
-.stat-box.success { background: rgba(16,185,129,0.1); }
+.stat-box.success { background: var(--success-soft); }
 .stat-box.success .val { color: var(--success); }
 .stat-box.danger { background: var(--danger-soft); }
 .stat-box.danger .val { color: var(--danger); }
 
+/* ═══ CHART (CSS-based) ═══ */
+.chart-wrap { margin-top: 8px; }
+.chart-bars { display: flex; align-items: flex-end; gap: 6px; height: 120px; padding: 8px 0; }
+.chart-bar {
+  flex: 1; background: linear-gradient(180deg, var(--brand), var(--brand-dark));
+  border-radius: 6px 6px 0 0; min-height: 4px; position: relative;
+  transition: height 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.chart-bar.today { background: linear-gradient(180deg, #EF4444, #DC2626); }
+.chart-bar .val {
+  position: absolute; top: -18px; left: 50%; transform: translateX(-50%);
+  font-size: 9px; font-weight: 900; color: var(--text-muted); white-space: nowrap;
+}
+.chart-labels { display: flex; gap: 6px; margin-top: 6px; }
+.chart-labels span {
+  flex: 1; text-align: center; font-size: 9px;
+  font-weight: 900; color: var(--text-muted);
+}
+
+/* ═══ FAMILY COMPARISON ═══ */
+.family-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px; border-radius: var(--radius-md);
+  background: var(--bg-muted); margin-bottom: 8px;
+  border: 1px solid var(--border-subtle);
+  transition: all 0.2s;
+}
+.family-row.winner { background: linear-gradient(135deg, #FEF3C7, #FDE68A); border-color: #FBBF24; }
+body.dark .family-row.winner { background: linear-gradient(135deg, #78350F, #92400E); }
+.family-row .avatar {
+  width: 40px; height: 40px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px; color: white; flex-shrink: 0;
+  font-weight: 900; box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+}
+.family-row .info { flex: 1; min-width: 0; }
+.family-row .name { font-size: 13px; font-weight: 900; margin-bottom: 2px; }
+.family-row .sub { font-size: 10px; font-weight: 700; color: var(--text-muted); }
+.family-row .amount { font-size: 14px; font-weight: 900; color: var(--danger); text-align: left; }
+.family-row .progress {
+  height: 3px; background: var(--border-default); border-radius: 999px;
+  margin-top: 6px; overflow: hidden;
+}
+.family-row .progress-fill { height: 100%; background: var(--brand); border-radius: 999px; }
+.avatar-ans { background: linear-gradient(135deg, #3B82F6, #1D4ED8); }
+.avatar-abdelrahman { background: linear-gradient(135deg, #10B981, #059669); }
+.avatar-salma { background: linear-gradient(135deg, #8B5CF6, #6D28D9); }
+.avatar-om_abdo { background: linear-gradient(135deg, #EC4899, #BE185D); }
+.challenge-badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: linear-gradient(135deg, #F59E0B, #D97706);
+  color: white; padding: 4px 10px; border-radius: 999px;
+  font-size: 10px; font-weight: 900; margin-right: auto;
+}
+
 /* ═══ EMPTY STATE ═══ */
 .empty-state {
-  text-align: center;
-  padding: 40px 20px;
-  color: var(--text-muted);
-  font-weight: 700;
-  font-size: 13px;
+  text-align: center; padding: 40px 20px;
+  color: var(--text-muted); font-weight: 700; font-size: 13px;
 }
-.empty-state .emoji {
-  font-size: 48px;
-  display: block;
-  margin-bottom: 12px;
-  opacity: 0.5;
-}
+.empty-state .emoji { font-size: 48px; display: block; margin-bottom: 12px; opacity: 0.5; }
 
 /* ═══ SKELETON ═══ */
 .skeleton {
   background: linear-gradient(90deg, var(--bg-muted) 25%, var(--border-subtle) 50%, var(--bg-muted) 75%);
-  background-size: 200% 100%;
-  animation: shimmer 1.5s infinite;
-  border-radius: 8px;
-  height: 20px;
-  margin-bottom: 8px;
+  background-size: 200% 100%; animation: shimmer 1.5s infinite;
+  border-radius: 8px; height: 20px; margin-bottom: 8px;
 }
 @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
 
@@ -546,17 +467,14 @@ body.theme-om_abdo .bottom-nav { background: rgba(253, 242, 248, 0.96); }
   position: fixed; inset: 0;
   background: linear-gradient(135deg, #0F172A, #1E293B);
   display: flex; flex-direction: column; align-items: center; justify-content: center;
-  z-index: 9999;
-  padding: 24px;
+  z-index: 9999; padding: 24px;
 }
 .pin-logo {
   width: 90px; height: 90px;
-  background: linear-gradient(135deg, #3B82F6, #1D4ED8);
-  border-radius: 28px;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 44px;
-  margin-bottom: 24px;
-  box-shadow: 0 16px 40px rgba(59,130,246,0.4);
+  background: linear-gradient(135deg, #F59E0B, #D97706);
+  border-radius: 28px; display: flex; align-items: center; justify-content: center;
+  font-size: 44px; margin-bottom: 24px;
+  box-shadow: 0 16px 40px rgba(245, 158, 11, 0.4);
   animation: pinPulse 2s ease-in-out infinite;
 }
 @keyframes pinPulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.05); } }
@@ -564,36 +482,19 @@ body.theme-om_abdo .bottom-nav { background: rgba(253, 242, 248, 0.96); }
 .pin-screen p { color: #94A3B8; font-size: 13px; margin-bottom: 32px; font-weight: 700; }
 .pin-dots { display: flex; gap: 16px; margin-bottom: 36px; }
 .pin-dot {
-  width: 16px; height: 16px;
-  border-radius: 50%;
-  border: 2px solid rgba(255,255,255,0.25);
-  transition: all 0.2s;
+  width: 16px; height: 16px; border-radius: 50%;
+  border: 2px solid rgba(255,255,255,0.25); transition: all 0.2s;
 }
 .pin-dot.filled {
-  background: #3B82F6;
-  border-color: #3B82F6;
-  transform: scale(1.15);
-  box-shadow: 0 0 12px rgba(59,130,246,0.6);
+  background: #F59E0B; border-color: #F59E0B;
+  transform: scale(1.15); box-shadow: 0 0 12px rgba(245, 158, 11, 0.6);
 }
-.pin-pad {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 14px;
-  max-width: 300px;
-  width: 100%;
-}
+.pin-pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; max-width: 300px; width: 100%; }
 .pin-btn {
-  aspect-ratio: 1;
-  background: rgba(255,255,255,0.06);
-  border: 1px solid rgba(255,255,255,0.12);
-  border-radius: 22px;
-  color: white;
-  font-size: 26px;
-  font-weight: 900;
-  font-family: inherit;
-  cursor: pointer;
-  backdrop-filter: blur(8px);
-  transition: all 0.1s;
+  aspect-ratio: 1; background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.12); border-radius: 22px;
+  color: white; font-size: 26px; font-weight: 900;
+  cursor: pointer; backdrop-filter: blur(8px); transition: all 0.1s;
 }
 .pin-btn:active { background: rgba(255,255,255,0.2); transform: scale(0.9); }
 .pin-error { color: #FCA5A5; font-size: 12px; margin-top: 20px; font-weight: 900; min-height: 18px; }
@@ -606,27 +507,52 @@ body.theme-om_abdo .bottom-nav { background: rgba(253, 242, 248, 0.96); }
 
 /* ═══ TOAST ═══ */
 .toast {
-  position: fixed;
-  top: 20px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: var(--success);
-  color: white;
-  padding: 12px 22px;
-  border-radius: var(--radius-md);
-  font-weight: 900;
-  font-size: 13px;
-  z-index: 10000;
+  position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+  background: var(--success); color: white;
+  padding: 12px 22px; border-radius: var(--radius-md);
+  font-weight: 900; font-size: 13px; z-index: 10000;
   box-shadow: 0 10px 30px rgba(0,0,0,0.2);
   animation: toastSlide 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-  max-width: 90vw;
-  display: flex; align-items: center; gap: 8px;
+  max-width: 90vw; display: flex; align-items: center; gap: 8px;
 }
 .toast.error { background: var(--danger); }
 @keyframes toastSlide {
   from { opacity: 0; transform: translate(-50%, -20px); }
   to { opacity: 1; transform: translate(-50%, 0); }
 }
+
+/* ═══ SNACKBAR (UNDO) ═══ */
+.snackbar {
+  position: fixed; bottom: calc(100px + env(safe-area-inset-bottom)); left: 12px; right: 12px;
+  background: #1E293B; color: white;
+  padding: 14px 18px; border-radius: var(--radius-md);
+  display: flex; align-items: center; gap: 12px;
+  box-shadow: 0 12px 32px rgba(0,0,0,0.4);
+  z-index: 8000;
+  animation: snackSlide 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes snackSlide {
+  from { opacity: 0; transform: translateY(30px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.snackbar .msg { flex: 1; font-size: 13px; font-weight: 700; }
+.snackbar .undo-btn {
+  background: var(--brand); color: white;
+  border: none; padding: 8px 16px; border-radius: 10px;
+  font-size: 12px; font-weight: 900; cursor: pointer;
+  transition: all 0.15s;
+}
+.snackbar .undo-btn:active { transform: scale(0.95); }
+.snackbar .progress-bar {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  height: 3px; background: rgba(255,255,255,0.1); border-radius: 0 0 var(--radius-md) var(--radius-md);
+  overflow: hidden;
+}
+.snackbar .progress-fill {
+  height: 100%; background: var(--brand);
+  animation: progressShrink 5s linear forwards;
+}
+@keyframes progressShrink { from { width: 100%; } to { width: 0%; } }
 
 /* ═══ MODAL ═══ */
 .modal-backdrop {
@@ -640,11 +566,8 @@ body.theme-om_abdo .bottom-nav { background: rgba(253, 242, 248, 0.96); }
 }
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 .modal {
-  background: var(--bg-card);
-  border-radius: var(--radius-xl);
-  padding: 24px;
-  width: 100%;
-  max-width: 360px;
+  background: var(--bg-card); border-radius: var(--radius-xl);
+  padding: 24px; width: 100%; max-width: 360px;
   box-shadow: var(--shadow-xl);
   animation: modalSlide 0.25s cubic-bezier(0.16, 1, 0.3, 1);
   text-align: center;
@@ -654,46 +577,32 @@ body.theme-om_abdo .bottom-nav { background: rgba(253, 242, 248, 0.96); }
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
 .modal .modal-icon {
-  width: 60px; height: 60px;
-  border-radius: 50%;
-  background: var(--danger-soft);
-  color: var(--danger);
+  width: 60px; height: 60px; border-radius: 50%;
+  background: var(--danger-soft); color: var(--danger);
   display: flex; align-items: center; justify-content: center;
-  font-size: 28px;
-  margin: 0 auto 16px;
+  font-size: 28px; margin: 0 auto 16px;
 }
 .modal h3 { font-size: 17px; font-weight: 900; margin-bottom: 8px; color: var(--text-primary); }
 .modal p { font-size: 13px; font-weight: 700; color: var(--text-secondary); margin-bottom: 22px; line-height: 1.6; }
 .modal-actions { display: flex; gap: 10px; }
 .modal-btn {
-  flex: 1;
-  padding: 13px;
-  border-radius: var(--radius-md);
-  font-family: inherit;
-  font-size: 13px;
-  font-weight: 900;
-  cursor: pointer;
-  border: none;
-  transition: all 0.15s;
+  flex: 1; padding: 13px; border-radius: var(--radius-md);
+  font-size: 13px; font-weight: 900; cursor: pointer;
+  border: none; transition: all 0.15s;
 }
 .modal-btn.secondary { background: var(--bg-muted); color: var(--text-secondary); border: 1px solid var(--border-default); }
 .modal-btn.danger { background: var(--danger); color: white; }
+.modal-btn.primary { background: var(--brand); color: white; }
 .modal-btn:active { transform: scale(0.97); }
 
 /* ═══ CART SUMMARY ═══ */
 .cart-summary {
-  position: fixed;
-  bottom: calc(80px + env(safe-area-inset-bottom));
+  position: fixed; bottom: calc(80px + env(safe-area-inset-bottom));
   left: 12px; right: 12px;
   background: linear-gradient(135deg, var(--brand), var(--brand-dark));
-  color: white;
-  padding: 14px 18px;
-  border-radius: var(--radius-lg);
-  box-shadow: 0 12px 32px rgba(245, 158, 11, 0.4);
-  z-index: 400;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  color: white; padding: 14px 18px; border-radius: var(--radius-lg);
+  box-shadow: 0 12px 32px var(--brand-soft); z-index: 400;
+  display: flex; align-items: center; justify-content: space-between;
   gap: 10px;
   animation: cartSlide 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -706,20 +615,13 @@ body.theme-om_abdo .bottom-nav { background: rgba(253, 242, 248, 0.96); }
 .cart-info .cart-total { font-size: 18px; font-weight: 900; }
 .cart-actions { display: flex; gap: 6px; }
 .cart-btn {
-  padding: 9px 14px;
-  border-radius: var(--radius-sm);
-  background: rgba(255,255,255,0.2);
-  border: 1px solid rgba(255,255,255,0.25);
-  color: white;
-  font-family: inherit;
-  font-size: 11px;
-  font-weight: 900;
-  cursor: pointer;
+  padding: 9px 14px; border-radius: var(--radius-sm);
+  background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.25);
+  color: white; font-size: 11px; font-weight: 900; cursor: pointer;
   transition: all 0.15s;
 }
 .cart-btn:active { transform: scale(0.95); background: rgba(255,255,255,0.3); }
 .cart-btn.primary { background: white; color: var(--brand); }
-.cart-btn.primary:active { background: rgba(255,255,255,0.9); }
 
 /* ═══ TAB CONTENT ═══ */
 .tab-content { display: none; }
@@ -727,43 +629,21 @@ body.theme-om_abdo .bottom-nav { background: rgba(253, 242, 248, 0.96); }
 
 /* ═══ PERIOD TABS ═══ */
 .period-tabs {
-  display: flex;
-  gap: 6px;
-  background: var(--bg-muted);
-  border-radius: var(--radius-md);
-  padding: 4px;
-  margin-bottom: 12px;
+  display: flex; gap: 6px; background: var(--bg-muted);
+  border-radius: var(--radius-md); padding: 4px; margin-bottom: 12px;
 }
 .period-btn {
-  flex: 1;
-  padding: 9px;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  border: none;
-  color: var(--text-muted);
-  font-family: inherit;
-  font-size: 11px;
-  font-weight: 900;
-  cursor: pointer;
-  transition: all 0.2s;
+  flex: 1; padding: 9px; border-radius: var(--radius-sm);
+  background: transparent; border: none; color: var(--text-muted);
+  font-size: 11px; font-weight: 900; cursor: pointer; transition: all 0.2s;
 }
-.period-btn.active {
-  background: var(--bg-card);
-  color: var(--brand);
-  box-shadow: var(--shadow-sm);
-}
+.period-btn.active { background: var(--bg-card); color: var(--brand); box-shadow: var(--shadow-sm); }
 
 /* ═══ LOADER ═══ */
-.loader-dots {
-  display: inline-flex;
-  gap: 4px;
-  align-items: center;
-}
+.loader-dots { display: inline-flex; gap: 4px; align-items: center; }
 .loader-dots span {
-  width: 6px; height: 6px;
-  border-radius: 50%;
-  background: currentColor;
-  animation: dotPulse 1.2s infinite;
+  width: 6px; height: 6px; border-radius: 50%;
+  background: currentColor; animation: dotPulse 1.2s infinite;
 }
 .loader-dots span:nth-child(2) { animation-delay: 0.2s; }
 .loader-dots span:nth-child(3) { animation-delay: 0.4s; }
@@ -771,6 +651,63 @@ body.theme-om_abdo .bottom-nav { background: rgba(253, 242, 248, 0.96); }
   0%, 60%, 100% { opacity: 0.3; transform: scale(0.8); }
   30% { opacity: 1; transform: scale(1); }
 }
+
+/* ═══ VOICE LISTENING OVERLAY ═══ */
+.voice-overlay {
+  position: fixed; inset: 0; z-index: 9500;
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(12px);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 30px; color: white; text-align: center;
+}
+.voice-overlay .mic-circle {
+  width: 120px; height: 120px; border-radius: 50%;
+  background: linear-gradient(135deg, #DC2626, #991B1B);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 56px; margin-bottom: 24px;
+  box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.6);
+  animation: micPulse 1.5s ease-in-out infinite;
+}
+@keyframes micPulse {
+  0% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.6); transform: scale(1); }
+  70% { box-shadow: 0 0 0 30px rgba(220, 38, 38, 0); transform: scale(1.05); }
+  100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0); transform: scale(1); }
+}
+.voice-overlay h3 { font-size: 20px; font-weight: 900; margin-bottom: 8px; }
+.voice-overlay p { font-size: 13px; color: #94A3B8; font-weight: 700; margin-bottom: 20px; }
+.voice-transcript {
+  background: rgba(255,255,255,0.08); padding: 14px 20px;
+  border-radius: var(--radius-md); font-size: 15px; font-weight: 700;
+  max-width: 400px; min-height: 50px; margin-bottom: 20px;
+  border: 1px solid rgba(255,255,255,0.15); line-height: 1.6;
+}
+.voice-close-btn {
+  background: rgba(255,255,255,0.15); color: white;
+  border: 1px solid rgba(255,255,255,0.2);
+  padding: 12px 28px; border-radius: var(--radius-md);
+  font-size: 14px; font-weight: 900; cursor: pointer;
+  transition: all 0.15s;
+}
+.voice-close-btn:active { transform: scale(0.95); }
+
+/* ═══ VOICE HINTS ═══ */
+.voice-hints {
+  background: var(--info-soft); color: var(--info);
+  padding: 10px 14px; border-radius: var(--radius-md);
+  font-size: 11px; font-weight: 700; margin-bottom: 12px;
+  border: 1px solid var(--info);
+  display: flex; align-items: center; gap: 8px;
+}
+.voice-hints strong { font-weight: 900; }
+
+/* ═══ BUDGET MODAL INPUT ═══ */
+.budget-input {
+  width: 100%; padding: 16px; border-radius: var(--radius-md);
+  border: 2px solid var(--border-default); background: var(--bg-muted);
+  color: var(--text-primary); font-size: 24px; font-weight: 900;
+  text-align: center; outline: none; margin-bottom: 16px;
+}
+.budget-input:focus { border-color: var(--brand); background: var(--bg-card); }
 
 @media (max-width: 340px) {
   .items-grid { grid-template-columns: repeat(2, 1fr); }
@@ -780,10 +717,13 @@ body.theme-om_abdo .bottom-nav { background: rgba(253, 242, 248, 0.96); }
 </head>
 <body>
 
+<!-- ═══════════ OFFLINE BANNER ═══════════ -->
+<div class="offline-banner" id="offlineBanner">📴 أنت غير متصل — سيتم المزامنة تلقائياً</div>
+
 <!-- ═══════════ PIN SCREEN ═══════════ -->
 <div class="pin-screen" id="pinScreen">
   <div class="pin-logo">🛒</div>
-  <h2>مسحوبات محل هاني</h2>
+  <h2>محل هاني</h2>
   <p>أدخل رمزك الشخصي</p>
   <div class="pin-dots">
     <div class="pin-dot" data-i="0"></div>
@@ -820,41 +760,58 @@ body.theme-om_abdo .bottom-nav { background: rgba(253, 242, 248, 0.96); }
         <div class="date-line" id="todayDate">—</div>
       </div>
       <div class="header-actions">
-        <button class="icon-btn" id="themeBtn" title="تبديل الوضع الليلي">🌙</button>
+        <button class="icon-btn" id="shareBtn" title="مشاركة">📤</button>
+        <button class="icon-btn" id="themeBtn" title="الوضع">🌙</button>
         <button class="icon-btn" id="logoutBtn" title="خروج">🚪</button>
       </div>
+    </div>
+    <!-- Budget strip -->
+    <div class="budget-strip" id="budgetStrip">
+      <div class="row-1">
+        <span id="budgetLabel">💰 ميزانيتك الشهرية</span>
+        <span id="budgetValues">0 / 0</span>
+      </div>
+      <div class="bar"><div class="bar-fill" id="budgetBar" style="width:0%"></div></div>
     </div>
   </header>
 
   <!-- ═══ TAB: HOME ═══ -->
   <div class="tab-content active" id="tab-home">
 
-    <!-- Search -->
     <div class="card">
       <div class="search-wrap">
         <span class="search-icon">🔍</span>
-        <input type="text" class="search-input" id="searchInput" placeholder="ابحث عن بند..." autocomplete="off">
+        <input type="text" class="search-input" id="searchInput" placeholder="ابحث أو قول طلبك..." autocomplete="off">
         <button class="search-clear" id="searchClear">×</button>
+        <button class="search-voice" id="voiceBtn" title="إدخال صوتي">🎤</button>
+      </div>
+
+      <!-- Voice hint -->
+      <div class="voice-hints">
+        🎤 <span>جرّب: <strong>"مارلبورو 20"</strong> أو <strong>"بيبسي خمسة"</strong></span>
+      </div>
+
+      <!-- Favorites -->
+      <div id="favSection" style="display:none">
+        <div class="card-title">⭐ المفضلة</div>
+        <div class="fav-row" id="favRow"></div>
       </div>
 
       <!-- Recently used -->
       <div id="recentSection" style="display:none">
-        <div class="card-title">⭐ الأكثر استخداماً</div>
+        <div class="card-title">🕒 الأكثر استخداماً</div>
         <div class="items-grid" id="recentGrid" style="margin-bottom:14px"></div>
       </div>
 
-      <!-- Categories -->
       <div class="card-title">📂 الفئات</div>
       <div class="categories-row" id="categoriesRow"></div>
     </div>
 
-    <!-- Items -->
     <div class="card">
       <div class="card-title" id="itemsSectionTitle">📌 اختر البند</div>
       <div class="items-grid" id="itemsGrid"></div>
     </div>
 
-    <!-- Amount -->
     <div class="card">
       <div class="card-title">💵 المبلغ</div>
       <div class="amount-display">
@@ -930,7 +887,33 @@ body.theme-om_abdo .bottom-nav { background: rgba(253, 242, 248, 0.96); }
     </div>
 
     <div class="card">
-      <div class="card-title">📈 إحصائيات الشهر</div>
+      <div class="card-title">📈 آخر 7 أيام</div>
+      <div class="chart-wrap">
+        <div class="chart-bars" id="chartBars"></div>
+        <div class="chart-labels" id="chartLabels"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">🥇 الأكثر استخداماً (هذا الشهر)</div>
+      <div id="topItemsList">
+        <div class="empty-state">لا توجد بيانات</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ TAB: FAMILY ═══ -->
+  <div class="tab-content" id="tab-family">
+    <div class="card">
+      <div class="card-title">
+        👥 مقارنة العائلة
+        <span class="challenge-badge" id="challengeBadge">🏆 تحدي الشهر</span>
+      </div>
+      <div id="familyList"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">📊 إحصائيات الشهر</div>
       <div class="stats-grid">
         <div class="stat-box primary">
           <div class="lbl">إجمالي الشهر</div>
@@ -940,13 +923,6 @@ body.theme-om_abdo .bottom-nav { background: rgba(253, 242, 248, 0.96); }
           <div class="lbl">حصتي الشهر</div>
           <div class="val" id="statMyMonth">0</div>
         </div>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="card-title">🥇 الأكثر استخداماً (هذا الشهر)</div>
-      <div id="topItemsList">
-        <div class="empty-state">لا توجد بيانات</div>
       </div>
     </div>
   </div>
@@ -962,15 +938,21 @@ body.theme-om_abdo .bottom-nav { background: rgba(253, 242, 248, 0.96); }
     </div>
 
     <div class="card">
+      <div class="card-title">💰 الميزانية الشهرية</div>
+      <button class="modal-btn primary" style="width:100%" id="setBudgetBtn">🎯 تحديد ميزانيتي</button>
+    </div>
+
+    <div class="card">
       <div class="card-title">⚙️ إعدادات</div>
       <button class="modal-btn secondary" style="width:100%;margin-bottom:8px" id="profileThemeBtn">🌓 تبديل الوضع الليلي</button>
       <button class="modal-btn secondary" style="width:100%;margin-bottom:8px" id="profileExportBtn">📥 تصدير بياناتي (CSV)</button>
+      <button class="modal-btn secondary" style="width:100%;margin-bottom:8px" id="profileInstallBtn" style="display:none">📲 تثبيت التطبيق</button>
       <button class="modal-btn danger" style="width:100%" id="profileLogoutBtn">🚪 تسجيل الخروج</button>
     </div>
 
     <div class="card" style="text-align:center;font-size:11px;color:var(--text-muted);font-weight:700;line-height:1.7">
-      نسخة احترافية v2.0<br>
-      مسحوبات محل هاني<br>
+      🚀 نسخة احترافية v3.0<br>
+      PWA • أوفلاين • صوت • ميزانية<br>
       متزامن مع التطبيق الرئيسي
     </div>
   </div>
@@ -980,20 +962,19 @@ body.theme-om_abdo .bottom-nav { background: rgba(253, 242, 248, 0.96); }
 <!-- ═══════════ BOTTOM NAV ═══════════ -->
 <nav class="bottom-nav" id="bottomNav" style="display:none">
   <button class="nav-btn active" data-tab="home">
-    <span class="nav-icon">🏠</span>
-    <span>الرئيسية</span>
+    <span class="nav-icon">🏠</span><span>الرئيسية</span>
   </button>
   <button class="nav-btn" data-tab="history">
-    <span class="nav-icon">📋</span>
-    <span>السجل</span>
+    <span class="nav-icon">📋</span><span>السجل</span>
   </button>
   <button class="nav-btn" data-tab="stats">
-    <span class="nav-icon">📊</span>
-    <span>إحصائيات</span>
+    <span class="nav-icon">📊</span><span>إحصائيات</span>
+  </button>
+  <button class="nav-btn" data-tab="family">
+    <span class="nav-icon">👥</span><span>العائلة</span>
   </button>
   <button class="nav-btn" data-tab="profile">
-    <span class="nav-icon">👤</span>
-    <span>حسابي</span>
+    <span class="nav-icon">👤</span><span>حسابي</span>
   </button>
 </nav>
 
@@ -1010,22 +991,22 @@ const USERS = {
 
 const FIREBASE_PROJECT = 'finance-app-2026-3e318';
 const CATEGORY_NAME = 'مسحوبات محل هاني';
-const AUTO_LOCK_MS = 5 * 60 * 1000; // 5 دقائق
+const AUTO_LOCK_MS = 5 * 60 * 1000;
 
 const CATEGORIES = {
-  smokes: { icon: '🚬', label: 'سجاير', items: ['سجاير','مارلبورو','ميريت','LM','كليوباترا','كليوباترا بوكس','نكست','وينستون','PINE','بال مال','إل إم أزرق','إل إم أحمر','ميريت أصفر','ميريت أزرق'] },
-  drinks: { icon: '🥤', label: 'مشروبات', items: ['بيبسي','كوكاكولا','سفن أب','ميرندا','عصير','جوافة','مانجو','برتقال','مياه','شاي','نسكافيه','قهوة','ميلو','ريد بُل','حليب معلب'] },
-  snacks: { icon: '🍫', label: 'سناكس', items: ['شيبسي','شيتوس','دوريتوس','ليز','تايجر','بسكويت','كراكرز','مولتو','كادبوري','جالاكسي','اندومي','نودلز','بونبون'] },
-  dairy: { icon: '🥛', label: 'ألبان وأجبان', items: ['لبن','زبادي','رايب','جبنة بيضاء','جبنة رومي','جبنة شيدر','بيض','زبدة','قشطة','لبنة','جبنة كيري'] },
-  basics: { icon: '🍞', label: 'بقالة', items: ['عيش','سكر','زيت','أرز','مكرونة','دقيق','ملح','عدس','فول','صلصة','خل','حمص','سكر ناعم','مربي'] },
-  cleaning: { icon: '🧴', label: 'منظفات', items: ['صابون','شامبو','معجون','فرشاة','مناديل','كلور','ديتول','مسحوق غسيل','سائل أطباق','معطر'] },
-  sweets: { icon: '🍬', label: 'حلويات', items: ['شوكولاتة','بونبون','لبان','مصاصة','كيك','جيلي','ويفر','بسكويت محشي'] },
-  special: { icon: '👤', label: 'طلبات خاصة', items: ['أنس','عبده','أم عبده','سلمى','عبد الرحمن'] }
+  smokes:   { icon: '🚬', label: 'سجاير',      items: ['سجاير','مارلبورو','ميريت','LM','كليوباترا','كليوباترا بوكس','نكست','وينستون','PINE','بال مال','إل إم أزرق','إل إم أحمر','ميريت أصفر','ميريت أزرق'] },
+  drinks:   { icon: '🥤', label: 'مشروبات',    items: ['بيبسي','كوكاكولا','سفن أب','ميرندا','عصير','جوافة','مانجو','برتقال','مياه','شاي','نسكافيه','قهوة','ميلو','ريد بُل','حليب معلب'] },
+  snacks:   { icon: '🍫', label: 'سناكس',      items: ['شيبسي','شيتوس','دوريتوس','ليز','تايجر','بسكويت','كراكرز','مولتو','كادبوري','جالاكسي','اندومي','نودلز','بونبون'] },
+  dairy:    { icon: '🥛', label: 'ألبان',      items: ['لبن','زبادي','رايب','جبنة بيضاء','جبنة رومي','جبنة شيدر','بيض','زبدة','قشطة','لبنة','جبنة كيري'] },
+  basics:   { icon: '🍞', label: 'بقالة',      items: ['عيش','سكر','زيت','أرز','مكرونة','دقيق','ملح','عدس','فول','صلصة','خل','حمص','سكر ناعم','مربي'] },
+  cleaning: { icon: '🧴', label: 'منظفات',     items: ['صابون','شامبو','معجون','فرشاة','مناديل','كلور','ديتول','مسحوق غسيل','سائل أطباق','معطر'] },
+  sweets:   { icon: '🍬', label: 'حلويات',     items: ['شوكولاتة','بونبون','لبان','مصاصة','كيك','جيلي','ويفر','بسكويت محشي'] },
+  special:  { icon: '👤', label: 'طلبات خاصة', items: ['أنس','عبده','أم عبده','سلمى','عبد الرحمن'] }
 };
 
 const MONTHS_AR = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
 
-/* ═══════════════════════════════════════════════════════ */
+/* ═══════════════ FIREBASE + OFFLINE ═══════════════ */
 const firebaseConfig = {
   apiKey: "AIzaSyCEq-Trf1oFsvPF5tlMvqU83ea_J2DLZjs",
   authDomain: "finance-app-2026-3e318.firebaseapp.com",
@@ -1036,7 +1017,70 @@ const firebaseConfig = {
 };
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
+
+// ⚡ تفعيل الأوفلاين
+db.enablePersistence({ synchronizeTabs: true }).catch((err) => {
+  console.warn('Offline persistence:', err.code);
+});
+
 const docRef = db.collection('finance_2026').doc('user_ahmed_data');
+
+/* ═══════════════ PWA SETUP ═══════════════ */
+(function setupPWA() {
+  // Manifest
+  const manifest = {
+    name: 'محل هاني — مسحوبات',
+    short_name: 'محل هاني',
+    description: 'تطبيق مسحوبات محل هاني',
+    start_url: './',
+    scope: './',
+    display: 'standalone',
+    orientation: 'portrait',
+    background_color: '#FFF7ED',
+    theme_color: '#F59E0B',
+    dir: 'rtl',
+    lang: 'ar',
+    icons: [{
+      src: 'data:image/svg+xml;base64,' + btoa('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192"><rect width="192" height="192" rx="42" fill="#F59E0B"/><text x="96" y="130" font-size="100" text-anchor="middle" fill="white">🛒</text></svg>'),
+      sizes: '192x192', type: 'image/svg+xml', purpose: 'any maskable'
+    }]
+  };
+  const manifestUrl = 'data:application/manifest+json;base64,' + btoa(JSON.stringify(manifest));
+  const link = document.createElement('link');
+  link.rel = 'manifest'; link.href = manifestUrl;
+  document.head.appendChild(link);
+
+  // Service Worker for offline shell
+  if ('serviceWorker' in navigator) {
+    const swCode = `
+      const CACHE = 'hani-v3';
+      self.addEventListener('install', e => { self.skipWaiting(); });
+      self.addEventListener('activate', e => {
+        e.waitUntil(clients.claim());
+      });
+      self.addEventListener('fetch', e => {
+        const url = new URL(e.request.url);
+        // Never cache Firebase / dynamic requests
+        if (url.hostname.includes('firebase') || url.hostname.includes('googleapis.com') && url.pathname.includes('firestore')) return;
+        if (e.request.method !== 'GET') return;
+        e.respondWith(
+          caches.open(CACHE).then(cache => 
+            cache.match(e.request).then(cached => {
+              const fetchPromise = fetch(e.request).then(res => {
+                if (res.ok) cache.put(e.request, res.clone());
+                return res;
+              }).catch(() => cached);
+              return cached || fetchPromise;
+            })
+          )
+        );
+      });
+    `;
+    const blob = new Blob([swCode], { type: 'application/javascript' });
+    const swUrl = URL.createObjectURL(blob);
+    navigator.serviceWorker.register(swUrl).catch(e => console.warn('SW:', e));
+  }
+})();
 
 /* ═══════════════ STATE ═══════════════ */
 let currentUser = null;
@@ -1047,10 +1091,15 @@ let unsubscribe = null;
 let cachedTx = [];
 let currentPeriod = 'today';
 let currentTab = 'home';
-let cart = []; // سلة العمليات
-let recentItems = []; // آخر البنود
+let cart = [];
+let recentItems = [];
+let favorites = [];
+let budgets = {}; // { userId: amount }
 let autoLockTimer = null;
 let isDark = localStorage.getItem('theme') === 'dark';
+let undoBuffer = null;
+let undoTimeout = null;
+let deferredPrompt = null;
 
 /* ═══════════════ HELPERS ═══════════════ */
 const getLocalISODate = (d = new Date()) =>
@@ -1061,10 +1110,9 @@ const escapeHtml = (s) => {
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
 };
 
-/* ═══════════════ HASH PIN (SHA-256) ═══════════════ */
 async function hashPin(pin) {
   try {
-    const data = new TextEncoder().encode('hani_shop_v2_' + pin);
+    const data = new TextEncoder().encode('hani_shop_v3_' + pin);
     const buf = await crypto.subtle.digest('SHA-256', data);
     return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
   } catch { return 'plain_' + pin; }
@@ -1089,24 +1137,45 @@ function showModal({ title, message, confirmText = 'تأكيد', cancelText = '�
     <div class="modal">
       <div class="modal-icon" style="${danger ? '' : 'background:var(--brand-soft);color:var(--brand)'}">${danger ? '⚠️' : '❓'}</div>
       <h3>${escapeHtml(title)}</h3>
-      <p>${escapeHtml(message)}</p>
+      <p>${escapeHtml(message).replace(/\n/g,'<br>')}</p>
       <div class="modal-actions">
         <button class="modal-btn secondary" data-act="cancel">${escapeHtml(cancelText)}</button>
-        <button class="modal-btn ${danger ? 'danger' : ''}" data-act="confirm" style="${danger ? '' : 'background:var(--brand);color:white'}">${escapeHtml(confirmText)}</button>
+        <button class="modal-btn ${danger ? 'danger' : 'primary'}" data-act="confirm">${escapeHtml(confirmText)}</button>
       </div>
     </div>
   `;
   document.body.appendChild(backdrop);
   backdrop.addEventListener('click', (e) => {
     const act = e.target.dataset?.act;
-    if (act === 'cancel' || e.target === backdrop) {
-      backdrop.remove();
-      onCancel?.();
-    } else if (act === 'confirm') {
-      backdrop.remove();
-      onConfirm?.();
-    }
+    if (act === 'cancel' || e.target === backdrop) { backdrop.remove(); onCancel?.(); }
+    else if (act === 'confirm') { backdrop.remove(); onConfirm?.(); }
   });
+}
+
+/* ═══════════════ SNACKBAR (UNDO) ═══════════════ */
+function showSnackbar(message, onUndo) {
+  const old = document.querySelector('.snackbar');
+  if (old) old.remove();
+  if (undoTimeout) clearTimeout(undoTimeout);
+  const bar = document.createElement('div');
+  bar.className = 'snackbar';
+  bar.innerHTML = `
+    <span class="msg">${escapeHtml(message)}</span>
+    <button class="undo-btn">↩️ تراجع</button>
+    <div class="progress-bar"><div class="progress-fill"></div></div>
+  `;
+  document.body.appendChild(bar);
+  const close = () => {
+    bar.remove();
+    undoBuffer = null;
+    if (undoTimeout) clearTimeout(undoTimeout);
+  };
+  bar.querySelector('.undo-btn').addEventListener('click', () => {
+    if (undoBuffer?.action) undoBuffer.action();
+    close();
+    showToast('تم الاسترجاع');
+  });
+  undoTimeout = setTimeout(close, 5000);
 }
 
 /* ═══════════════ PIN LOGIC ═══════════════ */
@@ -1132,7 +1201,6 @@ function renderPinDots() {
 async function checkPin() {
   const user = USERS[currentPin];
   if (user) {
-    // حفظ الـ hash بدلاً من الـ PIN الخام
     const hashed = await hashPin(currentPin);
     sessionStorage.setItem('family_pin_hash', hashed);
     sessionStorage.setItem('family_user_id', user.id);
@@ -1152,17 +1220,12 @@ async function checkPin() {
   }
 }
 
-// استعادة الجلسة
 (function restoreSession() {
   const savedUserId = sessionStorage.getItem('family_user_id');
   const savedHash = sessionStorage.getItem('family_pin_hash');
   if (savedUserId && savedHash) {
     const user = Object.values(USERS).find(u => u.id === savedUserId);
-    if (user) {
-      currentUser = user;
-      pinScreen.style.display = 'none';
-      init();
-    }
+    if (user) { currentUser = user; pinScreen.style.display = 'none'; init(); }
   }
 })();
 
@@ -1184,10 +1247,60 @@ function applyTheme() {
   document.documentElement.classList.toggle('dark', isDark);
   document.body.classList.toggle('dark', isDark);
   document.getElementById('themeBtn').textContent = isDark ? '☀️' : '🌙';
-  const metaTheme = document.querySelector('meta[name="theme-color"]');
-  if (metaTheme) metaTheme.setAttribute('content', isDark ? '#1E293B' : '#F59E0B');
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute('content', isDark ? '#1E293B' : '#F59E0B');
 }
 applyTheme();
+
+/* ═══════════════ LOCAL STORAGE: FAVORITES, RECENT, BUDGETS ═══════════════ */
+function loadUserData() {
+  if (!currentUser) return;
+  const uid = currentUser.id;
+  try {
+    const favRaw = localStorage.getItem(`hani_fav_${uid}`);
+    favorites = favRaw ? JSON.parse(favRaw) : [];
+    const recentRaw = localStorage.getItem(`hani_recent_${uid}`);
+    recentItems = recentRaw ? JSON.parse(recentRaw) : [];
+    const budgetRaw = localStorage.getItem(`hani_budget_${uid}`);
+    budgets[uid] = budgetRaw ? Number(budgetRaw) : 0;
+
+    // Reset daily counts
+    const lastReset = localStorage.getItem(`hani_recent_reset_${uid}`);
+    const today = getLocalISODate();
+    if (lastReset !== today) {
+      recentItems = recentItems.map(i => ({ ...i, count: 0 }));
+      localStorage.setItem(`hani_recent_reset_${uid}`, today);
+    }
+  } catch (e) { console.warn('Load user data:', e); }
+}
+
+function saveFavorites() {
+  localStorage.setItem(`hani_fav_${currentUser.id}`, JSON.stringify(favorites));
+}
+function saveRecent() {
+  localStorage.setItem(`hani_recent_${currentUser.id}`, JSON.stringify(recentItems));
+}
+function saveBudget(amount) {
+  budgets[currentUser.id] = amount;
+  localStorage.setItem(`hani_budget_${currentUser.id}`, String(amount));
+}
+function trackRecentItem(name) {
+  const existing = recentItems.find(i => i.name === name);
+  if (existing) existing.count = (existing.count || 0) + 1;
+  else recentItems.push({ name, count: 1 });
+  recentItems.sort((a, b) => (b.count || 0) - (a.count || 0));
+  recentItems = recentItems.slice(0, 12);
+  saveRecent();
+}
+function toggleFavorite(item) {
+  const idx = favorites.indexOf(item);
+  if (idx >= 0) favorites.splice(idx, 1);
+  else favorites.push(item);
+  saveFavorites();
+  renderFavorites();
+  renderItems(document.getElementById('searchInput').value);
+  showToast(idx >= 0 ? 'أُزيل من المفضلة' : 'أُضيف للمفضلة');
+}
 
 /* ═══════════════ INIT ═══════════════ */
 function init() {
@@ -1202,28 +1315,57 @@ function init() {
   document.getElementById('profileName').textContent = currentUser.name;
   document.getElementById('profileId').textContent = 'ID: ' + currentUser.id;
 
+  loadUserData();
   bindEvents();
   renderCategories();
   renderItems();
+  renderFavorites();
   renderRecentItems();
+  updateBudgetStrip();
   subscribeToData();
   updateCartSummary();
   resetAutoLock();
+  setupOfflineDetection();
+  setupInstallPrompt();
+}
+
+/* ═══════════════ OFFLINE DETECTION ═══════════════ */
+function setupOfflineDetection() {
+  const banner = document.getElementById('offlineBanner');
+  const update = () => banner.classList.toggle('show', !navigator.onLine);
+  window.addEventListener('online', () => { update(); showToast('تمت استعادة الاتصال'); });
+  window.addEventListener('offline', () => { update(); showToast('انقطع الاتصال — وضع الأوفلاين', true); });
+  update();
+}
+
+/* ═══════════════ INSTALL PROMPT ═══════════════ */
+function setupInstallPrompt() {
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    const btn = document.getElementById('profileInstallBtn');
+    if (btn) btn.style.display = 'block';
+  });
+  document.getElementById('profileInstallBtn')?.addEventListener('click', async () => {
+    if (!deferredPrompt) return showToast('التطبيق مثبت بالفعل');
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') showToast('تم التثبيت');
+    deferredPrompt = null;
+  });
 }
 
 /* ═══════════════ RENDER ═══════════════ */
 function renderCategories() {
-  const row = document.getElementById('categoriesRow');
-  row.innerHTML = Object.entries(CATEGORIES).map(([key, cat]) =>
-    `<button class="cat-btn ${key === selectedCategory ? 'active' : ''}" data-cat="${key}">${cat.icon} ${cat.label}</button>`
-  ).join('');
+  document.getElementById('categoriesRow').innerHTML =
+    Object.entries(CATEGORIES).map(([key, cat]) =>
+      `<button class="cat-btn ${key === selectedCategory ? 'active' : ''}" data-cat="${key}">${cat.icon} ${cat.label}</button>`
+    ).join('');
 }
 
 function renderItems(filter = '') {
   const cat = CATEGORIES[selectedCategory];
-  const filtered = filter
-    ? cat.items.filter(i => i.includes(filter))
-    : cat.items;
+  const filtered = filter ? cat.items.filter(i => i.includes(filter)) : cat.items;
   document.getElementById('itemsSectionTitle').textContent = filter
     ? `🔍 نتائج البحث (${filtered.length})`
     : `${cat.icon} ${cat.label} (${cat.items.length})`;
@@ -1232,23 +1374,220 @@ function renderItems(filter = '') {
     grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1"><span class="emoji">🔍</span>لا توجد نتائج</div>';
     return;
   }
-  grid.innerHTML = filtered.map(item =>
-    `<button class="item-btn ${item === selectedItem ? 'selected' : ''}" data-item="${escapeHtml(item)}">${escapeHtml(item)}</button>`
+  grid.innerHTML = filtered.map(item => {
+    const isFav = favorites.includes(item);
+    return `<button class="item-btn ${item === selectedItem ? 'selected' : ''}" data-item="${escapeHtml(item)}">
+      <span class="fav-toggle ${isFav ? 'on' : ''}" data-fav="${escapeHtml(item)}">${isFav ? '⭐' : '☆'}</span>
+      ${escapeHtml(item)}
+    </button>`;
+  }).join('');
+}
+
+function renderFavorites() {
+  const section = document.getElementById('favSection');
+  const row = document.getElementById('favRow');
+  if (favorites.length === 0) { section.style.display = 'none'; return; }
+  section.style.display = 'block';
+  row.innerHTML = favorites.map(f =>
+    `<button class="fav-chip" data-item="${escapeHtml(f)}">⭐ ${escapeHtml(f)}</button>`
   ).join('');
 }
 
 function renderRecentItems() {
   const section = document.getElementById('recentSection');
   const grid = document.getElementById('recentGrid');
-  if (recentItems.length === 0) { section.style.display = 'none'; return; }
+  const withCount = recentItems.filter(i => (i.count || 0) > 0);
+  if (withCount.length === 0) { section.style.display = 'none'; return; }
   section.style.display = 'block';
-  grid.innerHTML = recentItems.slice(0, 6).map(item => {
-    const count = item.count || 0;
-    return `<button class="item-btn ${item.name === selectedItem ? 'selected' : ''}" data-item="${escapeHtml(item.name)}">
-      ${count > 1 ? `<span class="badge-recent">×${count}</span>` : ''}
+  grid.innerHTML = withCount.slice(0, 6).map(item => `
+    <button class="item-btn ${item.name === selectedItem ? 'selected' : ''}" data-item="${escapeHtml(item.name)}">
+      <span class="badge-recent">×${item.count}</span>
       ${escapeHtml(item.name)}
-    </button>`;
-  }).join('');
+    </button>
+  `).join('');
+}
+
+/* ═══════════════ BUDGET STRIP ═══════════════ */
+function updateBudgetStrip() {
+  const strip = document.getElementById('budgetStrip');
+  if (!currentUser) return;
+  const budget = budgets[currentUser.id] || 0;
+  if (budget === 0) {
+    strip.style.display = 'none';
+    return;
+  }
+  strip.style.display = 'block';
+  const monthPrefix = getLocalISODate().slice(0, 7);
+  const spent = cachedTx
+    .filter(t => t.date.startsWith(monthPrefix) && t.createdBy === currentUser.id)
+    .reduce((s, t) => s + Number(t.amount || 0), 0);
+  const pct = Math.min(100, (spent / budget) * 100);
+  const over = spent > budget;
+  const warn = pct >= 80 && !over;
+
+  strip.classList.toggle('over', over);
+  strip.classList.toggle('warn', warn);
+
+  document.getElementById('budgetLabel').textContent = over
+    ? '⚠️ تجاوزت الميزانية!'
+    : warn ? '⚡ اقتربت من الحد'
+    : '💰 ميزانيتك الشهرية';
+  document.getElementById('budgetValues').textContent = `${fmt(spent)} / ${fmt(budget)}`;
+  document.getElementById('budgetBar').style.width = pct + '%';
+}
+
+/* ═══════════════ VOICE INPUT ═══════════════ */
+const ARABIC_NUMBERS = {
+  'واحد':1,'واحدة':1,'اثنين':2,'اتنين':2,'اثنان':2,'تلاتة':3,'ثلاثة':3,'أربعة':4,'اربعة':4,
+  'خمسة':5,'خمسه':5,'ستة':6,'سته':6,'سبعة':7,'سبعه':7,'تمانية':8,'ثمانية':8,'تمانيه':8,
+  'تسعة':9,'تسعه':9,'عشرة':10,'عشره':10,'عشرين':20,'ثلاثين':30,'تلاتين':30,
+  'اربعين':40,'أربعين':40,'خمسين':50,'ستين':60,'سبعين':70,'تمانين':80,'ثمانين':80,'تسعين':90,
+  'مية':100,'مائة':100,'ميه':100,'ميتين':200,'مائتين':200,'مائتان':200,
+  'تلاتمية':300,'ثلاثمائة':300,'اربعمية':400,'أربعمائة':400,'خمسمية':500,'خمسمائة':500
+};
+
+function parseVoiceText(text) {
+  let amount = null;
+  let itemText = text.trim();
+
+  // Try digits first
+  const digitMatch = text.match(/\d+/);
+  if (digitMatch) {
+    amount = parseFloat(digitMatch[0]);
+    itemText = text.replace(digitMatch[0], ' ').trim();
+  } else {
+    // Try Arabic words
+    for (const [word, num] of Object.entries(ARABIC_NUMBERS)) {
+      if (text.includes(word)) {
+        amount = num;
+        itemText = text.replace(word, ' ').trim();
+        break;
+      }
+    }
+  }
+
+  // Clean up
+  itemText = itemText
+    .replace(/جنيه|جنية|جنيهاً|بجنيه|من|على|علشان|اشتريت|اشتري|عايز|أريد/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  return { itemText, amount };
+}
+
+function findBestItemMatch(text) {
+  if (!text) return null;
+  const allItems = Object.values(CATEGORIES).flatMap(c => c.items);
+  // Exact match
+  const exact = allItems.find(i => i === text);
+  if (exact) return exact;
+  // Contains
+  const contains = allItems.find(i => i.includes(text) || text.includes(i));
+  if (contains) return contains;
+  // Word-by-word
+  const words = text.split(/\s+/);
+  for (const word of words) {
+    if (word.length < 2) continue;
+    const match = allItems.find(i => i.includes(word));
+    if (match) return match;
+  }
+  return null;
+}
+
+let recognition = null;
+function startVoiceInput() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) {
+    showToast('المتصفح لا يدعم الإدخال الصوتي', true);
+    return;
+  }
+  const voiceBtn = document.getElementById('voiceBtn');
+  voiceBtn.classList.add('listening');
+
+  // Overlay
+  const overlay = document.createElement('div');
+  overlay.className = 'voice-overlay';
+  overlay.innerHTML = `
+    <div class="mic-circle">🎤</div>
+    <h3>أتحدث الآن...</h3>
+    <p>قل مثلاً: "مارلبورو 20 جنيه"</p>
+    <div class="voice-transcript" id="voiceTranscript">...</div>
+    <button class="voice-close-btn" id="voiceClose">إلغاء</button>
+  `;
+  document.body.appendChild(overlay);
+  overlay.querySelector('#voiceClose').addEventListener('click', () => {
+    if (recognition) recognition.stop();
+    overlay.remove();
+    voiceBtn.classList.remove('listening');
+  });
+
+  recognition = new SR();
+  recognition.lang = 'ar-EG';
+  recognition.continuous = false;
+  recognition.interimResults = true;
+  recognition.maxAlternatives = 3;
+
+  let finalText = '';
+
+  recognition.onresult = (e) => {
+    let interim = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const transcript = e.results[i][0].transcript;
+      if (e.results[i].isFinal) finalText += transcript;
+      else interim += transcript;
+    }
+    const display = finalText || interim;
+    document.getElementById('voiceTranscript').textContent = display || '...';
+  };
+
+  recognition.onerror = (e) => {
+    console.error('Voice error:', e.error);
+    if (e.error === 'not-allowed') showToast('يرجى السماح بالوصول للميكروفون', true);
+    else if (e.error !== 'aborted') showToast('خطأ في الإدخال الصوتي', true);
+  };
+
+  recognition.onend = () => {
+    overlay.remove();
+    voiceBtn.classList.remove('listening');
+    if (!finalText) return;
+
+    const { itemText, amount } = parseVoiceText(finalText);
+    const matchedItem = findBestItemMatch(itemText);
+
+    if (matchedItem) {
+      selectedItem = matchedItem;
+      // Find category
+      for (const [key, cat] of Object.entries(CATEGORIES)) {
+        if (cat.items.includes(matchedItem)) { selectedCategory = key; break; }
+      }
+      renderCategories();
+      renderItems();
+      renderRecentItems();
+    } else if (itemText) {
+      showToast(`لم أتعرف على "${itemText}" — اختر يدوياً`, true);
+    }
+
+    if (amount) {
+      document.getElementById('amountInput').value = amount;
+    }
+
+    if (matchedItem && amount) {
+      showToast(`🎯 ${matchedItem} بـ ${amount} ج.م`);
+    } else if (matchedItem) {
+      showToast(`🎯 ${matchedItem} — أدخل المبلغ`);
+      document.getElementById('amountInput').focus();
+    }
+
+    if (navigator.vibrate) navigator.vibrate(40);
+  };
+
+  try {
+    recognition.start();
+  } catch (e) {
+    overlay.remove();
+    voiceBtn.classList.remove('listening');
+    showToast('فشل بدء التسجيل', true);
+  }
 }
 
 /* ═══════════════ EVENTS ═══════════════ */
@@ -1264,8 +1603,14 @@ function bindEvents() {
     renderItems();
   });
 
-  // Items
+  // Items (with fav toggle)
   document.getElementById('itemsGrid').addEventListener('click', (e) => {
+    const favBtn = e.target.closest('.fav-toggle');
+    if (favBtn) {
+      e.stopPropagation();
+      toggleFavorite(favBtn.dataset.fav);
+      return;
+    }
     const btn = e.target.closest('.item-btn');
     if (!btn) return;
     selectedItem = btn.dataset.item;
@@ -1286,6 +1631,20 @@ function bindEvents() {
     if (navigator.vibrate) navigator.vibrate(20);
   });
 
+  // Favorites
+  document.getElementById('favRow').addEventListener('click', (e) => {
+    const btn = e.target.closest('.fav-chip');
+    if (!btn) return;
+    selectedItem = btn.dataset.item;
+    for (const [key, cat] of Object.entries(CATEGORIES)) {
+      if (cat.items.includes(selectedItem)) { selectedCategory = key; break; }
+    }
+    renderCategories();
+    renderItems();
+    document.getElementById('amountInput').focus();
+    if (navigator.vibrate) navigator.vibrate(20);
+  });
+
   // Search
   const searchInput = document.getElementById('searchInput');
   const searchClear = document.getElementById('searchClear');
@@ -1299,6 +1658,9 @@ function bindEvents() {
     searchClear.classList.remove('show');
     renderItems();
   });
+
+  // Voice
+  document.getElementById('voiceBtn').addEventListener('click', startVoiceInput);
 
   // Quick amounts
   document.getElementById('quickAmounts').addEventListener('click', (e) => {
@@ -1316,7 +1678,7 @@ function bindEvents() {
     if (e.key === 'Enter') saveTransaction();
   });
 
-  // Save
+  // Save / Add cart
   document.getElementById('saveBtn').addEventListener('click', saveTransaction);
   document.getElementById('addCartBtn').addEventListener('click', addToCart);
 
@@ -1346,6 +1708,12 @@ function bindEvents() {
 
   // Export
   document.getElementById('profileExportBtn').addEventListener('click', exportMyData);
+
+  // Budget
+  document.getElementById('setBudgetBtn').addEventListener('click', openBudgetModal);
+
+  // Share
+  document.getElementById('shareBtn').addEventListener('click', shareReport);
 }
 
 function toggleTheme() {
@@ -1357,9 +1725,8 @@ function toggleTheme() {
 function confirmLogout() {
   showModal({
     title: 'تسجيل الخروج',
-    message: 'هل أنت متأكد من تسجيل الخروج؟',
+    message: 'هل أنت متأكد؟',
     confirmText: 'خروج',
-    cancelText: 'إلغاء',
     danger: true,
     onConfirm: () => {
       sessionStorage.removeItem('family_pin_hash');
@@ -1375,6 +1742,7 @@ function switchTab(tab) {
   document.querySelectorAll('.tab-content').forEach(c => c.classList.toggle('active', c.id === 'tab-' + tab));
   if (tab === 'history') renderHistory();
   if (tab === 'stats') renderStats();
+  if (tab === 'family') renderFamily();
 }
 
 /* ═══════════════ CART ═══════════════ */
@@ -1383,7 +1751,7 @@ function addToCart() {
   if (!selectedItem) return showToast('اختر البند أولاً', true);
   if (!amount || amount <= 0) return showToast('أدخل مبلغاً صحيحاً', true);
   const note = document.getElementById('noteInput').value.trim();
-  cart.push({ item: selectedItem, amount, note });
+  cart.push({ item: selectedItem, amount, note, category: selectedCategory });
   document.getElementById('amountInput').value = '';
   document.getElementById('noteInput').value = '';
   selectedItem = '';
@@ -1418,8 +1786,7 @@ function updateCartSummary() {
       showModal({
         title: 'مسح السلة',
         message: `هل تريد مسح ${cart.length} بند؟`,
-        danger: true,
-        confirmText: 'مسح',
+        danger: true, confirmText: 'مسح',
         onConfirm: () => { cart = []; updateCartSummary(); showToast('تم مسح السلة'); }
       });
     } else if (act === 'save') {
@@ -1434,29 +1801,23 @@ async function saveCart() {
   const iso = getLocalISODate(now);
   const txs = cart.map(c => ({
     id: 'fam-' + Date.now() + '-' + Math.random().toString(36).slice(2,9),
-    type: 'expense',
-    kind: 'operational',
+    type: 'expense', kind: 'operational',
     category: CATEGORY_NAME,
-    subCategory: CATEGORIES[selectedCategory]?.label || 'متنوع',
+    subCategory: CATEGORIES[c.category]?.label || 'متنوع',
     amount: c.amount,
     description: c.note ? `${c.item} — ${c.note}` : c.item,
-    method: 'cash',
-    date: iso,
-    month: MONTHS_AR[now.getMonth()],
-    year: now.getFullYear(),
-    monthIndex: now.getMonth(),
-    subType: 'withdrawal',
-    status: 'pending',
+    method: 'cash', date: iso,
+    month: MONTHS_AR[now.getMonth()], year: now.getFullYear(), monthIndex: now.getMonth(),
+    subType: 'withdrawal', status: 'pending',
     source: 'family-app',
-    createdBy: currentUser.id,
-    createdByName: currentUser.name,
+    createdBy: currentUser.id, createdByName: currentUser.name,
     createdAt: Date.now() + Math.random()
   }));
 
   const total = txs.reduce((s, t) => s + t.amount, 0);
   showModal({
     title: 'تأكيد الحفظ',
-    message: `سيتم حفظ ${txs.length} عملية بإجمالي ${fmt(total)} ج.م`,
+    message: `حفظ ${txs.length} عملية بإجمالي ${fmt(total)} ج.م`,
     confirmText: 'حفظ',
     onConfirm: async () => {
       try {
@@ -1464,7 +1825,7 @@ async function saveCart() {
         cart.forEach(c => trackRecentItem(c.item));
         cart = [];
         updateCartSummary();
-        showToast('تم حفظ السلة بنجاح');
+        showToast('تم حفظ السلة');
         if (navigator.vibrate) navigator.vibrate([40, 60, 40]);
       } catch (err) {
         showToast('فشل الحفظ: ' + err.message, true);
@@ -1485,22 +1846,16 @@ async function saveTransaction() {
 
   const tx = {
     id: 'fam-' + Date.now() + '-' + Math.random().toString(36).slice(2,9),
-    type: 'expense',
-    kind: 'operational',
+    type: 'expense', kind: 'operational',
     category: CATEGORY_NAME,
     subCategory: CATEGORIES[selectedCategory].label,
     amount,
     description: note ? `${selectedItem} — ${note}` : selectedItem,
-    method: 'cash',
-    date: iso,
-    month: MONTHS_AR[now.getMonth()],
-    year: now.getFullYear(),
-    monthIndex: now.getMonth(),
-    subType: 'withdrawal',
-    status: 'pending',
+    method: 'cash', date: iso,
+    month: MONTHS_AR[now.getMonth()], year: now.getFullYear(), monthIndex: now.getMonth(),
+    subType: 'withdrawal', status: 'pending',
     source: 'family-app',
-    createdBy: currentUser.id,
-    createdByName: currentUser.name,
+    createdBy: currentUser.id, createdByName: currentUser.name,
     createdAt: Date.now()
   };
 
@@ -1509,21 +1864,33 @@ async function saveTransaction() {
   saveBtn.innerHTML = '<span class="loader-dots"><span></span><span></span><span></span></span> جاري الحفظ';
 
   try {
-    await docRef.set({
-      transactions: firebase.firestore.FieldValue.arrayUnion(tx)
-    }, { merge: true });
-
+    await docRef.set({ transactions: firebase.firestore.FieldValue.arrayUnion(tx) }, { merge: true });
     trackRecentItem(selectedItem);
-
     document.getElementById('amountInput').value = '';
     document.getElementById('noteInput').value = '';
     selectedItem = '';
     renderItems();
     renderRecentItems();
-    showToast(`تم الحفظ — ${fmt(amount)} ج.م`);
-    if (navigator.vibrate) navigator.vibrate([30, 50, 30]);
+
+    // Budget warning
+    const budget = budgets[currentUser.id] || 0;
+    if (budget > 0) {
+      const monthPrefix = iso.slice(0, 7);
+      const spent = cachedTx
+        .filter(t => t.date.startsWith(monthPrefix) && t.createdBy === currentUser.id)
+        .reduce((s, t) => s + Number(t.amount || 0), 0) + amount;
+      if (spent > budget) {
+        showToast(`⚠️ تجاوزت الميزانية بـ ${fmt(spent - budget)} ج.م`, true);
+        if (navigator.vibrate) navigator.vibrate([100, 50, 100, 50, 100]);
+      } else {
+        showToast(`تم الحفظ — ${fmt(amount)} ج.م`);
+        if (navigator.vibrate) navigator.vibrate([30, 50, 30]);
+      }
+    } else {
+      showToast(`تم الحفظ — ${fmt(amount)} ج.م`);
+      if (navigator.vibrate) navigator.vibrate([30, 50, 30]);
+    }
   } catch (err) {
-    console.error(err);
     showToast('فشل الحفظ: ' + err.message, true);
   } finally {
     saveBtn.disabled = false;
@@ -1531,31 +1898,49 @@ async function saveTransaction() {
   }
 }
 
-/* ═══════════════ RECENT ITEMS (localStorage) ═══════════════ */
-function loadRecentItems() {
-  try {
-    const raw = localStorage.getItem('hani_recent_items_v2');
-    recentItems = raw ? JSON.parse(raw) : [];
-    // Reset counts daily
-    const lastReset = localStorage.getItem('hani_recent_reset');
-    const today = getLocalISODate();
-    if (lastReset !== today) {
-      recentItems = recentItems.map(i => ({ ...i, count: 0 }));
-      localStorage.setItem('hani_recent_reset', today);
+/* ═══════════════ BUDGET MODAL ═══════════════ */
+function openBudgetModal() {
+  const current = budgets[currentUser.id] || 0;
+  const backdrop = document.createElement('div');
+  backdrop.className = 'modal-backdrop';
+  backdrop.innerHTML = `
+    <div class="modal">
+      <div class="modal-icon" style="background:var(--brand-soft);color:var(--brand)">💰</div>
+      <h3>ميزانيتك الشهرية</h3>
+      <p>حدد الحد الأقصى للصرف الشهري</p>
+      <input type="text" inputmode="decimal" class="budget-input" id="budgetField" value="${current || ''}" placeholder="0">
+      <div class="modal-actions">
+        <button class="modal-btn secondary" data-act="cancel">إلغاء</button>
+        <button class="modal-btn primary" data-act="save">حفظ</button>
+      </div>
+      ${current > 0 ? '<button class="modal-btn danger" style="width:100%;margin-top:10px" data-act="remove">إزالة الميزانية</button>' : ''}
+    </div>
+  `;
+  document.body.appendChild(backdrop);
+  const input = backdrop.querySelector('#budgetField');
+  input.focus();
+  input.addEventListener('input', e => { e.target.value = e.target.value.replace(/[^\d.]/g, ''); });
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') backdrop.querySelector('[data-act="save"]').click(); });
+  backdrop.addEventListener('click', (e) => {
+    const act = e.target.dataset?.act;
+    if (act === 'cancel' || e.target === backdrop) backdrop.remove();
+    else if (act === 'save') {
+      const val = parseFloat(input.value);
+      if (!val || val <= 0) return showToast('أدخل مبلغاً صحيحاً', true);
+      saveBudget(val);
+      backdrop.remove();
+      updateBudgetStrip();
+      showToast(`تم تعيين الميزانية: ${fmt(val)} ج.م`);
+    } else if (act === 'remove') {
+      saveBudget(0);
+      backdrop.remove();
+      updateBudgetStrip();
+      showToast('تم إزالة الميزانية');
     }
-  } catch { recentItems = []; }
+  });
 }
-function trackRecentItem(name) {
-  const existing = recentItems.find(i => i.name === name);
-  if (existing) existing.count = (existing.count || 0) + 1;
-  else recentItems.push({ name, count: 1 });
-  recentItems.sort((a, b) => (b.count || 0) - (a.count || 0));
-  recentItems = recentItems.slice(0, 12);
-  localStorage.setItem('hani_recent_items_v2', JSON.stringify(recentItems));
-}
-loadRecentItems();
 
-/* ═══════════════ FIRESTORE SUBSCRIPTION ═══════════════ */
+/* ═══════════════ FIRESTORE ═══════════════ */
 function subscribeToData() {
   if (unsubscribe) unsubscribe();
   unsubscribe = docRef.onSnapshot((doc) => {
@@ -1565,29 +1950,21 @@ function subscribeToData() {
       .filter(t => t.category === CATEGORY_NAME)
       .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
     renderAll();
-  }, (err) => console.error('Snapshot error:', err));
+  }, (err) => console.error('Snapshot:', err));
 }
 
 function renderAll() {
-  renderHomeLog();
+  updateBudgetStrip();
   if (currentTab === 'history') renderHistory();
   if (currentTab === 'stats') renderStats();
-}
-
-/* ═══════════════ HOME LOG (TODAY ONLY) ═══════════════ */
-function renderHomeLog() {
-  const today = getLocalISODate();
-  const todayTx = cachedTx.filter(t => t.date === today);
-  // Home log removed from new layout — only stats tab now
+  if (currentTab === 'family') renderFamily();
 }
 
 /* ═══════════════ HISTORY ═══════════════ */
 function filterByPeriod(txList, period) {
   const today = new Date(); today.setHours(0,0,0,0);
   const todayISO = getLocalISODate(today);
-
   if (period === 'today') return txList.filter(t => t.date === todayISO);
-
   if (period === 'week') {
     const weekAgo = new Date(today); weekAgo.setDate(weekAgo.getDate() - 6);
     return txList.filter(t => { const d = new Date(t.date); return d >= weekAgo && d <= today; });
@@ -1604,7 +1981,6 @@ function renderHistory() {
   const totalEl = document.getElementById('historyTotal');
   const countEl = document.getElementById('historyCount');
   const filtered = filterByPeriod(cachedTx, currentPeriod);
-
   countEl.textContent = filtered.length;
 
   if (filtered.length === 0) {
@@ -1644,7 +2020,6 @@ function renderHistory() {
 function renderStats() {
   const today = getLocalISODate();
   const monthPrefix = today.slice(0, 7);
-
   const todayTx = cachedTx.filter(t => t.date === today);
   const monthTx = cachedTx.filter(t => t.date.startsWith(monthPrefix));
 
@@ -1661,7 +2036,9 @@ function renderStats() {
   document.getElementById('statMonthTotal').textContent = fmt(monthTotal);
   document.getElementById('statMyMonth').textContent = fmt(myMonth);
 
-  // Top items this month
+  renderWeekChart();
+
+  // Top items
   const itemCount = {};
   monthTx.forEach(t => {
     const itemName = (t.description || '').split(' — ')[0];
@@ -1669,41 +2046,133 @@ function renderStats() {
     itemCount[itemName] = (itemCount[itemName] || 0) + 1;
   });
   const top = Object.entries(itemCount).sort((a, b) => b[1] - a[1]).slice(0, 8);
-
   const list = document.getElementById('topItemsList');
   if (top.length === 0) {
     list.innerHTML = '<div class="empty-state">لا توجد بيانات</div>';
     return;
   }
-  list.innerHTML = top.map(([name, count], idx) => {
-    const medals = ['🥇','🥈','🥉'];
-    const medal = medals[idx] || '•';
-    return `
-      <div class="log-item">
-        <span class="desc">${medal} ${escapeHtml(name)}</span>
-        <span style="font-size:12px;font-weight:900;color:var(--brand)">×${count}</span>
-      </div>
-    `;
-  }).join('');
+  const medals = ['🥇','🥈','🥉'];
+  list.innerHTML = top.map(([name, count], idx) =>
+    `<div class="log-item">
+      <span class="desc">${medals[idx] || '•'} ${escapeHtml(name)}</span>
+      <span style="font-size:12px;font-weight:900;color:var(--brand)">×${count}</span>
+    </div>`
+  ).join('');
 }
 
-/* ═══════════════ DELETE ═══════════════ */
+function renderWeekChart() {
+  const days = [];
+  const today = new Date(); today.setHours(0,0,0,0);
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(today); d.setDate(d.getDate() - i);
+    const iso = getLocalISODate(d);
+    const total = cachedTx.filter(t => t.date === iso).reduce((s, t) => s + Number(t.amount || 0), 0);
+    days.push({ iso, label: ['أحد','إثنين','ثلاثاء','أربعاء','خميس','جمعة','سبت'][d.getDay()], total, isToday: i === 0 });
+  }
+  const max = Math.max(...days.map(d => d.total), 1);
+  document.getElementById('chartBars').innerHTML = days.map(d => {
+    const pct = (d.total / max) * 100;
+    return `<div class="chart-bar ${d.isToday ? 'today' : ''}" style="height:${Math.max(4, pct)}%">
+      ${d.total > 0 ? `<span class="val">${fmt(d.total)}</span>` : ''}
+    </div>`;
+  }).join('');
+  document.getElementById('chartLabels').innerHTML = days.map(d =>
+    `<span style="${d.isToday ? 'color:var(--danger)' : ''}">${d.label}</span>`
+  ).join('');
+}
+
+/* ═══════════════ FAMILY ═══════════════ */
+function renderFamily() {
+  const monthPrefix = getLocalISODate().slice(0, 7);
+  const monthTx = cachedTx.filter(t => t.date.startsWith(monthPrefix));
+
+  const byUser = {};
+  Object.values(USERS).forEach(u => byUser[u.id] = { ...u, total: 0, count: 0 });
+  monthTx.forEach(t => {
+    if (!byUser[t.createdBy]) return;
+    byUser[t.createdBy].total += Number(t.amount || 0);
+    byUser[t.createdBy].count += 1;
+  });
+
+  const list = Object.values(byUser).sort((a, b) => a.total - b.total);
+  const totalAll = list.reduce((s, u) => s + u.total, 0);
+  const minTotal = Math.min(...list.map(u => u.total).filter(t => t > 0), Infinity);
+  const maxTotal = Math.max(...list.map(u => u.total), 1);
+
+  // Winner
+  const winner = list.find(u => u.total === minTotal && u.total >= 0);
+  const badge = document.getElementById('challengeBadge');
+  if (winner && totalAll > 0) {
+    badge.innerHTML = `🏆 ${winner.name} الأوفر`;
+  } else {
+    badge.innerHTML = `🏆 تحدي الشهر`;
+  }
+
+  document.getElementById('familyList').innerHTML = list.map(u => {
+    const pct = maxTotal > 0 ? (u.total / maxTotal) * 100 : 0;
+    const isWinner = winner && u.id === winner.id && totalAll > 0;
+    const share = totalAll > 0 ? Math.round((u.total / totalAll) * 100) : 0;
+    return `
+      <div class="family-row ${isWinner ? 'winner' : ''}">
+        <div class="avatar avatar-${u.id}">${isWinner ? '🏆' : u.emoji}</div>
+        <div class="info">
+          <div class="name">${escapeHtml(u.name)} ${isWinner ? '👑' : ''}</div>
+          <div class="sub">${u.count} عملية • ${share}% من الإجمالي</div>
+          <div class="progress"><div class="progress-fill" style="width:${pct}%"></div></div>
+        </div>
+        <div class="amount">${fmt(u.total)}</div>
+      </div>
+    `;
+  }).join('') + `
+    <div class="today-total" style="margin-top:12px">
+      <span class="lbl">إجمالي الشهر</span>
+      <span class="val">${fmt(totalAll)} ج.م</span>
+    </div>
+  `;
+}
+
+/* ═══════════════ DELETE + UNDO ═══════════════ */
 function deleteTransaction(id) {
   const tx = cachedTx.find(t => t.id === id);
   if (!tx) return showToast('لم يتم العثور على العملية', true);
   if (tx.createdBy !== currentUser.id) return showToast('لا يمكنك حذف عملية شخص آخر', true);
 
+  // Hide immediately (optimistic)
+  const log = document.getElementById('historyLog');
+  const item = log.querySelector(`[data-id="${id}"]`)?.closest('.log-item');
+  if (item) item.style.opacity = '0.3';
+
   showModal({
     title: 'تأكيد الحذف',
     message: `سيتم حذف: ${tx.description}\nالمبلغ: ${fmt(tx.amount)} ج.م`,
-    danger: true,
-    confirmText: 'حذف',
+    danger: true, confirmText: 'حذف',
     onConfirm: async () => {
       try {
+        // Optimistic local removal
+        cachedTx = cachedTx.filter(t => t.id !== id);
+        renderAll();
+
+        // Save to Firestore
         await docRef.set({ transactions: firebase.firestore.FieldValue.arrayRemove(tx) }, { merge: true });
-        showToast('تم الحذف');
-      } catch (err) { showToast('فشل الحذف: ' + err.message, true); }
-    }
+
+        // Undo buffer
+        undoBuffer = {
+          action: async () => {
+            try {
+              await docRef.set({ transactions: firebase.firestore.FieldValue.arrayUnion(tx) }, { merge: true });
+            } catch (e) { showToast('فشل الاسترجاع: ' + e.message, true); }
+          }
+        };
+        showSnackbar('تم الحذف', undoBuffer.action);
+      } catch (err) {
+        showToast('فشل الحذف: ' + err.message, true);
+        // Restore
+        cachedTx.push(tx);
+        cachedTx.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+        renderAll();
+      }
+    },
+    onCancel: () => { if (item) item.style.opacity = '1'; }
   });
 }
 
@@ -1711,10 +2180,9 @@ function deleteTransaction(id) {
 function exportMyData() {
   const myTx = cachedTx.filter(t => t.createdBy === currentUser.id);
   if (myTx.length === 0) return showToast('لا توجد بيانات للتصدير', true);
-
   const header = 'التاريخ,الفئة,الوصف,المبلغ,الحالة\n';
   const rows = myTx.map(t =>
-    `${t.date},${escapeHtml(t.subCategory || '')},"${escapeHtml(t.description || '')}",${t.amount},${t.status === 'paid' ? 'معتمد' : 'معلق'}`
+    `${t.date},"${escapeHtml(t.subCategory || '')}","${escapeHtml(t.description || '')}",${t.amount},${t.status === 'paid' ? 'معتمد' : 'معلق'}`
   ).join('\n');
   const blob = new Blob(['\uFEFF' + header + rows], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
@@ -1725,6 +2193,59 @@ function exportMyData() {
   URL.revokeObjectURL(url);
   showToast('تم التصدير');
 }
+
+/* ═══════════════ SHARE (WhatsApp) ═══════════════ */
+async function shareReport() {
+  const today = getLocalISODate();
+  const monthPrefix = today.slice(0, 7);
+
+  const todayTx = cachedTx.filter(t => t.date === today);
+  const monthTx = cachedTx.filter(t => t.date.startsWith(monthPrefix));
+  const todayTotal = todayTx.reduce((s, t) => s + Number(t.amount || 0), 0);
+  const monthTotal = monthTx.reduce((s, t) => s + Number(t.amount || 0), 0);
+  const myMonth = monthTx.filter(t => t.createdBy === currentUser.id).reduce((s, t) => s + Number(t.amount || 0), 0);
+
+  let text = `🛒 *محل هاني* — تقرير\n`;
+  text += `📅 ${new Date().toLocaleDateString('ar-EG', { day: 'numeric', month: 'long', year: 'numeric' })}\n\n`;
+  text += `💰 *إجمالي اليوم:* ${fmt(todayTotal)} ج.م (${todayTx.length} عملية)\n`;
+  text += `📊 *إجمالي الشهر:* ${fmt(monthTotal)} ج.م\n`;
+  text += `👤 *حصتي الشهر:* ${fmt(myMonth)} ج.م\n\n`;
+
+  if (todayTx.length > 0) {
+    text += `*مسحوبات اليوم:*\n`;
+    todayTx.slice(0, 10).forEach(t => {
+      const who = t.createdByName || '؟';
+      text += `• ${t.description} — ${fmt(t.amount)} ج.م (${who})\n`;
+    });
+    if (todayTx.length > 10) text += `... و ${todayTx.length - 10} أخرى\n`;
+  }
+
+  text += `\n_من تطبيق محل هاني_`;
+
+  try {
+    if (navigator.share) {
+      await navigator.share({ title: 'تقرير محل هاني', text });
+      showToast('تم المشاركة');
+    } else {
+      // Fallback: WhatsApp Web
+      const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
+      window.open(url, '_blank');
+      showToast('تم فتح واتساب');
+    }
+  } catch (e) {
+    if (e.name !== 'AbortError') {
+      // Copy to clipboard as fallback
+      try {
+        await navigator.clipboard.writeText(text);
+        showToast('تم النسخ للحافظة');
+      } catch {
+        showToast('فشل المشاركة', true);
+      }
+    }
+  }
+}
+
+/* ═══════════════ END ═══════════════ */
 </script>
 </body>
 </html>
