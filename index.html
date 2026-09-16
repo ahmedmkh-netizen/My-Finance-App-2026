@@ -230,6 +230,9 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 @media print { .no-print, .bottom-nav-container, .fab, button { display: none !important; } body, .glass, .card { background: white !important; color: black !important; box-shadow: none !important; } }
 .sidebar-group-title { font-size: 10px; font-weight: 900; letter-spacing: 0.08em; text-transform: uppercase; padding: 0 12px; margin-bottom: 6px; margin-top: 4px; color: var(--text-muted); }
 .sidebar-group { margin-bottom: 12px; }
+.sub-tab-switcher { background: var(--bg-muted); border-radius: var(--radius-lg); padding: 4px; display: flex; gap: 4px; }
+.sub-tab-btn { flex: 1; padding: 10px 12px; border-radius: var(--radius-md); font-weight: 700; font-size: 12px; display: flex; align-items: center; justify-content: center; gap: 6px; transition: all 0.2s ease; cursor: pointer; border: none; background: transparent; color: var(--text-muted); }
+.sub-tab-btn.active { background: var(--brand); color: white; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3); }
 </style>
 </head>
 <body>
@@ -744,7 +747,6 @@ const SubCategoryBadge = memo(({ tx }) => {
   return <span className="badge badge-neutral">{tx.subCategory}</span>;
 });
 
-// ============ Generic Ledger ============
 const GenericLedgerComponent = memo(({ walletKey, ledgerData, liveBalance, isExpanded, onToggle, onDelete, onEditTransaction, theme, onAddDeposit, onAddWithdrawal, onExportCSV, walletVisibility, onToggleVisibility }) => {
   const [filter, setFilter] = useState('all');
   const [dateFilter, setDateFilter] = useState('');
@@ -828,7 +830,7 @@ const GenericLedgerComponent = memo(({ walletKey, ledgerData, liveBalance, isExp
   );
 });
 
-// ============ Custody View ============
+// ============ Custody View (embedded component) ============
 const CustodyView = memo(({ data, dispatch, saveHistory, addNotification }) => {
   const [showAdd, setShowAdd] = useState(false);
   const [filterType, setFilterType] = useState('all');
@@ -881,7 +883,7 @@ const CustodyView = memo(({ data, dispatch, saveHistory, addNotification }) => {
   const usagePct = summary.received > 0 ? (summary.totalSpent / summary.received) * 100 : 0;
 
   return (
-    <div className="space-y-4 animate-fadeIn pb-24">
+    <div className="space-y-4 animate-fadeIn">
       <div className="card">
         <div className="flex justify-between items-start gap-3 flex-wrap">
           <div className="flex-1 min-w-[180px]">
@@ -1034,7 +1036,7 @@ const CustodyView = memo(({ data, dispatch, saveHistory, addNotification }) => {
   );
 });
 
-// ============ Cashback View ============
+// ============ Cashback View (embedded component) ============
 const CashbackView = memo(({ data, dispatch, saveHistory, addNotification, cards, selectedYear, selectedMonth }) => {
   const [showAdd, setShowAdd] = useState(false);
   const [newTracker, setNewTracker] = useState({ cardId: cards[0]?.id || 1, month: selectedMonth, year: selectedYear, expectedAmount: '', receivedAmount: '', receivedDate: '', status: CASHBACK_STATUS.EXPECTED, notes: '' });
@@ -1083,7 +1085,7 @@ const CashbackView = memo(({ data, dispatch, saveHistory, addNotification, cards
   };
 
   return (
-    <div className="space-y-4 animate-fadeIn pb-24">
+    <div className="space-y-4 animate-fadeIn">
       <div className="card">
         <div className="flex justify-between items-start gap-3 flex-wrap">
           <div>
@@ -1212,7 +1214,6 @@ const CashbackView = memo(({ data, dispatch, saveHistory, addNotification, cards
   );
 });
 
-// ============ Duplicate Detection ============
 const DuplicateDetectionSystem = ({ transactions, data, dispatch, addNotification, saveHistory }) => {
   const [threshold, setThreshold] = useState(2);
   const [selectedMonth, setSelectedMonth] = useState('all');
@@ -1452,7 +1453,6 @@ const MonthComparisonView = memo(({ transactions, selectedYear, selectedMonth })
   );
 });
 
-// ============ Dashboard (مُبسط ونظيف) ============
 const DashboardView = memo(({ data, financeSnapshot, liveBalances, totalLiquidity, walletVisibility, onToggleVisibility, dispatch, selectedYear, selectedMonth, transactions, cards, updatedLoans, chartData, isDarkMode, handleManualReconciliation, addNotification, onSelectYear, onSelectMonth }) => {
   const totalCardDebt = cards.reduce((s, c) => s + safeNumber(c.openingDebt), 0);
   const totalLoanDebt = updatedLoans.filter(l => !l.isReceivable).reduce((s, l) => s + l.remaining, 0);
@@ -1481,7 +1481,6 @@ const DashboardView = memo(({ data, financeSnapshot, liveBalances, totalLiquidit
 
   return (
     <div className="space-y-4 animate-fadeIn">
-      {/* Hero */}
       <div className="card">
         <div className="flex items-center justify-between gap-4 flex-wrap">
           <div>
@@ -1505,7 +1504,6 @@ const DashboardView = memo(({ data, financeSnapshot, liveBalances, totalLiquidit
         </div>
       </div>
 
-      {/* Quick actions */}
       <div className="grid grid-cols-3 gap-2">
         <button onClick={() => { dispatch({ type: 'SET_FORM_MODE', payload: 'add' }); dispatch({ type: 'SET_FORM_DATA', payload: { type: 'expense', amount: '', date: getLocalISODate(), method: 'cash', subType: 'withdrawal', category: '', status: 'pending' } }); dispatch({ type: 'SET_FORM_OPEN', payload: true }); }} className="card py-3 flex flex-col items-center gap-1 active:scale-95">
           <div className="p-1.5 rounded-lg bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400"><TrendingDown size={16} /></div>
@@ -1521,16 +1519,16 @@ const DashboardView = memo(({ data, financeSnapshot, liveBalances, totalLiquidit
         </button>
       </div>
 
-      {/* Compact status row */}
+      {/* Compact status — Custody goes to loans tab, Cashback goes to cards tab */}
       <div className="grid grid-cols-3 gap-2">
-        <button onClick={() => dispatch({ type: 'SET_ACTIVE_TAB', payload: 'custody' })} className="card py-2.5 text-center active:scale-95">
+        <button onClick={() => dispatch({ type: 'SET_ACTIVE_TAB', payload: 'loans' })} className="card py-2.5 text-center active:scale-95">
           <div className="flex items-center justify-center gap-1 mb-1">
             <Briefcase size={11} className="text-blue-500" />
             <span className="text-[10px] font-bold" style={{ color: 'var(--text-muted)' }}>عهدة</span>
           </div>
           <p className={`text-sm font-black ${custodySummary.balance > 0 ? 'text-blue-600' : custodySummary.balance < 0 ? 'text-red-600' : 'text-emerald-600'}`}>{fmt(custodySummary.balance, 0)}</p>
         </button>
-        <button onClick={() => dispatch({ type: 'SET_ACTIVE_TAB', payload: 'cashback' })} className="card py-2.5 text-center active:scale-95">
+        <button onClick={() => dispatch({ type: 'SET_ACTIVE_TAB', payload: 'cards' })} className="card py-2.5 text-center active:scale-95">
           <div className="flex items-center justify-center gap-1 mb-1">
             <Gift size={11} className="text-emerald-500" />
             <span className="text-[10px] font-bold" style={{ color: 'var(--text-muted)' }}>كاش باك</span>
@@ -1546,13 +1544,10 @@ const DashboardView = memo(({ data, financeSnapshot, liveBalances, totalLiquidit
         </button>
       </div>
 
-      {/* Liquidity */}
       <QuickBalanceOverview balances={liveBalances} walletVisibility={walletVisibility} onToggleVisibility={onToggleVisibility} />
 
-      {/* Month selector */}
       <MonthSelector selectedYear={selectedYear} selectedMonth={selectedMonth} onSelectYear={onSelectYear} onSelectMonth={onSelectMonth} />
 
-      {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <EnhancedStatCard title="الكاش في اليد" amount={net.actualCashInHand} icon={Wallet} subtitle="حتى نهاية اليوم" isPrivate={!walletVisibility.cash} color="emerald" />
         <EnhancedStatCard title="دخل محصل" amount={net.actualIncome} icon={TrendingUp} subtitle={net.pendingIncome > 0 ? `+${fmt(net.pendingIncome, 0)} معلق` : ''} color="emerald" />
@@ -1568,7 +1563,6 @@ const DashboardView = memo(({ data, financeSnapshot, liveBalances, totalLiquidit
         </button>
       </div>
 
-      {/* Debt metrics */}
       <div className="grid grid-cols-3 gap-3">
         <div className="stat-card">
           <p className="text-[10px] font-bold mb-1" style={{ color: 'var(--text-muted)' }}>استخدام البطاقات</p>
@@ -1584,7 +1578,6 @@ const DashboardView = memo(({ data, financeSnapshot, liveBalances, totalLiquidit
         </div>
       </div>
 
-      {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
         <div className="card">
           <h3 className="font-bold text-xs mb-3 flex items-center gap-2"><BarChart3 className="text-blue-500" size={14} /> التدفق النقدي — {selectedYear}</h3>
@@ -1608,7 +1601,6 @@ const DashboardView = memo(({ data, financeSnapshot, liveBalances, totalLiquidit
         </div>
       </div>
 
-      {/* Reconciliation - compact */}
       <details className="card p-0 overflow-hidden">
         <summary className="p-4 cursor-pointer list-none flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -1913,8 +1905,10 @@ const TransactionsView = memo(({ groupedTransactions, transactions, selectedMont
   );
 });
 
-const LoansView = memo(({ updatedLoans, cards, recurringItems, transactions, dispatch, deleteRecurring, saveHistory, getLocalISODate, addNotification }) => {
+// ============ LoansView (مع دمج العهدة) ============
+const LoansView = memo(({ updatedLoans, cards, recurringItems, transactions, dispatch, deleteRecurring, saveHistory, getLocalISODate, addNotification, data }) => {
   const [showAdd, setShowAdd] = useState(false);
+  const [activeTab, setActiveTab] = useState('loans');
   const [newLoan, setNewLoan] = useState({ name: '', totalAmount: '', monthlyInstallment: '', dueDay: 1, description: '', isReceivable: false });
 
   const settleHany = (loan) => {
@@ -1958,6 +1952,7 @@ const LoansView = memo(({ updatedLoans, cards, recurringItems, transactions, dis
   const payables = updatedLoans.filter(l => !l.isReceivable);
   const receivables = updatedLoans.filter(l => l.isReceivable);
   const totalCards = cards.reduce((acc, c) => acc + safeNumber(c.openingDebt), 0);
+  const custodySummary = useMemo(() => computeCustodyBalance(data?.custodyEntries), [data?.custodyEntries]);
 
   const addLoan = () => {
     if (!newLoan.name || safeNumber(newLoan.totalAmount) <= 0) { addNotification({ type: 'error', title: 'الاسم والمبلغ مطلوبان' }); return; }
@@ -1969,141 +1964,168 @@ const LoansView = memo(({ updatedLoans, cards, recurringItems, transactions, dis
 
   return (
     <div className="space-y-4 animate-fadeIn pb-24">
-      <div className="card">
-        <p className="text-[11px] font-bold mb-1" style={{ color: 'var(--text-muted)' }}>إجمالي المديونية الصافية</p>
-        <h2 className="text-3xl font-black tracking-tight text-gradient">{fmt(totalLoans + totalCards - totalReceivable)}<span className="text-sm font-bold mr-2" style={{ color: 'var(--text-muted)' }}>ج.م</span></h2>
-        <div className="grid grid-cols-3 gap-2 mt-3">
-          <div className="p-2 rounded-lg bg-red-50 dark:bg-red-950/30 text-center">
-            <p className="text-[10px] font-bold text-red-700 dark:text-red-400">القروض</p>
-            <p className="text-xs font-black text-red-600">{fmt(totalLoans, 0)}</p>
-          </div>
-          <div className="p-2 rounded-lg bg-red-50 dark:bg-red-950/30 text-center">
-            <p className="text-[10px] font-bold text-red-700 dark:text-red-400">البطاقات</p>
-            <p className="text-xs font-black text-red-600">{fmt(totalCards, 0)}</p>
-          </div>
-          <div className="p-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 text-center">
-            <p className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400">مستحقات لك</p>
-            <p className="text-xs font-black text-emerald-600">{fmt(totalReceivable, 0)}</p>
-          </div>
-        </div>
-        <div className="flex gap-2 mt-3 flex-wrap">
-          <button onClick={() => setShowAdd(true)} className="btn btn-primary text-xs flex-1"><Plus size={14} /> إضافة التزام</button>
-          <button onClick={() => dispatch({ type: 'SET_RECURRING_MODAL_OPEN', payload: true })} className="btn btn-secondary text-xs flex-1"><Repeat size={14} /> متكرر</button>
-        </div>
+      {/* Sub-tab switcher: القروض | العهدة */}
+      <div className="sub-tab-switcher">
+        <button onClick={() => setActiveTab('loans')} className={`sub-tab-btn ${activeTab === 'loans' ? 'active' : ''}`}>
+          <Banknote size={14} /> القروض والمستحقات
+        </button>
+        <button onClick={() => setActiveTab('custody')} className={`sub-tab-btn ${activeTab === 'custody' ? 'active' : ''}`}>
+          <Briefcase size={14} /> العهدة
+          {custodySummary.balance !== 0 && <span className="badge badge-warning text-[9px] px-1.5 py-0">{fmt(custodySummary.balance, 0)}</span>}
+        </button>
       </div>
 
-      {showAdd && (
-        <div className="modal-backdrop">
-          <div className="w-full max-w-md rounded-2xl shadow-2xl animate-slideInBottom" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)' }}>
-            <div className="p-4 flex justify-between items-center" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-              <h3 className="text-base font-black">التزام جديد</h3>
-              <button onClick={() => setShowAdd(false)} className="btn btn-ghost p-1.5"><X size={16} /></button>
-            </div>
-            <div className="p-4 space-y-3">
-              <div><label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>الاسم *</label><input className="input-field text-sm" value={newLoan.name} onChange={e => setNewLoan({ ...newLoan, name: e.target.value })} /></div>
-              <div className="grid grid-cols-2 gap-3">
-                <div><label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>المبلغ *</label><input type="text" inputMode="decimal" className="input-field text-sm" value={newLoan.totalAmount} onChange={e => setNewLoan({ ...newLoan, totalAmount: e.target.value })} /></div>
-                <div><label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>القسط</label><input type="text" inputMode="decimal" className="input-field text-sm" value={newLoan.monthlyInstallment} onChange={e => setNewLoan({ ...newLoan, monthlyInstallment: e.target.value })} /></div>
+      {activeTab === 'custody' ? (
+        <CustodyView data={data} dispatch={dispatch} saveHistory={saveHistory} addNotification={addNotification} />
+      ) : (
+        <>
+          <div className="card">
+            <p className="text-[11px] font-bold mb-1" style={{ color: 'var(--text-muted)' }}>إجمالي المديونية الصافية</p>
+            <h2 className="text-3xl font-black tracking-tight text-gradient">{fmt(totalLoans + totalCards - totalReceivable)}<span className="text-sm font-bold mr-2" style={{ color: 'var(--text-muted)' }}>ج.م</span></h2>
+            <div className="grid grid-cols-3 gap-2 mt-3">
+              <div className="p-2 rounded-lg bg-red-50 dark:bg-red-950/30 text-center">
+                <p className="text-[10px] font-bold text-red-700 dark:text-red-400">القروض</p>
+                <p className="text-xs font-black text-red-600">{fmt(totalLoans, 0)}</p>
               </div>
-              <label className="flex items-center gap-3 p-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 cursor-pointer">
-                <input type="checkbox" checked={newLoan.isReceivable} onChange={e => setNewLoan({ ...newLoan, isReceivable: e.target.checked })} className="w-4 h-4 accent-emerald-600" />
-                <span className="text-xs font-bold text-emerald-700 dark:text-emerald-400">مستحق <strong>لي</strong></span>
-              </label>
-              <button onClick={addLoan} className="btn btn-primary w-full py-2.5 text-sm">إضافة</button>
+              <div className="p-2 rounded-lg bg-red-50 dark:bg-red-950/30 text-center">
+                <p className="text-[10px] font-bold text-red-700 dark:text-red-400">البطاقات</p>
+                <p className="text-xs font-black text-red-600">{fmt(totalCards, 0)}</p>
+              </div>
+              <div className="p-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 text-center">
+                <p className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400">مستحقات لك</p>
+                <p className="text-xs font-black text-emerald-600">{fmt(totalReceivable, 0)}</p>
+              </div>
+            </div>
+            <div className="flex gap-2 mt-3 flex-wrap">
+              <button onClick={() => setShowAdd(true)} className="btn btn-primary text-xs flex-1"><Plus size={14} /> إضافة التزام</button>
+              <button onClick={() => dispatch({ type: 'SET_RECURRING_MODAL_OPEN', payload: true })} className="btn btn-secondary text-xs flex-1"><Repeat size={14} /> متكرر</button>
             </div>
           </div>
-        </div>
-      )}
 
-      {receivables.length > 0 && (
-        <details className="card p-0 overflow-hidden">
-          <summary className="p-4 cursor-pointer list-none flex items-center justify-between">
-            <h3 className="font-black text-sm flex items-center gap-2 text-emerald-600"><TrendingUp size={14} /> مستحقات لك ({receivables.length})</h3>
-            <ChevronDown size={14} style={{ color: 'var(--text-muted)' }} />
-          </summary>
-          <div className="px-4 pb-4 space-y-2" style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '12px' }}>
-            {receivables.map(loan => (
-              <div key={loan.id} className="p-2.5 rounded-lg" style={{ background: 'var(--bg-muted)' }}>
-                <div className="flex justify-between items-center">
-                  <p className="font-bold text-xs truncate">{loan.name}</p>
-                  <p className="text-sm font-black text-emerald-600">{fmt(loan.remaining)}</p>
+          {showAdd && (
+            <div className="modal-backdrop">
+              <div className="w-full max-w-md rounded-2xl shadow-2xl animate-slideInBottom" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)' }}>
+                <div className="p-4 flex justify-between items-center" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                  <h3 className="text-base font-black">التزام جديد</h3>
+                  <button onClick={() => setShowAdd(false)} className="btn btn-ghost p-1.5"><X size={16} /></button>
                 </div>
-              </div>
-            ))}
-          </div>
-        </details>
-      )}
-
-      <div className="space-y-2">
-        <h3 className="font-black text-sm flex items-center gap-2 text-red-600"><TrendingDown size={14} /> مديونيات ({payables.length})</h3>
-        {payables.map(loan => {
-          const isPaid = loan.remaining <= 0;
-          const pct = loan.totalAmount > 0 ? (loan.totalPaid / loan.totalAmount) * 100 : 0;
-          const hasCarryover = loan.autoGenerated && transactions.some(t => t.source === 'carryover' && t.carryoverFrom === `${loan.month} ${loan.year}`);
-          return (
-            <div key={loan.id} className="card py-3">
-              <div className="flex justify-between items-start gap-2 mb-2">
-                <div className="flex items-center gap-2 flex-1 min-w-0">
-                  <div className={`p-1.5 rounded-lg flex-shrink-0 ${isPaid ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600' : 'bg-red-50 dark:bg-red-950/30 text-red-500'}`}><Banknote size={14} /></div>
-                  <div className="min-w-0">
-                    <h4 className="font-bold text-xs truncate">{loan.name}</h4>
-                    <p className="text-[10px] font-semibold" style={{ color: 'var(--text-muted)' }}>يوم {loan.dueDay}</p>
+                <div className="p-4 space-y-3">
+                  <div><label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>الاسم *</label><input className="input-field text-sm" value={newLoan.name} onChange={e => setNewLoan({ ...newLoan, name: e.target.value })} /></div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div><label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>المبلغ *</label><input type="text" inputMode="decimal" className="input-field text-sm" value={newLoan.totalAmount} onChange={e => setNewLoan({ ...newLoan, totalAmount: e.target.value })} /></div>
+                    <div><label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>القسط</label><input type="text" inputMode="decimal" className="input-field text-sm" value={newLoan.monthlyInstallment} onChange={e => setNewLoan({ ...newLoan, monthlyInstallment: e.target.value })} /></div>
                   </div>
+                  <label className="flex items-center gap-3 p-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 cursor-pointer">
+                    <input type="checkbox" checked={newLoan.isReceivable} onChange={e => setNewLoan({ ...newLoan, isReceivable: e.target.checked })} className="w-4 h-4 accent-emerald-600" />
+                    <span className="text-xs font-bold text-emerald-700 dark:text-emerald-400">مستحق <strong>لي</strong></span>
+                  </label>
+                  <button onClick={addLoan} className="btn btn-primary w-full py-2.5 text-sm">إضافة</button>
                 </div>
-                <button type="button" aria-label="تعديل" onClick={() => dispatch({ type: 'SET_EDITING_LOAN', payload: loan })} className="btn btn-ghost p-1"><Edit size={12} /></button>
               </div>
-              <div className="flex justify-between items-center mb-2">
-                <p className={`text-base font-black ${isPaid ? 'text-emerald-600' : 'text-red-600'}`}>{fmt(loan.remaining, 0)}</p>
-                <p className="text-xs font-bold" style={{ color: 'var(--text-muted)' }}>قسط: {fmt(loan.monthlyInstallment, 0)}</p>
-              </div>
-              <div className="w-full rounded-full h-1 overflow-hidden" style={{ background: 'var(--bg-muted)' }}>
-                <div className="bg-emerald-500 h-full rounded-full" style={{ width: `${Math.min(100, pct)}%` }}></div>
-              </div>
-              {!isPaid && (loan.monthlyInstallment > 0 || loan.autoGenerated) && (
-                <div className="flex justify-end gap-1.5 mt-2">
-                  {loan.autoGenerated && (hasCarryover ? <div className="badge badge-success text-[10px]">تمت التسوية</div> : <button onClick={() => settleHany(loan)} className="btn btn-primary text-[10px] py-1 px-2"><CheckCircle2 size={10} /> تسوية</button>)}
-                  {!loan.autoGenerated && loan.monthlyInstallment > 0 && (
-                    <button onClick={() => { dispatch({ type: 'SET_FORM_MODE', payload: 'add' }); dispatch({ type: 'SET_FORM_DATA', payload: { type: 'expense', category: 'الالتزامات البنكية والتمويلية', amount: loan.monthlyInstallment, description: `قسط ${loan.name}`, linkedLoanId: loan.id, method: 'instapay', date: getLocalISODate(), status: 'pending', subType: 'withdrawal' } }); dispatch({ type: 'SET_FORM_OPEN', payload: true }); }} className="btn btn-secondary text-[10px] py-1 px-2"><CheckCircle2 size={10} /> سداد</button>
-                  )}
-                </div>
-              )}
             </div>
-          );
-        })}
-      </div>
+          )}
 
-      {recurringItems.length > 0 && (
-        <details className="card p-0 overflow-hidden">
-          <summary className="p-4 cursor-pointer list-none flex items-center justify-between">
-            <h3 className="font-black text-sm flex items-center gap-2"><Repeat size={14} className="text-blue-500" /> المتكررة ({recurringItems.length})</h3>
-            <ChevronDown size={14} style={{ color: 'var(--text-muted)' }} />
-          </summary>
-          <div className="px-4 pb-4 space-y-1.5" style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '12px' }}>
-            {recurringItems.map(r => {
-              const isFee = BANK_FEE_CATEGORIES.has(r.category);
+          {receivables.length > 0 && (
+            <details className="card p-0 overflow-hidden">
+              <summary className="p-4 cursor-pointer list-none flex items-center justify-between">
+                <h3 className="font-black text-sm flex items-center gap-2 text-emerald-600"><TrendingUp size={14} /> مستحقات لك ({receivables.length})</h3>
+                <ChevronDown size={14} style={{ color: 'var(--text-muted)' }} />
+              </summary>
+              <div className="px-4 pb-4 space-y-2" style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '12px' }}>
+                {receivables.map(loan => (
+                  <div key={loan.id} className="p-2.5 rounded-lg" style={{ background: 'var(--bg-muted)' }}>
+                    <div className="flex justify-between items-center">
+                      <p className="font-bold text-xs truncate">{loan.name}</p>
+                      <p className="text-sm font-black text-emerald-600">{fmt(loan.remaining)}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </details>
+          )}
+
+          <div className="space-y-2">
+            <h3 className="font-black text-sm flex items-center gap-2 text-red-600"><TrendingDown size={14} /> مديونيات ({payables.length})</h3>
+            {payables.map(loan => {
+              const isPaid = loan.remaining <= 0;
+              const pct = loan.totalAmount > 0 ? (loan.totalPaid / loan.totalAmount) * 100 : 0;
+              const hasCarryover = loan.autoGenerated && transactions.some(t => t.source === 'carryover' && t.carryoverFrom === `${loan.month} ${loan.year}`);
               return (
-                <div key={r.id} className="flex justify-between items-center p-2 rounded-lg" style={{ background: isFee ? 'rgba(220, 38, 38, 0.05)' : 'var(--bg-muted)' }}>
-                  <div className="min-w-0 flex-1">
-                    <p className="font-bold text-xs truncate">{r.title} {isFee && '🏦'}</p>
-                    <p className="text-[10px] font-semibold" style={{ color: 'var(--text-muted)' }}>يوم {r.day}</p>
+                <div key={loan.id} className="card py-3">
+                  <div className="flex justify-between items-start gap-2 mb-2">
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      <div className={`p-1.5 rounded-lg flex-shrink-0 ${isPaid ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600' : 'bg-red-50 dark:bg-red-950/30 text-red-500'}`}><Banknote size={14} /></div>
+                      <div className="min-w-0">
+                        <h4 className="font-bold text-xs truncate">{loan.name}</h4>
+                        <p className="text-[10px] font-semibold" style={{ color: 'var(--text-muted)' }}>يوم {loan.dueDay}</p>
+                      </div>
+                    </div>
+                    <button type="button" aria-label="تعديل" onClick={() => dispatch({ type: 'SET_EDITING_LOAN', payload: loan })} className="btn btn-ghost p-1"><Edit size={12} /></button>
                   </div>
-                  <div className="flex items-center gap-1.5 flex-shrink-0">
-                    <span className={`font-black text-xs ${r.type === 'income' ? 'text-emerald-600' : 'text-red-500'}`}>{fmt(r.amount, 0)}</span>
-                    <button aria-label="حذف" onClick={() => deleteRecurring(r.id)} className="btn btn-ghost p-1 text-red-500"><Trash2 size={12} /></button>
+                  <div className="flex justify-between items-center mb-2">
+                    <p className={`text-base font-black ${isPaid ? 'text-emerald-600' : 'text-red-600'}`}>{fmt(loan.remaining, 0)}</p>
+                    <p className="text-xs font-bold" style={{ color: 'var(--text-muted)' }}>قسط: {fmt(loan.monthlyInstallment, 0)}</p>
                   </div>
+                  <div className="w-full rounded-full h-1 overflow-hidden" style={{ background: 'var(--bg-muted)' }}>
+                    <div className="bg-emerald-500 h-full rounded-full" style={{ width: `${Math.min(100, pct)}%` }}></div>
+                  </div>
+                  {!isPaid && (loan.monthlyInstallment > 0 || loan.autoGenerated) && (
+                    <div className="flex justify-end gap-1.5 mt-2">
+                      {loan.autoGenerated && (hasCarryover ? <div className="badge badge-success text-[10px]">تمت التسوية</div> : <button onClick={() => settleHany(loan)} className="btn btn-primary text-[10px] py-1 px-2"><CheckCircle2 size={10} /> تسوية</button>)}
+                      {!loan.autoGenerated && loan.monthlyInstallment > 0 && (
+                        <button onClick={() => { dispatch({ type: 'SET_FORM_MODE', payload: 'add' }); dispatch({ type: 'SET_FORM_DATA', payload: { type: 'expense', category: 'الالتزامات البنكية والتمويلية', amount: loan.monthlyInstallment, description: `قسط ${loan.name}`, linkedLoanId: loan.id, method: 'instapay', date: getLocalISODate(), status: 'pending', subType: 'withdrawal' } }); dispatch({ type: 'SET_FORM_OPEN', payload: true }); }} className="btn btn-secondary text-[10px] py-1 px-2"><CheckCircle2 size={10} /> سداد</button>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })}
           </div>
-        </details>
+
+          {recurringItems.length > 0 && (
+            <details className="card p-0 overflow-hidden">
+              <summary className="p-4 cursor-pointer list-none flex items-center justify-between">
+                <h3 className="font-black text-sm flex items-center gap-2"><Repeat size={14} className="text-blue-500" /> المتكررة ({recurringItems.length})</h3>
+                <ChevronDown size={14} style={{ color: 'var(--text-muted)' }} />
+              </summary>
+              <div className="px-4 pb-4 space-y-1.5" style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '12px' }}>
+                {recurringItems.map(r => {
+                  const isFee = BANK_FEE_CATEGORIES.has(r.category);
+                  return (
+                    <div key={r.id} className="flex justify-between items-center p-2 rounded-lg" style={{ background: isFee ? 'rgba(220, 38, 38, 0.05)' : 'var(--bg-muted)' }}>
+                      <div className="min-w-0 flex-1">
+                        <p className="font-bold text-xs truncate">{r.title} {isFee && '🏦'}</p>
+                        <p className="text-[10px] font-semibold" style={{ color: 'var(--text-muted)' }}>يوم {r.day}</p>
+                      </div>
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                        <span className={`font-black text-xs ${r.type === 'income' ? 'text-emerald-600' : 'text-red-500'}`}>{fmt(r.amount, 0)}</span>
+                        <button aria-label="حذف" onClick={() => deleteRecurring(r.id)} className="btn btn-ghost p-1 text-red-500"><Trash2 size={12} /></button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </details>
+          )}
+        </>
       )}
     </div>
   );
 });
 
-const WalletsAndCardsView = memo(({ cards, buildLedger, expandedLedgers, expandedCardsSection, selectedMonth, selectedYear, dispatch, handleDelete, handleAddWalletDeposit, handleAddWalletWithdrawal, exportWalletCSV, walletVisibility, liveBalances, cardHistoryMap, saveHistory, addNotification }) => {
+// ============ WalletsAndCardsView (مع دمج الكاش باك) ============
+const WalletsAndCardsView = memo(({ cards, buildLedger, expandedLedgers, expandedCardsSection, selectedMonth, selectedYear, dispatch, handleDelete, handleAddWalletDeposit, handleAddWalletWithdrawal, exportWalletCSV, walletVisibility, liveBalances, cardHistoryMap, saveHistory, addNotification, data }) => {
+  const [activeTab, setActiveTab] = useState('wallets');
   const [showAddCard, setShowAddCard] = useState(false);
   const [newCard, setNewCard] = useState({ name: '', bank: '', limit: '', last4: '', expiry: '', holderName: '', dueDate: '05 من كل شهر', theme: 'silver', cashbackRate: 1 });
+
+  const cashbackSummary = useMemo(() => {
+    const trackers = (data?.cashbackTrackers || []).filter(t => t.month === selectedMonth && (t.year || 2026) === selectedYear);
+    const expected = trackers.reduce((s, t) => s + safeNumber(t.expectedAmount), 0);
+    const received = trackers.reduce((s, t) => s + safeNumber(t.receivedAmount), 0);
+    return { expected, received, pending: expected - received };
+  }, [data?.cashbackTrackers, selectedMonth, selectedYear]);
+
   const addCard = () => {
     if (!newCard.name || !newCard.bank || safeNumber(newCard.limit) <= 0) { addNotification({ type: 'error', title: 'الاسم والبنك والحد مطلوبة' }); return; }
     saveHistory();
@@ -2111,6 +2133,7 @@ const WalletsAndCardsView = memo(({ cards, buildLedger, expandedLedgers, expande
     setShowAddCard(false); setNewCard({ name: '', bank: '', limit: '', last4: '', expiry: '', holderName: '', dueDate: '05 من كل شهر', theme: 'silver', cashbackRate: 1 });
     addNotification({ type: 'success', title: 'تمت الإضافة' });
   };
+
   const lp = (key) => ({
     walletKey: key,
     ledgerData: buildLedger ? buildLedger(key) : [],
@@ -2124,76 +2147,94 @@ const WalletsAndCardsView = memo(({ cards, buildLedger, expandedLedgers, expande
     onExportCSV: exportWalletCSV, walletVisibility,
     onToggleVisibility: (k) => dispatch({ type: 'TOGGLE_WALLET_VISIBILITY', payload: k })
   });
+
   return (
     <div className="space-y-4 animate-fadeIn">
-      <details className="card p-0 overflow-hidden" open={expandedCardsSection}>
-        <summary className="p-4 cursor-pointer list-none flex items-center justify-between" onClick={(e) => { e.preventDefault(); dispatch({ type: 'TOGGLE_CARDS_SECTION' }); }}>
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400"><CreditCard size={16} /></div>
-            <div>
-              <h3 className="font-black text-sm">البطاقات الائتمانية ({cards.length})</h3>
-              <p className="text-[10px] font-semibold mt-0.5" style={{ color: 'var(--text-muted)' }}>اضغط للعرض</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <button type="button" aria-label="إضافة" onClick={(e) => { e.stopPropagation(); setShowAddCard(true); }} className="btn btn-primary p-1.5"><Plus size={14} /></button>
-            <ChevronDown size={14} className={`transition-transform ${expandedCardsSection ? 'rotate-180' : ''}`} style={{ color: 'var(--text-muted)' }} />
-          </div>
-        </summary>
-        {expandedCardsSection && (
-          <div className="px-4 pb-4 grid grid-cols-1 md:grid-cols-2 gap-3" style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '16px' }}>
-            {cards.map(card => {
-              const themeCls = { silver: 'bg-gradient-to-br from-slate-100 via-slate-200 to-slate-300 border-slate-300 text-slate-800', gold: 'bg-gradient-to-br from-amber-100 via-yellow-200 to-amber-300 border-amber-300 text-amber-900', platinum: 'bg-gradient-to-br from-slate-200 via-gray-100 to-slate-300 border-slate-300 text-slate-700', black: 'bg-gradient-to-br from-slate-800 via-slate-900 to-black border-slate-700 text-white', blue: 'bg-gradient-to-br from-blue-200 via-blue-300 to-blue-500 border-blue-400 text-blue-950' }[card.theme] || 'bg-gradient-to-br from-slate-100 to-slate-300';
-              return (
-                <div key={card.id} className="space-y-2">
-                  <div className="relative">
-                    <div className="absolute top-1.5 right-1.5 z-20 flex gap-1.5">
-                      <button type="button" aria-label="كشف" onClick={() => dispatch({ type: 'SET_VIEWING_CARD_STATEMENT', payload: card })} className="bg-white/95 dark:bg-slate-800 p-1.5 rounded-md shadow-sm"><FileSpreadsheet size={12} /></button>
-                      <button type="button" aria-label="تعديل" onClick={() => dispatch({ type: 'SET_EDITING_CARD', payload: card })} className="bg-white/95 dark:bg-slate-800 p-1.5 rounded-md shadow-sm"><Edit size={12} /></button>
-                    </div>
-                    <div dir="ltr" className={`p-4 rounded-xl shadow-sm min-h-[160px] flex flex-col justify-between ${themeCls} border`}>
-                      <div className="flex justify-between items-start">
-                        <span className="font-black text-sm uppercase">{card.bank}</span>
-                        <Wifi size={14} className="rotate-90 opacity-70" />
-                      </div>
-                      <div className="flex gap-2 items-center">
-                        <div className="w-8 h-6 credit-card-chip"></div>
-                        <div className="text-xs font-mono tracking-[0.15em] font-bold">•••• {card.last4}</div>
-                      </div>
-                      <div className="flex justify-between items-end text-[10px] font-bold">
-                        <div><div className="uppercase opacity-70">{card.name}</div><div className="tracking-wide">{card.holderName}</div></div>
-                        <div className="text-right"><div className="uppercase opacity-70">EXP</div><div>{card.expiry}</div></div>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-4 gap-1.5">
-                    <div className="p-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 text-center">
-                      <p className="text-[9px] font-bold text-emerald-700 dark:text-emerald-400">متاح</p>
-                      <p className="text-[10px] font-black text-emerald-600">{fmt(safeNumber(card.limit) - safeNumber(card.openingDebt), 0)}</p>
-                    </div>
-                    <div className="p-1.5 rounded-lg bg-red-50 dark:bg-red-950/30 text-center">
-                      <p className="text-[9px] font-bold text-red-700 dark:text-red-400">مديونية</p>
-                      <p className="text-[10px] font-black text-red-600">{fmt(card.openingDebt, 0)}</p>
-                    </div>
-                    <div className="p-1.5 rounded-lg bg-blue-50 dark:bg-blue-950/30 text-center">
-                      <p className="text-[9px] font-bold text-blue-700 dark:text-blue-400">حد</p>
-                      <p className="text-[10px] font-black text-blue-600">{fmt(card.limit, 0)}</p>
-                    </div>
-                    <div className="p-1.5 rounded-lg bg-amber-50 dark:bg-amber-950/30 text-center">
-                      <p className="text-[9px] font-bold text-amber-700 dark:text-amber-400">كاش باك</p>
-                      <p className="text-[10px] font-black text-amber-600">{card.cashbackRate || 1}%</p>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </details>
-
-      <div className="space-y-2">
-        {[lp('fawry'), lp('etisalat'), lp('cib_savings'), lp('aaib_savings')].map(props => <GenericLedgerComponent key={props.walletKey} {...props} />)}
+      {/* Sub-tab switcher: المحافظ | الكاش باك */}
+      <div className="sub-tab-switcher">
+        <button onClick={() => setActiveTab('wallets')} className={`sub-tab-btn ${activeTab === 'wallets' ? 'active' : ''}`}>
+          <CreditCard size={14} /> المحافظ والبطاقات
+        </button>
+        <button onClick={() => setActiveTab('cashback')} className={`sub-tab-btn ${activeTab === 'cashback' ? 'active' : ''}`}>
+          <Gift size={14} /> الكاش باك
+          {cashbackSummary.received > 0 && <span className="badge badge-success text-[9px] px-1.5 py-0">{fmt(cashbackSummary.received, 0)}</span>}
+        </button>
       </div>
+
+      {activeTab === 'cashback' ? (
+        <CashbackView data={data} dispatch={dispatch} saveHistory={saveHistory} addNotification={addNotification} cards={cards} selectedYear={selectedYear} selectedMonth={selectedMonth} />
+      ) : (
+        <>
+          <details className="card p-0 overflow-hidden" open={expandedCardsSection}>
+            <summary className="p-4 cursor-pointer list-none flex items-center justify-between" onClick={(e) => { e.preventDefault(); dispatch({ type: 'TOGGLE_CARDS_SECTION' }); }}>
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400"><CreditCard size={16} /></div>
+                <div>
+                  <h3 className="font-black text-sm">البطاقات الائتمانية ({cards.length})</h3>
+                  <p className="text-[10px] font-semibold mt-0.5" style={{ color: 'var(--text-muted)' }}>اضغط للعرض</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button type="button" aria-label="إضافة" onClick={(e) => { e.stopPropagation(); setShowAddCard(true); }} className="btn btn-primary p-1.5"><Plus size={14} /></button>
+                <ChevronDown size={14} className={`transition-transform ${expandedCardsSection ? 'rotate-180' : ''}`} style={{ color: 'var(--text-muted)' }} />
+              </div>
+            </summary>
+            {expandedCardsSection && (
+              <div className="px-4 pb-4 grid grid-cols-1 md:grid-cols-2 gap-3" style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '16px' }}>
+                {cards.map(card => {
+                  const themeCls = { silver: 'bg-gradient-to-br from-slate-100 via-slate-200 to-slate-300 border-slate-300 text-slate-800', gold: 'bg-gradient-to-br from-amber-100 via-yellow-200 to-amber-300 border-amber-300 text-amber-900', platinum: 'bg-gradient-to-br from-slate-200 via-gray-100 to-slate-300 border-slate-300 text-slate-700', black: 'bg-gradient-to-br from-slate-800 via-slate-900 to-black border-slate-700 text-white', blue: 'bg-gradient-to-br from-blue-200 via-blue-300 to-blue-500 border-blue-400 text-blue-950' }[card.theme] || 'bg-gradient-to-br from-slate-100 to-slate-300';
+                  return (
+                    <div key={card.id} className="space-y-2">
+                      <div className="relative">
+                        <div className="absolute top-1.5 right-1.5 z-20 flex gap-1.5">
+                          <button type="button" aria-label="كشف" onClick={() => dispatch({ type: 'SET_VIEWING_CARD_STATEMENT', payload: card })} className="bg-white/95 dark:bg-slate-800 p-1.5 rounded-md shadow-sm"><FileSpreadsheet size={12} /></button>
+                          <button type="button" aria-label="تعديل" onClick={() => dispatch({ type: 'SET_EDITING_CARD', payload: card })} className="bg-white/95 dark:bg-slate-800 p-1.5 rounded-md shadow-sm"><Edit size={12} /></button>
+                        </div>
+                        <div dir="ltr" className={`p-4 rounded-xl shadow-sm min-h-[160px] flex flex-col justify-between ${themeCls} border`}>
+                          <div className="flex justify-between items-start">
+                            <span className="font-black text-sm uppercase">{card.bank}</span>
+                            <Wifi size={14} className="rotate-90 opacity-70" />
+                          </div>
+                          <div className="flex gap-2 items-center">
+                            <div className="w-8 h-6 credit-card-chip"></div>
+                            <div className="text-xs font-mono tracking-[0.15em] font-bold">•••• {card.last4}</div>
+                          </div>
+                          <div className="flex justify-between items-end text-[10px] font-bold">
+                            <div><div className="uppercase opacity-70">{card.name}</div><div className="tracking-wide">{card.holderName}</div></div>
+                            <div className="text-right"><div className="uppercase opacity-70">EXP</div><div>{card.expiry}</div></div>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-4 gap-1.5">
+                        <div className="p-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 text-center">
+                          <p className="text-[9px] font-bold text-emerald-700 dark:text-emerald-400">متاح</p>
+                          <p className="text-[10px] font-black text-emerald-600">{fmt(safeNumber(card.limit) - safeNumber(card.openingDebt), 0)}</p>
+                        </div>
+                        <div className="p-1.5 rounded-lg bg-red-50 dark:bg-red-950/30 text-center">
+                          <p className="text-[9px] font-bold text-red-700 dark:text-red-400">مديونية</p>
+                          <p className="text-[10px] font-black text-red-600">{fmt(card.openingDebt, 0)}</p>
+                        </div>
+                        <div className="p-1.5 rounded-lg bg-blue-50 dark:bg-blue-950/30 text-center">
+                          <p className="text-[9px] font-bold text-blue-700 dark:text-blue-400">حد</p>
+                          <p className="text-[10px] font-black text-blue-600">{fmt(card.limit, 0)}</p>
+                        </div>
+                        <div className="p-1.5 rounded-lg bg-amber-50 dark:bg-amber-950/30 text-center">
+                          <p className="text-[9px] font-bold text-amber-700 dark:text-amber-400">كاش باك</p>
+                          <p className="text-[10px] font-black text-amber-600">{card.cashbackRate || 1}%</p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </details>
+
+          <div className="space-y-2">
+            {[lp('fawry'), lp('etisalat'), lp('cib_savings'), lp('aaib_savings')].map(props => <GenericLedgerComponent key={props.walletKey} {...props} />)}
+          </div>
+        </>
+      )}
 
       {showAddCard && (
         <div className="modal-backdrop">
@@ -2685,7 +2726,7 @@ const ProfessionalTicker = memo(({ updatedLoans, cards, liveBalances, walletVisi
   );
 });
 
-// ============ Sidebar المبسط (بمجموعات) ============
+// ============ Sidebar مبسط (12 بند، 4 مجموعات) ============
 const EnhancedSidebar = memo(({ activeTab, dispatch, canUndo, onUndo }) => {
   const groups = [
     { title: 'الرئيسية', items: [
@@ -2693,11 +2734,9 @@ const EnhancedSidebar = memo(({ activeTab, dispatch, canUndo, onUndo }) => {
       { id: 'transactions', label: 'المعاملات', icon: ArrowUpRight }
     ]},
     { title: 'المتابعة', items: [
-      { id: 'custody', label: 'العهدة', icon: Briefcase },
-      { id: 'cashback', label: 'الكاش باك', icon: Gift },
       { id: 'categories', label: 'الفئات', icon: Layers },
-      { id: 'loans', label: 'القروض', icon: Banknote },
-      { id: 'cards', label: 'المحافظ', icon: CreditCard }
+      { id: 'loans', label: 'الالتزامات والعهد', icon: Banknote },
+      { id: 'cards', label: 'المحافظ والكاش باك', icon: CreditCard }
     ]},
     { title: 'التخطيط', items: [
       { id: 'planning', label: 'التخطيط الشهري', icon: Table },
@@ -3446,12 +3485,10 @@ function App() {
   const renderActiveView = () => {
     switch (activeTab) {
       case 'dashboard': return <DashboardView data={data} financeSnapshot={financeSnapshot} liveBalances={liveBalances} totalLiquidity={totalLiquidity} walletVisibility={walletVisibility} onToggleVisibility={(k) => dispatch({ type: 'TOGGLE_WALLET_VISIBILITY', payload: k })} dispatch={dispatch} selectedYear={selectedYear} selectedMonth={selectedMonth} transactions={transactions} cards={cards} updatedLoans={updatedLoans} chartData={chartData} isDarkMode={isDarkMode} handleManualReconciliation={handleManualReconciliation} addNotification={addNotification} onSelectYear={(y) => dispatch({ type: 'SET_SELECTED_YEAR', payload: y })} onSelectMonth={(m) => dispatch({ type: 'SET_SELECTED_MONTH', payload: m })} />;
-      case 'custody': return <CustodyView data={data} dispatch={dispatch} saveHistory={saveHistory} addNotification={addNotification} />;
-      case 'cashback': return <CashbackView data={data} dispatch={dispatch} saveHistory={saveHistory} addNotification={addNotification} cards={cards} selectedYear={selectedYear} selectedMonth={selectedMonth} />;
       case 'transactions': return <TransactionsView groupedTransactions={groupedTransactions} transactions={transactions} selectedMonth={selectedMonth} selectedYear={selectedYear} transViewMode={transViewMode} statusFilter={statusFilter} searchTerm={searchTerm} expandedGroup={expandedGroup} data={data} monthInsights={monthInsights} dispatch={dispatch} handleDelete={handleDelete} printReport={printReport} exportPdf={exportPdf} addNotification={addNotification} onSelectYear={(y) => dispatch({ type: 'SET_SELECTED_YEAR', payload: y })} onSelectMonth={(m) => dispatch({ type: 'SET_SELECTED_MONTH', payload: m })} saveHistory={saveHistory} onPrintMonthlyReport={printMonthlyReportPdf} />;
       case 'categories': return <CategoriesView transactions={transactions} selectedMonth={selectedMonth} selectedYear={selectedYear} catViewType={catViewType} activeCategoryDetail={activeCategoryDetail} budgets={budgets} dispatch={dispatch} handleDelete={handleDelete} printReport={printReport} exportPdf={exportPdf} onSelectYear={(y) => dispatch({ type: 'SET_SELECTED_YEAR', payload: y })} onSelectMonth={(m) => dispatch({ type: 'SET_SELECTED_MONTH', payload: m })} />;
-      case 'loans': return <LoansView updatedLoans={updatedLoans} cards={cards} recurringItems={recurringItems} transactions={transactions} dispatch={dispatch} deleteRecurring={deleteRecurring} saveHistory={saveHistory} getLocalISODate={getLocalISODate} addNotification={addNotification} />;
-      case 'cards': return <WalletsAndCardsView cards={cards} buildLedger={buildLedger} expandedLedgers={expandedLedgers} expandedCardsSection={expandedCardsSection} selectedMonth={selectedMonth} selectedYear={selectedYear} dispatch={dispatch} handleDelete={handleDelete} handleAddWalletDeposit={handleAddWalletDeposit} handleAddWalletWithdrawal={handleAddWalletWithdrawal} exportWalletCSV={exportWalletCSV} walletVisibility={walletVisibility} liveBalances={liveBalances} cardHistoryMap={cardHistoryMap} saveHistory={saveHistory} addNotification={addNotification} />;
+      case 'loans': return <LoansView updatedLoans={updatedLoans} cards={cards} recurringItems={recurringItems} transactions={transactions} dispatch={dispatch} deleteRecurring={deleteRecurring} saveHistory={saveHistory} getLocalISODate={getLocalISODate} addNotification={addNotification} data={data} />;
+      case 'cards': return <WalletsAndCardsView cards={cards} buildLedger={buildLedger} expandedLedgers={expandedLedgers} expandedCardsSection={expandedCardsSection} selectedMonth={selectedMonth} selectedYear={selectedYear} dispatch={dispatch} handleDelete={handleDelete} handleAddWalletDeposit={handleAddWalletDeposit} handleAddWalletWithdrawal={handleAddWalletWithdrawal} exportWalletCSV={exportWalletCSV} walletVisibility={walletVisibility} liveBalances={liveBalances} cardHistoryMap={cardHistoryMap} saveHistory={saveHistory} addNotification={addNotification} data={data} />;
       case 'planning': return <MonthlyPlanningView data={data} monthlyPlans={monthlyPlans} cards={cards} loans={updatedLoans} dispatch={dispatch} saveHistory={saveHistory} addNotification={addNotification} />;
       case 'planner': return <PlannerView updatedLoans={updatedLoans} cards={cards} selectedMonth={selectedMonth} selectedYear={selectedYear} monthlyPlans={monthlyPlans} totalLiquidityNow={totalLiquidity} />;
       case 'forecast': return <LiquidityForecastView transactions={transactions} updatedLoans={updatedLoans} recurringItems={recurringItems} liveBalances={liveBalances} selectedYear={selectedYear} selectedMonth={selectedMonth} monthlyPlans={monthlyPlans} />;
@@ -3479,7 +3516,6 @@ function App() {
           <div className="flex-1 overflow-y-auto scroll-hide" style={{ minHeight: 0 }}>{cardTx.length === 0 ? <div className="p-12 text-center font-medium text-xs" style={{ color: 'var(--text-muted)' }}>لا توجد عمليات</div> : <div className="divide-y" style={{ borderColor: 'var(--border-subtle)' }}>{cardTx.map(t => (<div key={t.id} className="p-3 flex justify-between items-center gap-2"><div className="min-w-0 flex-1"><p className="font-bold text-xs truncate">{t.description || '-'}</p><p className="text-[10px] font-semibold mt-0.5" style={{ color: 'var(--text-muted)' }}>{t.date}</p></div><span className="font-black text-xs">{fmt(t.amount, 0)}</span></div>))}</div>}</div></div></div>);
       })()}
 
-      {/* Bottom Nav - مبسط: 4 أزرار فقط */}
       {!isLocked && (<div className="bottom-nav-container no-print"><div className="scrollable-nav scroll-hide">
         {[
           { id: 'dashboard', label: 'الرئيسية', icon: LayoutDashboard },
@@ -3510,10 +3546,8 @@ function App() {
                 <p className="sidebar-group-title">المتابعة</p>
                 <div className="grid grid-cols-2 gap-1.5">
                   {[
-                    { id: 'custody', label: 'العهدة', icon: Briefcase },
-                    { id: 'cashback', label: 'الكاش باك', icon: Gift },
                     { id: 'categories', label: 'الفئات', icon: Layers },
-                    { id: 'loans', label: 'القروض', icon: Banknote }
+                    { id: 'loans', label: 'الالتزامات والعهد', icon: Banknote }
                   ].map(item => (
                     <button key={item.id} onClick={() => { dispatch({ type: 'SET_ACTIVE_TAB', payload: item.id }); setIsDrawerOpen(false); }} className="flex items-center gap-2 p-2.5 rounded-lg text-xs font-bold active:scale-[0.97] transition-all" style={{ background: 'var(--bg-muted)', color: 'var(--text-secondary)' }}>
                       <item.icon size={14} /><span className="truncate">{item.label}</span>
