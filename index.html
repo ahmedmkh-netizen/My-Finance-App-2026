@@ -44,6 +44,7 @@ tailwind.config = {
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <script type="importmap">
@@ -227,6 +228,8 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 .sub-tab-switcher { background: var(--bg-muted); border-radius: var(--radius-lg); padding: 4px; display: flex; gap: 4px; }
 .sub-tab-btn { flex: 1; padding: 10px 12px; border-radius: var(--radius-md); font-weight: 700; font-size: 12px; display: flex; align-items: center; justify-content: center; gap: 6px; transition: all 0.2s ease; cursor: pointer; border: none; background: transparent; color: var(--text-muted); }
 .sub-tab-btn.active { background: var(--brand); color: white; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3); }
+.receipt-thumb { width: 56px; height: 56px; border-radius: 8px; overflow: hidden; position: relative; border: 1px solid var(--border-default); cursor: pointer; transition: transform 0.15s ease; }
+.receipt-thumb:hover { transform: scale(1.05); }
 </style>
 </head>
 <body>
@@ -245,15 +248,17 @@ import {
   ArrowUp, Undo2, LogOut, Lock, Unlock, Moon, Sun, ShieldCheck, RefreshCcw, Menu,
   Search, FileSpreadsheet, Settings as SettingsIcon, Target, CalendarDays, BarChart3, Bell, Sparkles, Bot,
   AlertTriangle, Clock, CheckCircle2, Zap, Hash, Coins, Filter, Eye, EyeOff, ShieldAlert,
-  Download, Upload, Cloud, Signal, PiggyBank, Landmark as BuildingBank, ArrowDownCircle, ArrowUpCircle, Wifi, Store as StoreIcon, Users, Activity, Sliders, Table, RotateCcw, Percent, LineChart, Delete, FileText, Briefcase, Gift, Receipt, ArrowLeftRight
+  Download, Upload, Cloud, Signal, PiggyBank, Landmark as BuildingBank, ArrowDownCircle, ArrowUpCircle, Wifi, Store as StoreIcon, Users, Activity, Sliders, Table, RotateCcw, Percent, LineChart, Delete, FileText, Briefcase, Gift, Receipt, ArrowLeftRight, Camera, ImageIcon
 } from 'lucide-react';
 
 const firebaseConfig = { apiKey: "AIzaSyCEq-Trf1oFsvPF5tlMvqU83ea_J2DLZjs", authDomain: "finance-app-2026-3e318.firebaseapp.com", projectId: "finance-app-2026-3e318", storageBucket: "finance-app-2026-3e318.firebasestorage.app", messagingSenderId: "855414629770", appId: "1:855414629770:web:8bb07198b8245b63781473" };
 if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
+const storage = firebase.storage();
 
-const CURRENT_ENGINE_VERSION = 8;
-const CORRECT_PIN = '1033';
+const CURRENT_ENGINE_VERSION = 9;
+const DEFAULT_PIN = '1033';
+const PIN_HASH_KEY = 'finance_pin_hash_v1';
 const KIND = { OPERATIONAL: 'operational', FINANCIAL: 'financial', ADJUSTMENT: 'adjustment' };
 const KIND_LABELS = { operational: 'تشغيلي', financial: 'تمويلي', adjustment: 'تسوية' };
 
@@ -277,15 +282,64 @@ const dayStart = (d) => { const x = new Date(d); x.setHours(0,0,0,0); return x; 
 const endOfToday = () => { const x = new Date(); x.setHours(23,59,59,999); return x; };
 const toEnglishDigits = (s) => { if (s === null || s === undefined) return s; const map = { '٠':'0','١':'1','٢':'2','٣':'3','٤':'4','٥':'5','٦':'6','٧':'7','٨':'8','٩':'9','۰':'0','۱':'1','۲':'2','۳':'3','۴':'4','۵':'5','۶':'6','۷':'7','۸':'8','۹':'9' }; return String(s).replace(/[٠-٩۰-۹]/g, d => map[d]); };
 const parseNumberInput = (v) => { const cleaned = toEnglishDigits(v).replace(/[^\d.\-]/g, ''); const n = Number(cleaned); return isNaN(n) ? 0 : n; };
-
-// ⭐ كل الأرقام بكسور عشرية
 const fmt = (n) => safeNumber(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
 const makeMonthKey = (year, month) => `${year}-${month}`;
 const parseMonthKey = (key) => { if (!key || typeof key !== 'string' || !key.includes('-')) return null; const [y, ...rest] = key.split('-'); const year = Number(y); if (isNaN(year)) return null; return { year, month: rest.join('-') }; };
 
-const STORAGE_KEY = 'finance_tracker_V74_SECURE';
-const LEGACY_KEYS = ['finance_tracker_V73_SECURE', 'finance_tracker_V72_SECURE', 'finance_tracker_V71_SECURE'];
+// ============ PIN (hash-based) ============
+const hashPin = async (pin) => {
+  try {
+    const encoder = new TextEncoder();
+    const data = encoder.encode('fintracker_v1_' + pin);
+    const hashBuf = await crypto.subtle.digest('SHA-256', data);
+    return Array.from(new Uint8Array(hashBuf)).map(b => b.toString(16).padStart(2, '0')).join('');
+  } catch { return 'plain_' + pin; }
+};
+const getStoredPinHash = () => localStorage.getItem(PIN_HASH_KEY);
+const savePinHash = async (pin) => { localStorage.setItem(PIN_HASH_KEY, await hashPin(pin)); };
+const verifyPin = async (pin) => {
+  const stored = getStoredPinHash();
+  if (!stored) return pin === DEFAULT_PIN;
+  return (await hashPin(pin)) === stored;
+};
+
+// ============ Receipts (Images) ============
+const MAX_RECEIPT_SIZE_MB = 5;
+const compressImage = (file, maxWidth = 1280, quality = 0.75) => new Promise((resolve, reject) => {
+  if (!file.type.startsWith('image/')) return reject(new Error('الملف ليس صورة'));
+  if (file.size > MAX_RECEIPT_SIZE_MB * 1024 * 1024) return reject(new Error(`حجم الصورة أكبر من ${MAX_RECEIPT_SIZE_MB}MB`));
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      let { width, height } = img;
+      if (width > maxWidth) { height = Math.round((height * maxWidth) / width); width = maxWidth; }
+      canvas.width = width; canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, width, height);
+      canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error('فشل الضغط')), 'image/jpeg', quality);
+    };
+    img.onerror = () => reject(new Error('فشل قراءة الصورة'));
+    img.src = e.target.result;
+  };
+  reader.onerror = () => reject(new Error('فشل قراءة الملف'));
+  reader.readAsDataURL(file);
+});
+const uploadReceipt = async (txId, file) => {
+  const blob = await compressImage(file);
+  const path = `receipts/${txId}/${Date.now()}_${Math.random().toString(36).slice(2,8)}.jpg`;
+  const ref = storage.ref(path);
+  await ref.put(blob);
+  const url = await ref.getDownloadURL();
+  return { url, path, name: file.name, size: blob.size };
+};
+const deleteReceipt = async (path) => {
+  try { await storage.ref(path).delete(); } catch (e) { console.warn('Delete failed:', e); }
+};
+
+const STORAGE_KEY = 'finance_tracker_V75_SECURE';
+const LEGACY_KEYS = ['finance_tracker_V74_SECURE', 'finance_tracker_V73_SECURE', 'finance_tracker_V72_SECURE'];
 const ALL_MONTHS = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
 const YEARS_CONFIG = { 2026: ['أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'], 2027: ALL_MONTHS, 2028: ALL_MONTHS };
 const YEARS_LIST = [2026, 2027, 2028];
@@ -459,7 +513,7 @@ const computeBalance = (data, key, asOfDate) => {
   return bal;
 };
 
-// ============ ✅ دوال بطاقات الائتمان الجديدة ============
+// ✅ دوال بطاقات الائتمان
 const getCardMethod = (card) => {
   if (!card) return null;
   if (card.bank === 'CIB' && card.name === 'SWYPE') return 'cib_swype';
@@ -467,7 +521,6 @@ const getCardMethod = (card) => {
   return 'cib_card';
 };
 
-// حساب المديونية الحية للبطاقة = openingDebt + مشتريات - سدادات - استردادات
 const computeCardDebt = (data, card, asOfDate) => {
   if (!card) return 0;
   const method = getCardMethod(card);
@@ -478,22 +531,9 @@ const computeCardDebt = (data, card, asOfDate) => {
     const d = new Date(t.date);
     if (isNaN(d) || d > upper) return;
     const amt = safeNumber(t.amount);
-
-    // 1) سداد للبطاقة (linkedCardId === card.id) → يقلل المديونية
-    if (t.linkedCardId === card.id && t.type === 'expense' && !t.linkedLoanId) {
-      debt -= amt;
-      return;
-    }
-    // 2) مشتريات على البطاقة (method === cardMethod) → تزيد المديونية
-    if (t.type === 'expense' && t.method === method) {
-      debt += amt;
-      return;
-    }
-    // 3) استرداد على البطاقة (income + deposit) → يقلل المديونية
-    if (t.type === 'income' && t.method === method && t.subType === 'deposit') {
-      debt -= amt;
-      return;
-    }
+    if (t.linkedCardId === card.id && t.type === 'expense' && !t.linkedLoanId) { debt -= amt; return; }
+    if (t.type === 'expense' && t.method === method) { debt += amt; return; }
+    if (t.type === 'income' && t.method === method && t.subType === 'deposit') { debt -= amt; return; }
   });
   return Math.max(0, debt);
 };
@@ -595,7 +635,7 @@ const migrateTransaction = (t) => {
     const norm = ALL_MONTHS.find(m => normalizeText(m) === normalizeText(month));
     if (norm) { month = norm; monthIndex = getMonthIndex(norm); }
   }
-  return { ...t, kind, year, month, monthIndex };
+  return { ...t, kind, year, month, monthIndex, receipts: Array.isArray(t.receipts) ? t.receipts : [] };
 };
 
 const migrateData = (parsed) => {
@@ -790,6 +830,15 @@ const SubCategoryBadge = memo(({ tx }) => {
     return <span className="badge badge-warning">♻️ رصيد مرحل</span>;
   }
   return <span className="badge badge-neutral">{tx.subCategory}</span>;
+});
+
+const ReceiptIndicator = memo(({ tx, dispatch }) => {
+  if (!tx?.receipts?.length) return null;
+  return (
+    <button type="button" aria-label="عرض الفواتير" onClick={(e) => { e.stopPropagation(); dispatch({ type: 'SET_VIEWING_RECEIPT', payload: { tx, index: 0 } }); }} className="badge badge-brand cursor-pointer">
+      <Camera size={10} /> {tx.receipts.length}
+    </button>
+  );
 });
 
 const GenericLedgerComponent = memo(({ walletKey, ledgerData, liveBalance, isExpanded, onToggle, onDelete, onEditTransaction, theme, onAddDeposit, onAddWithdrawal, onExportCSV, walletVisibility, onToggleVisibility }) => {
@@ -1272,7 +1321,13 @@ const DuplicateDetectionSystem = ({ transactions, data, dispatch, addNotificatio
     return Object.entries(map).filter(([_, items]) => items.length >= threshold).map(([key, items]) => ({ key, amount: items[0].amount, count: items.length, items, category: items[0].category, risk: items.length >= 5 ? 'high' : items.length >= 3 ? 'medium' : 'low' }));
   }, [transactions, threshold, selectedMonth]);
   const doDelete = (ids, protectedCount) => {
-    dispatch({ type: 'SHOW_CONFIRM', danger: true, title: 'تأكيد الحذف', message: `سيتم حذف ${ids.length} عملية مكررة.${protectedCount > 0 ? ` تم تجاهل ${protectedCount} في أشهر مغلقة.` : ''}`, onConfirm: () => { saveHistory(); dispatch({ type: 'UPDATE_TRANSACTIONS', payload: transactions.filter(t => !ids.includes(t.id)) }); addNotification({ type: 'success', title: 'تم التنظيف' }); }, onCancel: () => dispatch({ type: 'HIDE_CONFIRM' }) });
+    dispatch({ type: 'SHOW_CONFIRM', danger: true, title: 'تأكيد الحذف', message: `سيتم حذف ${ids.length} عملية مكررة.${protectedCount > 0 ? ` تم تجاهل ${protectedCount} في أشهر مغلقة.` : ''}`, onConfirm: () => {
+      const toDelete = transactions.filter(t => ids.includes(t.id));
+      toDelete.forEach(t => { if (t.receipts?.length) t.receipts.forEach(r => deleteReceipt(r.path)); });
+      saveHistory();
+      dispatch({ type: 'UPDATE_TRANSACTIONS', payload: transactions.filter(t => !ids.includes(t.id)) });
+      addNotification({ type: 'success', title: 'تم التنظيف' });
+    }, onCancel: () => dispatch({ type: 'HIDE_CONFIRM' }) });
   };
   const handleDeleteAll = () => {
     let idsToDelete = [], protectedCount = 0;
@@ -1516,7 +1571,6 @@ const MonthComparisonView = memo(({ transactions, selectedYear, selectedMonth })
   );
 });
 
-// ✅ DashboardView مع computeCardDebt
 const DashboardView = memo(({ data, financeSnapshot, liveBalances, totalLiquidity, walletVisibility, onToggleVisibility, dispatch, selectedYear, selectedMonth, transactions, cards, updatedLoans, chartData, isDarkMode, handleManualReconciliation, addNotification, onSelectYear, onSelectMonth }) => {
   const totalCardDebt = cards.reduce((s, c) => s + computeCardDebt(data, c), 0);
   const totalLoanDebt = updatedLoans.filter(l => !l.isReceivable).reduce((s, l) => s + l.remaining, 0);
@@ -1569,11 +1623,11 @@ const DashboardView = memo(({ data, financeSnapshot, liveBalances, totalLiquidit
       </div>
 
       <div className="grid grid-cols-3 gap-2">
-        <button onClick={() => { dispatch({ type: 'SET_FORM_MODE', payload: 'add' }); dispatch({ type: 'SET_FORM_DATA', payload: { type: 'expense', amount: '', date: getLocalISODate(), method: 'cash', subType: 'withdrawal', category: '', status: 'pending' } }); dispatch({ type: 'SET_FORM_OPEN', payload: true }); }} className="card py-3 flex flex-col items-center gap-1 active:scale-95">
+        <button onClick={() => { dispatch({ type: 'SET_FORM_MODE', payload: 'add' }); dispatch({ type: 'SET_FORM_DATA', payload: { type: 'expense', amount: '', date: getLocalISODate(), method: 'cash', subType: 'withdrawal', category: '', status: 'pending', receipts: [] } }); dispatch({ type: 'SET_FORM_OPEN', payload: true }); }} className="card py-3 flex flex-col items-center gap-1 active:scale-95">
           <div className="p-1.5 rounded-lg bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400"><TrendingDown size={16} /></div>
           <span className="text-[11px] font-bold">مصروف</span>
         </button>
-        <button onClick={() => { dispatch({ type: 'SET_FORM_MODE', payload: 'add' }); dispatch({ type: 'SET_FORM_DATA', payload: { type: 'income', amount: '', date: getLocalISODate(), method: 'cash', subType: 'deposit', category: '', status: 'pending' } }); dispatch({ type: 'SET_FORM_OPEN', payload: true }); }} className="card py-3 flex flex-col items-center gap-1 active:scale-95">
+        <button onClick={() => { dispatch({ type: 'SET_FORM_MODE', payload: 'add' }); dispatch({ type: 'SET_FORM_DATA', payload: { type: 'income', amount: '', date: getLocalISODate(), method: 'cash', subType: 'deposit', category: '', status: 'pending', receipts: [] } }); dispatch({ type: 'SET_FORM_OPEN', payload: true }); }} className="card py-3 flex flex-col items-center gap-1 active:scale-95">
           <div className="p-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400"><TrendingUp size={16} /></div>
           <span className="text-[11px] font-bold">دخل</span>
         </button>
@@ -1734,6 +1788,7 @@ const CategoryDetailModal = memo(({ activeCategoryDetail, detailedTransactions, 
                     <div className="flex items-center gap-2 flex-wrap mb-1">
                       <span className="font-bold text-xs">{t.description || t.category}</span>
                       <FamilyBadge tx={t} />
+                      <ReceiptIndicator tx={t} dispatch={dispatch} />
                     </div>
                     <p className="text-[10px] font-semibold" style={{ color: 'var(--text-muted)' }}>{t.date} • {PAYMENT_METHODS.find(p => p.id === t.method)?.label}</p>
                   </div>
@@ -1921,7 +1976,7 @@ const TransactionsView = memo(({ groupedTransactions, transactions, selectedMont
                             <Clock className="text-amber-500" size={16} />
                           </button>
                           <div className="flex-1 min-w-0">
-                            <p className="font-bold text-xs truncate">{t.description || 'بدون وصف'} <FamilyBadge tx={t} /></p>
+                            <p className="font-bold text-xs truncate">{t.description || 'بدون وصف'} <FamilyBadge tx={t} /> <ReceiptIndicator tx={t} dispatch={dispatch} /></p>
                             <p className="text-[10px] font-semibold mt-0.5" style={{ color: 'var(--text-muted)' }}>{t.date} • {PAYMENT_METHODS.find(p => p.id === t.method)?.label}</p>
                           </div>
                           <div className="flex items-center gap-1 flex-shrink-0">
@@ -1952,7 +2007,7 @@ const TransactionsView = memo(({ groupedTransactions, transactions, selectedMont
             {paidArchive.map(t => (
               <div key={t.id} className="card py-2.5 flex justify-between items-center gap-2">
                 <div className="min-w-0 flex-1">
-                  <p className="font-bold text-xs truncate">{t.type === 'income' ? '💰' : '💸'} {t.description || t.category} <FamilyBadge tx={t} /></p>
+                  <p className="font-bold text-xs truncate">{t.type === 'income' ? '💰' : '💸'} {t.description || t.category} <FamilyBadge tx={t} /> <ReceiptIndicator tx={t} dispatch={dispatch} /></p>
                   <p className="text-[10px] font-semibold" style={{ color: 'var(--text-muted)' }}>{t.date}</p>
                 </div>
                 <div className="flex items-center gap-1 flex-shrink-0">
@@ -2233,7 +2288,7 @@ const LoansView = memo(({ updatedLoans, cards, recurringItems, transactions, dis
                     <div className="flex justify-end gap-1.5 mt-2">
                       {loan.autoGenerated && (hasCarryover ? <div className="badge badge-success text-[10px]">تمت التسوية</div> : <button onClick={() => settleHany(loan)} className="btn btn-primary text-[10px] py-1 px-2"><CheckCircle2 size={10} /> تسوية</button>)}
                       {!loan.autoGenerated && loan.monthlyInstallment > 0 && (
-                        <button onClick={() => { dispatch({ type: 'SET_FORM_MODE', payload: 'add' }); dispatch({ type: 'SET_FORM_DATA', payload: { type: 'expense', category: 'الالتزامات البنكية والتمويلية', amount: loan.monthlyInstallment, description: `قسط ${loan.name}`, linkedLoanId: loan.id, method: 'instapay', date: getLocalISODate(), status: 'pending', subType: 'withdrawal' } }); dispatch({ type: 'SET_FORM_OPEN', payload: true }); }} className="btn btn-secondary text-[10px] py-1 px-2"><CheckCircle2 size={10} /> سداد</button>
+                        <button onClick={() => { dispatch({ type: 'SET_FORM_MODE', payload: 'add' }); dispatch({ type: 'SET_FORM_DATA', payload: { type: 'expense', category: 'الالتزامات البنكية والتمويلية', amount: loan.monthlyInstallment, description: `قسط ${loan.name}`, linkedLoanId: loan.id, method: 'instapay', date: getLocalISODate(), status: 'pending', subType: 'withdrawal', receipts: [] } }); dispatch({ type: 'SET_FORM_OPEN', payload: true }); }} className="btn btn-secondary text-[10px] py-1 px-2"><CheckCircle2 size={10} /> سداد</button>
                       )}
                     </div>
                   )}
@@ -2273,7 +2328,6 @@ const LoansView = memo(({ updatedLoans, cards, recurringItems, transactions, dis
   );
 });
 
-// ✅ WalletsAndCardsView مع computeCardDebt
 const WalletsAndCardsView = memo(({ cards, buildLedger, expandedLedgers, expandedCardsSection, selectedMonth, selectedYear, dispatch, handleDelete, handleAddWalletDeposit, handleAddWalletWithdrawal, exportWalletCSV, walletVisibility, liveBalances, cardHistoryMap, saveHistory, addNotification, data }) => {
   const [activeTab, setActiveTab] = useState('wallets');
   const [showAddCard, setShowAddCard] = useState(false);
@@ -2751,7 +2805,40 @@ const CalendarView = memo(({ data, getAgendaItems, transactions, dispatch, saveH
   );
 });
 
-// ✅ SettingsView مع المديونية الحية
+const PinChangeModal = ({ onClose, addNotification }) => {
+  const [current, setCurrent] = useState('');
+  const [next, setNext] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [busy, setBusy] = useState(false);
+  const submit = async () => {
+    if (!/^\d{4}$/.test(next)) { addNotification({ type: 'error', title: 'الرمز الجديد لازم 4 أرقام' }); return; }
+    if (next !== confirm) { addNotification({ type: 'error', title: 'الرمز الجديد مش متطابق' }); return; }
+    setBusy(true);
+    const ok = await verifyPin(current);
+    if (!ok) { addNotification({ type: 'error', title: 'الرمز الحالي غير صحيح' }); setBusy(false); return; }
+    await savePinHash(next);
+    addNotification({ type: 'success', title: 'تم تغيير الرمز بنجاح' });
+    setBusy(false);
+    onClose();
+  };
+  return (
+    <div className="modal-backdrop z-[3700] no-print">
+      <div className="w-full max-w-sm rounded-2xl shadow-2xl p-5" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)' }}>
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-sm font-black flex items-center gap-2"><Lock size={14} /> تغيير رمز الدخول</h3>
+          <button onClick={onClose} className="btn btn-ghost p-1.5"><X size={16} /></button>
+        </div>
+        <div className="space-y-3">
+          <div><label className="text-[11px] font-bold block mb-1" style={{ color: 'var(--text-muted)' }}>الرمز الحالي</label><input type="password" inputMode="numeric" maxLength={4} className="input-field text-center text-lg font-black tracking-widest" value={current} onChange={e => setCurrent(e.target.value.replace(/\D/g, ''))} /></div>
+          <div><label className="text-[11px] font-bold block mb-1" style={{ color: 'var(--text-muted)' }}>الرمز الجديد</label><input type="password" inputMode="numeric" maxLength={4} className="input-field text-center text-lg font-black tracking-widest" value={next} onChange={e => setNext(e.target.value.replace(/\D/g, ''))} /></div>
+          <div><label className="text-[11px] font-bold block mb-1" style={{ color: 'var(--text-muted)' }}>تأكيد الرمز الجديد</label><input type="password" inputMode="numeric" maxLength={4} className="input-field text-center text-lg font-black tracking-widest" value={confirm} onChange={e => setConfirm(e.target.value.replace(/\D/g, ''))} /></div>
+          <button onClick={submit} disabled={busy} className="btn btn-primary w-full py-2.5 text-sm">{busy ? 'جاري الحفظ...' : 'حفظ'}</button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const SettingsView = memo(({ data, accountsData, cards, budgets, dispatch, saveHistory, addNotification, walletVisibility, onToggleVisibility }) => {
   const [localAccounts, setLocalAccounts] = useState(() => JSON.parse(JSON.stringify(accountsData)));
   const [localCards, setLocalCards] = useState(() => cards.map(c => ({ ...c })));
@@ -2765,7 +2852,7 @@ const SettingsView = memo(({ data, accountsData, cards, budgets, dispatch, saveH
   const handleCardChange = (id, field, value) => { setLocalCards(prev => prev.map(c => { if (c.id !== id) return c; const u = { ...c, [field]: value }; if (field === 'limit') u.availableBalance = Math.max(0, safeNumber(value) - safeNumber(u.openingDebt)); return u; })); setHasChanges(true); };
   const handleSave = () => { saveHistory(); const cleaned = {}; const today = getLocalISODate(); ACCOUNT_KEYS.forEach(k => { const oldBal = safeNumber(accountsData[k]?.balance); const newBal = parseNumberInput(localAccounts[k]?.balance); cleaned[k] = { ...localAccounts[k], balance: newBal, lastUpdated: (oldBal !== newBal) ? today : (localAccounts[k]?.lastUpdated || today) }; }); dispatch({ type: 'UPDATE_ACCOUNTS', payload: cleaned }); dispatch({ type: 'UPDATE_CARDS', payload: localCards.map(c => ({ ...c, limit: safeNumber(c.limit), openingDebt: safeNumber(c.openingDebt), cashbackRate: safeNumber(c.cashbackRate, 1) })) }); addNotification({ type: 'success', title: 'تم الحفظ' }); setHasChanges(false); };
   const handleDriveConnect = async () => { setDriveBusy(true); setDriveStatus('جاري الاتصال...'); try { await ensureDriveToken(); setDriveStatus('متصل'); addNotification({ type: 'success', title: 'Drive متصل' }); } catch (e) { setDriveStatus('فشل: ' + e.message); } finally { setDriveBusy(false); } };
-  const handleDriveBackupNow = async () => { setDriveBusy(true); setDriveStatus('جاري الرفع...'); try { const payload = { data, budgets, exportedAt: new Date().toISOString(), version: 'V74' }; const result = await uploadBackupToDrive(payload); localStorage.setItem(AUTO_BACKUP_LS_KEY, String(Date.now())); setDriveStatus(`تم الرفع: ${result.name}`); addNotification({ type: 'success', title: 'نسخة سحابية' }); } catch (e) { setDriveStatus('فشل: ' + e.message); } finally { setDriveBusy(false); } };
+  const handleDriveBackupNow = async () => { setDriveBusy(true); setDriveStatus('جاري الرفع...'); try { const payload = { data, budgets, exportedAt: new Date().toISOString(), version: 'V75' }; const result = await uploadBackupToDrive(payload); localStorage.setItem(AUTO_BACKUP_LS_KEY, String(Date.now())); setDriveStatus(`تم الرفع: ${result.name}`); addNotification({ type: 'success', title: 'نسخة سحابية' }); } catch (e) { setDriveStatus('فشل: ' + e.message); } finally { setDriveBusy(false); } };
   const handleDriveRestore = async () => { setDriveBusy(true); setDriveStatus('جاري الجلب...'); try { const files = await listDriveBackups(); if (files.length === 0) { setDriveStatus('لا توجد نسخ'); setDriveBusy(false); return; } const labels = files.slice(0, 10).map((f, i) => `${i + 1}) ${f.name}`).join('\n'); const choice = prompt(`اختر رقم النسخة:\n\n${labels}`, '1'); if (!choice) { setDriveBusy(false); setDriveStatus(''); return; } const idx = Math.max(1, Math.min(files.length, parseInt(choice, 10) || 1)) - 1; const file = files[idx]; const payload = await downloadBackupFromDrive(file.id); if (!payload?.data) throw new Error('الملف لا يحتوي بيانات'); dispatch({ type: 'SHOW_CONFIRM', danger: true, title: 'استعادة نسخة', message: `سيتم استبدال بياناتك`, onConfirm: () => { saveHistory(); dispatch({ type: 'SET_DATA', payload: migrateData(payload.data) }); if (payload.budgets) dispatch({ type: 'SET_BUDGETS', payload: payload.budgets }); addNotification({ type: 'success', title: 'تمت الاستعادة' }); }, onCancel: () => dispatch({ type: 'HIDE_CONFIRM' }) }); } catch (e) { setDriveStatus('فشل: ' + e.message); } finally { setDriveBusy(false); } };
   const handleFreshStart = () => { dispatch({ type: 'SHOW_CONFIRM', danger: true, title: 'بداية جديدة', message: 'سيتم مسح كل المعاملات', onConfirm: () => { saveHistory(); const zeroed = {}; ACCOUNT_KEYS.forEach(k => { zeroed[k] = { ...(accountsData[k] || {}), balance: 0, lastUpdated: getLocalISODate() }; }); dispatch({ type: 'SET_DATA', payload: { ...data, transactions: [], closedMonths: [], monthlySnapshots: {}, accountsData: zeroed, cards: (data.cards || []).map(c => ({ ...c, openingDebt: 0, availableBalance: safeNumber(c.limit) })), materializedRecurring: {}, notifiedItems: {}, custodyEntries: [], cashbackTrackers: [] } }); addNotification({ type: 'success', title: 'تم التصفير' }); dispatch({ type: 'HIDE_CONFIRM' }); }, onCancel: () => dispatch({ type: 'HIDE_CONFIRM' }) }); };
   return (
@@ -2844,6 +2931,18 @@ const SettingsView = memo(({ data, accountsData, cards, budgets, dispatch, saveH
           })}
         </div>
       )}
+
+      <div className="card">
+        <div className="flex items-center gap-2 mb-3">
+          <div className="p-2 rounded-lg bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400"><Lock size={14} /></div>
+          <h3 className="font-black text-sm">رمز الدخول (PIN)</h3>
+        </div>
+        <p className="text-[11px] mb-3" style={{ color: 'var(--text-muted)' }}>الرمز الافتراضي: <strong>1033</strong> — يمكنك تغييره لأي 4 أرقام</p>
+        <button onClick={() => dispatch({ type: 'SET_PIN_CHANGE_OPEN', payload: true })} className="btn btn-secondary text-xs w-full">
+          <Lock size={12} /> تغيير الرمز
+        </button>
+      </div>
+
       <details className="card p-0 overflow-hidden">
         <summary className="p-4 cursor-pointer list-none flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -2872,7 +2971,6 @@ const SettingsView = memo(({ data, accountsData, cards, budgets, dispatch, saveH
   );
 });
 
-// ✅ ProfessionalTicker مع computeCardDebt
 const ProfessionalTicker = memo(({ updatedLoans, cards, liveBalances, walletVisibility, custodyBalance, data }) => {
   const [quote] = useState(() => DAILY_DHIKR[Math.floor(Math.random() * DAILY_DHIKR.length)]);
   const totalDebt = updatedLoans.filter(l => !l.isReceivable).reduce((a, l) => a + l.remaining, 0) + cards.reduce((a, c) => a + computeCardDebt(data, c), 0);
@@ -2924,7 +3022,7 @@ const EnhancedSidebar = memo(({ activeTab, dispatch, canUndo, onUndo }) => {
         <div className="p-2 rounded-lg text-white" style={{ background: 'var(--brand)' }}><Wallet size={18} /></div>
         <div>
           <h2 className="font-black text-sm">المحفظة الذكية</h2>
-          <p className="text-[10px] font-semibold" style={{ color: 'var(--text-muted)' }}>V74</p>
+          <p className="text-[10px] font-semibold" style={{ color: 'var(--text-muted)' }}>V75</p>
         </div>
       </div>
       <nav className="flex-1 scroll-hide overflow-y-auto -mx-1 px-1">
@@ -3000,8 +3098,9 @@ const PinLockScreen = ({ onSuccess, onLogout }) => {
     setLastPressed(d);
     setTimeout(() => setLastPressed(null), 150);
     if (next.length === 4) {
-      setTimeout(() => {
-        if (next === CORRECT_PIN) { setSuccess(true); setTimeout(() => onSuccess(), 500); }
+      setTimeout(async () => {
+        const ok = await verifyPin(next);
+        if (ok) { setSuccess(true); setTimeout(() => onSuccess(), 500); }
         else { setError(true); setAttempts(a => a + 1); setTimeout(() => { setPin(''); setError(false); }, 650); }
       }, 150);
     }
@@ -3063,6 +3162,8 @@ function dataReducer(state, action) {
     case 'SET_AI_RESPONSE': return { ...state, aiResponse: action.payload };
     case 'SET_AI_LOADING': return { ...state, isAiLoading: action.payload };
     case 'SET_IS_LOCKED': return { ...state, isLocked: action.payload };
+    case 'SET_VIEWING_RECEIPT': return { ...state, viewingReceipt: action.payload };
+    case 'SET_PIN_CHANGE_OPEN': return { ...state, isPinChangeOpen: action.payload };
     case 'ADD_NOTIFICATION': return { ...state, notifications: [...state.notifications, { id: Date.now() + Math.random(), ...action.payload }] };
     case 'REMOVE_NOTIFICATION': return { ...state, notifications: state.notifications.filter(n => n.id !== action.payload) };
     case 'UPDATE_TRANSACTIONS': return { ...state, data: { ...state.data, transactions: action.payload } };
@@ -3174,7 +3275,7 @@ const uploadBackupToDrive = async (payload, fileName) => {
   const folderId = await getOrCreateBackupFolder();
   const name = fileName || `finance_backup_${getLocalISODate()}_${Date.now()}.json`;
   const metadata = { name, parents: [folderId], mimeType: 'application/json' };
-  const boundary = '----V74DriveBoundary' + Date.now();
+  const boundary = '----V75DriveBoundary' + Date.now();
   const body = `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n--${boundary}\r\nContent-Type: application/json\r\n\r\n${JSON.stringify(payload)}\r\n--${boundary}--`;
   const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,size,createdTime', { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': `multipart/related; boundary=${boundary}` }, body });
   if (!res.ok) throw new Error('فشل الرفع');
@@ -3198,7 +3299,7 @@ const downloadBackupFromDrive = async (fileId) => {
   return await res.json();
 };
 
-const AUTO_BACKUP_LS_KEY = 'v74_last_drive_backup_ts';
+const AUTO_BACKUP_LS_KEY = 'v75_last_drive_backup_ts';
 
 function App() {
   const defMY = useMemo(() => getDefaultMonthYear(), []);
@@ -3208,7 +3309,7 @@ function App() {
     selectedYear: defMY.year, selectedMonth: defMY.month,
     transViewMode: 'expense', catViewType: 'expense',
     isFormOpen: false, formMode: 'add',
-    formData: { type: 'expense', subType: 'withdrawal', status: 'pending' },
+    formData: { type: 'expense', subType: 'withdrawal', status: 'pending', receipts: [] },
     isLocked: false, isDarkMode: localStorage.getItem('theme') === 'dark',
     budgets: JSON.parse(localStorage.getItem('budgets') || '{}'),
     editingCard: null, editingLoan: null,
@@ -3221,6 +3322,8 @@ function App() {
     confirmDialog: { isOpen: false, title: '', message: '', onConfirm: null, onCancel: null, danger: false },
     isQuickTransferModalOpen: false, quickTransferData: { from: 'cash', to: 'fawry', amount: '', fees: '', transferType: 'internal', externalEntity: '' },
     viewingCardStatement: null,
+    viewingReceipt: null,
+    isPinChangeOpen: false,
     walletVisibility: { fawry: true, etisalat: true, cib_savings: true, aaib_savings: true, cash: true },
     isProcessing: false, formErrors: {}
   });
@@ -3234,7 +3337,7 @@ function App() {
   const processingTimeoutRef = useRef(null);
   const lastRemoteRef = useRef(null);
 
-  const { data, activeTab, selectedYear, selectedMonth, transViewMode, catViewType, isFormOpen, formMode, formData, activeCategoryDetail, isLocked, isDarkMode, expandedGroup, budgets, editingCard, editingLoan, searchTerm, editingBudgetCategory, budgetAmount, isRecurringModalOpen, recurringFormData, notifications, isAiModalOpen, aiResponse, isAiLoading, history, expandedLedgers, expandedCardsSection, statusFilter, confirmDialog, isQuickTransferModalOpen, quickTransferData, viewingCardStatement, walletVisibility, isProcessing, formErrors } = state;
+  const { data, activeTab, selectedYear, selectedMonth, transViewMode, catViewType, isFormOpen, formMode, formData, activeCategoryDetail, isLocked, isDarkMode, expandedGroup, budgets, editingCard, editingLoan, searchTerm, editingBudgetCategory, budgetAmount, isRecurringModalOpen, recurringFormData, notifications, isAiModalOpen, aiResponse, isAiLoading, history, expandedLedgers, expandedCardsSection, statusFilter, confirmDialog, isQuickTransferModalOpen, quickTransferData, viewingCardStatement, viewingReceipt, isPinChangeOpen, walletVisibility, isProcessing, formErrors } = state;
   const { transactions = [], loans = [], cards = [], recurringItems = [], accountsData = DEFAULT_ACCOUNTS, monthlyPlans = {}, monthlySnapshots = {} } = data || {};
 
   useEffect(() => { const unsub = firebase.auth().onAuthStateChanged((user) => { setAuthLoading(false); setIsAuthenticated(!!(user && user.email === "ahmedmkh@gmail.com")); }); return () => unsub(); }, []);
@@ -3293,7 +3396,8 @@ function App() {
           status: 'pending',
           sourceRecurringId: r.id,
           autoGenerated: true,
-          linkedCardId: r.linkedCardId || null
+          linkedCardId: r.linkedCardId || null,
+          receipts: []
         };
       }),
       ...receivablesToGen.map(l => {
@@ -3311,7 +3415,8 @@ function App() {
           subType: 'deposit',
           status: 'pending',
           sourceReceivableId: l.id,
-          autoGenerated: true
+          autoGenerated: true,
+          receipts: []
         };
       })
     ];
@@ -3443,7 +3548,6 @@ function App() {
     return acc.map(t => { const a = safeNumber(t.amount); bal += (t.subType === 'deposit') ? a : -a; return { ...t, runningBalance: bal }; }).reverse();
   }, [transactions, accountsData]);
 
-  // ✅ cardHistoryMap بعد إصلاح double counting
   const cardHistoryMap = useMemo(() => {
     const result = {};
     cards.forEach(card => {
@@ -3454,11 +3558,8 @@ function App() {
         transactions.forEach(t => {
           if (t.status !== 'paid' || t.month !== month || (t.year || 2026) !== year) return;
           const amt = safeNumber(t.amount);
-          // سداد للبطاقة (linkedCardId === card.id) → يقلل المديونية
           if (t.linkedCardId === card.id && t.type === 'expense' && !t.linkedLoanId) { payments += amt; return; }
-          // مشتريات على البطاقة (method === cardMethod) → تزيد المديونية
           if (t.type === 'expense' && t.method === method) { expenses += amt; return; }
-          // استرداد على البطاقة
           if (t.type === 'income' && t.method === method && t.subType === 'deposit') { refunds += amt; return; }
         });
         const openingDebt = debt;
@@ -3487,7 +3588,7 @@ function App() {
   const openWalletForm = useCallback((walletKey, kind) => {
     const w = WALLET_CONFIGS[walletKey]?.csvName || walletKey;
     dispatch({ type: 'SET_FORM_MODE', payload: 'add' });
-    dispatch({ type: 'SET_FORM_DATA', payload: { type: kind === 'deposit' ? 'income' : 'expense', category: 'شحن محفظة', amount: '', description: kind === 'deposit' ? `إيداع ${w}` : `سحب من ${w}`, method: walletKey, date: getLocalISODate(), subType: kind, status: 'pending' } });
+    dispatch({ type: 'SET_FORM_DATA', payload: { type: kind === 'deposit' ? 'income' : 'expense', category: 'شحن محفظة', amount: '', description: kind === 'deposit' ? `إيداع ${w}` : `سحب من ${w}`, method: walletKey, date: getLocalISODate(), subType: kind, status: 'pending', receipts: [] } });
     dispatch({ type: 'SET_FORM_OPEN', payload: true });
   }, []);
   const handleAddWalletDeposit = useCallback((k) => openWalletForm(k, 'deposit'), [openWalletForm]);
@@ -3521,8 +3622,8 @@ function App() {
     if (!window.html2pdf) { addNotification({ type: 'error', title: 'مكتبة PDF غير محمّلة' }); return; }
     const overlay = document.createElement('div');
     overlay.style.cssText = 'position:fixed;inset:0;background:rgba(42,36,24,0.85);backdrop-filter:blur(8px);z-index:9999999;display:flex;align-items:center;justify-content:center;color:white;font-family:Cairo,sans-serif;direction:rtl;';
-    overlay.innerHTML = `<div style="text-align:center;"><div style="width:50px;height:50px;border:3px solid rgba(255,255,255,0.2);border-radius:50%;border-top-color:#3B82F6;animation:v74spin 0.8s linear infinite;margin:0 auto 16px;"></div><p style="font-weight:800;font-size:15px;margin:0;">جاري إنشاء PDF...</p></div>`;
-    const styleTag = document.createElement('style'); styleTag.textContent = '@keyframes v74spin{to{transform:rotate(360deg)}}';
+    overlay.innerHTML = `<div style="text-align:center;"><div style="width:50px;height:50px;border:3px solid rgba(255,255,255,0.2);border-radius:50%;border-top-color:#3B82F6;animation:v75spin 0.8s linear infinite;margin:0 auto 16px;"></div><p style="font-weight:800;font-size:15px;margin:0;">جاري إنشاء PDF...</p></div>`;
+    const styleTag = document.createElement('style'); styleTag.textContent = '@keyframes v75spin{to{transform:rotate(360deg)}}';
     document.head.appendChild(styleTag); document.body.appendChild(overlay);
     const sorted = [...items].sort((a, b) => { const d = new Date(a.date) - new Date(b.date); if (d !== 0) return d; return String(a.id).localeCompare(String(b.id)); });
     const total = sorted.reduce((s, i) => s + safeNumber(i.amount), 0);
@@ -3555,7 +3656,24 @@ function App() {
     exportPdf(`التقرير الشامل — ${selectedMonth} ${selectedYear}`, enriched);
   }, [transactions, selectedMonth, selectedYear, exportPdf]);
 
-  // ✅ handleSaveTransaction مع منع السداد الذاتي للبطاقة
+  const handleReceiptSelect = useCallback(async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    const txId = formData.id || getSafeId();
+    const newReceipts = [...(formData.receipts || [])];
+    for (const file of files) {
+      try {
+        const result = await uploadReceipt(txId, file);
+        newReceipts.push(result);
+        addNotification({ type: 'success', title: 'تم رفع الصورة', message: file.name });
+      } catch (err) {
+        addNotification({ type: 'error', title: 'فشل الرفع', message: err.message });
+      }
+    }
+    dispatch({ type: 'SET_FORM_DATA', payload: { ...formData, id: txId, receipts: newReceipts } });
+    e.target.value = '';
+  }, [formData, addNotification]);
+
   const handleSaveTransaction = useCallback((e) => {
     e.preventDefault(); if (isProcessing) return;
     const errors = {}; const amount = parseNumberInput(formData.amount);
@@ -3566,7 +3684,6 @@ function App() {
     const d = new Date(formData.date); if (isNaN(d)) { addNotification({ type: 'error', title: 'تاريخ غير صالح' }); return; }
     const txYear = d.getFullYear(), txMonth = ALL_MONTHS[d.getMonth()];
 
-    // ✅ منع السداد الذاتي: نفس البطاقة كمصدر وهدف
     if (formData.type === 'expense' && formData.linkedCardId && CREDIT_CARD_METHOD_IDS.includes(formData.method)) {
       const linkedCard = cards.find(c => c.id === Number(formData.linkedCardId));
       if (linkedCard && getCardMethod(linkedCard) === formData.method) {
@@ -3583,7 +3700,7 @@ function App() {
         saveHistory();
         const finalSubType = formData.subType || (formData.type === 'income' ? 'deposit' : 'withdrawal');
         const status = formData.status || 'pending';
-        const newTx = { ...formData, id: formMode === 'edit' ? formData.id : getSafeId(), amount, month: txMonth, year: txYear, monthIndex: d.getMonth(), date: formData.date, subType: finalSubType, status };
+        const newTx = { ...formData, id: formMode === 'edit' ? formData.id : getSafeId(), amount, month: txMonth, year: txYear, monthIndex: d.getMonth(), date: formData.date, subType: finalSubType, status, receipts: formData.receipts || [] };
         const next = formMode === 'add' ? [...transactions, newTx] : transactions.map(t => t.id === newTx.id ? { ...newTx } : t);
         next.sort((a, b) => new Date(b.date) - new Date(a.date));
         dispatch({ type: 'UPDATE_TRANSACTIONS', payload: next });
@@ -3608,10 +3725,10 @@ function App() {
     if (isMonthClosed(data, txYear, txMonth)) { addNotification({ type: 'error', title: 'محظور' }); return; }
     try {
       saveHistory();
-      const newTx = { ...formData, id: getSafeId(), amount, month: txMonth, year: txYear, monthIndex: d.getMonth(), date: formData.date, subType: formData.subType || 'withdrawal', status: formData.status || 'pending' };
+      const newTx = { ...formData, id: getSafeId(), amount, month: txMonth, year: txYear, monthIndex: d.getMonth(), date: formData.date, subType: formData.subType || 'withdrawal', status: formData.status || 'pending', receipts: formData.receipts || [] };
       const next = [...transactions, newTx].sort((a, b) => new Date(b.date) - new Date(a.date));
       dispatch({ type: 'UPDATE_TRANSACTIONS', payload: next });
-      dispatch({ type: 'SET_FORM_DATA', payload: { ...formData, id: undefined, amount: '', description: '' } });
+      dispatch({ type: 'SET_FORM_DATA', payload: { ...formData, id: undefined, amount: '', description: '', receipts: [] } });
       addNotification({ type: 'success', title: 'تم الحفظ' });
     } catch (err) { console.error(err); }
   }, [formData, transactions, data, saveHistory, addNotification, isProcessing]);
@@ -3619,7 +3736,15 @@ function App() {
   const handleDelete = useCallback((id) => {
     const target = transactions.find(t => t.id === id);
     if (target && isMonthClosed(data, target.year || 2026, target.month)) { addNotification({ type: 'error', title: 'محظور' }); return; }
-    dispatch({ type: 'SHOW_CONFIRM', danger: true, title: 'تأكيد الحذف', message: 'هل أنت متأكد؟', onConfirm: () => { saveHistory(); dispatch({ type: 'UPDATE_TRANSACTIONS', payload: transactions.filter(t => t.id !== id) }); addNotification({ type: 'success', title: 'تم الحذف' }); }, onCancel: () => dispatch({ type: 'HIDE_CONFIRM' }) });
+    const msg = target?.receipts?.length ? `سيتم حذف العملية و ${target.receipts.length} صورة مرفقة` : 'هل أنت متأكد؟';
+    dispatch({ type: 'SHOW_CONFIRM', danger: true, title: 'تأكيد الحذف', message: msg, onConfirm: () => {
+      saveHistory();
+      if (target?.receipts?.length) {
+        Promise.all(target.receipts.map(r => deleteReceipt(r.path))).catch(e => console.warn(e));
+      }
+      dispatch({ type: 'UPDATE_TRANSACTIONS', payload: transactions.filter(t => t.id !== id) });
+      addNotification({ type: 'success', title: 'تم الحذف' });
+    }, onCancel: () => dispatch({ type: 'HIDE_CONFIRM' }) });
   }, [transactions, data, saveHistory, addNotification]);
 
   const handleQuickTransfer = useCallback((e) => {
@@ -3642,16 +3767,16 @@ function App() {
       const date = getLocalISODate(d);
       const txs = [];
       if (transferType === 'internal') {
-        txs.push({ id: 'qt-w-' + getSafeId(), type: 'expense', kind: KIND.FINANCIAL, category: 'تحويلات', amount: amount + fees, description: fees > 0 ? `تحويل إلى ${toLbl} + رسوم` : `تحويل إلى ${toLbl}`, method: quickTransferData.from, date, month: txMonth, year: txYear, monthIndex: d.getMonth(), subType: 'withdrawal', status: 'paid' });
-        txs.push({ id: 'qt-d-' + getSafeId(), type: 'income', kind: KIND.FINANCIAL, category: 'تحويلات واردة', amount, description: `تحويل من ${fromLbl}`, method: quickTransferData.to, date, month: txMonth, year: txYear, monthIndex: d.getMonth(), subType: 'deposit', status: 'paid' });
+        txs.push({ id: 'qt-w-' + getSafeId(), type: 'expense', kind: KIND.FINANCIAL, category: 'تحويلات', amount: amount + fees, description: fees > 0 ? `تحويل إلى ${toLbl} + رسوم` : `تحويل إلى ${toLbl}`, method: quickTransferData.from, date, month: txMonth, year: txYear, monthIndex: d.getMonth(), subType: 'withdrawal', status: 'paid', receipts: [] });
+        txs.push({ id: 'qt-d-' + getSafeId(), type: 'income', kind: KIND.FINANCIAL, category: 'تحويلات واردة', amount, description: `تحويل من ${fromLbl}`, method: quickTransferData.to, date, month: txMonth, year: txYear, monthIndex: d.getMonth(), subType: 'deposit', status: 'paid', receipts: [] });
       } else if (transferType === 'external') {
-        txs.push({ id: 'qt-ext-' + getSafeId(), type: 'expense', kind: KIND.FINANCIAL, category: 'تحويلات', amount, description: `تحويل إلى ${quickTransferData.externalEntity.trim()}`, method: quickTransferData.from, date, month: txMonth, year: txYear, monthIndex: d.getMonth(), subType: 'withdrawal', status: 'paid', externalEntity: quickTransferData.externalEntity.trim() });
+        txs.push({ id: 'qt-ext-' + getSafeId(), type: 'expense', kind: KIND.FINANCIAL, category: 'تحويلات', amount, description: `تحويل إلى ${quickTransferData.externalEntity.trim()}`, method: quickTransferData.from, date, month: txMonth, year: txYear, monthIndex: d.getMonth(), subType: 'withdrawal', status: 'paid', externalEntity: quickTransferData.externalEntity.trim(), receipts: [] });
       }
       if (fees > 0 && transferType === 'fees') {
-        txs.push({ id: 'qt-fee-' + getSafeId(), type: 'expense', kind: KIND.FINANCIAL, category: 'رسوم تحويلات', amount: fees, description: 'رسوم تحويلات يدوية', method: quickTransferData.from, date, month: txMonth, year: txYear, monthIndex: d.getMonth(), subType: 'withdrawal', status: 'paid', isTransferFee: true });
+        txs.push({ id: 'qt-fee-' + getSafeId(), type: 'expense', kind: KIND.FINANCIAL, category: 'رسوم تحويلات', amount: fees, description: 'رسوم تحويلات يدوية', method: quickTransferData.from, date, month: txMonth, year: txYear, monthIndex: d.getMonth(), subType: 'withdrawal', status: 'paid', isTransferFee: true, receipts: [] });
       }
       if (fees > 0 && transferType === 'external') {
-        txs.push({ id: 'qt-fee-' + getSafeId(), type: 'expense', kind: KIND.FINANCIAL, category: 'رسوم تحويلات', amount: fees, description: `رسوم تحويل خارجي`, method: quickTransferData.from, date, month: txMonth, year: txYear, monthIndex: d.getMonth(), subType: 'withdrawal', status: 'paid', isTransferFee: true });
+        txs.push({ id: 'qt-fee-' + getSafeId(), type: 'expense', kind: KIND.FINANCIAL, category: 'رسوم تحويلات', amount: fees, description: `رسوم تحويل خارجي`, method: quickTransferData.from, date, month: txMonth, year: txYear, monthIndex: d.getMonth(), subType: 'withdrawal', status: 'paid', isTransferFee: true, receipts: [] });
       }
       dispatch({ type: 'UPDATE_TRANSACTIONS', payload: [...txs, ...transactions].sort((a, b) => new Date(b.date) - new Date(a.date)) });
       dispatch({ type: 'SET_QUICK_TRANSFER_MODAL_OPEN', payload: false });
@@ -3668,7 +3793,7 @@ function App() {
     if (!actualAmount || Math.abs(diff) < 0.005) { addNotification({ type: 'info', title: 'الرصيد مطابق' }); return; }
     const d = new Date(); const txYear = d.getFullYear(), txMonth = ALL_MONTHS[d.getMonth()];
     if (isMonthClosed(data, txYear, txMonth)) { addNotification({ type: 'error', title: 'محظور' }); return; }
-    dispatch({ type: 'SHOW_CONFIRM', danger: false, title: 'تأكيد التسوية', message: `المحسوب: ${fmt(calc)}\nالفعلي: ${fmt(safeNumber(actualAmount))}`, onConfirm: () => { saveHistory(); const tx = { id: 'adj-' + getSafeId(), type: diff > 0 ? 'income' : 'expense', kind: KIND.ADJUSTMENT, category: 'أخرى', amount: Math.abs(diff), description: 'تسوية رصيد', method: walletKey, date: getLocalISODate(d), month: txMonth, year: txYear, monthIndex: d.getMonth(), subType: diff > 0 ? 'deposit' : 'withdrawal', status: 'paid' }; dispatch({ type: 'UPDATE_TRANSACTIONS', payload: [tx, ...transactions].sort((a, b) => new Date(b.date) - new Date(a.date)) }); addNotification({ type: 'success', title: 'تمت التسوية' }); }, onCancel: () => dispatch({ type: 'HIDE_CONFIRM' }) });
+    dispatch({ type: 'SHOW_CONFIRM', danger: false, title: 'تأكيد التسوية', message: `المحسوب: ${fmt(calc)}\nالفعلي: ${fmt(safeNumber(actualAmount))}`, onConfirm: () => { saveHistory(); const tx = { id: 'adj-' + getSafeId(), type: diff > 0 ? 'income' : 'expense', kind: KIND.ADJUSTMENT, category: 'أخرى', amount: Math.abs(diff), description: 'تسوية رصيد', method: walletKey, date: getLocalISODate(d), month: txMonth, year: txYear, monthIndex: d.getMonth(), subType: diff > 0 ? 'deposit' : 'withdrawal', status: 'paid', receipts: [] }; dispatch({ type: 'UPDATE_TRANSACTIONS', payload: [tx, ...transactions].sort((a, b) => new Date(b.date) - new Date(a.date)) }); addNotification({ type: 'success', title: 'تمت التسوية' }); }, onCancel: () => dispatch({ type: 'HIDE_CONFIRM' }) });
   }, [data, transactions, saveHistory, addNotification]);
 
   const handleUpdateLoan = useCallback((e) => {
@@ -3696,8 +3821,8 @@ function App() {
   }, [recurringItems, data, saveHistory, addNotification]);
 
   const handleExportCSV = useCallback(() => {
-    const header = "التاريخ,النوع,الفئة,الفئة الفرعية,الوصف,المبلغ,الطريقة,الحالة,الشهر,السنة,المُسجِّل\n";
-    const rows = transactions.map(t => `${t.date},${t.type},${t.category},"${escapeHtml(t.subCategory || '')}","${escapeHtml(t.description || '')}",${safeNumber(t.amount)},${t.method},${t.status || 'pending'},${t.month},${t.year || 2026},${t.createdByName || 'أنا'}`).join("\n");
+    const header = "التاريخ,النوع,الفئة,الفئة الفرعية,الوصف,المبلغ,الطريقة,الحالة,الشهر,السنة,المُسجِّل,عدد الفواتير\n";
+    const rows = transactions.map(t => `${t.date},${t.type},${t.category},"${escapeHtml(t.subCategory || '')}","${escapeHtml(t.description || '')}",${safeNumber(t.amount)},${t.method},${t.status || 'pending'},${t.month},${t.year || 2026},${t.createdByName || 'أنا'},${t.receipts?.length || 0}`).join("\n");
     const blob = new Blob(["\uFEFF" + header + rows], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a'); a.href = url; a.download = `transactions_${getLocalISODate()}.csv`; a.click();
@@ -3729,10 +3854,12 @@ function App() {
       const totalDebt = updatedLoans.filter(l => !l.isReceivable).reduce((s, l) => s + l.remaining, 0) + cards.reduce((s, c) => s + computeCardDebt(data, c), 0);
       const totalReceivable = updatedLoans.filter(l => l.isReceivable).reduce((s, l) => s + l.remaining, 0);
       const bankFees = m.filter(t => t.status === 'paid' && BANK_FEE_CATEGORIES.has(t.category)).reduce((s, t) => s + safeNumber(t.amount), 0);
+      const receiptsCount = m.filter(t => t.receipts?.length > 0).reduce((s, t) => s + t.receipts.length, 0);
       let text = `تحليل ${selectedMonth} ${selectedYear}\n\n`;
       text += `الدخل: ${fmt(inc)} ج.م\n`;
       text += `المصروف: ${fmt(exp)} ج.م\n`;
       if (bankFees > 0) text += `الرسوم البنكية: ${fmt(bankFees)} ج.م\n`;
+      if (receiptsCount > 0) text += `عدد الفواتير المرفقة: ${receiptsCount}\n`;
       text += `\n`;
       text += savings > 0 ? `وفر: ${fmt(savings)} ج.م\n\n` : savings < 0 ? `عجز: ${fmt(Math.abs(savings))} ج.م\n\n` : `متعادل\n\n`;
       text += `المديونية: ${fmt(totalDebt)} ج.م\n`;
@@ -3783,8 +3910,36 @@ function App() {
         const cardTx = transactions.filter(t => t.method === cardMethod && t.month === selectedMonth && (t.year || 2026) === selectedYear).sort((a, b) => new Date(b.date) - new Date(a.date));
         return (<div className="modal-backdrop z-[3500] no-print"><div className="w-full max-w-3xl rounded-2xl shadow-2xl overflow-hidden flex flex-col" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', maxHeight: 'calc(100dvh - 24px)' }}>
           <div className="p-4" style={{ borderBottom: '1px solid var(--border-subtle)' }}><div className="flex justify-between items-start flex-wrap gap-2"><div className="flex items-center gap-2"><BankLogo type={`${card.bank.toLowerCase()}_card`} size={32} /><div><h3 className="text-base font-black">{card.bank} - {card.name}</h3><p className="text-[11px] font-semibold mt-0.5" style={{ color: 'var(--text-muted)' }}>{selectedMonth} {selectedYear}</p></div></div><div className="flex gap-1.5"><button type="button" onClick={() => exportPdf(`كشف ${card.bank}`, cardTx)} className="btn btn-primary text-[11px] py-1.5 px-2.5"><FileText size={12} /> PDF</button><button type="button" aria-label="إغلاق" onClick={() => dispatch({ type: 'SET_VIEWING_CARD_STATEMENT', payload: null })} className="btn btn-ghost p-1.5"><X size={16} /></button></div></div><div className="grid grid-cols-2 gap-2 mt-3"><div className="p-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/30"><p className="text-[10px] font-bold text-amber-700 dark:text-amber-400">بداية</p><p className="text-sm font-black mt-0.5">{fmt(monthData?.openingDebt || 0)}</p></div><div className="p-2.5 rounded-lg bg-blue-50 dark:bg-blue-950/30"><p className="text-[10px] font-bold text-blue-700 dark:text-blue-400">نهاية</p><p className="text-sm font-black text-blue-600 mt-0.5">{fmt(monthData?.closingDebt || 0)}</p></div></div></div>
-          <div className="flex-1 overflow-y-auto scroll-hide" style={{ minHeight: 0 }}>{cardTx.length === 0 ? <div className="p-12 text-center font-medium text-xs" style={{ color: 'var(--text-muted)' }}>لا توجد عمليات</div> : <div className="divide-y" style={{ borderColor: 'var(--border-subtle)' }}>{cardTx.map(t => (<div key={t.id} className="p-3 flex justify-between items-center gap-2"><div className="min-w-0 flex-1"><p className="font-bold text-xs truncate">{t.description || '-'}</p><p className="text-[10px] font-semibold mt-0.5" style={{ color: 'var(--text-muted)' }}>{t.date}</p></div><span className="font-black text-xs">{fmt(t.amount)}</span></div>))}</div>}</div></div></div>);
+          <div className="flex-1 overflow-y-auto scroll-hide" style={{ minHeight: 0 }}>{cardTx.length === 0 ? <div className="p-12 text-center font-medium text-xs" style={{ color: 'var(--text-muted)' }}>لا توجد عمليات</div> : <div className="divide-y" style={{ borderColor: 'var(--border-subtle)' }}>{cardTx.map(t => (<div key={t.id} className="p-3 flex justify-between items-center gap-2"><div className="min-w-0 flex-1"><p className="font-bold text-xs truncate">{t.description || '-'} <ReceiptIndicator tx={t} dispatch={dispatch} /></p><p className="text-[10px] font-semibold mt-0.5" style={{ color: 'var(--text-muted)' }}>{t.date}</p></div><span className="font-black text-xs">{fmt(t.amount)}</span></div>))}</div>}</div></div></div>);
       })()}
+
+      {viewingReceipt && viewingReceipt.tx && (
+        <div className="modal-backdrop z-[3600] no-print" onClick={() => dispatch({ type: 'SET_VIEWING_RECEIPT', payload: null })}>
+          <div className="w-full max-w-3xl max-h-[95vh] rounded-2xl shadow-2xl overflow-hidden flex flex-col" style={{ background: 'var(--bg-card)' }} onClick={e => e.stopPropagation()}>
+            <div className="p-3 flex justify-between items-center" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+              <h3 className="text-sm font-black flex items-center gap-2"><Camera size={14} /> فواتير: {viewingReceipt.tx.description || viewingReceipt.tx.category || ''}</h3>
+              <button onClick={() => dispatch({ type: 'SET_VIEWING_RECEIPT', payload: null })} className="btn btn-ghost p-1.5"><X size={16} /></button>
+            </div>
+            <div className="flex-1 overflow-auto p-3 flex items-center justify-center" style={{ background: 'var(--bg-muted)', minHeight: '300px' }}>
+              {(viewingReceipt.tx.receipts || []).length > 0 ? (
+                <img src={viewingReceipt.tx.receipts[viewingReceipt.index || 0].url} alt="فاتورة" className="max-w-full max-h-[70vh] object-contain rounded-lg shadow-lg" />
+              ) : (<p style={{ color: 'var(--text-muted)' }}>لا توجد صور</p>)}
+            </div>
+            {(viewingReceipt.tx.receipts || []).length > 1 && (
+              <div className="p-3 flex gap-2 overflow-x-auto scroll-hide" style={{ borderTop: '1px solid var(--border-subtle)' }}>
+                {viewingReceipt.tx.receipts.map((r, idx) => (
+                  <button key={idx} onClick={() => dispatch({ type: 'SET_VIEWING_RECEIPT', payload: { ...viewingReceipt, index: idx } })} className={`flex-shrink-0 w-14 h-14 rounded-lg overflow-hidden border-2 transition-all ${viewingReceipt.index === idx ? 'border-blue-500 scale-105' : 'border-transparent opacity-60'}`}>
+                    <img src={r.url} alt="" className="w-full h-full object-cover" />
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+      {isPinChangeOpen && (
+        <PinChangeModal onClose={() => dispatch({ type: 'SET_PIN_CHANGE_OPEN', payload: false })} addNotification={addNotification} />
+      )}
 
       {!isLocked && (<div className="bottom-nav-container no-print"><div className="scrollable-nav scroll-hide">
         {[
@@ -3867,7 +4022,7 @@ function App() {
         </div>
       )}
 
-      {!isLocked && (<button type="button" aria-label="إضافة" onClick={() => { dispatch({ type: 'SET_FORM_MODE', payload: 'add' }); dispatch({ type: 'SET_FORM_DATA', payload: { type: 'expense', category: '', amount: '', date: getLocalISODate(), method: 'cash', subType: 'withdrawal', status: 'pending' } }); dispatch({ type: 'SET_FORM_OPEN', payload: true }); }} className="fab no-print"><Plus size={22} /></button>)}
+      {!isLocked && (<button type="button" aria-label="إضافة" onClick={() => { dispatch({ type: 'SET_FORM_MODE', payload: 'add' }); dispatch({ type: 'SET_FORM_DATA', payload: { type: 'expense', category: '', amount: '', date: getLocalISODate(), method: 'cash', subType: 'withdrawal', status: 'pending', receipts: [] } }); dispatch({ type: 'SET_FORM_OPEN', payload: true }); }} className="fab no-print"><Plus size={22} /></button>)}
       <EnhancedSidebar activeTab={activeTab} dispatch={dispatch} canUndo={history.length > 0} onUndo={() => dispatch({ type: 'UNDO' })} />
       <main ref={mainContentRef} className="flex-1 overflow-y-auto p-3 lg:p-5 pt-9">
         {isLocked ? (<div className="min-h-screen flex flex-col items-center justify-center no-print"><Lock size={48} className="mb-4 text-blue-500" /><h2 className="text-xl font-black mb-4">التطبيق مقفل</h2><button type="button" onClick={() => dispatch({ type: 'SET_IS_LOCKED', payload: false })} className="btn btn-primary px-6 py-3"><Unlock size={18} /> فتح</button></div>) : (<div className="max-w-6xl mx-auto space-y-4 animate-fadeIn pb-24"><ProfessionalHeader isDarkMode={isDarkMode} dispatch={dispatch} />{renderActiveView()}</div>)}
@@ -3903,6 +4058,30 @@ function App() {
               </div>
             </div>)}
             <div><label className="block text-[11px] font-bold mb-1" style={{ color: 'var(--text-muted)' }}>الوصف</label><input type="text" className={`input-field font-bold text-sm py-2.5 ${formErrors.description ? 'error' : ''}`} value={formData.description || ''} onChange={e => dispatch({ type: 'SET_FORM_DATA', payload: { ...formData, description: e.target.value } })} placeholder="تفاصيل..." /></div>
+
+            <div>
+              <label className="block text-[11px] font-bold mb-1.5 flex items-center justify-between" style={{ color: 'var(--text-muted)' }}>
+                <span className="flex items-center gap-1"><Camera size={12} /> صور الفاتورة (اختياري)</span>
+                <span className="text-[10px]">{formData.receipts?.length || 0} صورة</span>
+              </label>
+              {(formData.receipts || []).length > 0 && (
+                <div className="flex flex-wrap gap-2 mb-2">
+                  {(formData.receipts || []).map((r, idx) => (
+                    <div key={idx} className="relative w-14 h-14 rounded-lg overflow-hidden" style={{ border: '1px solid var(--border-default)' }}>
+                      <img src={r.url} alt="" className="w-full h-full object-cover cursor-pointer" onClick={() => dispatch({ type: 'SET_VIEWING_RECEIPT', payload: { tx: { receipts: formData.receipts, description: formData.description }, index: idx } })} />
+                      <button type="button" onClick={(e) => { e.stopPropagation(); const newReceipts = formData.receipts.filter((_, i) => i !== idx); deleteReceipt(r.path).catch(() => {}); dispatch({ type: 'SET_FORM_DATA', payload: { ...formData, receipts: newReceipts } }); }} className="absolute top-0 left-0 bg-red-500 text-white rounded-br-lg p-0.5"><X size={10} /></button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <label className="flex items-center justify-center gap-2 p-2.5 rounded-lg border-2 border-dashed cursor-pointer hover:bg-[color:var(--bg-muted)] transition-colors" style={{ borderColor: 'var(--border-default)' }}>
+                <Camera size={14} style={{ color: 'var(--text-muted)' }} />
+                <span className="text-[11px] font-bold" style={{ color: 'var(--text-secondary)' }}>إضافة صورة (كاميرا أو ملف)</span>
+                <input type="file" accept="image/*" multiple className="hidden" onChange={handleReceiptSelect} disabled={isProcessing} />
+              </label>
+              <p className="text-[10px] mt-1" style={{ color: 'var(--text-muted)' }}>حد أقصى {MAX_RECEIPT_SIZE_MB}MB — يتم الضغط تلقائيًا</p>
+            </div>
+
             {formData.type === 'expense' && (<details className="rounded-lg overflow-hidden" style={{ background: 'var(--bg-muted)' }}><summary className="p-2.5 cursor-pointer text-[11px] font-bold flex items-center justify-between" style={{ color: 'var(--text-secondary)' }}><span className="flex items-center gap-2"><Hash size={12} /> ربط بقرض أو بطاقة</span><ChevronDown size={12} /></summary>
               <div className="p-2.5 space-y-2" style={{ borderTop: '1px solid var(--border-subtle)' }}><select className="input-field text-[11px] font-bold w-full py-2" value={formData.linkedLoanId || ''} onChange={e => dispatch({ type: 'SET_FORM_DATA', payload: { ...formData, linkedLoanId: e.target.value || '' } })}><option value="">بدون قرض</option>{updatedLoans.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}</select>
                 <select className="input-field text-[11px] font-bold w-full py-2" value={formData.linkedCardId || ''} onChange={e => dispatch({ type: 'SET_FORM_DATA', payload: { ...formData, linkedCardId: e.target.value ? Number(e.target.value) : '' } })}><option value="">بدون بطاقة</option>{cards.map(c => <option key={c.id} value={c.id}>{c.name} - {c.bank}</option>)}</select></div></details>)}
@@ -3920,12 +4099,7 @@ function App() {
           <div className="grid grid-cols-2 gap-2.5"><div><label className="text-[11px] font-bold" style={{ color: 'var(--text-muted)' }}>المبلغ</label><input type="text" inputMode="decimal" className="input-field text-sm" value={editingLoan.totalAmount} onChange={e => dispatch({ type: 'SET_EDITING_LOAN', payload: { ...editingLoan, totalAmount: e.target.value } })} /></div><div><label className="text-[11px] font-bold" style={{ color: 'var(--text-muted)' }}>القسط</label><input type="text" inputMode="decimal" className="input-field text-sm" value={editingLoan.monthlyInstallment} onChange={e => dispatch({ type: 'SET_EDITING_LOAN', payload: { ...editingLoan, monthlyInstallment: e.target.value } })} /></div></div>
           {editingLoan.isReceivable && (
             <label className="flex items-center gap-3 p-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/30 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={!!editingLoan.paused}
-                onChange={e => dispatch({ type: 'SET_EDITING_LOAN', payload: { ...editingLoan, paused: e.target.checked } })}
-                className="w-4 h-4 accent-amber-600"
-              />
+              <input type="checkbox" checked={!!editingLoan.paused} onChange={e => dispatch({ type: 'SET_EDITING_LOAN', payload: { ...editingLoan, paused: e.target.checked } })} className="w-4 h-4 accent-amber-600" />
               <span className="text-xs font-bold text-amber-700 dark:text-amber-400">⏸ إيقاف مؤقت (لن يتولّد دخل تلقائي)</span>
             </label>
           )}
