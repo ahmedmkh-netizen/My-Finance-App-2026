@@ -497,7 +497,7 @@ const FINANCIAL_CATEGORIES = new Set([
   'رسوم بنكية شهرية','فوائد تأخير','رسوم سحب كاش','عمولة تحويل دولي'
 ]);
 
-const BANK_FEE_CATEGORIES = new Set(['رسوم بنكية شهرية','فوائد تأخير','رسوم سحب كاش','عمولة تحويل دولي']);
+const BANK_FEE_CATEGORIES = new Set(['رسوم بنكية شهرية','فوائد تأخير','رسوم سحب كاش','عمولة تحويل دولي','رسوم تحويلات']);
 
 const CATEGORY_GROUPS = {
   income: { 'مصادر الدخل':['راتب شهري','عمل حر','استثمارات','راتب AAIB','إيجار المحل','Cash Back','استرداد كاش باك','تكييف محمود'], 'تحويلات':['عهدة شركة إيماك','عهدة إيماك WE','تحويلات واردة','شحن محفظة','شحن رصيد فوري'] },
@@ -505,7 +505,7 @@ const CATEGORY_GROUPS = {
     'أساسيات المعيشة':['مصروفات المعيشة اليومية','المستلزمات المنزلية والتموين','اللحوم والدواجن والأسماك','الملابس والمستلزمات الشخصية','مسحوبات محل هاني'],
     'فواتير وخدمات':['الاتصالات وشحن الهواتف المحمولة','المرافق والخدمات – بولاق','المرافق والخدمات – العبور','شحن رصيد فوري','شحن محفظة','الصيانة والإصلاحات المنزلية','كهرباء / نت / مياه (صفط)','كهرباء / نت / مياه (العبور)','شحن تليفونات','رسوم تحويلات','فواتير عهدة','مصروفات عهدة'],
     'التزامات شهرية':['الالتزامات البنكية والتمويلية','التعليم والدروس والأنشطة','المصروفات النقدية الشهرية','الزكاة والتبرعات','أقساط valU','مصاريف جامعات ومدارس'],
-    'رسوم بنكية':['رسوم بنكية شهرية','فوائد تأخير','رسوم سحب كاش','عمولة تحويل دولي'],
+    'رسوم بنكية':['رسوم بنكية شهرية','فوائد تأخير','رسوم سحب كاش','عمولة تحويل دولي','رسوم تحويلات'],
     'نقل وصحة وترفيه':['الصحة والرعاية الطبية','المواصلات والانتقالات','الترفيه والمناسبات الاجتماعية','الطوارئ والاحتياطي النقدي','مصاريف موسمية وسنوية','أدوية وكشف'],
     'مشتريات':['كازيون / العثيم','لحوم / أسماك / دواجن','توابل / خزين','خضروات','بقالة / فاكهة','منظفات','مصروف نقدي'],
     'تحويلات':['تحويلات','مصاريف وسلف شخصية','محافظ الكترونية','بنوك / فيزا / تمويل عقاري'],
@@ -898,12 +898,10 @@ class ErrorBoundary extends React.Component {
 
 // ═══════════════════════════════════════════════════════
 // 🆕 Promise Modal Provider — Stack-based (LIFO)
-//    Multiple queued modals display as a nested stack.
-//    Only the top is visible; dismissing reveals the next.
 // ═══════════════════════════════════════════════════════
 const PromiseModalProvider = ({ children }) => {
   const [stack, setStack] = useState([]);
-  const [inputValues, setInputValues] = useState({}); // id -> current text
+  const [inputValues, setInputValues] = useState({});
 
   useEffect(() => {
     const handleInput = (e) => setStack(s => [...s, { kind: 'input', ...e.detail }]);
@@ -916,7 +914,7 @@ const PromiseModalProvider = ({ children }) => {
     };
   }, []);
 
-  const current = stack[stack.length - 1]; // top of stack (LIFO)
+  const current = stack[stack.length - 1];
 
   const dismiss = useCallback((value) => {
     if (!current) return;
@@ -1739,7 +1737,7 @@ const DuplicateDetectionSystem = ({ transactions, data, dispatch, addNotificatio
 };
 
 // ═══════════════════════════════════════════════════════
-// ConfirmDialog (state-based — kept for compatibility)
+// ConfirmDialog
 // ═══════════════════════════════════════════════════════
 const ConfirmDialog = ({ confirmDialog, dispatch }) => {
   if (!confirmDialog.isOpen) return null;
@@ -2111,10 +2109,9 @@ const DashboardView = memo(({ data, financeSnapshot, liveBalances, totalLiquidit
 });
 
 // ═══════════════════════════════════════════════════════
-// 🆕 CategoryDetailModal — يعرض المعاملات مجمّعة بالأيام
+// CategoryDetailModal — grouped by day
 // ═══════════════════════════════════════════════════════
 const CategoryDetailModal = memo(({ activeCategoryDetail, detailedTransactions, detailedTotal, paidTotal, pendingTotal, selectedMonth, selectedYear, dispatch, handleDelete, printReport, exportPdf }) => {
-  // 🆕 تجميع المعاملات حسب اليوم
   const dailyGroups = useMemo(() => groupTransactionsByDate(detailedTransactions), [detailedTransactions]);
 
   return (
@@ -3807,7 +3804,8 @@ function App() {
     expandedLedgers: { fawry: false, etisalat: false, cib_savings: false, aaib_savings: false },
     expandedCardsSection: false, statusFilter: 'all',
     confirmDialog: { isOpen: false, title: '', message: '', onConfirm: null, onCancel: null, danger: false },
-    isQuickTransferModalOpen: false, quickTransferData: { from: 'cash', to: 'fawry', amount: '', fees: '', transferType: 'internal', externalEntity: '' },
+    isQuickTransferModalOpen: false,
+    quickTransferData: { from: 'cash', to: 'fawry', amount: '', fees: '', transferType: 'internal', externalEntity: '', date: getLocalISODate() },
     viewingCardStatement: null,
     viewingReceipt: null,
     isPinChangeOpen: false,
@@ -4031,7 +4029,6 @@ function App() {
     return acc.map(t => { const a = safeNumber(t.amount); bal += (t.subType === 'deposit') ? a : -a; return { ...t, runningBalance: bal }; }).reverse();
   }, [transactions, accountsData]);
 
-  // 🆕 Optimized: single pass over transactions per card instead of per month
   const cardHistoryMap = useMemo(() => {
     const result = {};
     const allMonths = YEARS_LIST.flatMap(y => getMonthsForYear(y).map(m => ({ year: y, month: m })));
@@ -4243,18 +4240,36 @@ function App() {
     }, onCancel: () => dispatch({ type: 'HIDE_CONFIRM' }) });
   }, [transactions, data, saveHistory, addNotification]);
 
+  // ═══════════════════════════════════════════════════════
+  // 🆕 handleQuickTransfer — fixed + date + fees for internal
+  // ═══════════════════════════════════════════════════════
   const handleQuickTransfer = useCallback((e) => {
     e.preventDefault(); if (isProcessing) return;
+    const transferType = quickTransferData.transferType || 'internal';
     const amount = parseNumberInput(quickTransferData.amount);
     const fees = parseNumberInput(quickTransferData.fees || 0);
-    const transferType = quickTransferData.transferType || 'internal';
-    const d = new Date(); const txYear = d.getFullYear(), txMonth = ALL_MONTHS[d.getMonth()];
-    if (isMonthClosed(data, txYear, txMonth)) { addNotification({ type: 'error', title: 'محظور' }); return; }
-    if (amount <= 0) { addNotification({ type: 'error', title: 'تحقق' }); return; }
-    if (transferType === 'internal' && quickTransferData.from === quickTransferData.to) { addNotification({ type: 'error', title: 'اختر حسابين مختلفين' }); return; }
-    if (transferType === 'external' && !quickTransferData.externalEntity?.trim()) { addNotification({ type: 'error', title: 'اكتب الجهة' }); return; }
-    if (transferType === 'fees' && fees <= 0) { addNotification({ type: 'error', title: 'اكتب الرسوم' }); return; }
-    if (ACCOUNT_METHOD_IDS.includes(quickTransferData.from)) { const fromBal = computeBalance(data, quickTransferData.from); const needed = transferType === 'fees' ? fees : (amount + fees); if (needed > fromBal + 0.001) { addNotification({ type: 'error', title: 'رصيد غير كافٍ', message: `المتاح: ${fmt(fromBal)}` }); return; } }
+    const dateStr = quickTransferData.date || getLocalISODate();
+    const d = new Date(dateStr);
+    if (isNaN(d)) { addNotification({ type: 'error', title: 'تحقق', message: 'تاريخ غير صحيح' }); return; }
+    const txYear = d.getFullYear(), txMonth = ALL_MONTHS[d.getMonth()];
+    if (isMonthClosed(data, txYear, txMonth)) { addNotification({ type: 'error', title: 'محظور', message: `شهر ${txMonth} مغلق` }); return; }
+
+    // Validation حسب النوع
+    if (transferType === 'fees') {
+      if (fees <= 0) { addNotification({ type: 'error', title: 'تحقق', message: 'اكتب قيمة الرسوم' }); return; }
+    } else {
+      if (amount <= 0) { addNotification({ type: 'error', title: 'تحقق', message: 'اكتب المبلغ' }); return; }
+      if (transferType === 'internal' && quickTransferData.from === quickTransferData.to) { addNotification({ type: 'error', title: 'تحقق', message: 'اختر حسابين مختلفين' }); return; }
+      if (transferType === 'external' && !quickTransferData.externalEntity?.trim()) { addNotification({ type: 'error', title: 'تحقق', message: 'اكتب اسم الجهة' }); return; }
+    }
+
+    // Balance check
+    if (ACCOUNT_METHOD_IDS.includes(quickTransferData.from)) {
+      const fromBal = computeBalance(data, quickTransferData.from);
+      const totalNeeded = transferType === 'fees' ? fees : (amount + fees);
+      if (totalNeeded > fromBal + 0.001) { addNotification({ type: 'error', title: 'رصيد غير كافٍ', message: `المتاح: ${fmt(fromBal)}` }); return; }
+    }
+
     dispatch({ type: 'SET_IS_PROCESSING', payload: true });
     processingTimeoutRef.current = setTimeout(() => {
       saveHistory();
@@ -4262,22 +4277,27 @@ function App() {
       const toLbl = PAYMENT_METHODS.find(p => p.id === quickTransferData.to)?.label || quickTransferData.to;
       const date = getLocalISODate(d);
       const txs = [];
+
       if (transferType === 'internal') {
-        txs.push({ id: 'qt-w-' + getSafeId(), type: 'expense', kind: KIND.FINANCIAL, category: 'تحويلات', amount: amount + fees, description: fees > 0 ? `تحويل إلى ${toLbl} + رسوم` : `تحويل إلى ${toLbl}`, method: quickTransferData.from, date, month: txMonth, year: txYear, monthIndex: d.getMonth(), subType: 'withdrawal', status: 'paid', receipts: [] });
+        txs.push({ id: 'qt-w-' + getSafeId(), type: 'expense', kind: KIND.FINANCIAL, category: 'تحويلات', amount, description: `تحويل إلى ${toLbl}`, method: quickTransferData.from, date, month: txMonth, year: txYear, monthIndex: d.getMonth(), subType: 'withdrawal', status: 'paid', receipts: [] });
         txs.push({ id: 'qt-d-' + getSafeId(), type: 'income', kind: KIND.FINANCIAL, category: 'تحويلات واردة', amount, description: `تحويل من ${fromLbl}`, method: quickTransferData.to, date, month: txMonth, year: txYear, monthIndex: d.getMonth(), subType: 'deposit', status: 'paid', receipts: [] });
+        // 🆕 رسوم السحب كمعاملة منفصلة (فئة رسوم سحب كاش)
+        if (fees > 0) {
+          txs.push({ id: 'qt-fee-' + getSafeId(), type: 'expense', kind: KIND.FINANCIAL, category: 'رسوم سحب كاش', amount: fees, description: `رسوم سحب كاش — ${toLbl}`, method: quickTransferData.from, date, month: txMonth, year: txYear, monthIndex: d.getMonth(), subType: 'withdrawal', status: 'paid', isTransferFee: true, receipts: [] });
+        }
       } else if (transferType === 'external') {
         txs.push({ id: 'qt-ext-' + getSafeId(), type: 'expense', kind: KIND.FINANCIAL, category: 'تحويلات', amount, description: `تحويل إلى ${quickTransferData.externalEntity.trim()}`, method: quickTransferData.from, date, month: txMonth, year: txYear, monthIndex: d.getMonth(), subType: 'withdrawal', status: 'paid', externalEntity: quickTransferData.externalEntity.trim(), receipts: [] });
-      }
-      if (fees > 0 && transferType === 'fees') {
+        if (fees > 0) {
+          txs.push({ id: 'qt-fee-' + getSafeId(), type: 'expense', kind: KIND.FINANCIAL, category: 'رسوم تحويلات', amount: fees, description: `رسوم تحويل خارجي`, method: quickTransferData.from, date, month: txMonth, year: txYear, monthIndex: d.getMonth(), subType: 'withdrawal', status: 'paid', isTransferFee: true, receipts: [] });
+        }
+      } else if (transferType === 'fees') {
         txs.push({ id: 'qt-fee-' + getSafeId(), type: 'expense', kind: KIND.FINANCIAL, category: 'رسوم تحويلات', amount: fees, description: 'رسوم تحويلات يدوية', method: quickTransferData.from, date, month: txMonth, year: txYear, monthIndex: d.getMonth(), subType: 'withdrawal', status: 'paid', isTransferFee: true, receipts: [] });
       }
-      if (fees > 0 && transferType === 'external') {
-        txs.push({ id: 'qt-fee-' + getSafeId(), type: 'expense', kind: KIND.FINANCIAL, category: 'رسوم تحويلات', amount: fees, description: `رسوم تحويل خارجي`, method: quickTransferData.from, date, month: txMonth, year: txYear, monthIndex: d.getMonth(), subType: 'withdrawal', status: 'paid', isTransferFee: true, receipts: [] });
-      }
+
       dispatch({ type: 'UPDATE_TRANSACTIONS', payload: [...txs, ...transactions].sort((a, b) => new Date(b.date) - new Date(a.date)) });
       dispatch({ type: 'SET_QUICK_TRANSFER_MODAL_OPEN', payload: false });
-      dispatch({ type: 'SET_QUICK_TRANSFER_DATA', payload: { from: 'cash', to: 'fawry', amount: '', fees: '', transferType: 'internal', externalEntity: '' } });
-      addNotification({ type: 'success', title: 'تم التحويل' });
+      dispatch({ type: 'SET_QUICK_TRANSFER_DATA', payload: { from: 'cash', to: 'fawry', amount: '', fees: '', transferType: 'internal', externalEntity: '', date: getLocalISODate() } });
+      addNotification({ type: 'success', title: 'تم التحويل', message: `${txs.length} معاملة — ${date}` });
       dispatch({ type: 'SET_IS_PROCESSING', payload: false });
       processingTimeoutRef.current = null;
     }, 600);
@@ -4632,13 +4652,25 @@ function App() {
             <div className={`grid ${quickTransferData.transferType === 'fees' ? 'grid-cols-1' : 'grid-cols-2'} gap-2.5`}>
               {quickTransferData.transferType !== 'fees' && (<div>
                 <label className="text-[11px] font-bold block mb-1" style={{ color: 'var(--text-muted)' }}>المبلغ</label>
-                <input type="text" inputMode="decimal" required className="input-field text-base font-black text-blue-600 text-center py-2.5" value={quickTransferData.amount} onChange={e => dispatch({ type: 'SET_QUICK_TRANSFER_DATA', payload: { amount: e.target.value } })} placeholder="0.00" />
+                <input type="text" inputMode="decimal" className="input-field text-base font-black text-blue-600 text-center py-2.5" value={quickTransferData.amount} onChange={e => dispatch({ type: 'SET_QUICK_TRANSFER_DATA', payload: { amount: e.target.value } })} placeholder="0.00" />
               </div>)}
-              {quickTransferData.transferType !== 'internal' && (<div>
-                <label className="text-[11px] font-bold block mb-1" style={{ color: 'var(--text-muted)' }}>{quickTransferData.transferType === 'fees' ? 'الرسوم *' : 'رسوم'}</label>
+              <div>
+                <label className="text-[11px] font-bold block mb-1" style={{ color: 'var(--text-muted)' }}>
+                  {quickTransferData.transferType === 'fees' ? 'الرسوم *' : 'رسوم سحب (اختياري)'}
+                </label>
                 <input type="text" inputMode="decimal" className="input-field text-base font-black text-amber-600 text-center py-2.5" value={quickTransferData.fees || ''} onChange={e => dispatch({ type: 'SET_QUICK_TRANSFER_DATA', payload: { fees: e.target.value } })} placeholder="0.00" />
-              </div>)}
+              </div>
             </div>
+            <div>
+              <label className="text-[11px] font-bold block mb-1" style={{ color: 'var(--text-muted)' }}>التاريخ</label>
+              <input type="date" className="input-field text-sm font-bold py-2.5" value={quickTransferData.date || getLocalISODate()} onChange={e => dispatch({ type: 'SET_QUICK_TRANSFER_DATA', payload: { date: e.target.value } })} />
+            </div>
+            {quickTransferData.transferType === 'internal' && parseNumberInput(quickTransferData.fees || 0) > 0 && (
+              <div className="p-2 rounded-lg bg-amber-50 dark:bg-amber-950/30 text-[10px] font-semibold text-amber-700 dark:text-amber-400 flex items-start gap-1.5">
+                <AlertTriangle size={12} className="flex-shrink-0 mt-0.5" />
+                <span>سيتم تسجيل 3 معاملات: سحب من المصدر + إيداع في الهدف + رسوم سحب كاش منفصلة</span>
+              </div>
+            )}
             <button type="submit" className="btn btn-primary w-full py-2.5 text-sm" disabled={isProcessing}>{isProcessing ? 'جاري التنفيذ...' : 'تنفيذ التحويل'}</button>
           </form></div></div>)}
         {isRecurringModalOpen && (<div className="modal-backdrop no-print"><div className="w-full max-w-md rounded-2xl shadow-2xl animate-slideInBottom" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)' }}><div className="p-4 flex justify-between items-center" style={{ borderBottom: '1px solid var(--border-subtle)' }}><h3 className="text-sm font-black flex items-center gap-2"><Repeat size={14} className="text-blue-500" /> التزام متكرر</h3><button type="button" onClick={() => dispatch({ type: 'SET_RECURRING_MODAL_OPEN', payload: false })} className="btn btn-ghost p-1.5"><X size={16} /></button></div>
