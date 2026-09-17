@@ -271,8 +271,6 @@ const storage = firebase.storage();
 const CLOUDINARY_CLOUD_NAME = 'rs4dgpc';
 const CLOUDINARY_UPLOAD_PRESET = 'finance_receipts';
 const CLOUDINARY_UPLOAD_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`;
-// 🆕 Cloudinary Delete - requires an "unsigned" delete preset + invalidate
-// If not configured, deletion is skipped (mark as orphaned)
 const CLOUDINARY_DELETE_SUPPORTED = false;
 
 const CURRENT_ENGINE_VERSION = 10;
@@ -347,30 +345,41 @@ const isFutureDate = (d) => {
   return d > today;
 };
 
-// 🆕 ============ Promise-based Modals ============
-let _modalResolve = null;
+// ═══════════════════════════════════════════════════════
+// 🆕 Promise-based Modals — Stack/Queue based (fixes hang)
+// ═══════════════════════════════════════════════════════
+const _modalResolvers = new Map(); // id -> resolve
+let _modalIdCounter = 0;
 
 const showInputModal = (opts) => {
   return new Promise((resolve) => {
-    _modalResolve = resolve;
-    const event = new CustomEvent('show-input-modal', { detail: opts });
-    window.dispatchEvent(event);
+    const id = ++_modalIdCounter;
+    _modalResolvers.set(id, resolve);
+    window.dispatchEvent(new CustomEvent('show-input-modal', { detail: { ...opts, _id: id } }));
   });
 };
 
 const showConfirmModal = (opts) => {
   return new Promise((resolve) => {
-    _modalResolve = resolve;
-    const event = new CustomEvent('show-confirm-modal', { detail: opts });
-    window.dispatchEvent(event);
+    const id = ++_modalIdCounter;
+    _modalResolvers.set(id, resolve);
+    window.dispatchEvent(new CustomEvent('show-confirm-modal', { detail: { ...opts, _id: id } }));
   });
 };
 
-const resolveModal = (value) => {
-  if (_modalResolve) {
-    _modalResolve(value);
-    _modalResolve = null;
+// Resolves the specific modal by id — no lost promises
+const resolveModal = (id, value) => {
+  const resolve = _modalResolvers.get(id);
+  if (resolve) {
+    _modalResolvers.delete(id);
+    resolve(value);
   }
+};
+
+// Safety: resolve all pending modals with null (e.g. on fatal error / unmount)
+const clearAllModals = () => {
+  _modalResolvers.forEach((resolve) => resolve(null));
+  _modalResolvers.clear();
 };
 
 // ============ PIN (hash-based) ============
@@ -436,15 +445,10 @@ const uploadReceipt = async (txId, file) => {
   };
 };
 
-// 🆕 FIXED: deleteReceipt with better handling
 const deleteReceipt = async (path) => {
   if (!path) return { success: false, reason: 'no_path' };
   try {
-    // Cloudinary's client-side delete requires an unsigned delete preset with `invalidate=true`
-    // Since we don't want to enable that (security risk), we mark the receipt as orphaned.
-    // A Cloudinary dashboard rule can auto-delete orphaned assets periodically.
     console.log('📌 Receipt marked for deletion (Cloudinary asset preserved):', path);
-    // Track for potential manual cleanup
     try {
       const orphans = JSON.parse(localStorage.getItem('cloudinary_orphans') || '[]');
       orphans.push({ path, deletedAt: new Date().toISOString() });
@@ -514,7 +518,6 @@ const CATEGORIES = {
   expense:['الالتزامات البنكية والتمويلية','مصروفات المعيشة اليومية','مسحوبات محل هاني','الملابس والمستلزمات الشخصية','الزكاة والتبرعات','التعليم والدروس والأنشطة','المصروفات النقدية الشهرية','شحن رصيد فوري','المرافق والخدمات – بولاق','المرافق والخدمات – العبور','الاتصالات وشحن الهواتف المحمولة','الصحة والرعاية الطبية','المستلزمات المنزلية والتموين','اللحوم والدواجن والأسماك','الطوارئ والاحتياطي النقدي','الصيانة والإصلاحات المنزلية','المواصلات والانتقالات','الترفيه والمناسبات الاجتماعية','مصاريف موسمية وسنوية','شحن محفظة','أقساط valU','مصاريف جامعات ومدارس','كازيون / العثيم','لحوم / أسماك / دواجن','توابل / خزين','خضروات','بقالة / فاكهة','منظفات','أدوية وكشف','مصروف نقدي','مصاريف وسلف شخصية','محافظ الكترونية','بنوك / فيزا / تمويل عقاري','تحويلات','رسوم تحويلات','رسوم بنكية شهرية','فوائد تأخير','رسوم سحب كاش','عمولة تحويل دولي','فواتير عهدة','مصروفات عهدة','أخرى']
 };
 
-// 🆕 System IDs for special loans (fixes fragile name-based logic)
 const SYSTEM_LOAN_IDS = {
   TAKYEEF: 'sys_takyeef_mahmoud',
   HANY: 'sys_hany_shop'
@@ -653,7 +656,14 @@ const getCardMethod = (card) => {
   return 'cib_card';
 };
 
-const computeCardDebt = (data, card, asOfDate) => {
+// ═══════════════════════════════════════════════════════
+// 🆕 Memoized computeCardDebt — WeakMap keyed on data reference
+//    (auto-invalidates when reducer produces new data)
+//    Historical queries (asOfDate provided) skip the cache
+// ═══════════════════════════════════════════════════════
+const _cardDebtCache = new WeakMap();
+
+const _computeCardDebtRaw = (data, card, asOfDate) => {
   if (!card) return 0;
   const method = getCardMethod(card);
   const upper = asOfDate ? new Date(asOfDate) : endOfToday();
@@ -668,6 +678,17 @@ const computeCardDebt = (data, card, asOfDate) => {
     if (t.type === 'income' && t.method === method && t.subType === 'deposit') { debt -= amt; return; }
   });
   return Math.max(0, debt);
+};
+
+const computeCardDebt = (data, card, asOfDate) => {
+  if (!card) return 0;
+  if (asOfDate) return _computeCardDebtRaw(data, card, asOfDate);
+  const cache = _cardDebtCache.get(data);
+  if (cache && cache[card.id] !== undefined) return cache[card.id];
+  const result = _computeCardDebtRaw(data, card);
+  if (cache) cache[card.id] = result;
+  else _cardDebtCache.set(data, { [card.id]: result });
+  return result;
 };
 
 const computeCardAvailable = (data, card, asOfDate) => {
@@ -770,14 +791,12 @@ const migrateTransaction = (t) => {
   return { ...t, kind, year, month, monthIndex, receipts: Array.isArray(t.receipts) ? t.receipts : [] };
 };
 
-// 🆕 Improved migrateData with systemId support
 const migrateData = (parsed) => {
   if (!parsed) return parsed;
   const cards = Array.isArray(parsed.cards) ? parsed.cards : [];
   const loans = Array.isArray(parsed.loans) ? parsed.loans : [];
   const recurring = Array.isArray(parsed.recurringItems) ? parsed.recurringItems : [];
 
-  // Card & loan presence checks
   const hasSig = cards.some(c => c.name === 'Signature' && String(c.last4) === '0391');
   const hasSWYPE = cards.some(c => c.name === 'SWYPE');
   const hasTakyeef = loans.some(l => isTakyeefLoan(l));
@@ -797,7 +816,6 @@ const migrateData = (parsed) => {
     }
   });
 
-  // Ensure takyeef loan has systemId
   const withReceivable = (loans || []).map(l => {
     if (isTakyeefLoan(l)) {
       return { ...l, systemId: SYSTEM_LOAN_IDS.TAKYEEF, isReceivable: true, type: 'receivable', interest: 'مستحق لنا شهرياً', paused: !!l.paused };
@@ -805,7 +823,6 @@ const migrateData = (parsed) => {
     return l;
   });
 
-  // Normalize hany loan
   const normalizedLoans = withReceivable.map(l => {
     if (isHanyLoan(l) && !l.autoMonthly) {
       return { id: l.id || 15, systemId: SYSTEM_LOAN_IDS.HANY, name: 'مسحوبات محل هاني', autoMonthly: true, dueNextMonth: true, mergeIntoNextCycle: ['2026-أغسطس'], category: 'مسحوبات محل هاني', totalAmount: 0, prePaidAmount: 0, monthlyInstallment: 0, dueDay: 5, interest: 'مستحق شهري', description: 'مسحوبات يومية — تُحسب تلقائياً من قيود الشهر', type: 'debt' };
@@ -862,7 +879,7 @@ const getInitialData = () => {
 class ErrorBoundary extends React.Component {
   constructor(p) { super(p); this.state = { hasError: false, error: null }; }
   static getDerivedStateFromError(error) { return { hasError: true, error }; }
-  componentDidCatch(e, i) { console.error('App Error:', e, i); }
+  componentDidCatch(e, i) { console.error('App Error:', e, i); clearAllModals(); }
   render() {
     if (this.state.hasError) return (
       <div className="flex flex-col h-screen items-center justify-center p-8 text-center" style={{background: 'var(--bg-app)'}} dir="rtl">
@@ -878,20 +895,19 @@ class ErrorBoundary extends React.Component {
     return this.props.children;
   }
 }
-  // ═══════════════════════════════════════════════════════
-// 🆕 Promise-based Modal Components
+
+// ═══════════════════════════════════════════════════════
+// 🆕 Promise Modal Provider — Stack-based (LIFO)
+//    Multiple queued modals display as a nested stack.
+//    Only the top is visible; dismissing reveals the next.
 // ═══════════════════════════════════════════════════════
 const PromiseModalProvider = ({ children }) => {
-  const [inputModal, setInputModal] = useState(null);
-  const [confirmModal, setConfirmModal] = useState(null);
-  const [inputValue, setInputValue] = useState('');
+  const [stack, setStack] = useState([]);
+  const [inputValues, setInputValues] = useState({}); // id -> current text
 
   useEffect(() => {
-    const handleInput = (e) => {
-      setInputModal(e.detail);
-      setInputValue(e.detail.inputValue || '');
-    };
-    const handleConfirm = (e) => setConfirmModal(e.detail);
+    const handleInput = (e) => setStack(s => [...s, { kind: 'input', ...e.detail }]);
+    const handleConfirm = (e) => setStack(s => [...s, { kind: 'confirm', ...e.detail }]);
     window.addEventListener('show-input-modal', handleInput);
     window.addEventListener('show-confirm-modal', handleConfirm);
     return () => {
@@ -900,60 +916,84 @@ const PromiseModalProvider = ({ children }) => {
     };
   }, []);
 
+  const current = stack[stack.length - 1]; // top of stack (LIFO)
+
+  const dismiss = useCallback((value) => {
+    if (!current) return;
+    const id = current._id;
+    setStack(s => s.slice(0, -1));
+    resolveModal(id, value);
+    setInputValues(prev => {
+      if (!(id in prev)) return prev;
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+  }, [current]);
+
+  const inputValue = current?._id !== undefined
+    ? (inputValues[current._id] ?? current.inputValue ?? '')
+    : '';
+
+  const setInputValue = useCallback((v) => {
+    if (current?._id === undefined) return;
+    setInputValues(prev => ({ ...prev, [current._id]: v }));
+  }, [current?._id]);
+
   return (
     <>
       {children}
-      {inputModal && (
+      {current?.kind === 'input' && (
         <div className="modal-backdrop z-[6000] no-print">
           <div className="generic-modal max-w-md">
             <div className="generic-modal-header">
               <h3 className="text-base font-black flex items-center gap-2">
-                <span>{inputModal.icon || '💬'}</span>
-                {inputModal.title}
+                <span>{current.icon || '💬'}</span>
+                {current.title}
               </h3>
-              <button onClick={() => { resolveModal(null); setInputModal(null); }} className="btn btn-ghost p-1.5"><X size={16} /></button>
+              <button onClick={() => dismiss(null)} className="btn btn-ghost p-1.5"><X size={16} /></button>
             </div>
             <div className="generic-modal-body">
-              {inputModal.message && <p className="text-sm mb-3" style={{ color: 'var(--text-secondary)', whiteSpace: 'pre-line' }}>{inputModal.message}</p>}
+              {current.message && <p className="text-sm mb-3 whitespace-pre-line" style={{ color: 'var(--text-secondary)' }}>{current.message}</p>}
               <input
                 autoFocus
                 type="text"
-                inputMode={inputModal.numeric ? 'decimal' : 'text'}
+                inputMode={current.numeric ? 'decimal' : 'text'}
                 className="input-field text-2xl font-black text-center text-blue-600 py-4"
                 value={inputValue}
-                onChange={e => setInputValue(inputModal.numeric ? e.target.value.replace(/[^\d.\-]/g, '') : e.target.value)}
+                onChange={e => setInputValue(current.numeric ? e.target.value.replace(/[^\d.\-]/g, '') : e.target.value)}
                 onKeyDown={e => {
                   if (e.key === 'Enter') {
-                    const v = inputModal.numeric ? parseNumberInput(inputValue) : inputValue.trim();
-                    resolveModal(v); setInputModal(null);
+                    const v = current.numeric ? parseNumberInput(inputValue) : inputValue.trim();
+                    dismiss(v);
                   }
                 }}
-                placeholder={inputModal.placeholder || ''}
+                placeholder={current.placeholder || ''}
               />
             </div>
             <div className="generic-modal-footer">
-              <button onClick={() => { resolveModal(null); setInputModal(null); }} className="btn btn-secondary flex-1">إلغاء</button>
+              <button onClick={() => dismiss(null)} className="btn btn-secondary flex-1">إلغاء</button>
               <button onClick={() => {
-                const v = inputModal.numeric ? parseNumberInput(inputValue) : inputValue.trim();
-                resolveModal(v); setInputModal(null);
-              }} className="btn btn-primary flex-1">{inputModal.confirmText || 'تأكيد'}</button>
+                const v = current.numeric ? parseNumberInput(inputValue) : inputValue.trim();
+                dismiss(v);
+              }} className="btn btn-primary flex-1">{current.confirmText || 'تأكيد'}</button>
             </div>
           </div>
         </div>
       )}
-      {confirmModal && (
+      {current?.kind === 'confirm' && (
         <div className="modal-backdrop z-[6000] no-print">
           <div className="generic-modal max-w-sm">
             <div className="generic-modal-body text-center">
-              <div className={`w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center text-3xl ${confirmModal.danger ? 'bg-red-50 dark:bg-red-950/40' : 'bg-blue-50 dark:bg-blue-950/40'}`}>
-                {confirmModal.icon || (confirmModal.danger ? '⚠️' : '❓')}
+              <div className={`w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center text-3xl ${current.danger ? 'bg-red-50 dark:bg-red-950/40' : 'bg-blue-50 dark:bg-blue-950/40'}`}>
+                {current.icon || (current.danger ? '⚠️' : '❓')}
               </div>
-              <h3 className="text-base font-black mb-2">{confirmModal.title}</h3>
-              <p className="text-sm leading-relaxed mb-2" style={{ color: 'var(--text-secondary)', whiteSpace: 'pre-line' }}>{confirmModal.message}</p>
+              <h3 className="text-base font-black mb-2">{current.title}</h3>
+              <p className="text-sm leading-relaxed mb-2 whitespace-pre-line" style={{ color: 'var(--text-secondary)' }}>{current.message}</p>
             </div>
             <div className="generic-modal-footer">
-              <button onClick={() => { resolveModal(false); setConfirmModal(null); }} className="btn btn-secondary flex-1">إلغاء</button>
-              <button onClick={() => { resolveModal(true); setConfirmModal(null); }} className="btn flex-1" style={{ background: confirmModal.danger ? 'var(--danger)' : 'var(--brand)', color: 'white' }}>{confirmModal.confirmText || 'تأكيد'}</button>
+              <button onClick={() => dismiss(false)} className="btn btn-secondary flex-1">إلغاء</button>
+              <button onClick={() => dismiss(true)} className="btn flex-1" style={{ background: current.danger ? 'var(--danger)' : 'var(--brand)', color: 'white' }}>{current.confirmText || 'تأكيد'}</button>
             </div>
           </div>
         </div>
@@ -1092,7 +1132,7 @@ const ReceiptIndicator = memo(({ tx, dispatch }) => {
 });
 
 // ═══════════════════════════════════════════════════════
-// 🆕 Daily Grouping Utilities
+// Daily Grouping Utilities
 // ═══════════════════════════════════════════════════════
 const groupTransactionsByDate = (list) => {
   const groups = {};
@@ -1823,7 +1863,8 @@ const QuickBalanceOverview = memo(({ balances, walletVisibility, onToggleVisibil
     </div>
   );
 });
-  // ═══════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════
 // MonthComparisonView
 // ═══════════════════════════════════════════════════════
 const MonthComparisonView = memo(({ transactions, selectedYear, selectedMonth }) => {
@@ -2184,7 +2225,7 @@ const CategoriesView = memo(({ transactions, selectedMonth, selectedYear, catVie
 });
 
 // ═══════════════════════════════════════════════════════
-// TransactionsView (with Daily Grouping)
+// TransactionsView
 // ═══════════════════════════════════════════════════════
 const TransactionsView = memo(({ groupedTransactions, transactions, selectedMonth, selectedYear, transViewMode, statusFilter, searchTerm, expandedGroup, data, monthInsights, dispatch, handleDelete, printReport, exportPdf, addNotification, onSelectYear, onSelectMonth, saveHistory, onPrintMonthlyReport }) => {
   const [sourceFilter, setSourceFilter] = useState('all');
@@ -2205,7 +2246,6 @@ const TransactionsView = memo(({ groupedTransactions, transactions, selectedMont
   const monthTx = transactions.filter(t => t.month === selectedMonth && (t.year || 2026) === selectedYear);
   const activeFiltersCount = (sourceFilter !== 'all' ? 1 : 0) + (statusFilter !== 'all' ? 1 : 0) + (showBankFeesOnly ? 1 : 0);
 
-  // 🆕 Daily groups for the paid archive
   const dailyGroups = useMemo(() => groupTransactionsByDate(paidArchive), [paidArchive]);
 
   return (
@@ -2371,7 +2411,8 @@ const TransactionsView = memo(({ groupedTransactions, transactions, selectedMont
     </div>
   );
 });
-  // ═══════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════
 // LoansView
 // ═══════════════════════════════════════════════════════
 const LoansView = memo(({ updatedLoans, cards, recurringItems, transactions, dispatch, deleteRecurring, saveHistory, getLocalISODate, addNotification, data, selectedMonth, selectedYear }) => {
@@ -2379,7 +2420,6 @@ const LoansView = memo(({ updatedLoans, cards, recurringItems, transactions, dis
   const [activeTab, setActiveTab] = useState('loans');
   const [newLoan, setNewLoan] = useState({ name: '', totalAmount: '', monthlyInstallment: '', dueDay: 1, description: '', isReceivable: false });
 
-  // 🆕 FIXED: settleHany now uses Promise-based modal instead of prompt()
   const settleHany = async (loan) => {
     const months = ALL_MONTHS;
     const total = safeNumber(loan.totalAmount);
@@ -3223,7 +3263,6 @@ const SettingsView = memo(({ data, accountsData, cards, budgets, dispatch, saveH
   const handleSave = () => { saveHistory(); const cleaned = {}; const today = getLocalISODate(); ACCOUNT_KEYS.forEach(k => { const oldBal = safeNumber(accountsData[k]?.balance); const newBal = parseNumberInput(localAccounts[k]?.balance); cleaned[k] = { ...localAccounts[k], balance: newBal, lastUpdated: (oldBal !== newBal) ? today : (localAccounts[k]?.lastUpdated || today) }; }); dispatch({ type: 'UPDATE_ACCOUNTS', payload: cleaned }); dispatch({ type: 'UPDATE_CARDS', payload: localCards.map(c => ({ ...c, limit: safeNumber(c.limit), openingDebt: safeNumber(c.openingDebt), cashbackRate: safeNumber(c.cashbackRate, 1) })) }); addNotification({ type: 'success', title: 'تم الحفظ' }); setHasChanges(false); };
   const handleDriveConnect = async () => { setDriveBusy(true); setDriveStatus('جاري الاتصال...'); try { await ensureDriveToken(); setDriveStatus('متصل'); addNotification({ type: 'success', title: 'Drive متصل' }); } catch (e) { setDriveStatus('فشل: ' + e.message); } finally { setDriveBusy(false); } };
   const handleDriveBackupNow = async () => { setDriveBusy(true); setDriveStatus('جاري الرفع...'); try { const payload = { data, budgets, exportedAt: new Date().toISOString(), version: 'V76' }; const result = await uploadBackupToDrive(payload); localStorage.setItem(AUTO_BACKUP_LS_KEY, String(Date.now())); setDriveStatus(`تم الرفع: ${result.name}`); addNotification({ type: 'success', title: 'نسخة سحابية' }); } catch (e) { setDriveStatus('فشل: ' + e.message); } finally { setDriveBusy(false); } };
-  // 🆕 Restore uses Promise-based modal instead of prompt()
   const handleDriveRestore = async () => {
     setDriveBusy(true);
     setDriveStatus('جاري الجلب...');
@@ -3465,7 +3504,7 @@ const ProfessionalHeader = memo(({ isDarkMode, dispatch }) => (
 ));
 
 // ═══════════════════════════════════════════════════════
-// LoginScreen — 🆕 uses custom modal instead of alert()
+// LoginScreen
 // ═══════════════════════════════════════════════════════
 const LoginScreen = ({ onLogin }) => {
   const [isLoading, setIsLoading] = useState(false);
@@ -3974,23 +4013,37 @@ function App() {
     return acc.map(t => { const a = safeNumber(t.amount); bal += (t.subType === 'deposit') ? a : -a; return { ...t, runningBalance: bal }; }).reverse();
   }, [transactions, accountsData]);
 
+  // 🆕 Optimized: single pass over transactions per card instead of per month
   const cardHistoryMap = useMemo(() => {
     const result = {};
+    const allMonths = YEARS_LIST.flatMap(y => getMonthsForYear(y).map(m => ({ year: y, month: m })));
+
     cards.forEach(card => {
       const method = getCardMethod(card);
       let debt = safeNumber(card.openingDebt);
-      result[card.id] = YEARS_LIST.flatMap(y => getMonthsForYear(y).map(m => ({ year: y, month: m }))).map(({ year, month }) => {
-        let expenses = 0, payments = 0, refunds = 0;
-        transactions.forEach(t => {
-          if (t.status !== 'paid' || t.month !== month || (t.year || 2026) !== year) return;
-          const amt = safeNumber(t.amount);
-          if (t.linkedCardId === card.id && t.type === 'expense' && !t.linkedLoanId) { payments += amt; return; }
-          if (t.type === 'expense' && t.method === method) { expenses += amt; return; }
-          if (t.type === 'income' && t.method === method && t.subType === 'deposit') { refunds += amt; return; }
-        });
+
+      // Build monthly deltas in ONE pass over transactions
+      const deltas = {};
+      allMonths.forEach(({ year, month }) => {
+        deltas[`${year}|${month}`] = { expenses: 0, payments: 0, refunds: 0 };
+      });
+
+      for (let i = 0; i < transactions.length; i++) {
+        const t = transactions[i];
+        if (t.status !== 'paid') continue;
+        const d = deltas[`${t.year || 2026}|${t.month}`];
+        if (!d) continue;
+        const amt = safeNumber(t.amount);
+        if (t.linkedCardId === card.id && t.type === 'expense' && !t.linkedLoanId) { d.payments += amt; continue; }
+        if (t.type === 'expense' && t.method === method) { d.expenses += amt; continue; }
+        if (t.type === 'income' && t.method === method && t.subType === 'deposit') { d.refunds += amt; continue; }
+      }
+
+      result[card.id] = allMonths.map(({ year, month }) => {
+        const d = deltas[`${year}|${month}`];
         const openingDebt = debt;
-        debt = debt + expenses - payments - refunds;
-        return { year, month, openingDebt, expenses, payments: payments + refunds, closingDebt: debt, available: Math.max(0, safeNumber(card.limit) - debt) };
+        debt = debt + d.expenses - d.payments - d.refunds;
+        return { year, month, openingDebt, expenses: d.expenses, payments: d.payments + d.refunds, closingDebt: debt, available: Math.max(0, safeNumber(card.limit) - debt) };
       });
     });
     return result;
