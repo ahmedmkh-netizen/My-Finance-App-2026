@@ -534,7 +534,6 @@ const computeBalance = (data, key, asOfDate) => {
   return bal;
 };
 
-// ✅ دوال بطاقات الائتمان
 const getCardMethod = (card) => {
   if (!card) return null;
   if (card.bank === 'CIB' && card.name === 'SWYPE') return 'cib_swype';
@@ -741,8 +740,7 @@ const getInitialData = () => {
   } catch (e) { console.warn(e); }
   return { engineVersion: CURRENT_ENGINE_VERSION, recurringInitialized: true, transactions: [], loans: DEFAULT_LOANS, cards: DEFAULT_CARDS, accountsData: DEFAULT_ACCOUNTS, monthlyPlans: DEFAULT_MONTHLY_PLANS, recurringItems: DEFAULT_RECURRING, closedMonths: [], monthlySnapshots: {}, materializedRecurring: {}, notifiedItems: {}, custodyEntries: DEFAULT_CUSTODY_ENTRIES, cashbackTrackers: DEFAULT_CASHBACK_TRACKERS };
 };
-
-class ErrorBoundary extends React.Component {
+  class ErrorBoundary extends React.Component {
   constructor(p) { super(p); this.state = { hasError: false }; }
   static getDerivedStateFromError() { return { hasError: true }; }
   componentDidCatch(e, i) { console.error('App Error:', e, i); }
@@ -861,6 +859,59 @@ const ReceiptIndicator = memo(({ tx, dispatch }) => {
     </button>
   );
 });
+
+// 📅 تجميع العمليات حسب التاريخ + تسمية اليوم
+const groupTransactionsByDate = (list) => {
+  const groups = {};
+  list.forEach(t => {
+    const d = t.date || 'unknown';
+    if (!groups[d]) groups[d] = [];
+    groups[d].push(t);
+  });
+  const today = getLocalISODate();
+  const yest = new Date(); yest.setDate(yest.getDate() - 1);
+  const yestISO = getLocalISODate(yest);
+  return Object.keys(groups)
+    .sort((a, b) => b.localeCompare(a))
+    .map(date => {
+      let label;
+      if (date === today) label = '📅 النهاردة';
+      else if (date === yestISO) label = '📅 امبارح';
+      else {
+        try {
+          const dObj = new Date(date);
+          const ds = dObj.toLocaleDateString('ar-EG', { weekday: 'long', day: 'numeric', month: 'long' });
+          const ys = dObj.getFullYear() !== new Date().getFullYear() ? ' ' + dObj.getFullYear() : '';
+          label = '📅 ' + ds + ys;
+        } catch(e) { label = '📅 ' + date; }
+      }
+      const total = groups[date].reduce((s, t) => s + safeNumber(t.amount), 0);
+      return { date, label, items: groups[date], total };
+    });
+};
+
+const DayGroupHeader = memo(({ label, total, count }) => (
+  <div style={{
+    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+    padding: '12px 16px', marginTop: '14px', marginBottom: '10px',
+    background: 'linear-gradient(135deg, var(--brand-soft), transparent)',
+    borderRadius: '14px',
+    borderRight: '4px solid var(--brand)',
+    boxShadow: '0 2px 8px rgba(37, 99, 235, 0.06)'
+  }}>
+    <div style={{ fontSize: '13px', fontWeight: 900, color: 'var(--brand)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+      {label}
+      <span style={{ fontSize: '10px', opacity: 0.7, fontWeight: 700 }}>({count})</span>
+    </div>
+    <div style={{
+      fontSize: '13px', fontWeight: 900, color: 'var(--text-primary)',
+      background: 'var(--bg-card)', padding: '5px 12px', borderRadius: '999px',
+      boxShadow: '0 2px 6px rgba(0,0,0,0.06)'
+    }}>
+      {fmt(total)} ج.م
+    </div>
+  </div>
+));
 
 const GenericLedgerComponent = memo(({ walletKey, ledgerData, liveBalance, isExpanded, onToggle, onDelete, onEditTransaction, theme, onAddDeposit, onAddWithdrawal, onExportCSV, walletVisibility, onToggleVisibility }) => {
   const [filter, setFilter] = useState('all');
@@ -1436,8 +1487,7 @@ const ConfirmDialog = ({ confirmDialog, dispatch }) => {
     </div>
   );
 };
-
-const MonthSelector = memo(({ selectedYear, selectedMonth, onSelectYear, onSelectMonth, className = "" }) => {
+  const MonthSelector = memo(({ selectedYear, selectedMonth, onSelectYear, onSelectMonth, className = "" }) => {
   const months = getMonthsForYear(selectedYear);
   return (
     <div className={`card py-3 ${className}`}>
@@ -2017,23 +2067,30 @@ const TransactionsView = memo(({ groupedTransactions, transactions, selectedMont
       </section>
 
       {paidArchive.length > 0 && (
-        <details className="group">
+        <details className="group" open>
           <summary className="cursor-pointer list-none">
             <div className="card py-3 flex items-center justify-between">
               <h3 className="font-bold text-xs flex items-center gap-2 text-emerald-600"><CheckCircle2 size={14} /> سجل المدفوعات ({paidArchive.length})</h3>
               <ChevronDown className="transition-transform group-open:rotate-180" size={14} style={{ color: 'var(--text-muted)' }} />
             </div>
           </summary>
-          <div className="space-y-2 mt-2">
-            {paidArchive.map(t => (
-              <div key={t.id} className="card py-2.5 flex justify-between items-center gap-2">
-                <div className="min-w-0 flex-1">
-                  <p className="font-bold text-xs truncate">{t.type === 'income' ? '💰' : '💸'} {t.description || t.category} <FamilyBadge tx={t} /> <ReceiptIndicator tx={t} dispatch={dispatch} /></p>
-                  <p className="text-[10px] font-semibold" style={{ color: 'var(--text-muted)' }}>{t.date}</p>
-                </div>
-                <div className="flex items-center gap-1 flex-shrink-0">
-                  <span className="font-black text-xs">{fmt(t.amount)}</span>
-                  <button aria-label="إعادة تعليق" onClick={() => reopenOne(t)} className="btn btn-ghost p-1 text-amber-500"><Undo2 size={12} /></button>
+          <div className="mt-2">
+            {groupTransactionsByDate(paidArchive).map(group => (
+              <div key={group.date}>
+                <DayGroupHeader label={group.label} total={group.total} count={group.items.length} />
+                <div className="space-y-2">
+                  {group.items.map(t => (
+                    <div key={t.id} className="card py-2.5 flex justify-between items-center gap-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-bold text-xs truncate">{t.type === 'income' ? '💰' : '💸'} {t.description || t.category} <FamilyBadge tx={t} /> <ReceiptIndicator tx={t} dispatch={dispatch} /></p>
+                        <p className="text-[10px] font-semibold" style={{ color: 'var(--text-muted)' }}>{PAYMENT_METHODS.find(p => p.id === t.method)?.label || ''} • {new Date(t.createdAt || Date.now()).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}</p>
+                      </div>
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        <span className="font-black text-xs">{fmt(t.amount)}</span>
+                        <button aria-label="إعادة تعليق" onClick={() => reopenOne(t)} className="btn btn-ghost p-1 text-amber-500"><Undo2 size={12} /></button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             ))}
@@ -2043,8 +2100,7 @@ const TransactionsView = memo(({ groupedTransactions, transactions, selectedMont
     </div>
   );
 });
-
-const LoansView = memo(({ updatedLoans, cards, recurringItems, transactions, dispatch, deleteRecurring, saveHistory, getLocalISODate, addNotification, data, selectedMonth, selectedYear }) => {
+  const LoansView = memo(({ updatedLoans, cards, recurringItems, transactions, dispatch, deleteRecurring, saveHistory, getLocalISODate, addNotification, data, selectedMonth, selectedYear }) => {
   const [showAdd, setShowAdd] = useState(false);
   const [activeTab, setActiveTab] = useState('loans');
   const [newLoan, setNewLoan] = useState({ name: '', totalAmount: '', monthlyInstallment: '', dueDay: 1, description: '', isReceivable: false });
