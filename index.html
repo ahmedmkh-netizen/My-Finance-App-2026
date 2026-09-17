@@ -29,13 +29,15 @@ tailwind.config = {
         'fadeIn': 'fadeIn 0.25s ease-out',
         'slideUp': 'slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
         'spin': 'spin 1s linear infinite',
-        'shake': 'shake 0.4s ease-in-out'
+        'shake': 'shake 0.4s ease-in-out',
+        'popIn': 'popIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)'
       },
       keyframes: {
         fadeIn: { '0%': { opacity: '0' }, '100%': { opacity: '1' } },
         slideUp: { '0%': { opacity: '0', transform: 'translateY(20px)' }, '100%': { opacity: '1', transform: 'translateY(0)' } },
         'spin': { to: { transform: 'rotate(360deg)' } },
-        'shake': { '0%,100%': { transform: 'translateX(0)' }, '25%': { transform: 'translateX(-6px)' }, '75%': { transform: 'translateX(6px)' } }
+        'shake': { '0%,100%': { transform: 'translateX(0)' }, '25%': { transform: 'translateX(-6px)' }, '75%': { transform: 'translateX(6px)' } },
+        'popIn': { '0%': { opacity: '0', transform: 'scale(0.9)' }, '100%': { opacity: '1', transform: 'scale(1)' } }
       }
     }
   }
@@ -216,9 +218,11 @@ h1, h2, h3, h4 { font-weight: 800; letter-spacing: -0.02em; color: var(--text-pr
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes shake { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }
+@keyframes popIn { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: scale(1); } }
 .animate-fadeIn { animation: fadeIn 0.25s ease-out; }
 .animate-slideInBottom { animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
 .animate-shake { animation: shake 0.4s ease-in-out; }
+.animate-popIn { animation: popIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); }
 .text-gradient { background: linear-gradient(135deg, var(--brand) 0%, var(--brand-dark) 100%); background-clip: text; -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
 button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
 ::selection { background: var(--brand-soft); color: var(--brand-dark); }
@@ -230,6 +234,13 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 .sub-tab-btn.active { background: var(--brand); color: white; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3); }
 .receipt-thumb { width: 56px; height: 56px; border-radius: 8px; overflow: hidden; position: relative; border: 1px solid var(--border-default); cursor: pointer; transition: transform 0.15s ease; }
 .receipt-thumb:hover { transform: scale(1.05); }
+.day-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; margin-top: 14px; margin-bottom: 10px; background: linear-gradient(135deg, var(--brand-soft), transparent); border-radius: 14px; border-right: 4px solid var(--brand); box-shadow: 0 2px 8px rgba(37, 99, 235, 0.06); }
+.day-header-badge { font-size: 13px; font-weight: 900; color: var(--brand); display: flex; align-items: center; gap: 6px; }
+.day-header-total { font-size: 13px; font-weight: 900; color: var(--text-primary); background: var(--bg-card); padding: 5px 12px; border-radius: 999px; box-shadow: 0 2px 6px rgba(0,0,0,0.06); }
+.generic-modal { background: var(--bg-card); border-radius: var(--radius-xl); box-shadow: var(--shadow-xl); border: 1px solid var(--border-subtle); width: 100%; max-height: calc(100dvh - 24px); overflow: hidden; display: flex; flex-direction: column; animation: popIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); }
+.generic-modal-header { padding: 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-subtle); flex-shrink: 0; }
+.generic-modal-body { padding: 16px; overflow-y: auto; }
+.generic-modal-footer { padding: 16px; border-top: 1px solid var(--border-subtle); flex-shrink: 0; display: flex; gap: 10px; }
 </style>
 </head>
 <body>
@@ -260,8 +271,11 @@ const storage = firebase.storage();
 const CLOUDINARY_CLOUD_NAME = 'rs4dgpc';
 const CLOUDINARY_UPLOAD_PRESET = 'finance_receipts';
 const CLOUDINARY_UPLOAD_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`;
+// 🆕 Cloudinary Delete - requires an "unsigned" delete preset + invalidate
+// If not configured, deletion is skipped (mark as orphaned)
+const CLOUDINARY_DELETE_SUPPORTED = false;
 
-const CURRENT_ENGINE_VERSION = 9;
+const CURRENT_ENGINE_VERSION = 10;
 const DEFAULT_PIN = '1033';
 const PIN_HASH_KEY = 'finance_pin_hash_v1';
 const KIND = { OPERATIONAL: 'operational', FINANCIAL: 'financial', ADJUSTMENT: 'adjustment' };
@@ -277,6 +291,7 @@ const CASHBACK_STATUS_LABELS = { expected: 'متوقع', partial: 'جزئي', re
 
 const DAILY_DHIKR = ["سُبْحَانَ اللَّهِ وَبِحَمْدِهِ، سُبْحَانَ اللَّهِ الْعَظِيمِ","لَا حَوْلَ وَلَا قُوَّةَ إِلَّا بِاللَّهِ الْعَلِيِّ الْعَظِيمِ","اللَّهُمَّ اكْفِنِي بِحَلَالِكَ عَنْ حَرَامِكَ، وَأَغْنِنِي بِفَضْلِكَ عَمَّنْ سِوَاكَ","أَسْتَغْفِرُ اللَّهَ الْعَظِيمَ، وَأَتُوبُ إِلَيْهِ","اللَّهُمَّ بَارِكْ لَنَا فِيمَا رَزَقْتَنَا وَقِنَا عَذَابَ النَّارِ","لَا إِلَهَ إِلَّا أَنْتَ سُبْحَانَكَ إِنِّي كُنْتُ مِنَ الظَّالِمِينَ","اللَّهُمَّ بِكَ أَصْبَحْنَا وَبِكَ أَمْسَيْنَا وَبِكَ نَحْيَا وَبِكَ نَمُوتُ","رَضِيتُ بِاللَّهِ رَبًّا وَبِالإِسْلَامِ دِينًا وَبِمُحَمَّدٍ نَبِيًّا","يَا حَيُّ يَا قَيُّومُ بِرَحْمَتِكَ أَسْتَغِيثُ أَصْلِحْ لِي شَأْنِي كُلَّهُ","اللَّهُمَّ إِنِّي أَسْأَلُكَ عِلْمًا نَافِعًا وَرِزقًا طَيِّبًا وَعَمَلًا مُتَقَبَّلًا"];
 
+// ============ Helpers ============
 const escapeHtml = (u) => { if (typeof u !== 'string') return u; return u.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;"); };
 const getSafeId = () => { try { return crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).substr(2,9)}`; } catch { return `${Date.now()}-${Math.random().toString(36).substr(2,9)}`; } };
 const normalizeText = (t) => !t ? "" : t.toString().replace(/[أإآ]/g,'ا').replace(/ى/g,'ي').replace(/ة/g,'ه').replace(/[\u064B-\u065F]/g,'').trim().toLowerCase();
@@ -290,6 +305,73 @@ const parseNumberInput = (v) => { const cleaned = toEnglishDigits(v).replace(/[^
 const fmt = (n) => safeNumber(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const makeMonthKey = (year, month) => `${year}-${month}`;
 const parseMonthKey = (key) => { if (!key || typeof key !== 'string' || !key.includes('-')) return null; const [y, ...rest] = key.split('-'); const year = Number(y); if (isNaN(year)) return null; return { year, month: rest.join('-') }; };
+
+// 🆕 ============ Validation ============
+const VALIDATION = {
+  AMOUNT: { min: 0.01, max: 10000000, label: 'المبلغ' },
+  POSITIVE_INT: { min: 1, max: 31, label: 'الرقم' },
+  TEXT: { min: 1, max: 500, label: 'النص' },
+  LIMIT: { min: 100, max: 10000000, label: 'الحد الائتماني' },
+  INSTALLMENT: { min: 0, max: 10000000, label: 'القسط' }
+};
+
+const validateAmount = (raw, opts = {}) => {
+  const cfg = { ...VALIDATION.AMOUNT, ...opts };
+  const cleaned = toEnglishDigits(String(raw ?? '')).replace(/[^\d.\-]/g, '');
+  const n = parseFloat(cleaned);
+  if (isNaN(n) || !isFinite(n)) return { valid: false, error: 'اكتب رقم صحيح', value: 0 };
+  if (n < cfg.min) return { valid: false, error: `الحد الأدنى ${fmt(cfg.min)} ج.م`, value: 0 };
+  if (n > cfg.max) return { valid: false, error: `الحد الأقصى ${fmt(cfg.max)} ج.م`, value: 0 };
+  return { valid: true, value: n };
+};
+
+const validateText = (raw, opts = {}) => {
+  const cfg = { ...VALIDATION.TEXT, ...opts };
+  const s = String(raw || '').trim();
+  if (s.length < cfg.min) return { valid: false, error: `${cfg.label} مطلوب` };
+  if (s.length > cfg.max) return { valid: false, error: `${cfg.label} طويل جداً` };
+  return { valid: true, value: s };
+};
+
+const validateDate = (raw) => {
+  if (!raw) return { valid: false, error: 'التاريخ مطلوب' };
+  const d = new Date(raw);
+  if (isNaN(d)) return { valid: false, error: 'تاريخ غير صالح' };
+  const year = d.getFullYear();
+  if (year < 2020 || year > 2100) return { valid: false, error: 'السنة خارج النطاق' };
+  return { valid: true, value: d };
+};
+
+const isFutureDate = (d) => {
+  const today = new Date(); today.setHours(23, 59, 59, 999);
+  return d > today;
+};
+
+// 🆕 ============ Promise-based Modals ============
+let _modalResolve = null;
+
+const showInputModal = (opts) => {
+  return new Promise((resolve) => {
+    _modalResolve = resolve;
+    const event = new CustomEvent('show-input-modal', { detail: opts });
+    window.dispatchEvent(event);
+  });
+};
+
+const showConfirmModal = (opts) => {
+  return new Promise((resolve) => {
+    _modalResolve = resolve;
+    const event = new CustomEvent('show-confirm-modal', { detail: opts });
+    window.dispatchEvent(event);
+  });
+};
+
+const resolveModal = (value) => {
+  if (_modalResolve) {
+    _modalResolve(value);
+    _modalResolve = null;
+  }
+};
 
 // ============ PIN (hash-based) ============
 const hashPin = async (pin) => {
@@ -353,14 +435,31 @@ const uploadReceipt = async (txId, file) => {
     size: data.bytes
   };
 };
+
+// 🆕 FIXED: deleteReceipt with better handling
 const deleteReceipt = async (path) => {
-  // Cloudinary file preserved (no secret key needed)
-  console.log('Receipt removed from DB:', path);
-  return Promise.resolve();
+  if (!path) return { success: false, reason: 'no_path' };
+  try {
+    // Cloudinary's client-side delete requires an unsigned delete preset with `invalidate=true`
+    // Since we don't want to enable that (security risk), we mark the receipt as orphaned.
+    // A Cloudinary dashboard rule can auto-delete orphaned assets periodically.
+    console.log('📌 Receipt marked for deletion (Cloudinary asset preserved):', path);
+    // Track for potential manual cleanup
+    try {
+      const orphans = JSON.parse(localStorage.getItem('cloudinary_orphans') || '[]');
+      orphans.push({ path, deletedAt: new Date().toISOString() });
+      if (orphans.length > 200) orphans.splice(0, orphans.length - 200);
+      localStorage.setItem('cloudinary_orphans', JSON.stringify(orphans));
+    } catch {}
+    return { success: true, reason: 'marked_orphan', path };
+  } catch (e) {
+    console.warn('Delete receipt failed:', e);
+    return { success: false, reason: 'error', error: e.message };
+  }
 };
 
-const STORAGE_KEY = 'finance_tracker_V75_SECURE';
-const LEGACY_KEYS = ['finance_tracker_V74_SECURE', 'finance_tracker_V73_SECURE', 'finance_tracker_V72_SECURE'];
+const STORAGE_KEY = 'finance_tracker_V76_SECURE';
+const LEGACY_KEYS = ['finance_tracker_V75_SECURE', 'finance_tracker_V74_SECURE', 'finance_tracker_V73_SECURE', 'finance_tracker_V72_SECURE'];
 const ALL_MONTHS = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
 const YEARS_CONFIG = { 2026: ['أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'], 2027: ALL_MONTHS, 2028: ALL_MONTHS };
 const YEARS_LIST = [2026, 2027, 2028];
@@ -415,6 +514,19 @@ const CATEGORIES = {
   expense:['الالتزامات البنكية والتمويلية','مصروفات المعيشة اليومية','مسحوبات محل هاني','الملابس والمستلزمات الشخصية','الزكاة والتبرعات','التعليم والدروس والأنشطة','المصروفات النقدية الشهرية','شحن رصيد فوري','المرافق والخدمات – بولاق','المرافق والخدمات – العبور','الاتصالات وشحن الهواتف المحمولة','الصحة والرعاية الطبية','المستلزمات المنزلية والتموين','اللحوم والدواجن والأسماك','الطوارئ والاحتياطي النقدي','الصيانة والإصلاحات المنزلية','المواصلات والانتقالات','الترفيه والمناسبات الاجتماعية','مصاريف موسمية وسنوية','شحن محفظة','أقساط valU','مصاريف جامعات ومدارس','كازيون / العثيم','لحوم / أسماك / دواجن','توابل / خزين','خضروات','بقالة / فاكهة','منظفات','أدوية وكشف','مصروف نقدي','مصاريف وسلف شخصية','محافظ الكترونية','بنوك / فيزا / تمويل عقاري','تحويلات','رسوم تحويلات','رسوم بنكية شهرية','فوائد تأخير','رسوم سحب كاش','عمولة تحويل دولي','فواتير عهدة','مصروفات عهدة','أخرى']
 };
 
+// 🆕 System IDs for special loans (fixes fragile name-based logic)
+const SYSTEM_LOAN_IDS = {
+  TAKYEEF: 'sys_takyeef_mahmoud',
+  HANY: 'sys_hany_shop'
+};
+const SYSTEM_LOAN_NAMES = {
+  [SYSTEM_LOAN_IDS.TAKYEEF]: 'تكييف محمود',
+  [SYSTEM_LOAN_IDS.HANY]: 'مسحوبات محل هاني'
+};
+
+const isTakyeefLoan = (l) => l && (l.systemId === SYSTEM_LOAN_IDS.TAKYEEF || (l.name && l.name.includes('تكييف محمود')));
+const isHanyLoan = (l) => l && (l.systemId === SYSTEM_LOAN_IDS.HANY || (l.name && l.name.includes('محل هاني')));
+
 const DEFAULT_CARDS = [
   { id:1, name:'Titanium', bank:'CIB', limit:100500, availableBalance:61186.11, openingDebt:39313.89, expiry:'01/29', holderName:'AHMED M. KHALIL', last4:'1016', dueDate:'05 من كل شهر', type:'mastercard', theme:'silver', cashbackRate:2 },
   { id:2, name:'Signature', bank:'AAIB', limit:100000, availableBalance:67313.87, openingDebt:32686.13, expiry:'10/26', holderName:'AHMED M. KHALIL', last4:'0391', dueDate:'25 من كل شهر', type:'visa', theme:'black', cashbackRate:1.5 },
@@ -432,7 +544,7 @@ const DEFAULT_ACCOUNTS = {
 const DEFAULT_LOANS = [
   { id:1, name:'قرض عقاري AAIB - شقة العبور', totalAmount:30588.06, prePaidAmount:0, monthlyInstallment:5098.01, dueDay:3, interest:'حتى مارس 2027', description:'6 أقساط متبقية', type:'loan' },
   { id:2, name:'تسوية عقاري AAIB (أبريل 2027)', totalAmount:5062.84, prePaidAmount:0, monthlyInstallment:0, dueDay:3, interest:'القسط الأخير', description:'دفعة أبريل 2027', type:'debt' },
-  { id:7, name:'تكييف محمود', isReceivable:true, totalAmount:45600, prePaidAmount:14800, monthlyInstallment:2800, dueDay:1, interest:'مستحق لنا شهرياً', description:'مقدم 14,800 — متبقي 30,800 — 11 قسط × 2,800', type:'receivable', paused:false },
+  { id:7, systemId: SYSTEM_LOAN_IDS.TAKYEEF, name:'تكييف محمود', isReceivable:true, totalAmount:45600, prePaidAmount:14800, monthlyInstallment:2800, dueDay:1, interest:'مستحق لنا شهرياً', description:'مقدم 14,800 — متبقي 30,800 — 11 قسط × 2,800', type:'receivable', paused:false },
   { id:4, name:'مصاريف جامعة سلمى', totalAmount:25000, prePaidAmount:0, monthlyInstallment:0, dueDay:5, interest:'مستحق', description:'إجمالي 25,000', type:'debt' },
   { id:3, name:'مصاريف جامعة عبد الرحمن', totalAmount:52550, prePaidAmount:26275, monthlyInstallment:0, dueDay:5, interest:'مدفوع 50%', description:'متبقي 26,275', type:'debt' },
   { id:5, name:'مصاريف مدرسة أنس', totalAmount:16000, prePaidAmount:0, monthlyInstallment:0, dueDay:15, interest:'دفعات مرنة', description:'إجمالي 16,000', type:'debt' },
@@ -443,7 +555,7 @@ const DEFAULT_LOANS = [
   { id:12, name:'أقساط ValU (قسط)', totalAmount:649, prePaidAmount:0, monthlyInstallment:649, dueDay:5, interest:'آخر قسط', description:'قسط واحد', type:'debt' },
   { id:13, name:'أقساط ValU (صغير)', totalAmount:570, prePaidAmount:341, monthlyInstallment:229, dueDay:5, interest:'بدون فوائد', description:'متبقي 229', type:'debt' },
   { id:14, name:'تقويم أسنان سلمى', totalAmount:1750, prePaidAmount:0, monthlyInstallment:350, dueDay:15, interest:'5 دفعات × 350', description:'بدأ 15 يوليو 2026', type:'debt' },
-  { id:15, name:'مسحوبات محل هاني', autoMonthly:true, dueNextMonth:true, mergeIntoNextCycle:['2026-أغسطس'], category:'مسحوبات محل هاني', totalAmount:0, prePaidAmount:0, monthlyInstallment:0, dueDay:5, interest:'مستحق شهري', description:'مسحوبات يومية — تُحسب تلقائياً من قيود الشهر', type:'debt' }
+  { id:15, systemId: SYSTEM_LOAN_IDS.HANY, name:'مسحوبات محل هاني', autoMonthly:true, dueNextMonth:true, mergeIntoNextCycle:['2026-أغسطس'], category:'مسحوبات محل هاني', totalAmount:0, prePaidAmount:0, monthlyInstallment:0, dueDay:5, interest:'مستحق شهري', description:'مسحوبات يومية — تُحسب تلقائياً من قيود الشهر', type:'debt' }
 ];
 
 const DEFAULT_RECURRING = [
@@ -658,15 +770,18 @@ const migrateTransaction = (t) => {
   return { ...t, kind, year, month, monthIndex, receipts: Array.isArray(t.receipts) ? t.receipts : [] };
 };
 
+// 🆕 Improved migrateData with systemId support
 const migrateData = (parsed) => {
   if (!parsed) return parsed;
   const cards = Array.isArray(parsed.cards) ? parsed.cards : [];
   const loans = Array.isArray(parsed.loans) ? parsed.loans : [];
   const recurring = Array.isArray(parsed.recurringItems) ? parsed.recurringItems : [];
+
+  // Card & loan presence checks
   const hasSig = cards.some(c => c.name === 'Signature' && String(c.last4) === '0391');
   const hasSWYPE = cards.some(c => c.name === 'SWYPE');
-  const hasTakyeef = loans.some(l => l.name && l.name.includes('تكييف محمود'));
-  const hasHany = loans.some(l => l.name && l.name.includes('محل هاني'));
+  const hasTakyeef = loans.some(l => isTakyeefLoan(l));
+  const hasHany = loans.some(l => isHanyLoan(l));
 
   let { snapshots, closedMonths } = migrateSnapshotsAndClosed(parsed.monthlySnapshots, parsed.closedMonths);
   const incomingVersion = safeNumber(parsed.engineVersion, 1);
@@ -682,17 +797,20 @@ const migrateData = (parsed) => {
     }
   });
 
+  // Ensure takyeef loan has systemId
   const withReceivable = (loans || []).map(l => {
-    if (l && l.name && l.name.includes('تكييف محمود')) {
-      return { ...l, isReceivable: true, type: 'receivable', interest: 'مستحق لنا شهرياً', paused: !!l.paused };
+    if (isTakyeefLoan(l)) {
+      return { ...l, systemId: SYSTEM_LOAN_IDS.TAKYEEF, isReceivable: true, type: 'receivable', interest: 'مستحق لنا شهرياً', paused: !!l.paused };
     }
     return l;
   });
 
+  // Normalize hany loan
   const normalizedLoans = withReceivable.map(l => {
-    if (l && l.name && l.name.includes('مسحوبات محل هاني') && !l.autoMonthly) {
-      return { id: l.id || 15, name: 'مسحوبات محل هاني', autoMonthly: true, dueNextMonth: true, mergeIntoNextCycle: ['2026-أغسطس'], category: 'مسحوبات محل هاني', totalAmount: 0, prePaidAmount: 0, monthlyInstallment: 0, dueDay: 5, interest: 'مستحق شهري', description: 'مسحوبات يومية — تُحسب تلقائياً من قيود الشهر', type: 'debt' };
+    if (isHanyLoan(l) && !l.autoMonthly) {
+      return { id: l.id || 15, systemId: SYSTEM_LOAN_IDS.HANY, name: 'مسحوبات محل هاني', autoMonthly: true, dueNextMonth: true, mergeIntoNextCycle: ['2026-أغسطس'], category: 'مسحوبات محل هاني', totalAmount: 0, prePaidAmount: 0, monthlyInstallment: 0, dueDay: 5, interest: 'مستحق شهري', description: 'مسحوبات يومية — تُحسب تلقائياً من قيود الشهر', type: 'debt' };
     }
+    if (l && l.autoMonthly && !l.systemId) return { ...l, systemId: SYSTEM_LOAN_IDS.HANY };
     if (l && l.autoMonthly && !l.mergeIntoNextCycle) return { ...l, mergeIntoNextCycle: ['2026-أغسطس'] };
     return l;
   });
@@ -740,15 +858,17 @@ const getInitialData = () => {
   } catch (e) { console.warn(e); }
   return { engineVersion: CURRENT_ENGINE_VERSION, recurringInitialized: true, transactions: [], loans: DEFAULT_LOANS, cards: DEFAULT_CARDS, accountsData: DEFAULT_ACCOUNTS, monthlyPlans: DEFAULT_MONTHLY_PLANS, recurringItems: DEFAULT_RECURRING, closedMonths: [], monthlySnapshots: {}, materializedRecurring: {}, notifiedItems: {}, custodyEntries: DEFAULT_CUSTODY_ENTRIES, cashbackTrackers: DEFAULT_CASHBACK_TRACKERS };
 };
-  class ErrorBoundary extends React.Component {
-  constructor(p) { super(p); this.state = { hasError: false }; }
-  static getDerivedStateFromError() { return { hasError: true }; }
+
+class ErrorBoundary extends React.Component {
+  constructor(p) { super(p); this.state = { hasError: false, error: null }; }
+  static getDerivedStateFromError(error) { return { hasError: true, error }; }
   componentDidCatch(e, i) { console.error('App Error:', e, i); }
   render() {
     if (this.state.hasError) return (
       <div className="flex flex-col h-screen items-center justify-center p-8 text-center" style={{background: 'var(--bg-app)'}} dir="rtl">
         <AlertTriangle size={48} className="text-red-500 mb-4" />
         <h1 className="text-2xl font-black mb-6">عذراً، حدث خطأ تقني</h1>
+        <p className="text-sm mb-6 opacity-70 max-w-md break-all" style={{ color: 'var(--text-secondary)' }}>{String(this.state.error?.message || '')}</p>
         <div className="flex gap-3">
           <button onClick={() => window.location.reload()} className="btn btn-primary"><RefreshCcw size={18}/> إعادة</button>
           <button onClick={() => { localStorage.clear(); window.location.reload(); }} className="btn btn-secondary"><Trash2 size={18}/> مسح</button>
@@ -758,7 +878,118 @@ const getInitialData = () => {
     return this.props.children;
   }
 }
+  // ═══════════════════════════════════════════════════════
+// 🆕 Promise-based Modal Components
+// ═══════════════════════════════════════════════════════
+const PromiseModalProvider = ({ children }) => {
+  const [inputModal, setInputModal] = useState(null);
+  const [confirmModal, setConfirmModal] = useState(null);
+  const [inputValue, setInputValue] = useState('');
 
+  useEffect(() => {
+    const handleInput = (e) => {
+      setInputModal(e.detail);
+      setInputValue(e.detail.inputValue || '');
+    };
+    const handleConfirm = (e) => setConfirmModal(e.detail);
+    window.addEventListener('show-input-modal', handleInput);
+    window.addEventListener('show-confirm-modal', handleConfirm);
+    return () => {
+      window.removeEventListener('show-input-modal', handleInput);
+      window.removeEventListener('show-confirm-modal', handleConfirm);
+    };
+  }, []);
+
+  return (
+    <>
+      {children}
+      {inputModal && (
+        <div className="modal-backdrop z-[6000] no-print">
+          <div className="generic-modal max-w-md">
+            <div className="generic-modal-header">
+              <h3 className="text-base font-black flex items-center gap-2">
+                <span>{inputModal.icon || '💬'}</span>
+                {inputModal.title}
+              </h3>
+              <button onClick={() => { resolveModal(null); setInputModal(null); }} className="btn btn-ghost p-1.5"><X size={16} /></button>
+            </div>
+            <div className="generic-modal-body">
+              {inputModal.message && <p className="text-sm mb-3" style={{ color: 'var(--text-secondary)', whiteSpace: 'pre-line' }}>{inputModal.message}</p>}
+              <input
+                autoFocus
+                type="text"
+                inputMode={inputModal.numeric ? 'decimal' : 'text'}
+                className="input-field text-2xl font-black text-center text-blue-600 py-4"
+                value={inputValue}
+                onChange={e => setInputValue(inputModal.numeric ? e.target.value.replace(/[^\d.\-]/g, '') : e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') {
+                    const v = inputModal.numeric ? parseNumberInput(inputValue) : inputValue.trim();
+                    resolveModal(v); setInputModal(null);
+                  }
+                }}
+                placeholder={inputModal.placeholder || ''}
+              />
+            </div>
+            <div className="generic-modal-footer">
+              <button onClick={() => { resolveModal(null); setInputModal(null); }} className="btn btn-secondary flex-1">إلغاء</button>
+              <button onClick={() => {
+                const v = inputModal.numeric ? parseNumberInput(inputValue) : inputValue.trim();
+                resolveModal(v); setInputModal(null);
+              }} className="btn btn-primary flex-1">{inputModal.confirmText || 'تأكيد'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {confirmModal && (
+        <div className="modal-backdrop z-[6000] no-print">
+          <div className="generic-modal max-w-sm">
+            <div className="generic-modal-body text-center">
+              <div className={`w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center text-3xl ${confirmModal.danger ? 'bg-red-50 dark:bg-red-950/40' : 'bg-blue-50 dark:bg-blue-950/40'}`}>
+                {confirmModal.icon || (confirmModal.danger ? '⚠️' : '❓')}
+              </div>
+              <h3 className="text-base font-black mb-2">{confirmModal.title}</h3>
+              <p className="text-sm leading-relaxed mb-2" style={{ color: 'var(--text-secondary)', whiteSpace: 'pre-line' }}>{confirmModal.message}</p>
+            </div>
+            <div className="generic-modal-footer">
+              <button onClick={() => { resolveModal(false); setConfirmModal(null); }} className="btn btn-secondary flex-1">إلغاء</button>
+              <button onClick={() => { resolveModal(true); setConfirmModal(null); }} className="btn flex-1" style={{ background: confirmModal.danger ? 'var(--danger)' : 'var(--brand)', color: 'white' }}>{confirmModal.confirmText || 'تأكيد'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+};
+
+// ═══════════════════════════════════════════════════════
+// 🆕 Generic Modal Component
+// ═══════════════════════════════════════════════════════
+const Modal = memo(({ isOpen, onClose, title, icon, size = 'md', children, footer, className = '' }) => {
+  if (!isOpen) return null;
+  const sizeClass = { sm: 'max-w-sm', md: 'max-w-md', lg: 'max-w-lg', xl: 'max-w-xl', '2xl': 'max-w-2xl', '3xl': 'max-w-3xl', '5xl': 'max-w-5xl' }[size] || 'max-w-md';
+  return (
+    <div className="modal-backdrop no-print" onClick={(e) => { if (e.target === e.currentTarget && onClose) onClose(); }}>
+      <div className={`generic-modal ${sizeClass} ${className}`}>
+        {title && (
+          <div className="generic-modal-header">
+            <h3 className="text-base font-black flex items-center gap-2">
+              {icon && <span>{icon}</span>}
+              {title}
+            </h3>
+            {onClose && <button onClick={onClose} className="btn btn-ghost p-1.5"><X size={16} /></button>}
+          </div>
+        )}
+        <div className="generic-modal-body">{children}</div>
+        {footer && <div className="generic-modal-footer">{footer}</div>}
+      </div>
+    </div>
+  );
+});
+
+// ═══════════════════════════════════════════════════════
+// Badges & Indicators
+// ═══════════════════════════════════════════════════════
 const BankLogo = memo(({ type, size = 40, className = "" }) => {
   const [err, setErr] = useState(false);
   const get = () => {
@@ -860,7 +1091,9 @@ const ReceiptIndicator = memo(({ tx, dispatch }) => {
   );
 });
 
-// 📅 تجميع العمليات حسب التاريخ + تسمية اليوم
+// ═══════════════════════════════════════════════════════
+// 🆕 Daily Grouping Utilities
+// ═══════════════════════════════════════════════════════
 const groupTransactionsByDate = (list) => {
   const groups = {};
   list.forEach(t => {
@@ -891,39 +1124,34 @@ const groupTransactionsByDate = (list) => {
 };
 
 const DayGroupHeader = memo(({ label, total, count }) => (
-  <div style={{
-    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-    padding: '12px 16px', marginTop: '14px', marginBottom: '10px',
-    background: 'linear-gradient(135deg, var(--brand-soft), transparent)',
-    borderRadius: '14px',
-    borderRight: '4px solid var(--brand)',
-    boxShadow: '0 2px 8px rgba(37, 99, 235, 0.06)'
-  }}>
-    <div style={{ fontSize: '13px', fontWeight: 900, color: 'var(--brand)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+  <div className="day-header">
+    <div className="day-header-badge">
       {label}
       <span style={{ fontSize: '10px', opacity: 0.7, fontWeight: 700 }}>({count})</span>
     </div>
-    <div style={{
-      fontSize: '13px', fontWeight: 900, color: 'var(--text-primary)',
-      background: 'var(--bg-card)', padding: '5px 12px', borderRadius: '999px',
-      boxShadow: '0 2px 6px rgba(0,0,0,0.06)'
-    }}>
-      {fmt(total)} ج.م
-    </div>
+    <div className="day-header-total">{fmt(total)} ج.م</div>
   </div>
 ));
 
+// ═══════════════════════════════════════════════════════
+// GenericLedgerComponent
+// ═══════════════════════════════════════════════════════
 const GenericLedgerComponent = memo(({ walletKey, ledgerData, liveBalance, isExpanded, onToggle, onDelete, onEditTransaction, theme, onAddDeposit, onAddWithdrawal, onExportCSV, walletVisibility, onToggleVisibility }) => {
   const [filter, setFilter] = useState('all');
   const [dateFilter, setDateFilter] = useState('');
+
   const validatedLedger = useMemo(() => {
     try { return (ledgerData || []).map(item => ({ ...item, amount: safeNumber(item.amount), runningBalance: safeNumber(item.runningBalance), date: item.date || 'غير معروف', description: item.description || 'بدون وصف', subType: item.subType || (item.type === 'income' ? 'deposit' : 'withdrawal') })).filter(item => item.amount > 0); } catch { return []; }
   }, [ledgerData]);
+
   const filteredLedger = useMemo(() => validatedLedger.filter(i => { if (filter === 'deposit' && i.subType !== 'deposit') return false; if (filter === 'withdrawal' && i.subType !== 'withdrawal') return false; if (dateFilter && !(i.date||'').includes(dateFilter)) return false; return true; }), [validatedLedger, filter, dateFilter]);
+
   const stats = useMemo(() => ({ deposits: validatedLedger.filter(t => t.subType === 'deposit').reduce((s, t) => s + t.amount, 0), withdrawals: validatedLedger.filter(t => t.subType === 'withdrawal').reduce((s, t) => s + t.amount, 0), currentBalance: safeNumber(liveBalance) }), [validatedLedger, liveBalance]);
+
   const mask = (v) => !walletVisibility?.[walletKey] ? '•••••' : fmt(v);
   const IconComponent = theme.icon;
   const stop = (e, action) => { e.stopPropagation(); e.preventDefault(); if (action) action(); };
+
   return (
     <div className="card mb-3">
       <div className="flex justify-between items-center cursor-pointer -m-4.5 p-4.5" onClick={onToggle}>
@@ -996,6 +1224,9 @@ const GenericLedgerComponent = memo(({ walletKey, ledgerData, liveBalance, isExp
   );
 });
 
+// ═══════════════════════════════════════════════════════
+// CustodyView
+// ═══════════════════════════════════════════════════════
 const CustodyView = memo(({ data, dispatch, saveHistory, addNotification }) => {
   const [showAdd, setShowAdd] = useState(false);
   const [filterType, setFilterType] = useState('all');
@@ -1009,11 +1240,15 @@ const CustodyView = memo(({ data, dispatch, saveHistory, addNotification }) => {
   }, [custodyEntries, filterType]);
 
   const addEntry = () => {
-    const amount = parseNumberInput(newEntry.amount);
-    if (amount <= 0) { addNotification({ type: 'error', title: 'مبلغ غير صحيح' }); return; }
-    if (!newEntry.description.trim()) { addNotification({ type: 'error', title: 'اكتب الوصف' }); return; }
+    const check = validateAmount(newEntry.amount, { min: 0.01, max: 10000000, label: 'المبلغ' });
+    if (!check.valid) { addNotification({ type: 'error', title: 'خطأ', message: check.error }); return; }
+    const descCheck = validateText(newEntry.description, { min: 2, max: 200, label: 'الوصف' });
+    if (!descCheck.valid) { addNotification({ type: 'error', title: 'خطأ', message: descCheck.error }); return; }
+    const dateCheck = validateDate(newEntry.date);
+    if (!dateCheck.valid) { addNotification({ type: 'error', title: 'خطأ', message: dateCheck.error }); return; }
     saveHistory();
-    const entry = { ...newEntry, id: getSafeId(), amount, status: newEntry.type === CUSTODY_TYPE.SETTLE ? 'settled' : 'open' };
+    const amount = check.value;
+    const entry = { ...newEntry, description: descCheck.value, id: getSafeId(), amount, status: newEntry.type === CUSTODY_TYPE.SETTLE ? 'settled' : 'open' };
     const newEntries = [entry, ...custodyEntries];
     const newTxs = [];
     const d = new Date(newEntry.date);
@@ -1139,68 +1374,65 @@ const CustodyView = memo(({ data, dispatch, saveHistory, addNotification }) => {
       )}
 
       {showAdd && (
-        <div className="modal-backdrop no-print">
-          <div className="w-full max-w-md rounded-2xl shadow-2xl animate-slideInBottom" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)' }}>
-            <div className="p-4 flex justify-between items-center" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-              <h3 className="text-base font-black flex items-center gap-2"><Briefcase size={16} className="text-blue-500" /> حركة عهدة جديدة</h3>
-              <button onClick={() => setShowAdd(false)} className="btn btn-ghost p-1.5"><X size={16} /></button>
+        <Modal isOpen={true} onClose={() => setShowAdd(false)} title="حركة عهدة جديدة" icon="💼">
+          <div className="space-y-3">
+            <div>
+              <p className="text-[11px] font-bold mb-2" style={{ color: 'var(--text-muted)' }}>نوع الحركة:</p>
+              <div className="grid grid-cols-2 gap-2">
+                {Object.entries(CUSTODY_TYPE_LABELS).map(([type, label]) => {
+                  const Icon = CUSTODY_TYPE_ICONS[type] || Briefcase;
+                  const color = CUSTODY_TYPE_COLORS[type];
+                  const selected = newEntry.type === type;
+                  return (
+                    <button key={type} type="button" onClick={() => setNewEntry({ ...newEntry, type })} className={`p-2.5 rounded-lg text-[11px] font-bold transition-all border-2 flex items-center gap-2`} style={selected ? { borderColor: color, background: `${color}15`, color } : { borderColor: 'var(--border-default)' }}>
+                      <Icon size={14} /><span>{label}</span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-            <div className="p-4 space-y-3">
+            <div className="grid grid-cols-2 gap-3">
               <div>
-                <p className="text-[11px] font-bold mb-2" style={{ color: 'var(--text-muted)' }}>نوع الحركة:</p>
-                <div className="grid grid-cols-2 gap-2">
-                  {Object.entries(CUSTODY_TYPE_LABELS).map(([type, label]) => {
-                    const Icon = CUSTODY_TYPE_ICONS[type] || Briefcase;
-                    const color = CUSTODY_TYPE_COLORS[type];
-                    const selected = newEntry.type === type;
-                    return (
-                      <button key={type} type="button" onClick={() => setNewEntry({ ...newEntry, type })} className={`p-2.5 rounded-lg text-[11px] font-bold transition-all border-2 flex items-center gap-2`} style={selected ? { borderColor: color, background: `${color}15`, color } : { borderColor: 'var(--border-default)' }}>
-                        <Icon size={14} /><span>{label}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>المبلغ *</label>
-                  <input type="text" inputMode="decimal" className="input-field text-base font-black text-blue-600 text-center" value={newEntry.amount} onChange={e => setNewEntry({ ...newEntry, amount: e.target.value })} placeholder="0.00" />
-                </div>
-                <div>
-                  <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>التاريخ *</label>
-                  <input type="date" className="input-field text-xs font-bold" value={newEntry.date} onChange={e => setNewEntry({ ...newEntry, date: e.target.value })} />
-                </div>
+                <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>المبلغ *</label>
+                <input type="text" inputMode="decimal" className="input-field text-base font-black text-blue-600 text-center" value={newEntry.amount} onChange={e => setNewEntry({ ...newEntry, amount: e.target.value })} placeholder="0.00" />
               </div>
               <div>
-                <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>الوصف *</label>
-                <input type="text" className="input-field" placeholder="عهدة إيماك - WE..." value={newEntry.description} onChange={e => setNewEntry({ ...newEntry, description: e.target.value })} />
+                <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>التاريخ *</label>
+                <input type="date" className="input-field text-xs font-bold" value={newEntry.date} onChange={e => setNewEntry({ ...newEntry, date: e.target.value })} />
               </div>
+            </div>
+            <div>
+              <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>الوصف *</label>
+              <input type="text" className="input-field" placeholder="عهدة إيماك - WE..." value={newEntry.description} onChange={e => setNewEntry({ ...newEntry, description: e.target.value })} />
+            </div>
+            <div>
+              <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>الحساب/البطاقة</label>
+              <select className="input-field text-sm" value={newEntry.method} onChange={e => setNewEntry({ ...newEntry, method: e.target.value })}>
+                {PAYMENT_METHODS.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+              </select>
+            </div>
+            {(newEntry.type === CUSTODY_TYPE.SPEND_CASH || newEntry.type === CUSTODY_TYPE.SPEND_CARD) && (
               <div>
-                <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>الحساب/البطاقة</label>
-                <select className="input-field text-sm" value={newEntry.method} onChange={e => setNewEntry({ ...newEntry, method: e.target.value })}>
-                  {PAYMENT_METHODS.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+                <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>فئة الصرف</label>
+                <select className="input-field text-sm" value={newEntry.relatedCategory} onChange={e => setNewEntry({ ...newEntry, relatedCategory: e.target.value })}>
+                  <option value="فواتير عهدة">فواتير عهدة</option>
+                  <option value="مصروفات عهدة">مصروفات عهدة</option>
+                  <option value="الاتصالات وشحن الهواتف المحمولة">الاتصالات وشحن الهواتف</option>
+                  <option value="أخرى">أخرى</option>
                 </select>
               </div>
-              {(newEntry.type === CUSTODY_TYPE.SPEND_CASH || newEntry.type === CUSTODY_TYPE.SPEND_CARD) && (
-                <div>
-                  <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>فئة الصرف</label>
-                  <select className="input-field text-sm" value={newEntry.relatedCategory} onChange={e => setNewEntry({ ...newEntry, relatedCategory: e.target.value })}>
-                    <option value="فواتير عهدة">فواتير عهدة</option>
-                    <option value="مصروفات عهدة">مصروفات عهدة</option>
-                    <option value="الاتصالات وشحن الهواتف المحمولة">الاتصالات وشحن الهواتف</option>
-                    <option value="أخرى">أخرى</option>
-                  </select>
-                </div>
-              )}
-              <button onClick={addEntry} className="btn btn-primary w-full py-2.5 text-sm"><Save size={14} /> تسجيل الحركة</button>
-            </div>
+            )}
+            <button onClick={addEntry} className="btn btn-primary w-full py-2.5 text-sm"><Save size={14} /> تسجيل الحركة</button>
           </div>
-        </div>
+        </Modal>
       )}
     </div>
   );
 });
 
+// ═══════════════════════════════════════════════════════
+// CashbackView
+// ═══════════════════════════════════════════════════════
 const CashbackView = memo(({ data, dispatch, saveHistory, addNotification, cards, selectedYear, selectedMonth }) => {
   const [showAdd, setShowAdd] = useState(false);
   const [newTracker, setNewTracker] = useState({ cardId: cards[0]?.id || 1, month: selectedMonth, year: selectedYear, expectedAmount: '', receivedAmount: '', receivedDate: '', status: CASHBACK_STATUS.EXPECTED, notes: '' });
@@ -1223,9 +1455,10 @@ const CashbackView = memo(({ data, dispatch, saveHistory, addNotification, cards
   const monthPending = monthExpected - monthReceived;
 
   const addTracker = () => {
-    const expected = parseNumberInput(newTracker.expectedAmount);
-    if (expected <= 0) { addNotification({ type: 'error', title: 'أدخل المبلغ المتوقع' }); return; }
+    const check = validateAmount(newTracker.expectedAmount, { min: 0.01, max: 1000000, label: 'المبلغ المتوقع' });
+    if (!check.valid) { addNotification({ type: 'error', title: 'خطأ', message: check.error }); return; }
     saveHistory();
+    const expected = check.value;
     const received = parseNumberInput(newTracker.receivedAmount);
     const tracker = { ...newTracker, id: getSafeId(), expectedAmount: expected, receivedAmount: received, status: received >= expected ? CASHBACK_STATUS.RECEIVED : received > 0 ? CASHBACK_STATUS.PARTIAL : CASHBACK_STATUS.EXPECTED };
     dispatch({ type: 'UPDATE_CASHBACK_TRACKERS', payload: [...trackers, tracker] });
@@ -1338,46 +1571,43 @@ const CashbackView = memo(({ data, dispatch, saveHistory, addNotification, cards
       </div>
 
       {showAdd && (
-        <div className="modal-backdrop no-print">
-          <div className="w-full max-w-md rounded-2xl shadow-2xl animate-slideInBottom" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)' }}>
-            <div className="p-4 flex justify-between items-center" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-              <h3 className="text-base font-black flex items-center gap-2"><Gift size={16} className="text-emerald-500" /> متتبع كاش باك</h3>
-              <button onClick={() => setShowAdd(false)} className="btn btn-ghost p-1.5"><X size={16} /></button>
+        <Modal isOpen={true} onClose={() => setShowAdd(false)} title="متتبع كاش باك" icon="🎁">
+          <div className="space-y-3">
+            <div>
+              <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>البطاقة</label>
+              <select className="input-field" value={newTracker.cardId} onChange={e => setNewTracker({ ...newTracker, cardId: Number(e.target.value) })}>
+                {cards.map(c => <option key={c.id} value={c.id}>{c.bank} - {c.name}</option>)}
+              </select>
             </div>
-            <div className="p-4 space-y-3">
+            <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>البطاقة</label>
-                <select className="input-field" value={newTracker.cardId} onChange={e => setNewTracker({ ...newTracker, cardId: Number(e.target.value) })}>
-                  {cards.map(c => <option key={c.id} value={c.id}>{c.bank} - {c.name}</option>)}
+                <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>الشهر</label>
+                <select className="input-field text-sm" value={newTracker.month} onChange={e => setNewTracker({ ...newTracker, month: e.target.value })}>
+                  {getMonthsForYear(newTracker.year).map(m => <option key={m} value={m}>{m}</option>)}
                 </select>
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>الشهر</label>
-                  <select className="input-field text-sm" value={newTracker.month} onChange={e => setNewTracker({ ...newTracker, month: e.target.value })}>
-                    {getMonthsForYear(newTracker.year).map(m => <option key={m} value={m}>{m}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>السنة</label>
-                  <select className="input-field text-sm" value={newTracker.year} onChange={e => setNewTracker({ ...newTracker, year: Number(e.target.value) })}>
-                    {YEARS_LIST.map(y => <option key={y} value={y}>{y}</option>)}
-                  </select>
-                </div>
-              </div>
               <div>
-                <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>المبلغ المتوقع *</label>
-                <input type="text" inputMode="decimal" className="input-field text-base font-black text-blue-600 text-center" value={newTracker.expectedAmount} onChange={e => setNewTracker({ ...newTracker, expectedAmount: e.target.value })} placeholder="0.00" />
+                <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>السنة</label>
+                <select className="input-field text-sm" value={newTracker.year} onChange={e => setNewTracker({ ...newTracker, year: Number(e.target.value) })}>
+                  {YEARS_LIST.map(y => <option key={y} value={y}>{y}</option>)}
+                </select>
               </div>
-              <button onClick={addTracker} className="btn btn-primary w-full py-2.5 text-sm"><Save size={14} /> إضافة</button>
             </div>
+            <div>
+              <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>المبلغ المتوقع *</label>
+              <input type="text" inputMode="decimal" className="input-field text-base font-black text-blue-600 text-center" value={newTracker.expectedAmount} onChange={e => setNewTracker({ ...newTracker, expectedAmount: e.target.value })} placeholder="0.00" />
+            </div>
+            <button onClick={addTracker} className="btn btn-primary w-full py-2.5 text-sm"><Save size={14} /> إضافة</button>
           </div>
-        </div>
+        </Modal>
       )}
     </div>
   );
 });
 
+// ═══════════════════════════════════════════════════════
+// DuplicateDetectionSystem
+// ═══════════════════════════════════════════════════════
 const DuplicateDetectionSystem = ({ transactions, data, dispatch, addNotification, saveHistory }) => {
   const [threshold, setThreshold] = useState(2);
   const [selectedMonth, setSelectedMonth] = useState('all');
@@ -1468,26 +1698,35 @@ const DuplicateDetectionSystem = ({ transactions, data, dispatch, addNotificatio
   );
 };
 
+// ═══════════════════════════════════════════════════════
+// ConfirmDialog (state-based — kept for compatibility)
+// ═══════════════════════════════════════════════════════
 const ConfirmDialog = ({ confirmDialog, dispatch }) => {
   if (!confirmDialog.isOpen) return null;
   const isDanger = confirmDialog.danger;
   return (
     <div className="modal-backdrop z-[5000]">
-      <div className="w-full max-w-sm rounded-2xl shadow-2xl p-6 text-center animate-slideInBottom" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)' }}>
-        <div className={`w-14 h-14 ${isDanger ? 'bg-red-50 dark:bg-red-950/40 text-red-500' : 'bg-blue-50 dark:bg-blue-950/40 text-blue-500'} rounded-full flex items-center justify-center mx-auto mb-4`}>
-          {isDanger ? <AlertTriangle size={24} /> : <Bell size={24} />}
+      <div className="generic-modal max-w-sm">
+        <div className="generic-modal-body text-center">
+          <div className={`w-14 h-14 mx-auto mb-4 rounded-full flex items-center justify-center ${isDanger ? 'bg-red-50 dark:bg-red-950/40 text-red-500' : 'bg-blue-50 dark:bg-blue-950/40 text-blue-500'}`}>
+            {isDanger ? <AlertTriangle size={24} /> : <Bell size={24} />}
+          </div>
+          <h3 className="text-base font-black mb-2">{confirmDialog.title}</h3>
+          <p className="text-sm font-medium mb-2 leading-relaxed whitespace-pre-line" style={{ color: 'var(--text-secondary)' }}>{confirmDialog.message}</p>
         </div>
-        <h3 className="text-base font-black mb-2">{confirmDialog.title}</h3>
-        <p className="text-sm font-medium mb-5 leading-relaxed whitespace-pre-line" style={{ color: 'var(--text-secondary)' }}>{confirmDialog.message}</p>
-        <div className="flex gap-2">
+        <div className="generic-modal-footer">
           <button autoFocus onClick={() => { confirmDialog.onCancel?.(); dispatch({ type: 'HIDE_CONFIRM' }); }} className="btn btn-secondary flex-1 text-sm">إلغاء</button>
-          <button onClick={() => { confirmDialog.onConfirm?.(); dispatch({ type: 'HIDE_CONFIRM' }); }} className={`btn btn-primary flex-1 text-sm`} style={isDanger ? { background: 'var(--danger)' } : {}}>تأكيد</button>
+          <button onClick={() => { confirmDialog.onConfirm?.(); dispatch({ type: 'HIDE_CONFIRM' }); }} className="btn flex-1 text-sm" style={{ background: isDanger ? 'var(--danger)' : 'var(--brand)', color: 'white' }}>تأكيد</button>
         </div>
       </div>
     </div>
   );
 };
-  const MonthSelector = memo(({ selectedYear, selectedMonth, onSelectYear, onSelectMonth, className = "" }) => {
+
+// ═══════════════════════════════════════════════════════
+// MonthSelector
+// ═══════════════════════════════════════════════════════
+const MonthSelector = memo(({ selectedYear, selectedMonth, onSelectYear, onSelectMonth, className = "" }) => {
   const months = getMonthsForYear(selectedYear);
   return (
     <div className={`card py-3 ${className}`}>
@@ -1507,6 +1746,9 @@ const ConfirmDialog = ({ confirmDialog, dispatch }) => {
   );
 });
 
+// ═══════════════════════════════════════════════════════
+// EnhancedStatCard
+// ═══════════════════════════════════════════════════════
 const EnhancedStatCard = ({ title, amount, icon: Icon, subtitle, isPrivate, color = 'emerald' }) => {
   const colorMap = { emerald: 'text-emerald-600 dark:text-emerald-400', red: 'text-red-600 dark:text-red-400', blue: 'text-blue-600 dark:text-blue-400', purple: 'text-purple-600 dark:text-purple-400', amber: 'text-amber-600 dark:text-amber-400' };
   const bgMap = { emerald: 'bg-emerald-50 dark:bg-emerald-950/30', red: 'bg-red-50 dark:bg-red-950/30', blue: 'bg-blue-50 dark:bg-blue-950/30', purple: 'bg-purple-50 dark:bg-purple-950/30', amber: 'bg-amber-50 dark:bg-amber-950/30' };
@@ -1526,6 +1768,9 @@ const EnhancedStatCard = ({ title, amount, icon: Icon, subtitle, isPrivate, colo
   );
 };
 
+// ═══════════════════════════════════════════════════════
+// QuickBalanceOverview
+// ═══════════════════════════════════════════════════════
 const QuickBalanceOverview = memo(({ balances, walletVisibility, onToggleVisibility }) => {
   const [isVisible, setIsVisible] = useState(true);
   const accounts = ACCOUNT_KEYS.map(k => ({
@@ -1578,7 +1823,9 @@ const QuickBalanceOverview = memo(({ balances, walletVisibility, onToggleVisibil
     </div>
   );
 });
-
+  // ═══════════════════════════════════════════════════════
+// MonthComparisonView
+// ═══════════════════════════════════════════════════════
 const MonthComparisonView = memo(({ transactions, selectedYear, selectedMonth }) => {
   const idx = getMonthIndex(selectedMonth);
   const prevMonth = idx > 0 ? ALL_MONTHS[idx - 1] : 'ديسمبر';
@@ -1642,21 +1889,27 @@ const MonthComparisonView = memo(({ transactions, selectedYear, selectedMonth })
   );
 });
 
+// ═══════════════════════════════════════════════════════
+// DashboardView
+// ═══════════════════════════════════════════════════════
 const DashboardView = memo(({ data, financeSnapshot, liveBalances, totalLiquidity, walletVisibility, onToggleVisibility, dispatch, selectedYear, selectedMonth, transactions, cards, updatedLoans, chartData, isDarkMode, handleManualReconciliation, addNotification, onSelectYear, onSelectMonth }) => {
-  const totalCardDebt = cards.reduce((s, c) => s + computeCardDebt(data, c), 0);
-  const totalLoanDebt = updatedLoans.filter(l => !l.isReceivable).reduce((s, l) => s + l.remaining, 0);
+  const totalCardDebt = useMemo(() => cards.reduce((s, c) => s + computeCardDebt(data, c), 0), [cards, data]);
+  const totalLoanDebt = useMemo(() => updatedLoans.filter(l => !l.isReceivable).reduce((s, l) => s + l.remaining, 0), [updatedLoans]);
   const grandTotalDebt = totalCardDebt + totalLoanDebt;
   const netPosition = totalLiquidity - grandTotalDebt;
   const custodySummary = useMemo(() => computeCustodyBalance(data?.custodyEntries), [data?.custodyEntries]);
+
   const bankFeesMonth = useMemo(() => {
     return transactions.filter(t => t.status === 'paid' && t.type === 'expense' && BANK_FEE_CATEGORIES.has(t.category) && t.month === selectedMonth && (t.year || 2026) === selectedYear).reduce((s, t) => s + safeNumber(t.amount), 0);
   }, [transactions, selectedMonth, selectedYear]);
+
   const monthCashback = useMemo(() => {
     const trackers = (data?.cashbackTrackers || []).filter(t => t.month === selectedMonth && (t.year || 2026) === selectedYear);
     const expected = trackers.reduce((s, t) => s + safeNumber(t.expectedAmount), 0);
     const received = trackers.reduce((s, t) => s + safeNumber(t.receivedAmount), 0);
     return { expected, received, pending: expected - received };
   }, [data?.cashbackTrackers, selectedMonth, selectedYear]);
+
   const pieData = useMemo(() => {
     const acc = {};
     transactions.filter(t => t.type === 'expense' && t.month === selectedMonth && (t.year || 2026) === selectedYear && t.status === 'paid' && safeNumber(t.amount) > 0).forEach(t => { acc[t.category] = (acc[t.category] || 0) + safeNumber(t.amount); });
@@ -1666,6 +1919,7 @@ const DashboardView = memo(({ data, financeSnapshot, liveBalances, totalLiquidit
     const restVal = sorted.slice(4).reduce((s, i) => s + i.value, 0);
     return [...top, { name: 'أخرى', value: restVal }];
   }, [transactions, selectedMonth, selectedYear]);
+
   const net = financeSnapshot;
 
   return (
@@ -1815,6 +2069,9 @@ const DashboardView = memo(({ data, financeSnapshot, liveBalances, totalLiquidit
   );
 });
 
+// ═══════════════════════════════════════════════════════
+// CategoryDetailModal
+// ═══════════════════════════════════════════════════════
 const CategoryDetailModal = memo(({ activeCategoryDetail, detailedTransactions, detailedTotal, paidTotal, pendingTotal, selectedMonth, selectedYear, dispatch, handleDelete, printReport, exportPdf }) => (
   <div className="fixed inset-0 z-[3000] no-print">
     <div className="absolute inset-0 backdrop-blur-md animate-fadeIn" style={{ background: 'rgba(42, 36, 24, 0.55)' }} onClick={() => dispatch({ type: 'SET_ACTIVE_CATEGORY_DETAIL', payload: null })}></div>
@@ -1878,11 +2135,15 @@ const CategoryDetailModal = memo(({ activeCategoryDetail, detailedTransactions, 
   </div>
 ));
 
+// ═══════════════════════════════════════════════════════
+// CategoriesView
+// ═══════════════════════════════════════════════════════
 const CategoriesView = memo(({ transactions, selectedMonth, selectedYear, catViewType, activeCategoryDetail, budgets, dispatch, handleDelete, printReport, exportPdf, onSelectYear, onSelectMonth }) => {
-  const catTotals = transactions.filter(t => t.type === catViewType && t.month === selectedMonth && (t.year || 2026) === selectedYear).reduce((acc, t) => { acc[t.category] = (acc[t.category] || 0) + safeNumber(t.amount); return acc; }, {});
-  const detailedTransactions = activeCategoryDetail ? transactions.filter(t => t.category === activeCategoryDetail && t.month === selectedMonth && (t.year || 2026) === selectedYear).sort((a, b) => new Date(a.date) - new Date(b.date)) : [];
-  const detailedTotal = detailedTransactions.reduce((s, t) => s + safeNumber(t.amount), 0);
-  const paidTotal = detailedTransactions.filter(t => t.status === 'paid').reduce((s, t) => s + safeNumber(t.amount), 0);
+  const catTotals = useMemo(() => transactions.filter(t => t.type === catViewType && t.month === selectedMonth && (t.year || 2026) === selectedYear).reduce((acc, t) => { acc[t.category] = (acc[t.category] || 0) + safeNumber(t.amount); return acc; }, {}), [transactions, catViewType, selectedMonth, selectedYear]);
+
+  const detailedTransactions = useMemo(() => activeCategoryDetail ? transactions.filter(t => t.category === activeCategoryDetail && t.month === selectedMonth && (t.year || 2026) === selectedYear).sort((a, b) => new Date(a.date) - new Date(b.date)) : [], [activeCategoryDetail, transactions, selectedMonth, selectedYear]);
+  const detailedTotal = useMemo(() => detailedTransactions.reduce((s, t) => s + safeNumber(t.amount), 0), [detailedTransactions]);
+  const paidTotal = useMemo(() => detailedTransactions.filter(t => t.status === 'paid').reduce((s, t) => s + safeNumber(t.amount), 0), [detailedTransactions]);
   const pendingTotal = detailedTotal - paidTotal;
   const printGlobalData = CATEGORIES[catViewType].map(cat => ({ date: `${selectedMonth} ${selectedYear}`, category: cat, description: 'إجمالي', method: '-', amount: catTotals[cat] || 0 })).filter(i => i.amount > 0);
   return (
@@ -1922,21 +2183,31 @@ const CategoriesView = memo(({ transactions, selectedMonth, selectedYear, catVie
   );
 });
 
+// ═══════════════════════════════════════════════════════
+// TransactionsView (with Daily Grouping)
+// ═══════════════════════════════════════════════════════
 const TransactionsView = memo(({ groupedTransactions, transactions, selectedMonth, selectedYear, transViewMode, statusFilter, searchTerm, expandedGroup, data, monthInsights, dispatch, handleDelete, printReport, exportPdf, addNotification, onSelectYear, onSelectMonth, saveHistory, onPrintMonthlyReport }) => {
   const [sourceFilter, setSourceFilter] = useState('all');
   const [showFilters, setShowFilters] = useState(false);
   const [showBankFeesOnly, setShowBankFeesOnly] = useState(false);
+
   const filterBySource = (list) => { if (sourceFilter === 'all') return list; if (sourceFilter === 'self') return list.filter(t => !isFamilyTx(t)); return list.filter(t => t.createdBy === sourceFilter); };
   const filterByBankFees = (list) => showBankFeesOnly ? list.filter(t => isBankFee(t)) : list;
-  const pendingGroups = groupedTransactions.map(g => ({ ...g, items: filterByBankFees(filterBySource(g.items.filter(t => t.status !== 'paid'))) })).filter(g => g.items.length > 0);
-  const paidArchive = filterByBankFees(filterBySource(transactions.filter(t => t.month === selectedMonth && (t.year || 2026) === selectedYear && t.status === 'paid' && t.type === transViewMode))).sort((a, b) => new Date(b.date) - new Date(a.date));
+
+  const pendingGroups = useMemo(() => groupedTransactions.map(g => ({ ...g, items: filterByBankFees(filterBySource(g.items.filter(t => t.status !== 'paid'))) })).filter(g => g.items.length > 0), [groupedTransactions, sourceFilter, showBankFeesOnly]);
+  const paidArchive = useMemo(() => filterByBankFees(filterBySource(transactions.filter(t => t.month === selectedMonth && (t.year || 2026) === selectedYear && t.status === 'paid' && t.type === transViewMode))).sort((a, b) => new Date(b.date) - new Date(a.date)), [transactions, selectedMonth, selectedYear, transViewMode, sourceFilter, showBankFeesOnly]);
   const totalPending = pendingGroups.reduce((s, g) => s + g.items.length, 0);
   const isClosed = isMonthClosed(data, selectedYear, selectedMonth);
+
   const approveOne = (t) => { if (isMonthClosed(data, t.year || 2026, t.month)) { addNotification({ type: 'error', title: 'محظور' }); return; } dispatch({ type: 'UPDATE_TRANSACTIONS', payload: transactions.map(tr => tr.id === t.id ? { ...tr, status: 'paid' } : tr) }); addNotification({ type: 'success', title: 'تم الاعتماد' }); };
   const approveAll = () => { if (isClosed) { addNotification({ type: 'error', title: 'محظور' }); return; } dispatch({ type: 'SHOW_CONFIRM', danger: false, title: 'اعتماد الكل', message: `سيتم اعتماد ${totalPending} عملية`, onConfirm: () => { saveHistory(); const ids = new Set(pendingGroups.flatMap(g => g.items.map(i => i.id))); dispatch({ type: 'UPDATE_TRANSACTIONS', payload: transactions.map(t => ids.has(t.id) ? { ...t, status: 'paid' } : t) }); addNotification({ type: 'success', title: 'تم الاعتماد' }); }, onCancel: () => dispatch({ type: 'HIDE_CONFIRM' }) }); };
   const reopenOne = (t) => { if (isMonthClosed(data, t.year || 2026, t.month)) { addNotification({ type: 'error', title: 'محظور' }); return; } dispatch({ type: 'UPDATE_TRANSACTIONS', payload: transactions.map(tr => tr.id === t.id ? { ...tr, status: 'pending' } : tr) }); addNotification({ type: 'warning', title: 'إعادة تعليق' }); };
   const monthTx = transactions.filter(t => t.month === selectedMonth && (t.year || 2026) === selectedYear);
   const activeFiltersCount = (sourceFilter !== 'all' ? 1 : 0) + (statusFilter !== 'all' ? 1 : 0) + (showBankFeesOnly ? 1 : 0);
+
+  // 🆕 Daily groups for the paid archive
+  const dailyGroups = useMemo(() => groupTransactionsByDate(paidArchive), [paidArchive]);
+
   return (
     <div className="space-y-4 animate-fadeIn">
       <div className="card">
@@ -2066,7 +2337,7 @@ const TransactionsView = memo(({ groupedTransactions, transactions, selectedMont
         )}
       </section>
 
-      {paidArchive.length > 0 && (
+      {dailyGroups.length > 0 && (
         <details className="group" open>
           <summary className="cursor-pointer list-none">
             <div className="card py-3 flex items-center justify-between">
@@ -2075,7 +2346,7 @@ const TransactionsView = memo(({ groupedTransactions, transactions, selectedMont
             </div>
           </summary>
           <div className="mt-2">
-            {groupTransactionsByDate(paidArchive).map(group => (
+            {dailyGroups.map(group => (
               <div key={group.date}>
                 <DayGroupHeader label={group.label} total={group.total} count={group.items.length} />
                 <div className="space-y-2">
@@ -2100,12 +2371,16 @@ const TransactionsView = memo(({ groupedTransactions, transactions, selectedMont
     </div>
   );
 });
-  const LoansView = memo(({ updatedLoans, cards, recurringItems, transactions, dispatch, deleteRecurring, saveHistory, getLocalISODate, addNotification, data, selectedMonth, selectedYear }) => {
+  // ═══════════════════════════════════════════════════════
+// LoansView
+// ═══════════════════════════════════════════════════════
+const LoansView = memo(({ updatedLoans, cards, recurringItems, transactions, dispatch, deleteRecurring, saveHistory, getLocalISODate, addNotification, data, selectedMonth, selectedYear }) => {
   const [showAdd, setShowAdd] = useState(false);
   const [activeTab, setActiveTab] = useState('loans');
   const [newLoan, setNewLoan] = useState({ name: '', totalAmount: '', monthlyInstallment: '', dueDay: 1, description: '', isReceivable: false });
 
-  const settleHany = (loan) => {
+  // 🆕 FIXED: settleHany now uses Promise-based modal instead of prompt()
+  const settleHany = async (loan) => {
     const months = ALL_MONTHS;
     const total = safeNumber(loan.totalAmount);
     const paidAlready = safeNumber(loan.totalPaid);
@@ -2114,11 +2389,21 @@ const TransactionsView = memo(({ groupedTransactions, transactions, selectedMont
     const monthLabel = `${loan.month} ${loan.year}`;
     const alreadyCarried = transactions.some(t => t.source === 'carryover' && t.carryoverFrom === monthLabel);
     if (alreadyCarried) { addNotification({ type: 'info', title: 'تمت التسوية مسبقاً' }); return; }
-    const input = prompt(`تسوية مسحوبات محل هاني\n\nالإجمالي: ${fmt(total)}\nمدفوع: ${fmt(paidAlready)}\nالمتبقي: ${fmt(remaining)}\n\nالمبلغ المدفوع الآن:`, String(remaining));
+
+    const input = await showInputModal({
+      title: 'تسوية مسحوبات محل هاني',
+      icon: '💰',
+      message: `الإجمالي: ${fmt(total)}\nمدفوع: ${fmt(paidAlready)}\nالمتبقي: ${fmt(remaining)}\n\nالمبلغ المدفوع الآن:`,
+      inputValue: String(remaining),
+      numeric: true,
+      confirmText: 'تسوية'
+    });
+
     if (input === null) return;
     const paidNow = parseNumberInput(input);
     if (paidNow <= 0) { addNotification({ type: 'error', title: 'مبلغ غير صحيح' }); return; }
     if (paidNow > remaining + 0.005) { addNotification({ type: 'error', title: `الحد الأقصى ${fmt(remaining)}` }); return; }
+
     const newRemaining = remaining - paidNow;
     const willCarry = newRemaining > 0.005;
     let nextMIdx = 0, nextY = loan.year, nextMonthName = '';
@@ -2141,17 +2426,20 @@ const TransactionsView = memo(({ groupedTransactions, transactions, selectedMont
     addNotification({ type: 'success', title: 'تمت التسوية', duration: 7000 });
   };
 
-  const totalLoans = updatedLoans.filter(l => !l.isReceivable).reduce((s, l) => s + l.remaining, 0);
-  const totalReceivable = updatedLoans.filter(l => l.isReceivable).reduce((s, l) => s + l.remaining, 0);
-  const payables = updatedLoans.filter(l => !l.isReceivable);
-  const receivables = updatedLoans.filter(l => l.isReceivable);
-  const totalCards = cards.reduce((acc, c) => acc + computeCardDebt(data, c), 0);
+  const totalLoans = useMemo(() => updatedLoans.filter(l => !l.isReceivable).reduce((s, l) => s + l.remaining, 0), [updatedLoans]);
+  const totalReceivable = useMemo(() => updatedLoans.filter(l => l.isReceivable).reduce((s, l) => s + l.remaining, 0), [updatedLoans]);
+  const payables = useMemo(() => updatedLoans.filter(l => !l.isReceivable), [updatedLoans]);
+  const receivables = useMemo(() => updatedLoans.filter(l => l.isReceivable), [updatedLoans]);
+  const totalCards = useMemo(() => cards.reduce((acc, c) => acc + computeCardDebt(data, c), 0), [cards, data]);
   const custodySummary = useMemo(() => computeCustodyBalance(data?.custodyEntries), [data?.custodyEntries]);
 
   const addLoan = () => {
-    if (!newLoan.name || safeNumber(newLoan.totalAmount) <= 0) { addNotification({ type: 'error', title: 'الاسم والمبلغ مطلوبان' }); return; }
+    const nameCheck = validateText(newLoan.name, { min: 2, max: 200, label: 'الاسم' });
+    if (!nameCheck.valid) { addNotification({ type: 'error', title: 'خطأ', message: nameCheck.error }); return; }
+    const amountCheck = validateAmount(newLoan.totalAmount, { min: 0.01, max: 10000000, label: 'المبلغ' });
+    if (!amountCheck.valid) { addNotification({ type: 'error', title: 'خطأ', message: amountCheck.error }); return; }
     saveHistory();
-    dispatch({ type: 'UPDATE_LOANS', payload: [...updatedLoans, { id: Date.now(), name: newLoan.name, totalAmount: safeNumber(newLoan.totalAmount), prePaidAmount: 0, monthlyInstallment: safeNumber(newLoan.monthlyInstallment), dueDay: safeNumber(newLoan.dueDay, 1), interest: '', description: newLoan.description || '', type: newLoan.isReceivable ? 'receivable' : 'debt', isReceivable: newLoan.isReceivable, paused: false }] });
+    dispatch({ type: 'UPDATE_LOANS', payload: [...updatedLoans, { id: Date.now(), name: nameCheck.value, totalAmount: amountCheck.value, prePaidAmount: 0, monthlyInstallment: safeNumber(newLoan.monthlyInstallment), dueDay: safeNumber(newLoan.dueDay, 1), interest: '', description: newLoan.description || '', type: newLoan.isReceivable ? 'receivable' : 'debt', isReceivable: newLoan.isReceivable, paused: false }] });
     setShowAdd(false); setNewLoan({ name: '', totalAmount: '', monthlyInstallment: '', dueDay: 1, description: '', isReceivable: false });
     addNotification({ type: 'success', title: 'تمت الإضافة' });
   };
@@ -2228,26 +2516,20 @@ const TransactionsView = memo(({ groupedTransactions, transactions, selectedMont
           </div>
 
           {showAdd && (
-            <div className="modal-backdrop">
-              <div className="w-full max-w-md rounded-2xl shadow-2xl animate-slideInBottom" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)' }}>
-                <div className="p-4 flex justify-between items-center" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-                  <h3 className="text-base font-black">التزام جديد</h3>
-                  <button onClick={() => setShowAdd(false)} className="btn btn-ghost p-1.5"><X size={16} /></button>
+            <Modal isOpen={true} onClose={() => setShowAdd(false)} title="التزام جديد" icon="📋">
+              <div className="space-y-3">
+                <div><label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>الاسم *</label><input className="input-field text-sm" value={newLoan.name} onChange={e => setNewLoan({ ...newLoan, name: e.target.value })} /></div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div><label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>المبلغ *</label><input type="text" inputMode="decimal" className="input-field text-sm" value={newLoan.totalAmount} onChange={e => setNewLoan({ ...newLoan, totalAmount: e.target.value })} /></div>
+                  <div><label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>القسط</label><input type="text" inputMode="decimal" className="input-field text-sm" value={newLoan.monthlyInstallment} onChange={e => setNewLoan({ ...newLoan, monthlyInstallment: e.target.value })} /></div>
                 </div>
-                <div className="p-4 space-y-3">
-                  <div><label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>الاسم *</label><input className="input-field text-sm" value={newLoan.name} onChange={e => setNewLoan({ ...newLoan, name: e.target.value })} /></div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div><label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>المبلغ *</label><input type="text" inputMode="decimal" className="input-field text-sm" value={newLoan.totalAmount} onChange={e => setNewLoan({ ...newLoan, totalAmount: e.target.value })} /></div>
-                    <div><label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>القسط</label><input type="text" inputMode="decimal" className="input-field text-sm" value={newLoan.monthlyInstallment} onChange={e => setNewLoan({ ...newLoan, monthlyInstallment: e.target.value })} /></div>
-                  </div>
-                  <label className="flex items-center gap-3 p-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 cursor-pointer">
-                    <input type="checkbox" checked={newLoan.isReceivable} onChange={e => setNewLoan({ ...newLoan, isReceivable: e.target.checked })} className="w-4 h-4 accent-emerald-600" />
-                    <span className="text-xs font-bold text-emerald-700 dark:text-emerald-400">مستحق <strong>لي</strong></span>
-                  </label>
-                  <button onClick={addLoan} className="btn btn-primary w-full py-2.5 text-sm">إضافة</button>
-                </div>
+                <label className="flex items-center gap-3 p-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 cursor-pointer">
+                  <input type="checkbox" checked={newLoan.isReceivable} onChange={e => setNewLoan({ ...newLoan, isReceivable: e.target.checked })} className="w-4 h-4 accent-emerald-600" />
+                  <span className="text-xs font-bold text-emerald-700 dark:text-emerald-400">مستحق <strong>لي</strong></span>
+                </label>
+                <button onClick={addLoan} className="btn btn-primary w-full py-2.5 text-sm">إضافة</button>
               </div>
-            </div>
+            </Modal>
           )}
 
           {receivables.length > 0 && (
@@ -2405,6 +2687,9 @@ const TransactionsView = memo(({ groupedTransactions, transactions, selectedMont
   );
 });
 
+// ═══════════════════════════════════════════════════════
+// WalletsAndCardsView
+// ═══════════════════════════════════════════════════════
 const WalletsAndCardsView = memo(({ cards, buildLedger, expandedLedgers, expandedCardsSection, selectedMonth, selectedYear, dispatch, handleDelete, handleAddWalletDeposit, handleAddWalletWithdrawal, exportWalletCSV, walletVisibility, liveBalances, cardHistoryMap, saveHistory, addNotification, data }) => {
   const [activeTab, setActiveTab] = useState('wallets');
   const [showAddCard, setShowAddCard] = useState(false);
@@ -2418,9 +2703,11 @@ const WalletsAndCardsView = memo(({ cards, buildLedger, expandedLedgers, expande
   }, [data?.cashbackTrackers, selectedMonth, selectedYear]);
 
   const addCard = () => {
-    if (!newCard.name || !newCard.bank || safeNumber(newCard.limit) <= 0) { addNotification({ type: 'error', title: 'الاسم والبنك والحد مطلوبة' }); return; }
+    if (!newCard.name || !newCard.bank) { addNotification({ type: 'error', title: 'الاسم والبنك مطلوبان' }); return; }
+    const limitCheck = validateAmount(newCard.limit, { min: 100, max: 10000000, label: 'الحد' });
+    if (!limitCheck.valid) { addNotification({ type: 'error', title: 'خطأ', message: limitCheck.error }); return; }
     saveHistory();
-    dispatch({ type: 'UPDATE_CARDS', payload: [...cards, { ...newCard, id: Date.now(), limit: safeNumber(newCard.limit), availableBalance: safeNumber(newCard.limit), openingDebt: 0, cashbackRate: safeNumber(newCard.cashbackRate, 1) }] });
+    dispatch({ type: 'UPDATE_CARDS', payload: [...cards, { ...newCard, id: Date.now(), limit: limitCheck.value, availableBalance: limitCheck.value, openingDebt: 0, cashbackRate: safeNumber(newCard.cashbackRate, 1) }] });
     setShowAddCard(false); setNewCard({ name: '', bank: '', limit: '', last4: '', expiry: '', holderName: '', dueDate: '05 من كل شهر', theme: 'silver', cashbackRate: 1 });
     addNotification({ type: 'success', title: 'تمت الإضافة' });
   };
@@ -2529,31 +2816,28 @@ const WalletsAndCardsView = memo(({ cards, buildLedger, expandedLedgers, expande
       )}
 
       {showAddCard && (
-        <div className="modal-backdrop">
-          <div className="w-full max-w-md rounded-2xl shadow-2xl animate-slideInBottom" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)' }}>
-            <div className="p-4 flex justify-between items-center" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-              <h3 className="text-base font-black">بطاقة جديدة</h3>
-              <button onClick={() => setShowAddCard(false)} className="btn btn-ghost p-1.5"><X size={16} /></button>
+        <Modal isOpen={true} onClose={() => setShowAddCard(false)} title="بطاقة جديدة" icon="💳">
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div><label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>الاسم *</label><input className="input-field text-sm" value={newCard.name} onChange={e => setNewCard({ ...newCard, name: e.target.value })} /></div>
+              <div><label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>البنك *</label><input className="input-field text-sm" value={newCard.bank} onChange={e => setNewCard({ ...newCard, bank: e.target.value })} /></div>
             </div>
-            <div className="p-4 space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div><label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>الاسم *</label><input className="input-field text-sm" value={newCard.name} onChange={e => setNewCard({ ...newCard, name: e.target.value })} /></div>
-                <div><label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>البنك *</label><input className="input-field text-sm" value={newCard.bank} onChange={e => setNewCard({ ...newCard, bank: e.target.value })} /></div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div><label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>الحد *</label><input type="text" inputMode="decimal" className="input-field text-sm" value={newCard.limit} onChange={e => setNewCard({ ...newCard, limit: e.target.value })} /></div>
-                <div><label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>آخر 4</label><input maxLength="4" className="input-field text-center text-sm" value={newCard.last4} onChange={e => setNewCard({ ...newCard, last4: e.target.value })} /></div>
-              </div>
-              <div><label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>نسبة الكاش باك %</label><input type="text" inputMode="decimal" className="input-field text-center font-black text-amber-600 text-sm" value={newCard.cashbackRate} onChange={e => setNewCard({ ...newCard, cashbackRate: e.target.value })} /></div>
-              <button onClick={addCard} className="btn btn-primary w-full py-2.5 text-sm">إضافة</button>
+            <div className="grid grid-cols-2 gap-3">
+              <div><label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>الحد *</label><input type="text" inputMode="decimal" className="input-field text-sm" value={newCard.limit} onChange={e => setNewCard({ ...newCard, limit: e.target.value })} /></div>
+              <div><label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>آخر 4</label><input maxLength="4" className="input-field text-center text-sm" value={newCard.last4} onChange={e => setNewCard({ ...newCard, last4: e.target.value })} /></div>
             </div>
+            <div><label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>نسبة الكاش باك %</label><input type="text" inputMode="decimal" className="input-field text-center font-black text-amber-600 text-sm" value={newCard.cashbackRate} onChange={e => setNewCard({ ...newCard, cashbackRate: e.target.value })} /></div>
+            <button onClick={addCard} className="btn btn-primary w-full py-2.5 text-sm">إضافة</button>
           </div>
-        </div>
+        </Modal>
       )}
     </div>
   );
 });
 
+// ═══════════════════════════════════════════════════════
+// MonthlyPlanningView
+// ═══════════════════════════════════════════════════════
 const MonthlyPlanningView = memo(({ data, monthlyPlans, cards, loans, dispatch, saveHistory, addNotification }) => {
   const planningMonths = useMemo(() => [...getMonthsForYear(2026).map(m => ({ month: m, year: 2026 })), { month: 'يناير', year: 2027 }, { month: 'فبراير', year: 2027 }], []);
   const pk = (m) => makeMonthKey(m.year, m.month);
@@ -2635,6 +2919,9 @@ const MonthlyPlanningView = memo(({ data, monthlyPlans, cards, loans, dispatch, 
   );
 });
 
+// ═══════════════════════════════════════════════════════
+// PlannerView
+// ═══════════════════════════════════════════════════════
 const PlannerView = memo(({ updatedLoans, cards, selectedMonth, selectedYear, monthlyPlans, totalLiquidityNow }) => {
   const projection = useMemo(() => {
     const seq = []; let y = selectedYear, mi = getMonthIndex(selectedMonth);
@@ -2688,6 +2975,9 @@ const PlannerView = memo(({ updatedLoans, cards, selectedMonth, selectedYear, mo
   );
 });
 
+// ═══════════════════════════════════════════════════════
+// LiquidityForecastView
+// ═══════════════════════════════════════════════════════
 const ForecastRow = ({ label, value, color, prefix = '' }) => (
   <div className="flex justify-between items-center">
     <span className="text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>{label}</span>
@@ -2802,6 +3092,9 @@ const LiquidityForecastView = memo(({ transactions, updatedLoans, recurringItems
   );
 });
 
+// ═══════════════════════════════════════════════════════
+// CalendarView
+// ═══════════════════════════════════════════════════════
 const CalendarView = memo(({ data, getAgendaItems, transactions, dispatch, saveHistory, addNotification }) => {
   const [filterCat, setFilterCat] = useState('all');
   const items = getAgendaItems();
@@ -2882,6 +3175,9 @@ const CalendarView = memo(({ data, getAgendaItems, transactions, dispatch, saveH
   );
 });
 
+// ═══════════════════════════════════════════════════════
+// PinChangeModal
+// ═══════════════════════════════════════════════════════
 const PinChangeModal = ({ onClose, addNotification }) => {
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
@@ -2899,23 +3195,20 @@ const PinChangeModal = ({ onClose, addNotification }) => {
     onClose();
   };
   return (
-    <div className="modal-backdrop z-[3700] no-print">
-      <div className="w-full max-w-sm rounded-2xl shadow-2xl p-5" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)' }}>
-        <div className="flex justify-between items-center mb-4">
-          <h3 className="text-sm font-black flex items-center gap-2"><Lock size={14} /> تغيير رمز الدخول</h3>
-          <button onClick={onClose} className="btn btn-ghost p-1.5"><X size={16} /></button>
-        </div>
-        <div className="space-y-3">
-          <div><label className="text-[11px] font-bold block mb-1" style={{ color: 'var(--text-muted)' }}>الرمز الحالي</label><input type="password" inputMode="numeric" maxLength={4} className="input-field text-center text-lg font-black tracking-widest" value={current} onChange={e => setCurrent(e.target.value.replace(/\D/g, ''))} /></div>
-          <div><label className="text-[11px] font-bold block mb-1" style={{ color: 'var(--text-muted)' }}>الرمز الجديد</label><input type="password" inputMode="numeric" maxLength={4} className="input-field text-center text-lg font-black tracking-widest" value={next} onChange={e => setNext(e.target.value.replace(/\D/g, ''))} /></div>
-          <div><label className="text-[11px] font-bold block mb-1" style={{ color: 'var(--text-muted)' }}>تأكيد الرمز الجديد</label><input type="password" inputMode="numeric" maxLength={4} className="input-field text-center text-lg font-black tracking-widest" value={confirm} onChange={e => setConfirm(e.target.value.replace(/\D/g, ''))} /></div>
-          <button onClick={submit} disabled={busy} className="btn btn-primary w-full py-2.5 text-sm">{busy ? 'جاري الحفظ...' : 'حفظ'}</button>
-        </div>
+    <Modal isOpen={true} onClose={onClose} title="تغيير رمز الدخول" icon="🔐">
+      <div className="space-y-3">
+        <div><label className="text-[11px] font-bold block mb-1" style={{ color: 'var(--text-muted)' }}>الرمز الحالي</label><input type="password" inputMode="numeric" maxLength={4} className="input-field text-center text-lg font-black tracking-widest" value={current} onChange={e => setCurrent(e.target.value.replace(/\D/g, ''))} /></div>
+        <div><label className="text-[11px] font-bold block mb-1" style={{ color: 'var(--text-muted)' }}>الرمز الجديد</label><input type="password" inputMode="numeric" maxLength={4} className="input-field text-center text-lg font-black tracking-widest" value={next} onChange={e => setNext(e.target.value.replace(/\D/g, ''))} /></div>
+        <div><label className="text-[11px] font-bold block mb-1" style={{ color: 'var(--text-muted)' }}>تأكيد الرمز الجديد</label><input type="password" inputMode="numeric" maxLength={4} className="input-field text-center text-lg font-black tracking-widest" value={confirm} onChange={e => setConfirm(e.target.value.replace(/\D/g, ''))} /></div>
+        <button onClick={submit} disabled={busy} className="btn btn-primary w-full py-2.5 text-sm">{busy ? 'جاري الحفظ...' : 'حفظ'}</button>
       </div>
-    </div>
+    </Modal>
   );
 };
 
+// ═══════════════════════════════════════════════════════
+// SettingsView
+// ═══════════════════════════════════════════════════════
 const SettingsView = memo(({ data, accountsData, cards, budgets, dispatch, saveHistory, addNotification, walletVisibility, onToggleVisibility }) => {
   const [localAccounts, setLocalAccounts] = useState(() => JSON.parse(JSON.stringify(accountsData)));
   const [localCards, setLocalCards] = useState(() => cards.map(c => ({ ...c })));
@@ -2929,8 +3222,31 @@ const SettingsView = memo(({ data, accountsData, cards, budgets, dispatch, saveH
   const handleCardChange = (id, field, value) => { setLocalCards(prev => prev.map(c => { if (c.id !== id) return c; const u = { ...c, [field]: value }; if (field === 'limit') u.availableBalance = Math.max(0, safeNumber(value) - safeNumber(u.openingDebt)); return u; })); setHasChanges(true); };
   const handleSave = () => { saveHistory(); const cleaned = {}; const today = getLocalISODate(); ACCOUNT_KEYS.forEach(k => { const oldBal = safeNumber(accountsData[k]?.balance); const newBal = parseNumberInput(localAccounts[k]?.balance); cleaned[k] = { ...localAccounts[k], balance: newBal, lastUpdated: (oldBal !== newBal) ? today : (localAccounts[k]?.lastUpdated || today) }; }); dispatch({ type: 'UPDATE_ACCOUNTS', payload: cleaned }); dispatch({ type: 'UPDATE_CARDS', payload: localCards.map(c => ({ ...c, limit: safeNumber(c.limit), openingDebt: safeNumber(c.openingDebt), cashbackRate: safeNumber(c.cashbackRate, 1) })) }); addNotification({ type: 'success', title: 'تم الحفظ' }); setHasChanges(false); };
   const handleDriveConnect = async () => { setDriveBusy(true); setDriveStatus('جاري الاتصال...'); try { await ensureDriveToken(); setDriveStatus('متصل'); addNotification({ type: 'success', title: 'Drive متصل' }); } catch (e) { setDriveStatus('فشل: ' + e.message); } finally { setDriveBusy(false); } };
-  const handleDriveBackupNow = async () => { setDriveBusy(true); setDriveStatus('جاري الرفع...'); try { const payload = { data, budgets, exportedAt: new Date().toISOString(), version: 'V75' }; const result = await uploadBackupToDrive(payload); localStorage.setItem(AUTO_BACKUP_LS_KEY, String(Date.now())); setDriveStatus(`تم الرفع: ${result.name}`); addNotification({ type: 'success', title: 'نسخة سحابية' }); } catch (e) { setDriveStatus('فشل: ' + e.message); } finally { setDriveBusy(false); } };
-  const handleDriveRestore = async () => { setDriveBusy(true); setDriveStatus('جاري الجلب...'); try { const files = await listDriveBackups(); if (files.length === 0) { setDriveStatus('لا توجد نسخ'); setDriveBusy(false); return; } const labels = files.slice(0, 10).map((f, i) => `${i + 1}) ${f.name}`).join('\n'); const choice = prompt(`اختر رقم النسخة:\n\n${labels}`, '1'); if (!choice) { setDriveBusy(false); setDriveStatus(''); return; } const idx = Math.max(1, Math.min(files.length, parseInt(choice, 10) || 1)) - 1; const file = files[idx]; const payload = await downloadBackupFromDrive(file.id); if (!payload?.data) throw new Error('الملف لا يحتوي بيانات'); dispatch({ type: 'SHOW_CONFIRM', danger: true, title: 'استعادة نسخة', message: `سيتم استبدال بياناتك`, onConfirm: () => { saveHistory(); dispatch({ type: 'SET_DATA', payload: migrateData(payload.data) }); if (payload.budgets) dispatch({ type: 'SET_BUDGETS', payload: payload.budgets }); addNotification({ type: 'success', title: 'تمت الاستعادة' }); }, onCancel: () => dispatch({ type: 'HIDE_CONFIRM' }) }); } catch (e) { setDriveStatus('فشل: ' + e.message); } finally { setDriveBusy(false); } };
+  const handleDriveBackupNow = async () => { setDriveBusy(true); setDriveStatus('جاري الرفع...'); try { const payload = { data, budgets, exportedAt: new Date().toISOString(), version: 'V76' }; const result = await uploadBackupToDrive(payload); localStorage.setItem(AUTO_BACKUP_LS_KEY, String(Date.now())); setDriveStatus(`تم الرفع: ${result.name}`); addNotification({ type: 'success', title: 'نسخة سحابية' }); } catch (e) { setDriveStatus('فشل: ' + e.message); } finally { setDriveBusy(false); } };
+  // 🆕 Restore uses Promise-based modal instead of prompt()
+  const handleDriveRestore = async () => {
+    setDriveBusy(true);
+    setDriveStatus('جاري الجلب...');
+    try {
+      const files = await listDriveBackups();
+      if (files.length === 0) { setDriveStatus('لا توجد نسخ'); setDriveBusy(false); return; }
+      const labels = files.slice(0, 10).map((f, i) => `${i + 1}) ${f.name}`).join('\n');
+      const choice = await showInputModal({
+        title: 'اختر رقم النسخة',
+        icon: '☁️',
+        message: labels,
+        inputValue: '1',
+        numeric: true,
+        confirmText: 'استعادة'
+      });
+      if (!choice) { setDriveBusy(false); setDriveStatus(''); return; }
+      const idx = Math.max(1, Math.min(files.length, parseInt(choice, 10) || 1)) - 1;
+      const file = files[idx];
+      const payload = await downloadBackupFromDrive(file.id);
+      if (!payload?.data) throw new Error('الملف لا يحتوي بيانات');
+      dispatch({ type: 'SHOW_CONFIRM', danger: true, title: 'استعادة نسخة', message: `سيتم استبدال بياناتك`, onConfirm: () => { saveHistory(); dispatch({ type: 'SET_DATA', payload: migrateData(payload.data) }); if (payload.budgets) dispatch({ type: 'SET_BUDGETS', payload: payload.budgets }); addNotification({ type: 'success', title: 'تمت الاستعادة' }); }, onCancel: () => dispatch({ type: 'HIDE_CONFIRM' }) });
+    } catch (e) { setDriveStatus('فشل: ' + e.message); } finally { setDriveBusy(false); }
+  };
   const handleFreshStart = () => { dispatch({ type: 'SHOW_CONFIRM', danger: true, title: 'بداية جديدة', message: 'سيتم مسح كل المعاملات', onConfirm: () => { saveHistory(); const zeroed = {}; ACCOUNT_KEYS.forEach(k => { zeroed[k] = { ...(accountsData[k] || {}), balance: 0, lastUpdated: getLocalISODate() }; }); dispatch({ type: 'SET_DATA', payload: { ...data, transactions: [], closedMonths: [], monthlySnapshots: {}, accountsData: zeroed, cards: (data.cards || []).map(c => ({ ...c, openingDebt: 0, availableBalance: safeNumber(c.limit) })), materializedRecurring: {}, notifiedItems: {}, custodyEntries: [], cashbackTrackers: [] } }); addNotification({ type: 'success', title: 'تم التصفير' }); dispatch({ type: 'HIDE_CONFIRM' }); }, onCancel: () => dispatch({ type: 'HIDE_CONFIRM' }) }); };
   return (
     <div className="space-y-4 animate-fadeIn pb-24">
@@ -3048,6 +3364,9 @@ const SettingsView = memo(({ data, accountsData, cards, budgets, dispatch, saveH
   );
 });
 
+// ═══════════════════════════════════════════════════════
+// ProfessionalTicker
+// ═══════════════════════════════════════════════════════
 const ProfessionalTicker = memo(({ updatedLoans, cards, liveBalances, walletVisibility, custodyBalance, data }) => {
   const [quote] = useState(() => DAILY_DHIKR[Math.floor(Math.random() * DAILY_DHIKR.length)]);
   const totalDebt = updatedLoans.filter(l => !l.isReceivable).reduce((a, l) => a + l.remaining, 0) + cards.reduce((a, c) => a + computeCardDebt(data, c), 0);
@@ -3070,6 +3389,9 @@ const ProfessionalTicker = memo(({ updatedLoans, cards, liveBalances, walletVisi
   );
 });
 
+// ═══════════════════════════════════════════════════════
+// EnhancedSidebar
+// ═══════════════════════════════════════════════════════
 const EnhancedSidebar = memo(({ activeTab, dispatch, canUndo, onUndo }) => {
   const groups = [
     { title: 'الرئيسية', items: [
@@ -3099,7 +3421,7 @@ const EnhancedSidebar = memo(({ activeTab, dispatch, canUndo, onUndo }) => {
         <div className="p-2 rounded-lg text-white" style={{ background: 'var(--brand)' }}><Wallet size={18} /></div>
         <div>
           <h2 className="font-black text-sm">المحفظة الذكية</h2>
-          <p className="text-[10px] font-semibold" style={{ color: 'var(--text-muted)' }}>V75</p>
+          <p className="text-[10px] font-semibold" style={{ color: 'var(--text-muted)' }}>V76</p>
         </div>
       </div>
       <nav className="flex-1 scroll-hide overflow-y-auto -mx-1 px-1">
@@ -3121,6 +3443,9 @@ const EnhancedSidebar = memo(({ activeTab, dispatch, canUndo, onUndo }) => {
   );
 });
 
+// ═══════════════════════════════════════════════════════
+// ProfessionalHeader
+// ═══════════════════════════════════════════════════════
 const ProfessionalHeader = memo(({ isDarkMode, dispatch }) => (
   <header className="flex justify-between items-center gap-3 mb-4">
     <div className="flex items-center gap-2.5">
@@ -3139,12 +3464,23 @@ const ProfessionalHeader = memo(({ isDarkMode, dispatch }) => (
   </header>
 ));
 
+// ═══════════════════════════════════════════════════════
+// LoginScreen — 🆕 uses custom modal instead of alert()
+// ═══════════════════════════════════════════════════════
 const LoginScreen = ({ onLogin }) => {
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
   const handleGoogleLogin = () => {
     setIsLoading(true);
+    setError('');
     const provider = new firebase.auth.GoogleAuthProvider();
-    firebase.auth().signInWithPopup(provider).then((result) => { if (result.user.email === "ahmedmkh@gmail.com") onLogin(); else { alert("دخول غير مصرح"); firebase.auth().signOut(); } }).catch((error) => alert("خطأ: " + error.message)).finally(() => setIsLoading(false));
+    firebase.auth().signInWithPopup(provider)
+      .then((result) => {
+        if (result.user.email === "ahmedmkh@gmail.com") onLogin();
+        else { setError('دخول غير مصرح'); firebase.auth().signOut(); }
+      })
+      .catch((err) => setError(err.message || 'خطأ في تسجيل الدخول'))
+      .finally(() => setIsLoading(false));
   };
   return (
     <div className="min-h-screen flex items-center justify-center p-6" style={{ background: 'radial-gradient(ellipse at top, #2A2418 0%, #1A1508 60%, #0F0B04 100%)' }}>
@@ -3154,6 +3490,11 @@ const LoginScreen = ({ onLogin }) => {
           <h1 className="text-2xl font-black text-white mb-1">محفظتي المالية</h1>
           <p className="text-sm font-medium" style={{ color: '#C8BEA8' }}>إدارة مالية ذكية</p>
         </div>
+        {error && (
+          <div className="mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-300 text-xs font-bold flex items-center gap-2">
+            <AlertTriangle size={14} /> {error}
+          </div>
+        )}
         <button onClick={handleGoogleLogin} disabled={isLoading} className="w-full bg-white text-slate-900 py-4 px-6 rounded-2xl font-black text-sm flex items-center justify-center gap-3 hover:bg-slate-100 active:scale-[0.98] shadow-xl disabled:opacity-50 transition-all">
           {isLoading ? (<><div className="w-5 h-5 border-2 border-slate-900 border-t-transparent rounded-full animate-spin"></div> جاري الدخول...</>) : (<><img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5" alt="Google" />تسجيل الدخول</>)}
         </button>
@@ -3162,6 +3503,9 @@ const LoginScreen = ({ onLogin }) => {
   );
 };
 
+// ═══════════════════════════════════════════════════════
+// PinLockScreen
+// ═══════════════════════════════════════════════════════
 const PinLockScreen = ({ onSuccess, onLogout }) => {
   const [pin, setPin] = useState('');
   const [error, setError] = useState(false);
@@ -3212,6 +3556,9 @@ const PinLockScreen = ({ onSuccess, onLogout }) => {
   );
 };
 
+// ═══════════════════════════════════════════════════════
+// dataReducer
+// ═══════════════════════════════════════════════════════
 function dataReducer(state, action) {
   switch (action.type) {
     case 'SET_DATA': return { ...state, data: action.payload };
@@ -3293,6 +3640,9 @@ function dataReducer(state, action) {
   }
 }
 
+// ═══════════════════════════════════════════════════════
+// Google Drive Helpers
+// ═══════════════════════════════════════════════════════
 const DRIVE_CLIENT_ID = '190006477168-odmpreq26b618rdn1dsg4k1aag3k056g.apps.googleusercontent.com';
 const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
 const DRIVE_FOLDER_NAME = 'Finance Backups';
@@ -3352,7 +3702,7 @@ const uploadBackupToDrive = async (payload, fileName) => {
   const folderId = await getOrCreateBackupFolder();
   const name = fileName || `finance_backup_${getLocalISODate()}_${Date.now()}.json`;
   const metadata = { name, parents: [folderId], mimeType: 'application/json' };
-  const boundary = '----V75DriveBoundary' + Date.now();
+  const boundary = '----V76DriveBoundary' + Date.now();
   const body = `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n--${boundary}\r\nContent-Type: application/json\r\n\r\n${JSON.stringify(payload)}\r\n--${boundary}--`;
   const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,size,createdTime', { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': `multipart/related; boundary=${boundary}` }, body });
   if (!res.ok) throw new Error('فشل الرفع');
@@ -3376,8 +3726,11 @@ const downloadBackupFromDrive = async (fileId) => {
   return await res.json();
 };
 
-const AUTO_BACKUP_LS_KEY = 'v75_last_drive_backup_ts';
+const AUTO_BACKUP_LS_KEY = 'v76_last_drive_backup_ts';
 
+// ═══════════════════════════════════════════════════════
+// App Component
+// ═══════════════════════════════════════════════════════
 function App() {
   const defMY = useMemo(() => getDefaultMonthYear(), []);
   const [state, dispatch] = useReducer(dataReducer, {
@@ -3446,12 +3799,8 @@ function App() {
     const materialized = data.materializedRecurring?.[monthKey] || [];
 
     const missingRecurring = recurringItems.filter(r => !materialized.includes(r.id));
-
     const receivablesToGen = (data.loans || []).filter(l =>
-      l.isReceivable &&
-      !l.paused &&
-      safeNumber(l.monthlyInstallment) > 0 &&
-      !materialized.includes('recv-' + l.id)
+      l.isReceivable && !l.paused && safeNumber(l.monthlyInstallment) > 0 && !materialized.includes('recv-' + l.id)
     );
 
     if (missingRecurring.length === 0 && receivablesToGen.length === 0) return;
@@ -3699,8 +4048,8 @@ function App() {
     if (!window.html2pdf) { addNotification({ type: 'error', title: 'مكتبة PDF غير محمّلة' }); return; }
     const overlay = document.createElement('div');
     overlay.style.cssText = 'position:fixed;inset:0;background:rgba(42,36,24,0.85);backdrop-filter:blur(8px);z-index:9999999;display:flex;align-items:center;justify-content:center;color:white;font-family:Cairo,sans-serif;direction:rtl;';
-    overlay.innerHTML = `<div style="text-align:center;"><div style="width:50px;height:50px;border:3px solid rgba(255,255,255,0.2);border-radius:50%;border-top-color:#3B82F6;animation:v75spin 0.8s linear infinite;margin:0 auto 16px;"></div><p style="font-weight:800;font-size:15px;margin:0;">جاري إنشاء PDF...</p></div>`;
-    const styleTag = document.createElement('style'); styleTag.textContent = '@keyframes v75spin{to{transform:rotate(360deg)}}';
+    overlay.innerHTML = `<div style="text-align:center;"><div style="width:50px;height:50px;border:3px solid rgba(255,255,255,0.2);border-radius:50%;border-top-color:#3B82F6;animation:v76spin 0.8s linear infinite;margin:0 auto 16px;"></div><p style="font-weight:800;font-size:15px;margin:0;">جاري إنشاء PDF...</p></div>`;
+    const styleTag = document.createElement('style'); styleTag.textContent = '@keyframes v76spin{to{transform:rotate(360deg)}}';
     document.head.appendChild(styleTag); document.body.appendChild(overlay);
     const sorted = [...items].sort((a, b) => { const d = new Date(a.date) - new Date(b.date); if (d !== 0) return d; return String(a.id).localeCompare(String(b.id)); });
     const total = sorted.reduce((s, i) => s + safeNumber(i.amount), 0);
@@ -3975,260 +4324,262 @@ function App() {
   };
 
   return (
-    <div className="flex h-screen overflow-hidden font-sans">
-      <ProfessionalTicker updatedLoans={updatedLoans} cards={cards} liveBalances={liveBalances} walletVisibility={walletVisibility} custodyBalance={custodySummary.balance} data={data} />
-      <ToastContainer notifications={notifications} removeNotification={removeNotification} />
-      <ConfirmDialog confirmDialog={confirmDialog} dispatch={dispatch} />
-      {isProcessing && (<div className="processing-overlay"><div className="processing-spinner mb-4"></div><h3 className="text-base font-bold mb-2">جاري تطبيق العملية</h3><button onClick={cancelProcessing} className="btn btn-secondary bg-red-500 text-white mt-3 text-xs">إلغاء</button></div>)}
-      {viewingCardStatement && (() => {
-        const card = viewingCardStatement;
-        const monthData = (cardHistoryMap[card.id] || []).find(h => h.month === selectedMonth && h.year === selectedYear);
-        const cardMethod = getCardMethod(card);
-        const cardTx = transactions.filter(t => t.method === cardMethod && t.month === selectedMonth && (t.year || 2026) === selectedYear).sort((a, b) => new Date(b.date) - new Date(a.date));
-        return (<div className="modal-backdrop z-[3500] no-print"><div className="w-full max-w-3xl rounded-2xl shadow-2xl overflow-hidden flex flex-col" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', maxHeight: 'calc(100dvh - 24px)' }}>
-          <div className="p-4" style={{ borderBottom: '1px solid var(--border-subtle)' }}><div className="flex justify-between items-start flex-wrap gap-2"><div className="flex items-center gap-2"><BankLogo type={`${card.bank.toLowerCase()}_card`} size={32} /><div><h3 className="text-base font-black">{card.bank} - {card.name}</h3><p className="text-[11px] font-semibold mt-0.5" style={{ color: 'var(--text-muted)' }}>{selectedMonth} {selectedYear}</p></div></div><div className="flex gap-1.5"><button type="button" onClick={() => exportPdf(`كشف ${card.bank}`, cardTx)} className="btn btn-primary text-[11px] py-1.5 px-2.5"><FileText size={12} /> PDF</button><button type="button" aria-label="إغلاق" onClick={() => dispatch({ type: 'SET_VIEWING_CARD_STATEMENT', payload: null })} className="btn btn-ghost p-1.5"><X size={16} /></button></div></div><div className="grid grid-cols-2 gap-2 mt-3"><div className="p-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/30"><p className="text-[10px] font-bold text-amber-700 dark:text-amber-400">بداية</p><p className="text-sm font-black mt-0.5">{fmt(monthData?.openingDebt || 0)}</p></div><div className="p-2.5 rounded-lg bg-blue-50 dark:bg-blue-950/30"><p className="text-[10px] font-bold text-blue-700 dark:text-blue-400">نهاية</p><p className="text-sm font-black text-blue-600 mt-0.5">{fmt(monthData?.closingDebt || 0)}</p></div></div></div>
-          <div className="flex-1 overflow-y-auto scroll-hide" style={{ minHeight: 0 }}>{cardTx.length === 0 ? <div className="p-12 text-center font-medium text-xs" style={{ color: 'var(--text-muted)' }}>لا توجد عمليات</div> : <div className="divide-y" style={{ borderColor: 'var(--border-subtle)' }}>{cardTx.map(t => (<div key={t.id} className="p-3 flex justify-between items-center gap-2"><div className="min-w-0 flex-1"><p className="font-bold text-xs truncate">{t.description || '-'} <ReceiptIndicator tx={t} dispatch={dispatch} /></p><p className="text-[10px] font-semibold mt-0.5" style={{ color: 'var(--text-muted)' }}>{t.date}</p></div><span className="font-black text-xs">{fmt(t.amount)}</span></div>))}</div>}</div></div></div>);
-      })()}
+    <PromiseModalProvider>
+      <div className="flex h-screen overflow-hidden font-sans">
+        <ProfessionalTicker updatedLoans={updatedLoans} cards={cards} liveBalances={liveBalances} walletVisibility={walletVisibility} custodyBalance={custodySummary.balance} data={data} />
+        <ToastContainer notifications={notifications} removeNotification={removeNotification} />
+        <ConfirmDialog confirmDialog={confirmDialog} dispatch={dispatch} />
+        {isProcessing && (<div className="processing-overlay"><div className="processing-spinner mb-4"></div><h3 className="text-base font-bold mb-2">جاري تطبيق العملية</h3><button onClick={cancelProcessing} className="btn btn-secondary bg-red-500 text-white mt-3 text-xs">إلغاء</button></div>)}
+        {viewingCardStatement && (() => {
+          const card = viewingCardStatement;
+          const monthData = (cardHistoryMap[card.id] || []).find(h => h.month === selectedMonth && h.year === selectedYear);
+          const cardMethod = getCardMethod(card);
+          const cardTx = transactions.filter(t => t.method === cardMethod && t.month === selectedMonth && (t.year || 2026) === selectedYear).sort((a, b) => new Date(b.date) - new Date(a.date));
+          return (<div className="modal-backdrop z-[3500] no-print"><div className="w-full max-w-3xl rounded-2xl shadow-2xl overflow-hidden flex flex-col" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', maxHeight: 'calc(100dvh - 24px)' }}>
+            <div className="p-4" style={{ borderBottom: '1px solid var(--border-subtle)' }}><div className="flex justify-between items-start flex-wrap gap-2"><div className="flex items-center gap-2"><BankLogo type={`${card.bank.toLowerCase()}_card`} size={32} /><div><h3 className="text-base font-black">{card.bank} - {card.name}</h3><p className="text-[11px] font-semibold mt-0.5" style={{ color: 'var(--text-muted)' }}>{selectedMonth} {selectedYear}</p></div></div><div className="flex gap-1.5"><button type="button" onClick={() => exportPdf(`كشف ${card.bank}`, cardTx)} className="btn btn-primary text-[11px] py-1.5 px-2.5"><FileText size={12} /> PDF</button><button type="button" aria-label="إغلاق" onClick={() => dispatch({ type: 'SET_VIEWING_CARD_STATEMENT', payload: null })} className="btn btn-ghost p-1.5"><X size={16} /></button></div></div><div className="grid grid-cols-2 gap-2 mt-3"><div className="p-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/30"><p className="text-[10px] font-bold text-amber-700 dark:text-amber-400">بداية</p><p className="text-sm font-black mt-0.5">{fmt(monthData?.openingDebt || 0)}</p></div><div className="p-2.5 rounded-lg bg-blue-50 dark:bg-blue-950/30"><p className="text-[10px] font-bold text-blue-700 dark:text-blue-400">نهاية</p><p className="text-sm font-black text-blue-600 mt-0.5">{fmt(monthData?.closingDebt || 0)}</p></div></div></div>
+            <div className="flex-1 overflow-y-auto scroll-hide" style={{ minHeight: 0 }}>{cardTx.length === 0 ? <div className="p-12 text-center font-medium text-xs" style={{ color: 'var(--text-muted)' }}>لا توجد عمليات</div> : <div className="divide-y" style={{ borderColor: 'var(--border-subtle)' }}>{cardTx.map(t => (<div key={t.id} className="p-3 flex justify-between items-center gap-2"><div className="min-w-0 flex-1"><p className="font-bold text-xs truncate">{t.description || '-'} <ReceiptIndicator tx={t} dispatch={dispatch} /></p><p className="text-[10px] font-semibold mt-0.5" style={{ color: 'var(--text-muted)' }}>{t.date}</p></div><span className="font-black text-xs">{fmt(t.amount)}</span></div>))}</div>}</div></div></div>);
+        })()}
 
-      {viewingReceipt && viewingReceipt.tx && (
-        <div className="modal-backdrop z-[3600] no-print" onClick={() => dispatch({ type: 'SET_VIEWING_RECEIPT', payload: null })}>
-          <div className="w-full max-w-3xl max-h-[95vh] rounded-2xl shadow-2xl overflow-hidden flex flex-col" style={{ background: 'var(--bg-card)' }} onClick={e => e.stopPropagation()}>
-            <div className="p-3 flex justify-between items-center" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-              <h3 className="text-sm font-black flex items-center gap-2"><Camera size={14} /> فواتير: {viewingReceipt.tx.description || viewingReceipt.tx.category || ''}</h3>
-              <button onClick={() => dispatch({ type: 'SET_VIEWING_RECEIPT', payload: null })} className="btn btn-ghost p-1.5"><X size={16} /></button>
-            </div>
-            <div className="flex-1 overflow-auto p-3 flex items-center justify-center" style={{ background: 'var(--bg-muted)', minHeight: '300px' }}>
-              {(viewingReceipt.tx.receipts || []).length > 0 ? (
-                <img src={viewingReceipt.tx.receipts[viewingReceipt.index || 0].url} alt="فاتورة" className="max-w-full max-h-[70vh] object-contain rounded-lg shadow-lg" />
-              ) : (<p style={{ color: 'var(--text-muted)' }}>لا توجد صور</p>)}
-            </div>
-            {(viewingReceipt.tx.receipts || []).length > 1 && (
-              <div className="p-3 flex gap-2 overflow-x-auto scroll-hide" style={{ borderTop: '1px solid var(--border-subtle)' }}>
-                {viewingReceipt.tx.receipts.map((r, idx) => (
-                  <button key={idx} onClick={() => dispatch({ type: 'SET_VIEWING_RECEIPT', payload: { ...viewingReceipt, index: idx } })} className={`flex-shrink-0 w-14 h-14 rounded-lg overflow-hidden border-2 transition-all ${viewingReceipt.index === idx ? 'border-blue-500 scale-105' : 'border-transparent opacity-60'}`}>
-                    <img src={r.url} alt="" className="w-full h-full object-cover" />
-                  </button>
-                ))}
+        {viewingReceipt && viewingReceipt.tx && (
+          <div className="modal-backdrop z-[3600] no-print" onClick={() => dispatch({ type: 'SET_VIEWING_RECEIPT', payload: null })}>
+            <div className="w-full max-w-3xl max-h-[95vh] rounded-2xl shadow-2xl overflow-hidden flex flex-col" style={{ background: 'var(--bg-card)' }} onClick={e => e.stopPropagation()}>
+              <div className="p-3 flex justify-between items-center" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                <h3 className="text-sm font-black flex items-center gap-2"><Camera size={14} /> فواتير: {viewingReceipt.tx.description || viewingReceipt.tx.category || ''}</h3>
+                <button onClick={() => dispatch({ type: 'SET_VIEWING_RECEIPT', payload: null })} className="btn btn-ghost p-1.5"><X size={16} /></button>
               </div>
-            )}
-          </div>
-        </div>
-      )}
-      {isPinChangeOpen && (
-        <PinChangeModal onClose={() => dispatch({ type: 'SET_PIN_CHANGE_OPEN', payload: false })} addNotification={addNotification} />
-      )}
-
-      {!isLocked && (<div className="bottom-nav-container no-print"><div className="scrollable-nav scroll-hide">
-        {[
-          { id: 'dashboard', label: 'الرئيسية', icon: LayoutDashboard },
-          { id: 'transactions', label: 'المعاملات', icon: ArrowUpRight },
-          { id: 'cards', label: 'المحافظ', icon: CreditCard },
-          { id: 'calendar', label: 'الأجندة', icon: CalendarDays }
-        ].map(item => (
-          <button key={item.id} type="button" onClick={() => dispatch({ type: 'SET_ACTIVE_TAB', payload: item.id })} className={`nav-btn ${activeTab === item.id ? 'active' : ''}`}>
-            <item.icon size={19} /><span>{item.label}</span>
-          </button>
-        ))}
-        <button type="button" onClick={() => setIsDrawerOpen(true)} className="nav-btn" style={{ color: 'var(--brand)' }}>
-          <Menu size={19} /><span>المزيد</span>
-        </button>
-      </div></div>)}
-
-      {isDrawerOpen && (
-        <div className="fixed inset-0 z-[4000] no-print">
-          <div className="absolute inset-0 backdrop-blur-sm animate-fadeIn" style={{ background: 'rgba(42, 36, 24, 0.55)' }} onClick={() => setIsDrawerOpen(false)}></div>
-          <div className="absolute bottom-0 left-0 right-0 rounded-t-3xl shadow-2xl max-h-[85vh] overflow-y-auto scroll-hide animate-slideInBottom" style={{ background: 'var(--bg-card)', paddingBottom: 'calc(20px + env(safe-area-inset-bottom))' }}>
-            <div className="pt-3 pb-2 flex justify-center"><div className="w-10 h-1.5 rounded-full" style={{ background: 'var(--border-default)' }}></div></div>
-            <div className="px-4 pb-2 flex justify-between items-center">
-              <h3 className="font-black text-sm">القائمة</h3>
-              <button onClick={() => setIsDrawerOpen(false)} className="btn btn-ghost p-1.5"><X size={16} /></button>
-            </div>
-            <div className="px-3 space-y-3">
-              <div>
-                <p className="sidebar-group-title">المتابعة</p>
-                <div className="grid grid-cols-2 gap-1.5">
-                  {[
-                    { id: 'categories', label: 'الفئات', icon: Layers },
-                    { id: 'loans', label: 'الالتزامات والعهد', icon: Banknote }
-                  ].map(item => (
-                    <button key={item.id} onClick={() => { dispatch({ type: 'SET_ACTIVE_TAB', payload: item.id }); setIsDrawerOpen(false); }} className="flex items-center gap-2 p-2.5 rounded-lg text-xs font-bold active:scale-[0.97] transition-all" style={{ background: 'var(--bg-muted)', color: 'var(--text-secondary)' }}>
-                      <item.icon size={14} /><span className="truncate">{item.label}</span>
+              <div className="flex-1 overflow-auto p-3 flex items-center justify-center" style={{ background: 'var(--bg-muted)', minHeight: '300px' }}>
+                {(viewingReceipt.tx.receipts || []).length > 0 ? (
+                  <img src={viewingReceipt.tx.receipts[viewingReceipt.index || 0].url} alt="فاتورة" className="max-w-full max-h-[70vh] object-contain rounded-lg shadow-lg" />
+                ) : (<p style={{ color: 'var(--text-muted)' }}>لا توجد صور</p>)}
+              </div>
+              {(viewingReceipt.tx.receipts || []).length > 1 && (
+                <div className="p-3 flex gap-2 overflow-x-auto scroll-hide" style={{ borderTop: '1px solid var(--border-subtle)' }}>
+                  {viewingReceipt.tx.receipts.map((r, idx) => (
+                    <button key={idx} onClick={() => dispatch({ type: 'SET_VIEWING_RECEIPT', payload: { ...viewingReceipt, index: idx } })} className={`flex-shrink-0 w-14 h-14 rounded-lg overflow-hidden border-2 transition-all ${viewingReceipt.index === idx ? 'border-blue-500 scale-105' : 'border-transparent opacity-60'}`}>
+                      <img src={r.url} alt="" className="w-full h-full object-cover" />
                     </button>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <p className="sidebar-group-title">التخطيط</p>
-                <div className="grid grid-cols-2 gap-1.5">
-                  {[
-                    { id: 'planning', label: 'التخطيط', icon: Table },
-                    { id: 'planner', label: 'المخطط', icon: Target },
-                    { id: 'forecast', label: 'التوقع', icon: LineChart },
-                    { id: 'comparison', label: 'المقارنة', icon: Activity },
-                    { id: 'duplicates', label: 'المكررات', icon: Filter }
-                  ].map(item => (
-                    <button key={item.id} onClick={() => { dispatch({ type: 'SET_ACTIVE_TAB', payload: item.id }); setIsDrawerOpen(false); }} className="flex items-center gap-2 p-2.5 rounded-lg text-xs font-bold active:scale-[0.97] transition-all" style={{ background: 'var(--bg-muted)', color: 'var(--text-secondary)' }}>
-                      <item.icon size={14} /><span className="truncate">{item.label}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <p className="sidebar-group-title">الإعدادات</p>
-                <div className="grid grid-cols-2 gap-1.5">
-                  <button onClick={() => { handleExport(); setIsDrawerOpen(false); }} className="flex items-center gap-2 p-2.5 rounded-lg text-xs font-bold active:scale-[0.97] transition-all" style={{ background: 'var(--bg-muted)', color: 'var(--text-secondary)' }}>
-                    <Download size={14} className="text-blue-500" /><span className="truncate">حفظ نسخة</span>
-                  </button>
-                  <label className="flex items-center gap-2 p-2.5 rounded-lg text-xs font-bold cursor-pointer active:scale-[0.97]" style={{ background: 'var(--bg-muted)', color: 'var(--text-secondary)' }}>
-                    <Upload size={14} className="text-purple-500" /><span className="truncate">استيراد</span>
-                    <input type="file" accept=".json" onChange={(e) => { handleImport(e); setIsDrawerOpen(false); }} className="hidden" />
-                  </label>
-                  <button onClick={() => { dispatch({ type: 'SET_ACTIVE_TAB', payload: 'settings' }); setIsDrawerOpen(false); }} className="col-span-2 flex items-center justify-center gap-2 p-2.5 rounded-lg text-xs font-bold active:scale-[0.97]" style={{ background: 'var(--bg-muted)', color: 'var(--text-secondary)' }}>
-                    <Sliders size={14} /><span>الإعدادات</span>
-                  </button>
-                  <button onClick={() => { sessionStorage.removeItem('pin_verified'); setPinVerified(false); setIsDrawerOpen(false); }} className="flex items-center gap-2 p-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400 text-xs font-bold active:scale-[0.97]">
-                    <Lock size={14} /><span className="truncate">قفل</span>
-                  </button>
-                  <button onClick={() => { firebase.auth().signOut(); setIsAuthenticated(false); sessionStorage.removeItem('pin_verified'); setPinVerified(false); setIsDrawerOpen(false); }} className="flex items-center gap-2 p-2.5 rounded-lg bg-red-50 dark:bg-red-950/30 text-red-600 text-xs font-bold active:scale-[0.97]">
-                    <LogOut size={14} /><span className="truncate">خروج</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {!isLocked && (<button type="button" aria-label="إضافة" onClick={() => { dispatch({ type: 'SET_FORM_MODE', payload: 'add' }); dispatch({ type: 'SET_FORM_DATA', payload: { type: 'expense', category: '', amount: '', date: getLocalISODate(), method: 'cash', subType: 'withdrawal', status: 'pending', receipts: [] } }); dispatch({ type: 'SET_FORM_OPEN', payload: true }); }} className="fab no-print"><Plus size={22} /></button>)}
-      <EnhancedSidebar activeTab={activeTab} dispatch={dispatch} canUndo={history.length > 0} onUndo={() => dispatch({ type: 'UNDO' })} />
-      <main ref={mainContentRef} className="flex-1 overflow-y-auto p-3 lg:p-5 pt-9">
-        {isLocked ? (<div className="min-h-screen flex flex-col items-center justify-center no-print"><Lock size={48} className="mb-4 text-blue-500" /><h2 className="text-xl font-black mb-4">التطبيق مقفل</h2><button type="button" onClick={() => dispatch({ type: 'SET_IS_LOCKED', payload: false })} className="btn btn-primary px-6 py-3"><Unlock size={18} /> فتح</button></div>) : (<div className="max-w-6xl mx-auto space-y-4 animate-fadeIn pb-24"><ProfessionalHeader isDarkMode={isDarkMode} dispatch={dispatch} />{renderActiveView()}</div>)}
-      </main>
-
-      {isFormOpen && (
-        <div className="modal-backdrop no-print"><div className="w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden flex flex-col animate-slideInBottom" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', maxHeight: 'calc(100dvh - 24px)' }}>
-          <div className="p-3.5 flex justify-between items-center flex-shrink-0" style={{ borderBottom: '1px solid var(--border-subtle)' }}><h3 className="text-sm font-black">{formMode === 'add' ? 'إضافة عملية' : 'تعديل'}</h3><button type="button" aria-label="إغلاق" onClick={() => dispatch({ type: 'SET_FORM_OPEN', payload: false })} className="btn btn-ghost p-1.5"><X size={16} /></button></div>
-          <form onSubmit={handleSaveTransaction} className="p-3.5 space-y-2.5 overflow-y-auto scroll-hide" id="transaction-form" style={{ minHeight: 0 }}>
-            <div className="grid grid-cols-2 gap-2.5">
-              <div><label className="block text-[11px] font-bold mb-1" style={{ color: 'var(--text-muted)' }}>النوع</label><select className="input-field font-bold text-sm py-2.5" value={formData.type} onChange={(e) => { const t = e.target.value; dispatch({ type: 'SET_FORM_DATA', payload: { ...formData, type: t, subType: t === 'income' ? 'deposit' : 'withdrawal', category: '' } }); }}><option value="expense">مصروف 💸</option><option value="income">دخل 💰</option></select></div>
-              <div><label className="block text-[11px] font-bold mb-1" style={{ color: 'var(--text-muted)' }}>الفئة</label><select className={`input-field font-bold text-sm py-2.5 ${formErrors.category ? 'error' : ''}`} value={formData.category} onChange={e => dispatch({ type: 'SET_FORM_DATA', payload: { ...formData, category: e.target.value } })} required><option value="">اختر...</option>{Object.entries(CATEGORY_GROUPS[formData.type]).map(([g, items]) => (<optgroup key={g} label={g}>{items.map(c => <option key={c} value={c}>{c}</option>)}</optgroup>))}</select></div>
-            </div>
-            <div className="p-2.5 rounded-lg" style={{ background: 'var(--bg-muted)' }}>
-              <div className="grid grid-cols-2 gap-1.5">
-                <label className={`flex items-center justify-center gap-1.5 p-2.5 rounded-lg cursor-pointer border-2 font-bold text-[11px] transition-all ${formData.status !== 'paid' ? 'bg-amber-50 dark:bg-amber-950/30 border-amber-500 text-amber-700 dark:text-amber-400' : 'border-transparent'}`}><input type="radio" name="status" value="pending" className="hidden" checked={formData.status !== 'paid'} onChange={() => dispatch({ type: 'SET_FORM_DATA', payload: { ...formData, status: 'pending' } })} /><Clock size={12} /> معلق</label>
-                <label className={`flex items-center justify-center gap-1.5 p-2.5 rounded-lg cursor-pointer border-2 font-bold text-[11px] transition-all ${formData.status === 'paid' ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-500 text-emerald-700 dark:text-emerald-400' : 'border-transparent'}`}><input type="radio" name="status" value="paid" className="hidden" checked={formData.status === 'paid'} onChange={() => dispatch({ type: 'SET_FORM_DATA', payload: { ...formData, status: 'paid' } })} /><CheckCircle2 size={12} /> معتمد</label>
-              </div>
-            </div>
-            {ACCOUNT_METHOD_IDS.includes(formData.method) && formData.method !== 'cash' && (<div className="flex gap-1.5">
-              <label className={`flex-1 flex items-center justify-center gap-1.5 p-2 rounded-lg cursor-pointer border-2 text-[11px] font-bold transition-all ${formData.subType === 'deposit' ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700' : 'border-[color:var(--border-default)]'}`}><input type="radio" name="subType" value="deposit" className="hidden" checked={formData.subType === 'deposit'} onChange={() => dispatch({ type: 'SET_FORM_DATA', payload: { ...formData, subType: 'deposit' } })} /><span>إيداع +</span></label>
-              <label className={`flex-1 flex items-center justify-center gap-1.5 p-2 rounded-lg cursor-pointer border-2 text-[11px] font-bold transition-all ${formData.subType === 'withdrawal' ? 'border-red-500 bg-red-50 dark:bg-red-950/30 text-red-700' : 'border-[color:var(--border-default)]'}`}><input type="radio" name="subType" value="withdrawal" className="hidden" checked={formData.subType === 'withdrawal'} onChange={() => dispatch({ type: 'SET_FORM_DATA', payload: { ...formData, subType: 'withdrawal' } })} /><span>سحب −</span></label>
-            </div>)}
-            <div className="grid grid-cols-3 gap-2">
-              <div><label className="block text-[11px] font-bold mb-1" style={{ color: 'var(--text-muted)' }}>المبلغ</label><input type="text" inputMode="decimal" required className={`input-field text-sm font-black text-blue-600 text-center py-2.5 ${formErrors.amount ? 'error' : ''}`} value={formData.amount} onChange={e => dispatch({ type: 'SET_FORM_DATA', payload: { ...formData, amount: e.target.value } })} /></div>
-              <div><label className="block text-[11px] font-bold mb-1" style={{ color: 'var(--text-muted)' }}>التاريخ</label><input type="date" required className={`input-field text-[11px] font-bold py-2.5 ${formErrors.date ? 'error' : ''}`} value={formData.date} onChange={e => dispatch({ type: 'SET_FORM_DATA', payload: { ...formData, date: e.target.value } })} /></div>
-              <div><label className="block text-[11px] font-bold mb-1" style={{ color: 'var(--text-muted)' }}>الدفع</label><select className="input-field text-[11px] font-bold py-2.5" value={formData.method} onChange={e => dispatch({ type: 'SET_FORM_DATA', payload: { ...formData, method: e.target.value } })}>{PAYMENT_METHODS.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}</select></div>
-            </div>
-            {formData.category === 'مسحوبات محل هاني' && (<div className="p-2.5 rounded-lg bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-900">
-              <label className="text-[10px] font-black text-orange-700 dark:text-orange-400 flex items-center gap-1 mb-1.5"><Zap size={10} /> اختيار سريع</label>
-              <div className="flex flex-wrap gap-1 max-h-32 overflow-y-auto scroll-hide">
-                {HANY_QUICK_ITEMS.map(item => (<button key={item} type="button" onClick={() => dispatch({ type: 'SET_FORM_DATA', payload: { ...formData, description: item } })} className={`px-2 py-1 rounded-md text-[10px] font-bold transition-all ${formData.description === item ? 'bg-orange-500 text-white' : 'bg-white dark:bg-slate-800 text-orange-700 dark:text-orange-300'}`}>{item}</button>))}
-              </div>
-            </div>)}
-            <div><label className="block text-[11px] font-bold mb-1" style={{ color: 'var(--text-muted)' }}>الوصف</label><input type="text" className={`input-field font-bold text-sm py-2.5 ${formErrors.description ? 'error' : ''}`} value={formData.description || ''} onChange={e => dispatch({ type: 'SET_FORM_DATA', payload: { ...formData, description: e.target.value } })} placeholder="تفاصيل..." /></div>
-
-            <div>
-              <label className="block text-[11px] font-bold mb-1.5 flex items-center justify-between" style={{ color: 'var(--text-muted)' }}>
-                <span className="flex items-center gap-1"><Camera size={12} /> صور الفاتورة (اختياري)</span>
-                <span className="text-[10px]">{formData.receipts?.length || 0} صورة</span>
-              </label>
-              {(formData.receipts || []).length > 0 && (
-                <div className="flex flex-wrap gap-2 mb-2">
-                  {(formData.receipts || []).map((r, idx) => (
-                    <div key={idx} className="relative w-14 h-14 rounded-lg overflow-hidden" style={{ border: '1px solid var(--border-default)' }}>
-                      <img src={r.url} alt="" className="w-full h-full object-cover cursor-pointer" onClick={() => dispatch({ type: 'SET_VIEWING_RECEIPT', payload: { tx: { receipts: formData.receipts, description: formData.description }, index: idx } })} />
-                      <button type="button" onClick={(e) => { e.stopPropagation(); const newReceipts = formData.receipts.filter((_, i) => i !== idx); deleteReceipt(r.path).catch(() => {}); dispatch({ type: 'SET_FORM_DATA', payload: { ...formData, receipts: newReceipts } }); }} className="absolute top-0 left-0 bg-red-500 text-white rounded-br-lg p-0.5"><X size={10} /></button>
-                    </div>
                   ))}
                 </div>
               )}
-              <label className="flex items-center justify-center gap-2 p-2.5 rounded-lg border-2 border-dashed cursor-pointer hover:bg-[color:var(--bg-muted)] transition-colors" style={{ borderColor: 'var(--border-default)' }}>
-                <Camera size={14} style={{ color: 'var(--text-muted)' }} />
-                <span className="text-[11px] font-bold" style={{ color: 'var(--text-secondary)' }}>إضافة صورة (كاميرا أو ملف)</span>
-                <input type="file" accept="image/*" multiple className="hidden" onChange={handleReceiptSelect} disabled={isProcessing} />
-              </label>
-              <p className="text-[10px] mt-1" style={{ color: 'var(--text-muted)' }}>حد أقصى {MAX_RECEIPT_SIZE_MB}MB — يتم الضغط تلقائيًا</p>
             </div>
+          </div>
+        )}
+        {isPinChangeOpen && (
+          <PinChangeModal onClose={() => dispatch({ type: 'SET_PIN_CHANGE_OPEN', payload: false })} addNotification={addNotification} />
+        )}
 
-            {formData.type === 'expense' && (<details className="rounded-lg overflow-hidden" style={{ background: 'var(--bg-muted)' }}><summary className="p-2.5 cursor-pointer text-[11px] font-bold flex items-center justify-between" style={{ color: 'var(--text-secondary)' }}><span className="flex items-center gap-2"><Hash size={12} /> ربط بقرض أو بطاقة</span><ChevronDown size={12} /></summary>
-              <div className="p-2.5 space-y-2" style={{ borderTop: '1px solid var(--border-subtle)' }}><select className="input-field text-[11px] font-bold w-full py-2" value={formData.linkedLoanId || ''} onChange={e => dispatch({ type: 'SET_FORM_DATA', payload: { ...formData, linkedLoanId: e.target.value || '' } })}><option value="">بدون قرض</option>{updatedLoans.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}</select>
-                <select className="input-field text-[11px] font-bold w-full py-2" value={formData.linkedCardId || ''} onChange={e => dispatch({ type: 'SET_FORM_DATA', payload: { ...formData, linkedCardId: e.target.value ? Number(e.target.value) : '' } })}><option value="">بدون بطاقة</option>{cards.map(c => <option key={c.id} value={c.id}>{c.name} - {c.bank}</option>)}</select></div></details>)}
-            {formData.category === 'مسحوبات محل هاني' && formMode === 'add' ? (<div className="grid grid-cols-2 gap-2"><button type="button" onClick={handleSaveAndNext} disabled={isProcessing} className="btn btn-secondary py-2.5 text-sm"><Zap size={14} /> حفظ + التالي</button><button type="submit" disabled={isProcessing} className="btn btn-primary py-2.5 text-sm"><Save size={14} /> حفظ</button></div>) : (<button type="submit" className="btn btn-primary w-full py-2.5 text-sm" disabled={isProcessing}>{isProcessing ? 'جاري الحفظ...' : <><Save size={14} /> {formData.status === 'paid' ? 'حفظ واعتماد' : 'حفظ كمعلق'}</>}</button>)}
-          </form></div></div>)}
-      {isAiModalOpen && (<div className="modal-backdrop no-print"><div className="w-full max-w-xl rounded-2xl shadow-2xl overflow-hidden animate-slideInBottom" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)' }}><div className="p-4 flex justify-between items-center" style={{ borderBottom: '1px solid var(--border-subtle)' }}><h3 className="text-sm font-black flex items-center gap-2"><Sparkles size={14} className="text-blue-500" /> المساعد</h3><button type="button" onClick={() => dispatch({ type: 'SET_AI_MODAL_OPEN', payload: false })} className="btn btn-ghost p-1.5"><X size={16} /></button></div><div className="p-4"><button type="button" onClick={handleAnalyzeFinances} disabled={isAiLoading} className="btn btn-primary w-full py-2.5 text-sm mb-3">{isAiLoading ? 'جاري التحليل...' : <><Sparkles size={14} /> تحليل الوضع المالي</>}</button>{aiResponse && <div className="p-3 rounded-lg whitespace-pre-line text-xs font-medium leading-relaxed" style={{ background: 'var(--bg-muted)' }}>{aiResponse}</div>}</div></div></div>)}
-      {editingCard && (<div className="modal-backdrop no-print"><div className="w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden animate-slideInBottom max-h-[90dvh] flex flex-col" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)' }}><div className="p-4 flex justify-between items-center" style={{ borderBottom: '1px solid var(--border-subtle)' }}><h3 className="text-sm font-black">تعديل البطاقة</h3><button type="button" onClick={() => dispatch({ type: 'SET_EDITING_CARD', payload: null })} className="btn btn-ghost p-1.5"><X size={16} /></button></div>
-        <form onSubmit={handleUpdateCard} className="p-4 space-y-2.5 overflow-y-auto scroll-hide">
-          <div className="grid grid-cols-2 gap-2.5"><div><label className="text-[11px] font-bold" style={{ color: 'var(--text-muted)' }}>الاسم</label><input type="text" required className="input-field text-sm" value={editingCard.name} onChange={e => dispatch({ type: 'SET_EDITING_CARD', payload: { ...editingCard, name: e.target.value } })} /></div><div><label className="text-[11px] font-bold" style={{ color: 'var(--text-muted)' }}>البنك</label><input type="text" required className="input-field text-sm" value={editingCard.bank} onChange={e => dispatch({ type: 'SET_EDITING_CARD', payload: { ...editingCard, bank: e.target.value } })} /></div></div>
-          <div className="grid grid-cols-3 gap-2.5"><div><label className="text-[11px] font-bold" style={{ color: 'var(--text-muted)' }}>الحد</label><input type="text" inputMode="decimal" className="input-field text-blue-600 font-bold text-sm" value={editingCard.limit} onChange={e => dispatch({ type: 'SET_EDITING_CARD', payload: { ...editingCard, limit: e.target.value, availableBalance: Math.max(0, parseNumberInput(e.target.value) - safeNumber(editingCard.openingDebt)) } })} /></div><div><label className="text-[11px] font-bold" style={{ color: 'var(--text-muted)' }}>مديونية أساسية</label><input type="text" inputMode="decimal" className="input-field text-red-500 font-bold text-sm" value={editingCard.openingDebt} onChange={e => dispatch({ type: 'SET_EDITING_CARD', payload: { ...editingCard, openingDebt: e.target.value, availableBalance: Math.max(0, safeNumber(editingCard.limit) - parseNumberInput(e.target.value)) } })} /></div><div><label className="text-[11px] font-bold" style={{ color: 'var(--text-muted)' }}>كاش باك %</label><input type="text" inputMode="decimal" className="input-field text-amber-600 font-black text-sm text-center" value={editingCard.cashbackRate || 1} onChange={e => dispatch({ type: 'SET_EDITING_CARD', payload: { ...editingCard, cashbackRate: e.target.value } })} /></div></div>
-          <button type="submit" className="btn btn-primary w-full py-2.5 text-sm">حفظ</button></form></div></div>)}
-      {editingLoan && (<div className="modal-backdrop no-print"><div className="w-full max-w-md rounded-2xl shadow-2xl animate-slideInBottom" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)' }}><div className="p-4 flex justify-between items-center" style={{ borderBottom: '1px solid var(--border-subtle)' }}><h3 className="text-sm font-black">تعديل الالتزام</h3><button type="button" onClick={() => dispatch({ type: 'SET_EDITING_LOAN', payload: null })} className="btn btn-ghost p-1.5"><X size={16} /></button></div>
-        <form onSubmit={handleUpdateLoan} className="p-4 space-y-2.5">
-          <div><label className="text-[11px] font-bold" style={{ color: 'var(--text-muted)' }}>الاسم</label><input type="text" className="input-field text-sm" value={editingLoan.name} onChange={e => dispatch({ type: 'SET_EDITING_LOAN', payload: { ...editingLoan, name: e.target.value } })} /></div>
-          <div className="grid grid-cols-2 gap-2.5"><div><label className="text-[11px] font-bold" style={{ color: 'var(--text-muted)' }}>المبلغ</label><input type="text" inputMode="decimal" className="input-field text-sm" value={editingLoan.totalAmount} onChange={e => dispatch({ type: 'SET_EDITING_LOAN', payload: { ...editingLoan, totalAmount: e.target.value } })} /></div><div><label className="text-[11px] font-bold" style={{ color: 'var(--text-muted)' }}>القسط</label><input type="text" inputMode="decimal" className="input-field text-sm" value={editingLoan.monthlyInstallment} onChange={e => dispatch({ type: 'SET_EDITING_LOAN', payload: { ...editingLoan, monthlyInstallment: e.target.value } })} /></div></div>
-          {editingLoan.isReceivable && (
-            <label className="flex items-center gap-3 p-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/30 cursor-pointer">
-              <input type="checkbox" checked={!!editingLoan.paused} onChange={e => dispatch({ type: 'SET_EDITING_LOAN', payload: { ...editingLoan, paused: e.target.checked } })} className="w-4 h-4 accent-amber-600" />
-              <span className="text-xs font-bold text-amber-700 dark:text-amber-400">⏸ إيقاف مؤقت (لن يتولّد دخل تلقائي)</span>
-            </label>
-          )}
-          <button type="submit" className="btn btn-primary w-full py-2.5 text-sm">حفظ</button></form></div></div>)}
-      {editingBudgetCategory && (<div className="modal-backdrop no-print"><div className="w-full max-w-sm rounded-2xl shadow-2xl p-5" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)' }}><h3 className="text-sm font-black mb-3">ميزانية: {editingBudgetCategory}</h3>
-        <input type="text" inputMode="decimal" className="input-field text-base font-black text-blue-600 mb-3" value={budgetAmount} onChange={e => dispatch({ type: 'SET_BUDGET_AMOUNT', payload: e.target.value })} />
-        <div className="flex gap-2"><button type="button" onClick={handleSaveBudget} className="btn btn-primary flex-1 text-sm">حفظ</button><button type="button" onClick={() => dispatch({ type: 'SET_EDITING_BUDGET_CATEGORY', payload: null })} className="btn btn-secondary flex-1 text-sm">إلغاء</button></div></div></div>)}
-      {isQuickTransferModalOpen && (<div className="modal-backdrop no-print"><div className="w-full max-w-md rounded-2xl shadow-2xl animate-slideInBottom" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)' }}><div className="p-4 flex justify-between items-center" style={{ borderBottom: '1px solid var(--border-subtle)' }}><h3 className="text-sm font-black flex items-center gap-2"><ArrowRight size={16} className="text-blue-500" /> تحويل</h3><button type="button" onClick={() => dispatch({ type: 'SET_QUICK_TRANSFER_MODAL_OPEN', payload: false })} className="btn btn-ghost p-1.5"><X size={16} /></button></div>
-        <form onSubmit={handleQuickTransfer} className="p-4 space-y-3">
-          <div>
-            <div className="grid grid-cols-3 gap-1.5">
-              {[{ id: 'internal', label: 'حساباتي', icon: '🏠' }, { id: 'external', label: 'جهة خارجية', icon: '🌍' }, { id: 'fees', label: 'رسوم', icon: '💰' }].map(t => (
-                <button key={t.id} type="button" onClick={() => dispatch({ type: 'SET_QUICK_TRANSFER_DATA', payload: { transferType: t.id } })} className={`p-2.5 rounded-lg text-[11px] font-bold transition-all border-2 flex flex-col items-center gap-1 ${quickTransferData.transferType === t.id ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400' : 'border-[color:var(--border-default)]'}`}>
-                  <span className="text-sm">{t.icon}</span><span>{t.label}</span>
-                </button>
-              ))}
+        {!isLocked && (<div className="bottom-nav-container no-print"><div className="scrollable-nav scroll-hide">
+          {[
+            { id: 'dashboard', label: 'الرئيسية', icon: LayoutDashboard },
+            { id: 'transactions', label: 'المعاملات', icon: ArrowUpRight },
+            { id: 'cards', label: 'المحافظ', icon: CreditCard },
+            { id: 'calendar', label: 'الأجندة', icon: CalendarDays }
+          ].map(item => (
+            <button key={item.id} type="button" onClick={() => dispatch({ type: 'SET_ACTIVE_TAB', payload: item.id })} className={`nav-btn ${activeTab === item.id ? 'active' : ''}`}>
+              <item.icon size={19} /><span>{item.label}</span>
+            </button>
+          ))}
+          <button type="button" onClick={() => setIsDrawerOpen(true)} className="nav-btn" style={{ color: 'var(--brand)' }}>
+            <Menu size={19} /><span>المزيد</span>
+          </button>
+        </div></div>)}
+
+        {isDrawerOpen && (
+          <div className="fixed inset-0 z-[4000] no-print">
+            <div className="absolute inset-0 backdrop-blur-sm animate-fadeIn" style={{ background: 'rgba(42, 36, 24, 0.55)' }} onClick={() => setIsDrawerOpen(false)}></div>
+            <div className="absolute bottom-0 left-0 right-0 rounded-t-3xl shadow-2xl max-h-[85vh] overflow-y-auto scroll-hide animate-slideInBottom" style={{ background: 'var(--bg-card)', paddingBottom: 'calc(20px + env(safe-area-inset-bottom))' }}>
+              <div className="pt-3 pb-2 flex justify-center"><div className="w-10 h-1.5 rounded-full" style={{ background: 'var(--border-default)' }}></div></div>
+              <div className="px-4 pb-2 flex justify-between items-center">
+                <h3 className="font-black text-sm">القائمة</h3>
+                <button onClick={() => setIsDrawerOpen(false)} className="btn btn-ghost p-1.5"><X size={16} /></button>
+              </div>
+              <div className="px-3 space-y-3">
+                <div>
+                  <p className="sidebar-group-title">المتابعة</p>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {[
+                      { id: 'categories', label: 'الفئات', icon: Layers },
+                      { id: 'loans', label: 'الالتزامات والعهد', icon: Banknote }
+                    ].map(item => (
+                      <button key={item.id} onClick={() => { dispatch({ type: 'SET_ACTIVE_TAB', payload: item.id }); setIsDrawerOpen(false); }} className="flex items-center gap-2 p-2.5 rounded-lg text-xs font-bold active:scale-[0.97] transition-all" style={{ background: 'var(--bg-muted)', color: 'var(--text-secondary)' }}>
+                        <item.icon size={14} /><span className="truncate">{item.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <p className="sidebar-group-title">التخطيط</p>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {[
+                      { id: 'planning', label: 'التخطيط', icon: Table },
+                      { id: 'planner', label: 'المخطط', icon: Target },
+                      { id: 'forecast', label: 'التوقع', icon: LineChart },
+                      { id: 'comparison', label: 'المقارنة', icon: Activity },
+                      { id: 'duplicates', label: 'المكررات', icon: Filter }
+                    ].map(item => (
+                      <button key={item.id} onClick={() => { dispatch({ type: 'SET_ACTIVE_TAB', payload: item.id }); setIsDrawerOpen(false); }} className="flex items-center gap-2 p-2.5 rounded-lg text-xs font-bold active:scale-[0.97] transition-all" style={{ background: 'var(--bg-muted)', color: 'var(--text-secondary)' }}>
+                        <item.icon size={14} /><span className="truncate">{item.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <p className="sidebar-group-title">الإعدادات</p>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <button onClick={() => { handleExport(); setIsDrawerOpen(false); }} className="flex items-center gap-2 p-2.5 rounded-lg text-xs font-bold active:scale-[0.97] transition-all" style={{ background: 'var(--bg-muted)', color: 'var(--text-secondary)' }}>
+                      <Download size={14} className="text-blue-500" /><span className="truncate">حفظ نسخة</span>
+                    </button>
+                    <label className="flex items-center gap-2 p-2.5 rounded-lg text-xs font-bold cursor-pointer active:scale-[0.97]" style={{ background: 'var(--bg-muted)', color: 'var(--text-secondary)' }}>
+                      <Upload size={14} className="text-purple-500" /><span className="truncate">استيراد</span>
+                      <input type="file" accept=".json" onChange={(e) => { handleImport(e); setIsDrawerOpen(false); }} className="hidden" />
+                    </label>
+                    <button onClick={() => { dispatch({ type: 'SET_ACTIVE_TAB', payload: 'settings' }); setIsDrawerOpen(false); }} className="col-span-2 flex items-center justify-center gap-2 p-2.5 rounded-lg text-xs font-bold active:scale-[0.97]" style={{ background: 'var(--bg-muted)', color: 'var(--text-secondary)' }}>
+                      <Sliders size={14} /><span>الإعدادات</span>
+                    </button>
+                    <button onClick={() => { sessionStorage.removeItem('pin_verified'); setPinVerified(false); setIsDrawerOpen(false); }} className="flex items-center gap-2 p-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400 text-xs font-bold active:scale-[0.97]">
+                      <Lock size={14} /><span className="truncate">قفل</span>
+                    </button>
+                    <button onClick={() => { firebase.auth().signOut(); setIsAuthenticated(false); sessionStorage.removeItem('pin_verified'); setPinVerified(false); setIsDrawerOpen(false); }} className="flex items-center gap-2 p-2.5 rounded-lg bg-red-50 dark:bg-red-950/30 text-red-600 text-xs font-bold active:scale-[0.97]">
+                      <LogOut size={14} /><span className="truncate">خروج</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
-          <div className={`grid ${quickTransferData.transferType === 'internal' ? 'grid-cols-2' : 'grid-cols-1'} gap-2.5`}>
+        )}
+
+        {!isLocked && (<button type="button" aria-label="إضافة" onClick={() => { dispatch({ type: 'SET_FORM_MODE', payload: 'add' }); dispatch({ type: 'SET_FORM_DATA', payload: { type: 'expense', category: '', amount: '', date: getLocalISODate(), method: 'cash', subType: 'withdrawal', status: 'pending', receipts: [] } }); dispatch({ type: 'SET_FORM_OPEN', payload: true }); }} className="fab no-print"><Plus size={22} /></button>)}
+        <EnhancedSidebar activeTab={activeTab} dispatch={dispatch} canUndo={history.length > 0} onUndo={() => dispatch({ type: 'UNDO' })} />
+        <main ref={mainContentRef} className="flex-1 overflow-y-auto p-3 lg:p-5 pt-9">
+          {isLocked ? (<div className="min-h-screen flex flex-col items-center justify-center no-print"><Lock size={48} className="mb-4 text-blue-500" /><h2 className="text-xl font-black mb-4">التطبيق مقفل</h2><button type="button" onClick={() => dispatch({ type: 'SET_IS_LOCKED', payload: false })} className="btn btn-primary px-6 py-3"><Unlock size={18} /> فتح</button></div>) : (<div className="max-w-6xl mx-auto space-y-4 animate-fadeIn pb-24"><ProfessionalHeader isDarkMode={isDarkMode} dispatch={dispatch} />{renderActiveView()}</div>)}
+        </main>
+
+        {isFormOpen && (
+          <div className="modal-backdrop no-print"><div className="w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden flex flex-col animate-slideInBottom" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', maxHeight: 'calc(100dvh - 24px)' }}>
+            <div className="p-3.5 flex justify-between items-center flex-shrink-0" style={{ borderBottom: '1px solid var(--border-subtle)' }}><h3 className="text-sm font-black">{formMode === 'add' ? 'إضافة عملية' : 'تعديل'}</h3><button type="button" aria-label="إغلاق" onClick={() => dispatch({ type: 'SET_FORM_OPEN', payload: false })} className="btn btn-ghost p-1.5"><X size={16} /></button></div>
+            <form onSubmit={handleSaveTransaction} className="p-3.5 space-y-2.5 overflow-y-auto scroll-hide" id="transaction-form" style={{ minHeight: 0 }}>
+              <div className="grid grid-cols-2 gap-2.5">
+                <div><label className="block text-[11px] font-bold mb-1" style={{ color: 'var(--text-muted)' }}>النوع</label><select className="input-field font-bold text-sm py-2.5" value={formData.type} onChange={(e) => { const t = e.target.value; dispatch({ type: 'SET_FORM_DATA', payload: { ...formData, type: t, subType: t === 'income' ? 'deposit' : 'withdrawal', category: '' } }); }}><option value="expense">مصروف 💸</option><option value="income">دخل 💰</option></select></div>
+                <div><label className="block text-[11px] font-bold mb-1" style={{ color: 'var(--text-muted)' }}>الفئة</label><select className={`input-field font-bold text-sm py-2.5 ${formErrors.category ? 'error' : ''}`} value={formData.category} onChange={e => dispatch({ type: 'SET_FORM_DATA', payload: { ...formData, category: e.target.value } })} required><option value="">اختر...</option>{Object.entries(CATEGORY_GROUPS[formData.type]).map(([g, items]) => (<optgroup key={g} label={g}>{items.map(c => <option key={c} value={c}>{c}</option>)}</optgroup>))}</select></div>
+              </div>
+              <div className="p-2.5 rounded-lg" style={{ background: 'var(--bg-muted)' }}>
+                <div className="grid grid-cols-2 gap-1.5">
+                  <label className={`flex items-center justify-center gap-1.5 p-2.5 rounded-lg cursor-pointer border-2 font-bold text-[11px] transition-all ${formData.status !== 'paid' ? 'bg-amber-50 dark:bg-amber-950/30 border-amber-500 text-amber-700 dark:text-amber-400' : 'border-transparent'}`}><input type="radio" name="status" value="pending" className="hidden" checked={formData.status !== 'paid'} onChange={() => dispatch({ type: 'SET_FORM_DATA', payload: { ...formData, status: 'pending' } })} /><Clock size={12} /> معلق</label>
+                  <label className={`flex items-center justify-center gap-1.5 p-2.5 rounded-lg cursor-pointer border-2 font-bold text-[11px] transition-all ${formData.status === 'paid' ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-500 text-emerald-700 dark:text-emerald-400' : 'border-transparent'}`}><input type="radio" name="status" value="paid" className="hidden" checked={formData.status === 'paid'} onChange={() => dispatch({ type: 'SET_FORM_DATA', payload: { ...formData, status: 'paid' } })} /><CheckCircle2 size={12} /> معتمد</label>
+                </div>
+              </div>
+              {ACCOUNT_METHOD_IDS.includes(formData.method) && formData.method !== 'cash' && (<div className="flex gap-1.5">
+                <label className={`flex-1 flex items-center justify-center gap-1.5 p-2 rounded-lg cursor-pointer border-2 text-[11px] font-bold transition-all ${formData.subType === 'deposit' ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700' : 'border-[color:var(--border-default)]'}`}><input type="radio" name="subType" value="deposit" className="hidden" checked={formData.subType === 'deposit'} onChange={() => dispatch({ type: 'SET_FORM_DATA', payload: { ...formData, subType: 'deposit' } })} /><span>إيداع +</span></label>
+                <label className={`flex-1 flex items-center justify-center gap-1.5 p-2 rounded-lg cursor-pointer border-2 text-[11px] font-bold transition-all ${formData.subType === 'withdrawal' ? 'border-red-500 bg-red-50 dark:bg-red-950/30 text-red-700' : 'border-[color:var(--border-default)]'}`}><input type="radio" name="subType" value="withdrawal" className="hidden" checked={formData.subType === 'withdrawal'} onChange={() => dispatch({ type: 'SET_FORM_DATA', payload: { ...formData, subType: 'withdrawal' } })} /><span>سحب −</span></label>
+              </div>)}
+              <div className="grid grid-cols-3 gap-2">
+                <div><label className="block text-[11px] font-bold mb-1" style={{ color: 'var(--text-muted)' }}>المبلغ</label><input type="text" inputMode="decimal" required className={`input-field text-sm font-black text-blue-600 text-center py-2.5 ${formErrors.amount ? 'error' : ''}`} value={formData.amount} onChange={e => dispatch({ type: 'SET_FORM_DATA', payload: { ...formData, amount: e.target.value } })} /></div>
+                <div><label className="block text-[11px] font-bold mb-1" style={{ color: 'var(--text-muted)' }}>التاريخ</label><input type="date" required className={`input-field text-[11px] font-bold py-2.5 ${formErrors.date ? 'error' : ''}`} value={formData.date} onChange={e => dispatch({ type: 'SET_FORM_DATA', payload: { ...formData, date: e.target.value } })} /></div>
+                <div><label className="block text-[11px] font-bold mb-1" style={{ color: 'var(--text-muted)' }}>الدفع</label><select className="input-field text-[11px] font-bold py-2.5" value={formData.method} onChange={e => dispatch({ type: 'SET_FORM_DATA', payload: { ...formData, method: e.target.value } })}>{PAYMENT_METHODS.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}</select></div>
+              </div>
+              {formData.category === 'مسحوبات محل هاني' && (<div className="p-2.5 rounded-lg bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-900">
+                <label className="text-[10px] font-black text-orange-700 dark:text-orange-400 flex items-center gap-1 mb-1.5"><Zap size={10} /> اختيار سريع</label>
+                <div className="flex flex-wrap gap-1 max-h-32 overflow-y-auto scroll-hide">
+                  {HANY_QUICK_ITEMS.map(item => (<button key={item} type="button" onClick={() => dispatch({ type: 'SET_FORM_DATA', payload: { ...formData, description: item } })} className={`px-2 py-1 rounded-md text-[10px] font-bold transition-all ${formData.description === item ? 'bg-orange-500 text-white' : 'bg-white dark:bg-slate-800 text-orange-700 dark:text-orange-300'}`}>{item}</button>))}
+                </div>
+              </div>)}
+              <div><label className="block text-[11px] font-bold mb-1" style={{ color: 'var(--text-muted)' }}>الوصف</label><input type="text" className={`input-field font-bold text-sm py-2.5 ${formErrors.description ? 'error' : ''}`} value={formData.description || ''} onChange={e => dispatch({ type: 'SET_FORM_DATA', payload: { ...formData, description: e.target.value } })} placeholder="تفاصيل..." /></div>
+
+              <div>
+                <label className="block text-[11px] font-bold mb-1.5 flex items-center justify-between" style={{ color: 'var(--text-muted)' }}>
+                  <span className="flex items-center gap-1"><Camera size={12} /> صور الفاتورة (اختياري)</span>
+                  <span className="text-[10px]">{formData.receipts?.length || 0} صورة</span>
+                </label>
+                {(formData.receipts || []).length > 0 && (
+                  <div className="flex flex-wrap gap-2 mb-2">
+                    {(formData.receipts || []).map((r, idx) => (
+                      <div key={idx} className="relative w-14 h-14 rounded-lg overflow-hidden" style={{ border: '1px solid var(--border-default)' }}>
+                        <img src={r.url} alt="" className="w-full h-full object-cover cursor-pointer" onClick={() => dispatch({ type: 'SET_VIEWING_RECEIPT', payload: { tx: { receipts: formData.receipts, description: formData.description }, index: idx } })} />
+                        <button type="button" onClick={(e) => { e.stopPropagation(); const newReceipts = formData.receipts.filter((_, i) => i !== idx); deleteReceipt(r.path).catch(() => {}); dispatch({ type: 'SET_FORM_DATA', payload: { ...formData, receipts: newReceipts } }); }} className="absolute top-0 left-0 bg-red-500 text-white rounded-br-lg p-0.5"><X size={10} /></button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <label className="flex items-center justify-center gap-2 p-2.5 rounded-lg border-2 border-dashed cursor-pointer hover:bg-[color:var(--bg-muted)] transition-colors" style={{ borderColor: 'var(--border-default)' }}>
+                  <Camera size={14} style={{ color: 'var(--text-muted)' }} />
+                  <span className="text-[11px] font-bold" style={{ color: 'var(--text-secondary)' }}>إضافة صورة (كاميرا أو ملف)</span>
+                  <input type="file" accept="image/*" multiple className="hidden" onChange={handleReceiptSelect} disabled={isProcessing} />
+                </label>
+                <p className="text-[10px] mt-1" style={{ color: 'var(--text-muted)' }}>حد أقصى {MAX_RECEIPT_SIZE_MB}MB — يتم الضغط تلقائيًا</p>
+              </div>
+
+              {formData.type === 'expense' && (<details className="rounded-lg overflow-hidden" style={{ background: 'var(--bg-muted)' }}><summary className="p-2.5 cursor-pointer text-[11px] font-bold flex items-center justify-between" style={{ color: 'var(--text-secondary)' }}><span className="flex items-center gap-2"><Hash size={12} /> ربط بقرض أو بطاقة</span><ChevronDown size={12} /></summary>
+                <div className="p-2.5 space-y-2" style={{ borderTop: '1px solid var(--border-subtle)' }}><select className="input-field text-[11px] font-bold w-full py-2" value={formData.linkedLoanId || ''} onChange={e => dispatch({ type: 'SET_FORM_DATA', payload: { ...formData, linkedLoanId: e.target.value || '' } })}><option value="">بدون قرض</option>{updatedLoans.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}</select>
+                  <select className="input-field text-[11px] font-bold w-full py-2" value={formData.linkedCardId || ''} onChange={e => dispatch({ type: 'SET_FORM_DATA', payload: { ...formData, linkedCardId: e.target.value ? Number(e.target.value) : '' } })}><option value="">بدون بطاقة</option>{cards.map(c => <option key={c.id} value={c.id}>{c.name} - {c.bank}</option>)}</select></div></details>)}
+              {formData.category === 'مسحوبات محل هاني' && formMode === 'add' ? (<div className="grid grid-cols-2 gap-2"><button type="button" onClick={handleSaveAndNext} disabled={isProcessing} className="btn btn-secondary py-2.5 text-sm"><Zap size={14} /> حفظ + التالي</button><button type="submit" disabled={isProcessing} className="btn btn-primary py-2.5 text-sm"><Save size={14} /> حفظ</button></div>) : (<button type="submit" className="btn btn-primary w-full py-2.5 text-sm" disabled={isProcessing}>{isProcessing ? 'جاري الحفظ...' : <><Save size={14} /> {formData.status === 'paid' ? 'حفظ واعتماد' : 'حفظ كمعلق'}</>}</button>)}
+            </form></div></div>)}
+        {isAiModalOpen && (<div className="modal-backdrop no-print"><div className="w-full max-w-xl rounded-2xl shadow-2xl overflow-hidden animate-slideInBottom" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)' }}><div className="p-4 flex justify-between items-center" style={{ borderBottom: '1px solid var(--border-subtle)' }}><h3 className="text-sm font-black flex items-center gap-2"><Sparkles size={14} className="text-blue-500" /> المساعد</h3><button type="button" onClick={() => dispatch({ type: 'SET_AI_MODAL_OPEN', payload: false })} className="btn btn-ghost p-1.5"><X size={16} /></button></div><div className="p-4"><button type="button" onClick={handleAnalyzeFinances} disabled={isAiLoading} className="btn btn-primary w-full py-2.5 text-sm mb-3">{isAiLoading ? 'جاري التحليل...' : <><Sparkles size={14} /> تحليل الوضع المالي</>}</button>{aiResponse && <div className="p-3 rounded-lg whitespace-pre-line text-xs font-medium leading-relaxed" style={{ background: 'var(--bg-muted)' }}>{aiResponse}</div>}</div></div></div>)}
+        {editingCard && (<div className="modal-backdrop no-print"><div className="w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden animate-slideInBottom max-h-[90dvh] flex flex-col" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)' }}><div className="p-4 flex justify-between items-center" style={{ borderBottom: '1px solid var(--border-subtle)' }}><h3 className="text-sm font-black">تعديل البطاقة</h3><button type="button" onClick={() => dispatch({ type: 'SET_EDITING_CARD', payload: null })} className="btn btn-ghost p-1.5"><X size={16} /></button></div>
+          <form onSubmit={handleUpdateCard} className="p-4 space-y-2.5 overflow-y-auto scroll-hide">
+            <div className="grid grid-cols-2 gap-2.5"><div><label className="text-[11px] font-bold" style={{ color: 'var(--text-muted)' }}>الاسم</label><input type="text" required className="input-field text-sm" value={editingCard.name} onChange={e => dispatch({ type: 'SET_EDITING_CARD', payload: { ...editingCard, name: e.target.value } })} /></div><div><label className="text-[11px] font-bold" style={{ color: 'var(--text-muted)' }}>البنك</label><input type="text" required className="input-field text-sm" value={editingCard.bank} onChange={e => dispatch({ type: 'SET_EDITING_CARD', payload: { ...editingCard, bank: e.target.value } })} /></div></div>
+            <div className="grid grid-cols-3 gap-2.5"><div><label className="text-[11px] font-bold" style={{ color: 'var(--text-muted)' }}>الحد</label><input type="text" inputMode="decimal" className="input-field text-blue-600 font-bold text-sm" value={editingCard.limit} onChange={e => dispatch({ type: 'SET_EDITING_CARD', payload: { ...editingCard, limit: e.target.value, availableBalance: Math.max(0, parseNumberInput(e.target.value) - safeNumber(editingCard.openingDebt)) } })} /></div><div><label className="text-[11px] font-bold" style={{ color: 'var(--text-muted)' }}>مديونية أساسية</label><input type="text" inputMode="decimal" className="input-field text-red-500 font-bold text-sm" value={editingCard.openingDebt} onChange={e => dispatch({ type: 'SET_EDITING_CARD', payload: { ...editingCard, openingDebt: e.target.value, availableBalance: Math.max(0, safeNumber(editingCard.limit) - parseNumberInput(e.target.value)) } })} /></div><div><label className="text-[11px] font-bold" style={{ color: 'var(--text-muted)' }}>كاش باك %</label><input type="text" inputMode="decimal" className="input-field text-amber-600 font-black text-sm text-center" value={editingCard.cashbackRate || 1} onChange={e => dispatch({ type: 'SET_EDITING_CARD', payload: { ...editingCard, cashbackRate: e.target.value } })} /></div></div>
+            <button type="submit" className="btn btn-primary w-full py-2.5 text-sm">حفظ</button></form></div></div>)}
+        {editingLoan && (<div className="modal-backdrop no-print"><div className="w-full max-w-md rounded-2xl shadow-2xl animate-slideInBottom" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)' }}><div className="p-4 flex justify-between items-center" style={{ borderBottom: '1px solid var(--border-subtle)' }}><h3 className="text-sm font-black">تعديل الالتزام</h3><button type="button" onClick={() => dispatch({ type: 'SET_EDITING_LOAN', payload: null })} className="btn btn-ghost p-1.5"><X size={16} /></button></div>
+          <form onSubmit={handleUpdateLoan} className="p-4 space-y-2.5">
+            <div><label className="text-[11px] font-bold" style={{ color: 'var(--text-muted)' }}>الاسم</label><input type="text" className="input-field text-sm" value={editingLoan.name} onChange={e => dispatch({ type: 'SET_EDITING_LOAN', payload: { ...editingLoan, name: e.target.value } })} /></div>
+            <div className="grid grid-cols-2 gap-2.5"><div><label className="text-[11px] font-bold" style={{ color: 'var(--text-muted)' }}>المبلغ</label><input type="text" inputMode="decimal" className="input-field text-sm" value={editingLoan.totalAmount} onChange={e => dispatch({ type: 'SET_EDITING_LOAN', payload: { ...editingLoan, totalAmount: e.target.value } })} /></div><div><label className="text-[11px] font-bold" style={{ color: 'var(--text-muted)' }}>القسط</label><input type="text" inputMode="decimal" className="input-field text-sm" value={editingLoan.monthlyInstallment} onChange={e => dispatch({ type: 'SET_EDITING_LOAN', payload: { ...editingLoan, monthlyInstallment: e.target.value } })} /></div></div>
+            {editingLoan.isReceivable && (
+              <label className="flex items-center gap-3 p-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/30 cursor-pointer">
+                <input type="checkbox" checked={!!editingLoan.paused} onChange={e => dispatch({ type: 'SET_EDITING_LOAN', payload: { ...editingLoan, paused: e.target.checked } })} className="w-4 h-4 accent-amber-600" />
+                <span className="text-xs font-bold text-amber-700 dark:text-amber-400">⏸ إيقاف مؤقت (لن يتولّد دخل تلقائي)</span>
+              </label>
+            )}
+            <button type="submit" className="btn btn-primary w-full py-2.5 text-sm">حفظ</button></form></div></div>)}
+        {editingBudgetCategory && (<div className="modal-backdrop no-print"><div className="w-full max-w-sm rounded-2xl shadow-2xl p-5" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)' }}><h3 className="text-sm font-black mb-3">ميزانية: {editingBudgetCategory}</h3>
+          <input type="text" inputMode="decimal" className="input-field text-base font-black text-blue-600 mb-3" value={budgetAmount} onChange={e => dispatch({ type: 'SET_BUDGET_AMOUNT', payload: e.target.value })} />
+          <div className="flex gap-2"><button type="button" onClick={handleSaveBudget} className="btn btn-primary flex-1 text-sm">حفظ</button><button type="button" onClick={() => dispatch({ type: 'SET_EDITING_BUDGET_CATEGORY', payload: null })} className="btn btn-secondary flex-1 text-sm">إلغاء</button></div></div></div>)}
+        {isQuickTransferModalOpen && (<div className="modal-backdrop no-print"><div className="w-full max-w-md rounded-2xl shadow-2xl animate-slideInBottom" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)' }}><div className="p-4 flex justify-between items-center" style={{ borderBottom: '1px solid var(--border-subtle)' }}><h3 className="text-sm font-black flex items-center gap-2"><ArrowRight size={16} className="text-blue-500" /> تحويل</h3><button type="button" onClick={() => dispatch({ type: 'SET_QUICK_TRANSFER_MODAL_OPEN', payload: false })} className="btn btn-ghost p-1.5"><X size={16} /></button></div>
+          <form onSubmit={handleQuickTransfer} className="p-4 space-y-3">
             <div>
-              <label className="text-[11px] font-bold block mb-1" style={{ color: 'var(--text-muted)' }}>من</label>
-              <select className="input-field text-sm py-2.5" value={quickTransferData.from} onChange={e => dispatch({ type: 'SET_QUICK_TRANSFER_DATA', payload: { from: e.target.value } })}>{PAYMENT_METHODS.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}</select>
+              <div className="grid grid-cols-3 gap-1.5">
+                {[{ id: 'internal', label: 'حساباتي', icon: '🏠' }, { id: 'external', label: 'جهة خارجية', icon: '🌍' }, { id: 'fees', label: 'رسوم', icon: '💰' }].map(t => (
+                  <button key={t.id} type="button" onClick={() => dispatch({ type: 'SET_QUICK_TRANSFER_DATA', payload: { transferType: t.id } })} className={`p-2.5 rounded-lg text-[11px] font-bold transition-all border-2 flex flex-col items-center gap-1 ${quickTransferData.transferType === t.id ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400' : 'border-[color:var(--border-default)]'}`}>
+                    <span className="text-sm">{t.icon}</span><span>{t.label}</span>
+                  </button>
+                ))}
+              </div>
             </div>
-            {quickTransferData.transferType === 'internal' && (<div>
-              <label className="text-[11px] font-bold block mb-1" style={{ color: 'var(--text-muted)' }}>إلى</label>
-              <select className="input-field text-sm py-2.5" value={quickTransferData.to} onChange={e => dispatch({ type: 'SET_QUICK_TRANSFER_DATA', payload: { to: e.target.value } })}>{PAYMENT_METHODS.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}</select>
-            </div>)}
-            {quickTransferData.transferType === 'external' && (<div>
-              <label className="text-[11px] font-bold block mb-1" style={{ color: 'var(--text-muted)' }}>الجهة *</label>
-              <input type="text" className="input-field text-sm py-2.5" placeholder="اسم الجهة" value={quickTransferData.externalEntity || ''} onChange={e => dispatch({ type: 'SET_QUICK_TRANSFER_DATA', payload: { externalEntity: e.target.value } })} />
-            </div>)}
-          </div>
-          <div className={`grid ${quickTransferData.transferType === 'fees' ? 'grid-cols-1' : 'grid-cols-2'} gap-2.5`}>
-            {quickTransferData.transferType !== 'fees' && (<div>
-              <label className="text-[11px] font-bold block mb-1" style={{ color: 'var(--text-muted)' }}>المبلغ</label>
-              <input type="text" inputMode="decimal" required className="input-field text-base font-black text-blue-600 text-center py-2.5" value={quickTransferData.amount} onChange={e => dispatch({ type: 'SET_QUICK_TRANSFER_DATA', payload: { amount: e.target.value } })} placeholder="0.00" />
-            </div>)}
-            {quickTransferData.transferType !== 'internal' && (<div>
-              <label className="text-[11px] font-bold block mb-1" style={{ color: 'var(--text-muted)' }}>{quickTransferData.transferType === 'fees' ? 'الرسوم *' : 'رسوم'}</label>
-              <input type="text" inputMode="decimal" className="input-field text-base font-black text-amber-600 text-center py-2.5" value={quickTransferData.fees || ''} onChange={e => dispatch({ type: 'SET_QUICK_TRANSFER_DATA', payload: { fees: e.target.value } })} placeholder="0.00" />
-            </div>)}
-          </div>
-          <button type="submit" className="btn btn-primary w-full py-2.5 text-sm" disabled={isProcessing}>{isProcessing ? 'جاري التنفيذ...' : 'تنفيذ التحويل'}</button>
-        </form></div></div>)}
-      {isRecurringModalOpen && (<div className="modal-backdrop no-print"><div className="w-full max-w-md rounded-2xl shadow-2xl animate-slideInBottom" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)' }}><div className="p-4 flex justify-between items-center" style={{ borderBottom: '1px solid var(--border-subtle)' }}><h3 className="text-sm font-black flex items-center gap-2"><Repeat size={14} className="text-blue-500" /> التزام متكرر</h3><button type="button" onClick={() => dispatch({ type: 'SET_RECURRING_MODAL_OPEN', payload: false })} className="btn btn-ghost p-1.5"><X size={16} /></button></div>
-        <form onSubmit={handleSaveRecurring} className="p-4 space-y-2.5">
-          <div><label className="text-[11px] font-bold block mb-1" style={{ color: 'var(--text-muted)' }}>العنوان</label><input type="text" required className="input-field text-sm" value={recurringFormData.title} onChange={e => dispatch({ type: 'SET_RECURRING_FORM_DATA', payload: { ...recurringFormData, title: e.target.value } })} /></div>
-          <div className="grid grid-cols-2 gap-2.5"><div><label className="text-[11px] font-bold block mb-1" style={{ color: 'var(--text-muted)' }}>المبلغ</label><input type="text" inputMode="decimal" required className="input-field font-bold text-blue-600 text-sm" value={recurringFormData.amount} onChange={e => dispatch({ type: 'SET_RECURRING_FORM_DATA', payload: { ...recurringFormData, amount: e.target.value } })} /></div><div><label className="text-[11px] font-bold block mb-1" style={{ color: 'var(--text-muted)' }}>اليوم</label><input type="number" required min="1" max="31" className="input-field text-center text-sm" value={recurringFormData.day} onChange={e => dispatch({ type: 'SET_RECURRING_FORM_DATA', payload: { ...recurringFormData, day: e.target.value } })} /></div></div>
-          <div><label className="text-[11px] font-bold block mb-1" style={{ color: 'var(--text-muted)' }}>النوع</label><select className="input-field text-sm" value={recurringFormData.type} onChange={e => dispatch({ type: 'SET_RECURRING_FORM_DATA', payload: { ...recurringFormData, type: e.target.value } })}><option value="expense">مصروف</option><option value="income">دخل</option></select></div>
-          <div><label className="text-[11px] font-bold block mb-1" style={{ color: 'var(--text-muted)' }}>الفئة</label><select className="input-field text-sm" value={recurringFormData.category} onChange={e => dispatch({ type: 'SET_RECURRING_FORM_DATA', payload: { ...recurringFormData, category: e.target.value } })}><option value="أخرى">أخرى</option><optgroup label="دخل">{CATEGORIES.income.map(c => <option key={'i-'+c} value={c}>{c}</option>)}</optgroup><optgroup label="مصروف">{CATEGORIES.expense.map(c => <option key={'e-'+c} value={c}>{c}</option>)}</optgroup></select></div>
-          <button type="submit" className="btn btn-primary w-full py-2.5 text-sm">إضافة</button></form></div></div>)}
-    </div>
+            <div className={`grid ${quickTransferData.transferType === 'internal' ? 'grid-cols-2' : 'grid-cols-1'} gap-2.5`}>
+              <div>
+                <label className="text-[11px] font-bold block mb-1" style={{ color: 'var(--text-muted)' }}>من</label>
+                <select className="input-field text-sm py-2.5" value={quickTransferData.from} onChange={e => dispatch({ type: 'SET_QUICK_TRANSFER_DATA', payload: { from: e.target.value } })}>{PAYMENT_METHODS.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}</select>
+              </div>
+              {quickTransferData.transferType === 'internal' && (<div>
+                <label className="text-[11px] font-bold block mb-1" style={{ color: 'var(--text-muted)' }}>إلى</label>
+                <select className="input-field text-sm py-2.5" value={quickTransferData.to} onChange={e => dispatch({ type: 'SET_QUICK_TRANSFER_DATA', payload: { to: e.target.value } })}>{PAYMENT_METHODS.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}</select>
+              </div>)}
+              {quickTransferData.transferType === 'external' && (<div>
+                <label className="text-[11px] font-bold block mb-1" style={{ color: 'var(--text-muted)' }}>الجهة *</label>
+                <input type="text" className="input-field text-sm py-2.5" placeholder="اسم الجهة" value={quickTransferData.externalEntity || ''} onChange={e => dispatch({ type: 'SET_QUICK_TRANSFER_DATA', payload: { externalEntity: e.target.value } })} />
+              </div>)}
+            </div>
+            <div className={`grid ${quickTransferData.transferType === 'fees' ? 'grid-cols-1' : 'grid-cols-2'} gap-2.5`}>
+              {quickTransferData.transferType !== 'fees' && (<div>
+                <label className="text-[11px] font-bold block mb-1" style={{ color: 'var(--text-muted)' }}>المبلغ</label>
+                <input type="text" inputMode="decimal" required className="input-field text-base font-black text-blue-600 text-center py-2.5" value={quickTransferData.amount} onChange={e => dispatch({ type: 'SET_QUICK_TRANSFER_DATA', payload: { amount: e.target.value } })} placeholder="0.00" />
+              </div>)}
+              {quickTransferData.transferType !== 'internal' && (<div>
+                <label className="text-[11px] font-bold block mb-1" style={{ color: 'var(--text-muted)' }}>{quickTransferData.transferType === 'fees' ? 'الرسوم *' : 'رسوم'}</label>
+                <input type="text" inputMode="decimal" className="input-field text-base font-black text-amber-600 text-center py-2.5" value={quickTransferData.fees || ''} onChange={e => dispatch({ type: 'SET_QUICK_TRANSFER_DATA', payload: { fees: e.target.value } })} placeholder="0.00" />
+              </div>)}
+            </div>
+            <button type="submit" className="btn btn-primary w-full py-2.5 text-sm" disabled={isProcessing}>{isProcessing ? 'جاري التنفيذ...' : 'تنفيذ التحويل'}</button>
+          </form></div></div>)}
+        {isRecurringModalOpen && (<div className="modal-backdrop no-print"><div className="w-full max-w-md rounded-2xl shadow-2xl animate-slideInBottom" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)' }}><div className="p-4 flex justify-between items-center" style={{ borderBottom: '1px solid var(--border-subtle)' }}><h3 className="text-sm font-black flex items-center gap-2"><Repeat size={14} className="text-blue-500" /> التزام متكرر</h3><button type="button" onClick={() => dispatch({ type: 'SET_RECURRING_MODAL_OPEN', payload: false })} className="btn btn-ghost p-1.5"><X size={16} /></button></div>
+          <form onSubmit={handleSaveRecurring} className="p-4 space-y-2.5">
+            <div><label className="text-[11px] font-bold block mb-1" style={{ color: 'var(--text-muted)' }}>العنوان</label><input type="text" required className="input-field text-sm" value={recurringFormData.title} onChange={e => dispatch({ type: 'SET_RECURRING_FORM_DATA', payload: { ...recurringFormData, title: e.target.value } })} /></div>
+            <div className="grid grid-cols-2 gap-2.5"><div><label className="text-[11px] font-bold block mb-1" style={{ color: 'var(--text-muted)' }}>المبلغ</label><input type="text" inputMode="decimal" required className="input-field font-bold text-blue-600 text-sm" value={recurringFormData.amount} onChange={e => dispatch({ type: 'SET_RECURRING_FORM_DATA', payload: { ...recurringFormData, amount: e.target.value } })} /></div><div><label className="text-[11px] font-bold block mb-1" style={{ color: 'var(--text-muted)' }}>اليوم</label><input type="number" required min="1" max="31" className="input-field text-center text-sm" value={recurringFormData.day} onChange={e => dispatch({ type: 'SET_RECURRING_FORM_DATA', payload: { ...recurringFormData, day: e.target.value } })} /></div></div>
+            <div><label className="text-[11px] font-bold block mb-1" style={{ color: 'var(--text-muted)' }}>النوع</label><select className="input-field text-sm" value={recurringFormData.type} onChange={e => dispatch({ type: 'SET_RECURRING_FORM_DATA', payload: { ...recurringFormData, type: e.target.value } })}><option value="expense">مصروف</option><option value="income">دخل</option></select></div>
+            <div><label className="text-[11px] font-bold block mb-1" style={{ color: 'var(--text-muted)' }}>الفئة</label><select className="input-field text-sm" value={recurringFormData.category} onChange={e => dispatch({ type: 'SET_RECURRING_FORM_DATA', payload: { ...recurringFormData, category: e.target.value } })}><option value="أخرى">أخرى</option><optgroup label="دخل">{CATEGORIES.income.map(c => <option key={'i-'+c} value={c}>{c}</option>)}</optgroup><optgroup label="مصروف">{CATEGORIES.expense.map(c => <option key={'e-'+c} value={c}>{c}</option>)}</optgroup></select></div>
+            <button type="submit" className="btn btn-primary w-full py-2.5 text-sm">إضافة</button></form></div></div>)}
+      </div>
+    </PromiseModalProvider>
   );
 }
 
