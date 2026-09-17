@@ -274,7 +274,7 @@ const CLOUDINARY_UPLOAD_PRESET = 'finance_receipts';
 const CLOUDINARY_UPLOAD_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`;
 const CLOUDINARY_DELETE_SUPPORTED = false;
 
-const CURRENT_ENGINE_VERSION = 10;
+const CURRENT_ENGINE_VERSION = 11;
 const DEFAULT_PIN = '1033';
 const PIN_HASH_KEY = 'finance_pin_hash_v1';
 const KIND = { OPERATIONAL: 'operational', FINANCIAL: 'financial', ADJUSTMENT: 'adjustment' };
@@ -306,7 +306,7 @@ const makeMonthKey = (year, month) => `${year}-${month}`;
 const parseMonthKey = (key) => { if (!key || typeof key !== 'string' || !key.includes('-')) return null; const [y, ...rest] = key.split('-'); const year = Number(y); if (isNaN(year)) return null; return { year, month: rest.join('-') }; };
 
 // ═══════════════════════════════════════════════════════
-// 🆕 SMS Bank Parser — يحلل رسائل البنوك المصرية
+// SMS Bank Parser — يحلل رسائل البنوك المصرية + Telda
 // ═══════════════════════════════════════════════════════
 const parseBankSms = (rawInput) => {
   const result = {
@@ -325,14 +325,12 @@ const parseBankSms = (rawInput) => {
 
   const text = toEnglishDigits(rawInput).replace(/\u00A0/g, ' ');
 
-  // 1) البنك
   if (/\bCIB\b|Commercial International|SWYPE|Titanium|سي آي بي/i.test(text)) {
     result.bank = 'CIB'; result.bankId = 'cib';
   } else if (/\bAAIB\b|Arab African|العربي الأفريقي|العربي الافريقي|الإفريقي الدولي/i.test(text)) {
     result.bank = 'AAIB'; result.bankId = 'aaib';
   }
 
-  // 2) آخر 4 أرقام
   const last4Patterns = [
     /\b(?:ending|ends)\s*(?:with\s*)?(\d{4})\b/i,
     /\bcard\s*(?:no\.?|number|#)?\s*[:\-]?\s*(?:\*{2,}|\.{2,}|x{2,})?\s*(\d{4})\b/i,
@@ -345,7 +343,6 @@ const parseBankSms = (rawInput) => {
     if (m) { result.last4 = m[1]; break; }
   }
 
-  // 3) نوع العملية
   const incomeHints = [
     /\bcredit(?:ed)?\b/i, /\bdeposit(?:ed)?\b/i, /\breceived\b/i, /\bsalary\b/i,
     /\brefund\b/i, /\breimbursement\b/i, /\bcashback\b/i, /\badded\b/i,
@@ -363,7 +360,6 @@ const parseBankSms = (rawInput) => {
   else if (isIncome && isExpense) { result.notes.push('نوع العملية غير واضح — تم افتراض مصروف'); }
   else { result.notes.push('لم يتم التعرف على نوع العملية'); }
 
-  // 4) المبلغ
   const cur = '(?:EGP|LE|E£|ج\\.?م|جنيه|جم|ق\\.?م|ريال|SAR|USD|AED|درهم|دينار|\\$)';
   const amtPatterns = [
     new RegExp(`${cur}\\s*([0-9][0-9,]*\\.?[0-9]*)`, 'i'),
@@ -386,14 +382,12 @@ const parseBankSms = (rawInput) => {
     }
   }
 
-  // 5) الرصيد
   const balMatch = text.match(/(?:balance|الرصيد|رصيد)[^\d]{0,20}([0-9][0-9,]*\.?[0-9]*)/i);
   if (balMatch) {
     const b = Number(balMatch[1].replace(/,/g, ''));
     if (b > 0 && b !== result.amount) result.balance = b;
   }
 
-  // 6) التاريخ
   const now = new Date();
   let parsedDate = null;
   const MONTHS_EN = { jan:1, feb:2, mar:3, apr:4, may:5, jun:6, jul:7, aug:8, sep:9, oct:10, nov:11, dec:12 };
@@ -446,7 +440,6 @@ const parseBankSms = (rawInput) => {
     }
   }
 
-  // 7) التاجر
   const merchantPatterns = [
     /\bat\s+([A-Z][A-Z0-9\s&'\.\-]{2,40}?)(?:\s+on\s|\s+at\s|\s*[\.\,\n]|$)/i,
     /\b(?:merchant|from|to)\s*[:\-]?\s*([A-Z][A-Z0-9\s&'\.\-]{2,40}?)(?:\s+on\s|\s*[\.\,\n]|$)/i,
@@ -466,12 +459,22 @@ const parseBankSms = (rawInput) => {
     if (filtered.length) result.description = filtered[0].trim();
   }
 
-  // 8) ربط البطاقة
   if (result.last4 === '1016') { result.method = 'cib_card'; result.linkedCardId = 1; result.bank = 'CIB'; }
   else if (result.last4 === '0391') { result.method = 'aaib_card'; result.linkedCardId = 2; result.bank = 'AAIB'; }
   else if (result.last4 === '2017') { result.method = 'cib_swype'; result.linkedCardId = 3; result.bank = 'CIB'; }
   else if (result.bankId === 'cib') { result.method = 'cib_card'; result.linkedCardId = 1; }
   else if (result.bankId === 'aaib') { result.method = 'aaib_card'; result.linkedCardId = 2; }
+
+  // 🆕 كشف رسائل Telda
+  if (/\bTelda\b|تيلدا/i.test(text)) {
+    const personMatch = text.match(/(?:to|لـ|إلى)\s*(Shaimaa|Salma|Abdelrahman|شيماء|سلمى|عبد الرحمن)/i);
+    if (personMatch) {
+      const p = personMatch[1].toLowerCase();
+      if (p === 'shaimaa' || p === 'شيماء') { result.method = 'telda_shaimaa'; result.description = result.description || 'تحويل Telda - شيماء'; }
+      else if (p === 'salma' || p === 'سلمى') { result.method = 'telda_salma'; result.description = result.description || 'تحويل Telda - سلمى'; }
+      else if (p === 'abdelrahman' || p === 'عبد الرحمن') { result.method = 'telda_abdelrahman'; result.description = result.description || 'تحويل Telda - عبد الرحمن'; }
+    }
+  }
 
   result.ok = result.amount > 0;
   if (!result.ok) result.notes.push('لم يتم العثور على مبلغ');
@@ -481,7 +484,7 @@ const parseBankSms = (rawInput) => {
   return result;
 };
 
-// 🆕 ============ Validation ============
+// ============ Validation ============
 const VALIDATION = {
   AMOUNT: { min: 0.01, max: 10000000, label: 'المبلغ' },
   POSITIVE_INT: { min: 1, max: 31, label: 'الرقم' },
@@ -523,7 +526,7 @@ const isFutureDate = (d) => {
 };
 
 // ═══════════════════════════════════════════════════════
-// Promise-based Modals — Stack/Queue based
+// Promise-based Modals
 // ═══════════════════════════════════════════════════════
 const _modalResolvers = new Map();
 let _modalIdCounter = 0;
@@ -557,7 +560,7 @@ const clearAllModals = () => {
   _modalResolvers.clear();
 };
 
-// ============ PIN (hash-based) ============
+// ============ PIN ============
 const hashPin = async (pin) => {
   try {
     const encoder = new TextEncoder();
@@ -574,7 +577,7 @@ const verifyPin = async (pin) => {
   return (await hashPin(pin)) === stored;
 };
 
-// ============ Receipts (Images) ============
+// ============ Receipts ============
 const MAX_RECEIPT_SIZE_MB = 5;
 const compressImage = (file, maxWidth = 1280, quality = 0.75) => new Promise((resolve, reject) => {
   if (!file.type.startsWith('image/')) return reject(new Error('الملف ليس صورة'));
@@ -597,6 +600,7 @@ const compressImage = (file, maxWidth = 1280, quality = 0.75) => new Promise((re
   reader.onerror = () => reject(new Error('فشل قراءة الملف'));
   reader.readAsDataURL(file);
 });
+
 const uploadReceipt = async (txId, file) => {
   const blob = await compressImage(file);
   const formData = new FormData();
@@ -604,7 +608,6 @@ const uploadReceipt = async (txId, file) => {
   formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
   formData.append('folder', `receipts/${txId}`);
   formData.append('public_id', `${Date.now()}_${Math.random().toString(36).slice(2,8)}`);
-
   const res = await fetch(CLOUDINARY_UPLOAD_URL, { method: 'POST', body: formData });
   if (!res.ok) {
     const errText = await res.text();
@@ -649,15 +652,43 @@ const getDefaultMonthYear = () => {
 
 const HANY_QUICK_ITEMS = ['سجاير','مارلبورو','ميريت','LM','كليوباترا','كليوباترا بوكس','نكست','وينستون','PINE','بال مال','إل إم أزرق','إل إم أحمر','ميريت أصفر','ميريت أزرق','بيبسي','كوكاكولا','سفن أب','ميرندا','عصير','جوافة','مانجو','برتقال','مياه','شاي','نسكافيه','قهوة','ميلو','ريد بُل','حليب معلب','شيبسي','شيتوس','دوريتوس','ليز','تايجر','بسكويت','كراكرز','مولتو','كادبوري','جالاكسي','اندومي','نودلز','بونبون','لبن','زبادي','رايب','جبنة بيضاء','جبنة رومي','جبنة شيدر','بيض','زبدة','قشطة','لبنة','جبنة كيري','عيش','سكر','زيت','أرز','مكرونة','دقيق','ملح','عدس','فول','صلصة','خل','حمص','سكر ناعم','مربي','صابون','شامبو','معجون','فرشاة','مناديل','كلور','ديتول','مسحوق غسيل','سائل أطباق','معطر','شوكولاتة','لبان','مصاصة','كيك','جيلي','ويفر','بسكويت محشي','رصيد مرحل من الشهر السابق'];
 
-const CATEGORY_COLORS = { 'راتب شهري':'#10b981','عمل حر':'#3b82f6','استثمارات':'#8b5cf6','الالتزامات البنكية والتمويلية':'#ef4444','مصروفات المعيشة اليومية':'#f59e0b','مسحوبات محل هاني':'#f97316','الملابس والمستلزمات الشخصية':'#ec4899','الزكاة والتبرعات':'#14b8a6','التعليم والدروس والأنشطة':'#6366f1','المصروفات النقدية الشهرية':'#84cc16','المرافق والخدمات – بولاق':'#64748b','المرافق والخدمات – العبور':'#0ea5e9','الاتصالات وشحن الهواتف المحمولة':'#eab308','الصحة والرعاية الطبية':'#be123c','المستلزمات المنزلية والتموين':'#a855f7','اللحوم والدواجن والأسماك':'#be185d','الطوارئ والاحتياطي النقدي':'#dc2626','الصيانة والإصلاحات المنزلية':'#78716c','المواصلات والانتقالات':'#06b6d4','الترفيه والمناسبات الاجتماعية':'#d946ef','مصاريف موسمية وسنوية':'#22c55e','شحن رصيد فوري':'#eab308','أخرى':'#9ca3af','عهدة شركة إيماك':'#f59e0b','تحويلات واردة':'#8b5cf6','شحن محفظة':'#0ea5e9','تحويلات':'#6366f1','تكييف محمود':'#10b981','إيجار المحل':'#22d3ee','راتب AAIB':'#84cc16','Cash Back':'#10b981','عهدة إيماك WE':'#8b5cf6','أقساط valU':'#6366f1','مصاريف جامعات ومدارس':'#f59e0b','مشتريات بقالة هاني':'#f97316','أدوية وكشف':'#be123c','كازيون / العثيم':'#a855f7','لحوم / أسماك / دواجن':'#be185d','توابل / خزين':'#78716c','خضروات':'#22c55e','بقالة / فاكهة':'#84cc16','منظفات':'#06b6d4','كهرباء / نت / مياه (صفط)':'#64748b','كهرباء / نت / مياه (العبور)':'#0ea5e9','شحن تليفونات':'#eab308','مصروف نقدي':'#84cc16','مصاريف وسلف شخصية':'#ef4444','محافظ الكترونية':'#005CB9','بنوك / فيزا / تمويل عقاري':'#004996','رسوم تحويلات':'#64748b','رسوم بنكية شهرية':'#dc2626','فوائد تأخير':'#991b1b','رسوم سحب كاش':'#e11d48','عمولة تحويل دولي':'#7c3aed','استرداد كاش باك':'#10b981','فواتير عهدة':'#0891b2','مصروفات عهدة':'#0284c7' };
+const CATEGORY_COLORS = { 'راتب شهري':'#10b981','عمل حر':'#3b82f6','استثمارات':'#8b5cf6','الالتزامات البنكية والتمويلية':'#ef4444','مصروفات المعيشة اليومية':'#f59e0b','مسحوبات محل هاني':'#f97316','الملابس والمستلزمات الشخصية':'#ec4899','الزكاة والتبرعات':'#14b8a6','التعليم والدروس والأنشطة':'#6366f1','المصروفات النقدية الشهرية':'#84cc16','المرافق والخدمات – بولاق':'#64748b','المرافق والخدمات – العبور':'#0ea5e9','الاتصالات وشحن الهواتف المحمولة':'#eab308','الصحة والرعاية الطبية':'#be123c','المستلزمات المنزلية والتموين':'#a855f7','اللحوم والدواجن والأسماك':'#be185d','الطوارئ والاحتياطي النقدي':'#dc2626','الصيانة والإصلاحات المنزلية':'#78716c','المواصلات والانتقالات':'#06b6d4','الترفيه والمناسبات الاجتماعية':'#d946ef','مصاريف موسمية وسنوية':'#22c55e','شحن رصيد فوري':'#eab308','أخرى':'#9ca3af','عهدة شركة إيماك':'#f59e0b','تحويلات واردة':'#8b5cf6','شحن محفظة':'#0ea5e9','تحويلات':'#6366f1','تكييف محمود':'#10b981','إيجار المحل':'#22d3ee','راتب AAIB':'#84cc16','Cash Back':'#10b981','عهدة إيماك WE':'#8b5cf6','أقساط valU':'#6366f1','مصاريف جامعات ومدارس':'#f59e0b','مشتريات بقالة هاني':'#f97316','أدوية وكشف':'#be123c','كازيون / العثيم':'#a855f7','لحوم / أسماك / دواجن':'#be185d','توابل / خزين':'#78716c','خضروات':'#22c55e','بقالة / فاكهة':'#84cc16','منظفات':'#06b6d4','كهرباء / نت / مياه (صفط)':'#64748b','كهرباء / نت / مياه (العبور)':'#0ea5e9','شحن تليفونات':'#eab308','مصروف نقدي':'#84cc16','مصاريف وسلف شخصية':'#ef4444','محافظ الكترونية':'#005CB9','بنوك / فيزا / تمويل عقاري':'#004996','رسوم تحويلات':'#64748b','رسوم بنكية شهرية':'#dc2626','فوائد تأخير':'#991b1b','رسوم سحب كاش':'#e11d48','عمولة تحويل دولي':'#7c3aed','استرداد كاش باك':'#10b981','فواتير عهدة':'#0891b2','مصروفات عهدة':'#0284c7','مصروف شهري - شيماء':'#8b5cf6','مصروف شهري - سلمى':'#ec4899','مصروف شهري - عبد الرحمن':'#10b981','مصروف شهري - أنس':'#3b82f6' };
 
+// 🆕 Payment Methods المنظمة
 const PAYMENT_METHODS = [
-  { id:'instapay', label:'InstaPay' },{ id:'cib_card', label:'CIB Master' },{ id:'cib_swype', label:'CIB SWYPE' },{ id:'cib_savings', label:'CIB توفير' },
-  { id:'aaib_card', label:'AAIB Visa' },{ id:'aaib_savings', label:'AAIB توفير' },{ id:'cash', label:'نقدي' },{ id:'etisalat', label:'اتصالات' },{ id:'fawry', label:'فوري' },
-  { id:'telda', label:'Telda' },{ id:'orange', label:'أورنج' },{ id:'we', label:'WE' }
+  // 🏦 Financial Accounts
+  { id:'cib_savings', label:'CIB Savings', group:'account' },
+  { id:'aaib_savings', label:'AAIB Savings', group:'account' },
+  { id:'cash', label:'Cash', group:'account' },
+  { id:'fawry', label:'Fawry', group:'account' },
+  { id:'etisalat', label:'Etisalat', group:'account' },
+
+  // 💳 Credit Cards
+  { id:'cib_card', label:'CIB Master', group:'card' },
+  { id:'cib_swype', label:'CIB SWYPE', group:'card' },
+  { id:'aaib_card', label:'AAIB Visa', group:'card' },
+
+  // 🌐 Transfer Channels
+  { id:'instapay', label:'InstaPay', group:'channel' },
+  { id:'telda_shaimaa', label:'Telda Shaimaa', group:'channel' },
+  { id:'telda_salma', label:'Telda Salma', group:'channel' },
+  { id:'telda_abdelrahman', label:'Telda Abdelrahman', group:'channel' }
 ];
-const ACCOUNT_METHOD_IDS = ['cash','fawry','etisalat','cib_savings','aaib_savings'];
-const CREDIT_CARD_METHOD_IDS = ['cib_card','cib_swype','aaib_card'];
+
+// 🆕 Constants المنظمة
+const ACCOUNT_KEYS = ['cib_savings', 'aaib_savings', 'cash', 'fawry', 'etisalat'];
+const ACCOUNT_METHOD_IDS = ['cib_savings', 'aaib_savings', 'cash', 'fawry', 'etisalat'];
+const CREDIT_CARD_METHOD_IDS = ['cib_card', 'cib_swype', 'aaib_card'];
+const EXTERNAL_TRANSFER_METHOD_IDS = ['telda_shaimaa', 'telda_salma', 'telda_abdelrahman'];
+const TRANSFER_CHANNEL_IDS = ['instapay', ...EXTERNAL_TRANSFER_METHOD_IDS];
+
+// 🆕 المستفيدين من المصاريف الشهرية
+const BENEFICIARIES = [
+  { id: 'shaimaa',      name: 'شيماء (البيت)', label: 'شيماء',       defaultAmount: 5000, method: 'telda_shaimaa',     hasTelda: true  },
+  { id: 'salma',        name: 'سلمى',           label: 'سلمى',        defaultAmount: 1200, method: 'telda_salma',       hasTelda: true  },
+  { id: 'abdelrahman',  name: 'عبد الرحمن',     label: 'عبد الرحمن',  defaultAmount: 1200, method: 'telda_abdelrahman', hasTelda: true  },
+  { id: 'anas',         name: 'أنس',            label: 'أنس',         defaultAmount: 250,  method: null,                hasTelda: false }
+];
 
 const FINANCIAL_CATEGORIES = new Set([
   'الالتزامات البنكية والتمويلية','تكييف محمود','أقساط valU','تحويلات','بنوك / فيزا / تمويل عقاري',
@@ -672,7 +703,7 @@ const CATEGORY_GROUPS = {
   expense: {
     'أساسيات المعيشة':['مصروفات المعيشة اليومية','المستلزمات المنزلية والتموين','اللحوم والدواجن والأسماك','الملابس والمستلزمات الشخصية','مسحوبات محل هاني'],
     'فواتير وخدمات':['الاتصالات وشحن الهواتف المحمولة','المرافق والخدمات – بولاق','المرافق والخدمات – العبور','شحن رصيد فوري','شحن محفظة','الصيانة والإصلاحات المنزلية','كهرباء / نت / مياه (صفط)','كهرباء / نت / مياه (العبور)','شحن تليفونات','رسوم تحويلات','فواتير عهدة','مصروفات عهدة'],
-    'التزامات شهرية':['الالتزامات البنكية والتمويلية','التعليم والدروس والأنشطة','المصروفات النقدية الشهرية','الزكاة والتبرعات','أقساط valU','مصاريف جامعات ومدارس'],
+    'التزامات شهرية':['الالتزامات البنكية والتمويلية','التعليم والدروس والأنشطة','المصروفات النقدية الشهرية','الزكاة والتبرعات','أقساط valU','مصاريف جامعات ومدارس','مصروف شهري - شيماء','مصروف شهري - سلمى','مصروف شهري - عبد الرحمن','مصروف شهري - أنس'],
     'رسوم بنكية':['رسوم بنكية شهرية','فوائد تأخير','رسوم سحب كاش','عمولة تحويل دولي','رسوم تحويلات'],
     'نقل وصحة وترفيه':['الصحة والرعاية الطبية','المواصلات والانتقالات','الترفيه والمناسبات الاجتماعية','الطوارئ والاحتياطي النقدي','مصاريف موسمية وسنوية','أدوية وكشف'],
     'مشتريات':['كازيون / العثيم','لحوم / أسماك / دواجن','توابل / خزين','خضروات','بقالة / فاكهة','منظفات','مصروف نقدي'],
@@ -683,7 +714,7 @@ const CATEGORY_GROUPS = {
 
 const CATEGORIES = {
   income:['راتب شهري','عمل حر','استثمارات','راتب AAIB','إيجار المحل','عهدة شركة إيماك','عهدة إيماك WE','Cash Back','استرداد كاش باك','تكييف محمود','تحويلات واردة','شحن محفظة'],
-  expense:['الالتزامات البنكية والتمويلية','مصروفات المعيشة اليومية','مسحوبات محل هاني','الملابس والمستلزمات الشخصية','الزكاة والتبرعات','التعليم والدروس والأنشطة','المصروفات النقدية الشهرية','شحن رصيد فوري','المرافق والخدمات – بولاق','المرافق والخدمات – العبور','الاتصالات وشحن الهواتف المحمولة','الصحة والرعاية الطبية','المستلزمات المنزلية والتموين','اللحوم والدواجن والأسماك','الطوارئ والاحتياطي النقدي','الصيانة والإصلاحات المنزلية','المواصلات والانتقالات','الترفيه والمناسبات الاجتماعية','مصاريف موسمية وسنوية','شحن محفظة','أقساط valU','مصاريف جامعات ومدارس','كازيون / العثيم','لحوم / أسماك / دواجن','توابل / خزين','خضروات','بقالة / فاكهة','منظفات','أدوية وكشف','مصروف نقدي','مصاريف وسلف شخصية','محافظ الكترونية','بنوك / فيزا / تمويل عقاري','تحويلات','رسوم تحويلات','رسوم بنكية شهرية','فوائد تأخير','رسوم سحب كاش','عمولة تحويل دولي','فواتير عهدة','مصروفات عهدة','أخرى']
+  expense:['الالتزامات البنكية والتمويلية','مصروفات المعيشة اليومية','مسحوبات محل هاني','الملابس والمستلزمات الشخصية','الزكاة والتبرعات','التعليم والدروس والأنشطة','المصروفات النقدية الشهرية','شحن رصيد فوري','المرافق والخدمات – بولاق','المرافق والخدمات – العبور','الاتصالات وشحن الهواتف المحمولة','الصحة والرعاية الطبية','المستلزمات المنزلية والتموين','اللحوم والدواجن والأسماك','الطوارئ والاحتياطي النقدي','الصيانة والإصلاحات المنزلية','المواصلات والانتقالات','الترفيه والمناسبات الاجتماعية','مصاريف موسمية وسنوية','شحن محفظة','أقساط valU','مصاريف جامعات ومدارس','كازيون / العثيم','لحوم / أسماك / دواجن','توابل / خزين','خضروات','بقالة / فاكهة','منظفات','أدوية وكشف','مصروف نقدي','مصاريف وسلف شخصية','محافظ الكترونية','بنوك / فيزا / تمويل عقاري','تحويلات','رسوم تحويلات','رسوم بنكية شهرية','فوائد تأخير','رسوم سحب كاش','عمولة تحويل دولي','فواتير عهدة','مصروفات عهدة','مصروف شهري - شيماء','مصروف شهري - سلمى','مصروف شهري - عبد الرحمن','مصروف شهري - أنس','أخرى']
 };
 
 const SYSTEM_LOAN_IDS = { TAKYEEF: 'sys_takyeef_mahmoud', HANY: 'sys_hany_shop' };
@@ -699,11 +730,11 @@ const DEFAULT_CARDS = [
 ];
 
 const DEFAULT_ACCOUNTS = {
-  cib_savings: { balance: 151100, label: 'CIB توفير', lastUpdated: '2026-09-01' },
-  aaib_savings: { balance: 5098.01, label: 'AAIB توفير', lastUpdated: '2026-09-01' },
-  cash: { balance: 1100, label: 'نقدي', lastUpdated: '2026-09-01' },
-  fawry: { balance: 0, label: 'فوري', lastUpdated: '2026-09-01' },
-  etisalat: { balance: 0, label: 'اتصالات', lastUpdated: '2026-09-01' }
+  cib_savings: { balance: 151100, label: 'CIB Savings', lastUpdated: '2026-09-01' },
+  aaib_savings: { balance: 5098.01, label: 'AAIB Savings', lastUpdated: '2026-09-01' },
+  cash: { balance: 1100, label: 'Cash', lastUpdated: '2026-09-01' },
+  fawry: { balance: 0, label: 'Fawry', lastUpdated: '2026-09-01' },
+  etisalat: { balance: 0, label: 'Etisalat', lastUpdated: '2026-09-01' }
 };
 
 const DEFAULT_LOANS = [
@@ -734,7 +765,11 @@ const DEFAULT_RECURRING = [
   { id:'r8', title:'Cash Back متوقع', amount:2700, day:28, category:'Cash Back', type:'income' },
   { id:'r9', title:'رسوم شهرية - CIB Titanium', amount:25, day:5, category:'رسوم بنكية شهرية', type:'expense', kind:'financial', linkedCardId:1 },
   { id:'r10', title:'رسوم شهرية - CIB SWYPE', amount:15, day:5, category:'رسوم بنكية شهرية', type:'expense', kind:'financial', linkedCardId:3 },
-  { id:'r11', title:'رسوم شهرية - AAIB Signature', amount:20, day:25, category:'رسوم بنكية شهرية', type:'expense', kind:'financial', linkedCardId:2 }
+  { id:'r11', title:'رسوم شهرية - AAIB Signature', amount:20, day:25, category:'رسوم بنكية شهرية', type:'expense', kind:'financial', linkedCardId:2 },
+  { id:'r12', title:'مصروف شهري - شيماء', amount:5000, day:1, category:'مصروف شهري - شيماء', type:'expense' },
+  { id:'r13', title:'مصروف شهري - سلمى', amount:1200, day:1, category:'مصروف شهري - سلمى', type:'expense' },
+  { id:'r14', title:'مصروف شهري - عبد الرحمن', amount:1200, day:1, category:'مصروف شهري - عبد الرحمن', type:'expense' },
+  { id:'r15', title:'مصروف شهري - أنس', amount:250, day:1, category:'مصروف شهري - أنس', type:'expense' }
 ];
 
 const DEFAULT_CUSTODY_ENTRIES = [
@@ -755,8 +790,13 @@ const DEFAULT_MONTHLY_PLANS = {
 };
 
 const ACCOUNT_ICONS = { cib_savings: BuildingBank, aaib_savings: PiggyBank, cash: Wallet, fawry: StoreIcon, etisalat: Signal };
-const ACCOUNT_KEYS = ['cib_savings', 'aaib_savings', 'cash', 'fawry', 'etisalat'];
-const ACCOUNT_SHORT_NAMES = { cib_savings: 'CIB توفير', aaib_savings: 'AAIB توفير', cash: 'نقدي', fawry: 'فوري', etisalat: 'اتصالات' };
+const ACCOUNT_SHORT_NAMES = {
+  cib_savings: 'CIB Savings',
+  aaib_savings: 'AAIB Savings',
+  cash: 'Cash',
+  fawry: 'Fawry',
+  etisalat: 'Etisalat'
+};
 
 const inferKind = (tx) => {
   if (tx.kind) return tx.kind;
@@ -766,6 +806,7 @@ const inferKind = (tx) => {
 };
 
 const isBankFee = (tx) => BANK_FEE_CATEGORIES.has(tx?.category);
+const isBeneficiaryCategory = (cat) => typeof cat === 'string' && cat.startsWith('مصروف شهري - ');
 
 const isMonthClosed = (data, year, month) => {
   const key = makeMonthKey(year, month);
@@ -945,7 +986,9 @@ const migrateTransaction = (t) => {
     const norm = ALL_MONTHS.find(m => normalizeText(m) === normalizeText(month));
     if (norm) { month = norm; monthIndex = getMonthIndex(norm); }
   }
-  return { ...t, kind, year, month, monthIndex, receipts: Array.isArray(t.receipts) ? t.receipts : [] };
+  let subType = t.subType;
+  if (!subType) subType = t.type === 'income' ? 'deposit' : 'withdrawal';
+  return { ...t, kind, year, month, monthIndex, subType, receipts: Array.isArray(t.receipts) ? t.receipts : [] };
 };
 
 const migrateData = (parsed) => {
@@ -967,9 +1010,16 @@ const migrateData = (parsed) => {
 
   const accountsData = parsed.accountsData && typeof parsed.accountsData === 'object' ? { ...DEFAULT_ACCOUNTS, ...parsed.accountsData } : { ...DEFAULT_ACCOUNTS };
   const defaultCutoff = deriveDefaultCutoff(transactions);
+  const renamedLabels = { 'CIB توفير': 'CIB Savings', 'AAIB توفير': 'AAIB Savings', 'نقدي': 'Cash', 'فوري': 'Fawry', 'اتصالات': 'Etisalat' };
   ACCOUNT_KEYS.forEach(k => {
     if (!accountsData[k]?.lastUpdated) {
       accountsData[k] = { ...(DEFAULT_ACCOUNTS[k] || {}), ...(accountsData[k] || {}), lastUpdated: defaultCutoff };
+    }
+    if (accountsData[k] && accountsData[k].label && renamedLabels[accountsData[k].label]) {
+      accountsData[k] = { ...accountsData[k], label: renamedLabels[accountsData[k].label] };
+    }
+    if (accountsData[k] && !accountsData[k].label) {
+      accountsData[k] = { ...accountsData[k], label: DEFAULT_ACCOUNTS[k].label };
     }
   });
 
@@ -998,6 +1048,10 @@ const migrateData = (parsed) => {
   const hasBankFees = recurringItems.some(r => BANK_FEE_CATEGORIES.has(r.category));
   if (!hasBankFees && Array.isArray(recurringItems) && recurringItems.length > 0) {
     recurringItems = [...recurringItems, ...DEFAULT_RECURRING.filter(r => BANK_FEE_CATEGORIES.has(r.category))];
+  }
+  const hasMonthlyExpenses = recurringItems.some(r => isBeneficiaryCategory(r.category));
+  if (!hasMonthlyExpenses && Array.isArray(recurringItems) && recurringItems.length > 0 && incomingVersion < CURRENT_ENGINE_VERSION) {
+    recurringItems = [...recurringItems, ...DEFAULT_RECURRING.filter(r => isBeneficiaryCategory(r.category))];
   }
 
   const { openingBalance2026: _drop, ...rest } = parsed;
@@ -1032,8 +1086,7 @@ const getInitialData = () => {
   } catch (e) { console.warn(e); }
   return { engineVersion: CURRENT_ENGINE_VERSION, recurringInitialized: true, transactions: [], loans: DEFAULT_LOANS, cards: DEFAULT_CARDS, accountsData: DEFAULT_ACCOUNTS, monthlyPlans: DEFAULT_MONTHLY_PLANS, recurringItems: DEFAULT_RECURRING, closedMonths: [], monthlySnapshots: {}, materializedRecurring: {}, notifiedItems: {}, custodyEntries: DEFAULT_CUSTODY_ENTRIES, cashbackTrackers: DEFAULT_CASHBACK_TRACKERS };
 };
-
-class ErrorBoundary extends React.Component {
+  class ErrorBoundary extends React.Component {
   constructor(p) { super(p); this.state = { hasError: false, error: null }; }
   static getDerivedStateFromError(error) { return { hasError: true, error }; }
   componentDidCatch(e, i) { console.error('App Error:', e, i); clearAllModals(); }
@@ -1205,10 +1258,10 @@ const BankLogo = memo(({ type, size = 40, className = "" }) => {
 });
 
 const WALLET_CONFIGS = {
-  fawry: { id:'fawry', title:'محفظة فوري', subtitle:'تتبع الشحن والسداد', icon: StoreIcon, csvName:'فوري' },
-  etisalat: { id:'etisalat', title:'سجل اتصالات كاش', subtitle:'تتبع الإيداع والسحب', icon: Signal, csvName:'اتصالات' },
-  cib_savings: { id:'cib_savings', title:'سجل حساب توفير CIB', subtitle:'تتبع المعاملات', icon: BuildingBank, csvName:'CIB_توفير' },
-  aaib_savings: { id:'aaib_savings', title:'سجل حساب توفير AAIB', subtitle:'تتبع المعاملات', icon: PiggyBank, csvName:'AAIB_توفير' }
+  fawry: { id:'fawry', title:'Fawry Wallet', subtitle:'Track deposits & payments', icon: StoreIcon, csvName:'Fawry' },
+  etisalat: { id:'etisalat', title:'Etisalat Cash', subtitle:'Track deposits & withdrawals', icon: Signal, csvName:'Etisalat' },
+  cib_savings: { id:'cib_savings', title:'CIB Savings Account', subtitle:'Track transactions', icon: BuildingBank, csvName:'CIB_Savings' },
+  aaib_savings: { id:'aaib_savings', title:'AAIB Savings Account', subtitle:'Track transactions', icon: PiggyBank, csvName:'AAIB_Savings' }
 };
 
 const Toast = ({ notification, onClose }) => {
@@ -1252,6 +1305,17 @@ const RecurringBadge = memo(({ tx }) => {
 const SmsBadge = memo(({ tx }) => {
   if (tx?.source !== 'sms') return null;
   return <span className="badge badge-brand">📱 SMS</span>;
+});
+
+const BeneficiaryBadge = memo(({ tx }) => {
+  if (!isBeneficiaryCategory(tx?.category)) return null;
+  const label = tx.category.replace('مصروف شهري - ', '');
+  return <span className="badge badge-warning">👨‍👩‍👧 {label}</span>;
+});
+
+const TeldaBadge = memo(({ tx }) => {
+  if (!EXTERNAL_TRANSFER_METHOD_IDS.includes(tx?.method)) return null;
+  return <span className="badge badge-brand">💳 Telda</span>;
 });
 
 const FAMILY_MEMBERS = {
@@ -1631,7 +1695,7 @@ const CustodyView = memo(({ data, dispatch, saveHistory, addNotification }) => {
 });
 
 // ═══════════════════════════════════════════════════════
-// CashbackView
+// CashbackView — مع markReceived المُحسَّن
 // ═══════════════════════════════════════════════════════
 const CashbackView = memo(({ data, dispatch, saveHistory, addNotification, cards, selectedYear, selectedMonth }) => {
   const [showAdd, setShowAdd] = useState(false);
@@ -1667,14 +1731,59 @@ const CashbackView = memo(({ data, dispatch, saveHistory, addNotification, cards
     addNotification({ type: 'success', title: 'تم الحفظ' });
   };
 
-  const markReceived = (tracker) => {
+  // 🆕 markReceived: بيسأل المستخدم — على البطاقة أم نقدي؟
+  const markReceived = async (tracker) => {
+    const card = cards.find(c => c.id === tracker.cardId);
+    const cardMethod = card ? getCardMethod(card) : null;
+
+    const choice = await showInputModal({
+      title: 'أين استلمت الكاش باك؟',
+      icon: '🎁',
+      message: `البطاقة: ${card?.bank} - ${card?.name}\n\n1 = على البطاقة (خصم من المديونية)\n2 = نقدي (إضافة للكاش)\n\nاكتب الرقم:`,
+      inputValue: '1',
+      numeric: true,
+      confirmText: 'تأكيد'
+    });
+
+    if (choice === null) return;
+    const choiceNum = parseInt(choice, 10);
+    if (choiceNum !== 1 && choiceNum !== 2) {
+      addNotification({ type: 'error', title: 'اختر 1 أو 2' });
+      return;
+    }
+
+    const useCard = choiceNum === 1;
+    const method = useCard && cardMethod ? cardMethod : 'cash';
+
     saveHistory();
-    const updated = trackers.map(t => t.id === tracker.id ? { ...t, receivedAmount: t.expectedAmount, receivedDate: getLocalISODate(), status: CASHBACK_STATUS.RECEIVED } : t);
+    const updated = trackers.map(t => t.id === tracker.id
+      ? { ...t, receivedAmount: t.expectedAmount, receivedDate: getLocalISODate(), status: CASHBACK_STATUS.RECEIVED }
+      : t);
     dispatch({ type: 'UPDATE_CASHBACK_TRACKERS', payload: updated });
+
     const d = new Date();
-    const newTx = { id: getSafeId(), type: 'income', kind: KIND.OPERATIONAL, category: 'استرداد كاش باك', amount: safeNumber(tracker.expectedAmount), description: `كاش باك - ${cards.find(c => c.id === tracker.cardId)?.name || ''}`, method: 'cash', date: getLocalISODate(d), month: ALL_MONTHS[d.getMonth()], year: d.getFullYear(), monthIndex: d.getMonth(), subType: 'deposit', status: 'paid' };
+    const newTx = {
+      id: getSafeId(),
+      type: 'income',
+      kind: KIND.OPERATIONAL,
+      category: 'استرداد كاش باك',
+      amount: safeNumber(tracker.expectedAmount),
+      description: `كاش باك - ${card?.name || ''} (${useCard ? 'على البطاقة' : 'نقدي'})`,
+      method,
+      date: getLocalISODate(d),
+      month: ALL_MONTHS[d.getMonth()],
+      year: d.getFullYear(),
+      monthIndex: d.getMonth(),
+      subType: 'deposit',
+      status: 'paid',
+      linkedCardId: useCard && card ? card.id : undefined
+    };
     dispatch({ type: 'UPDATE_TRANSACTIONS', payload: [newTx, ...(data.transactions || [])].sort((a, b) => new Date(b.date) - new Date(a.date)) });
-    addNotification({ type: 'success', title: 'تم استلام الكاش باك', message: `${fmt(tracker.expectedAmount)} ج.م` });
+    addNotification({
+      type: 'success',
+      title: 'تم استلام الكاش باك',
+      message: `${fmt(tracker.expectedAmount)} ج.م — ${useCard ? 'على البطاقة' : 'نقدي'}`
+    });
   };
 
   const deleteTracker = (id) => {
@@ -1804,8 +1913,7 @@ const CashbackView = memo(({ data, dispatch, saveHistory, addNotification, cards
     </div>
   );
 });
-
-// ═══════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════
 // DuplicateDetectionSystem
 // ═══════════════════════════════════════════════════════
 const DuplicateDetectionSystem = ({ transactions, data, dispatch, addNotification, saveHistory }) => {
@@ -2159,7 +2267,7 @@ const DashboardView = memo(({ data, financeSnapshot, liveBalances, totalLiquidit
         </button>
         <button onClick={() => dispatch({ type: 'SET_QUICK_TRANSFER_MODAL_OPEN', payload: true })} className="card py-3 flex flex-col items-center gap-1 active:scale-95">
           <div className="p-1.5 rounded-lg bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400"><Layers size={16} /></div>
-          <span className="text-[11px] font-bold">تحويل</span>
+          <span className="text-[11px] font-bold">تحويل / شهري</span>
         </button>
       </div>
 
@@ -2326,6 +2434,8 @@ const CategoryDetailModal = memo(({ activeCategoryDetail, detailedTransactions, 
                             <div className="flex items-center gap-2 flex-wrap mb-1">
                               <span className="font-bold text-xs">{t.description || t.category}</span>
                               <FamilyBadge tx={t} />
+                              <SmsBadge tx={t} />
+                              <TeldaBadge tx={t} />
                               <ReceiptIndicator tx={t} dispatch={dispatch} />
                               {t.status !== 'paid' && <span className="badge badge-warning text-[10px]">⏳ معلق</span>}
                             </div>
@@ -2400,8 +2510,7 @@ const CategoriesView = memo(({ transactions, selectedMonth, selectedYear, catVie
     </div>
   );
 });
-
-// ═══════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════
 // TransactionsView
 // ═══════════════════════════════════════════════════════
 const TransactionsView = memo(({ groupedTransactions, transactions, selectedMonth, selectedYear, transViewMode, statusFilter, searchTerm, expandedGroup, data, monthInsights, dispatch, handleDelete, printReport, exportPdf, addNotification, onSelectYear, onSelectMonth, saveHistory, onPrintMonthlyReport }) => {
@@ -2409,13 +2518,15 @@ const TransactionsView = memo(({ groupedTransactions, transactions, selectedMont
   const [showFilters, setShowFilters] = useState(false);
   const [showBankFeesOnly, setShowBankFeesOnly] = useState(false);
   const [showSmsOnly, setShowSmsOnly] = useState(false);
+  const [showBeneficiariesOnly, setShowBeneficiariesOnly] = useState(false);
 
   const filterBySource = (list) => { if (sourceFilter === 'all') return list; if (sourceFilter === 'self') return list.filter(t => !isFamilyTx(t)); return list.filter(t => t.createdBy === sourceFilter); };
   const filterByBankFees = (list) => showBankFeesOnly ? list.filter(t => isBankFee(t)) : list;
   const filterBySms = (list) => showSmsOnly ? list.filter(t => t.source === 'sms') : list;
+  const filterByBeneficiaries = (list) => showBeneficiariesOnly ? list.filter(t => isBeneficiaryCategory(t.category)) : list;
 
-  const pendingGroups = useMemo(() => groupedTransactions.map(g => ({ ...g, items: filterBySms(filterByBankFees(filterBySource(g.items.filter(t => t.status !== 'paid')))) })).filter(g => g.items.length > 0), [groupedTransactions, sourceFilter, showBankFeesOnly, showSmsOnly]);
-  const paidArchive = useMemo(() => filterBySms(filterByBankFees(filterBySource(transactions.filter(t => t.month === selectedMonth && (t.year || 2026) === selectedYear && t.status === 'paid' && t.type === transViewMode)))).sort((a, b) => new Date(b.date) - new Date(a.date)), [transactions, selectedMonth, selectedYear, transViewMode, sourceFilter, showBankFeesOnly, showSmsOnly]);
+  const pendingGroups = useMemo(() => groupedTransactions.map(g => ({ ...g, items: filterByBeneficiaries(filterBySms(filterByBankFees(filterBySource(g.items.filter(t => t.status !== 'paid'))))) })).filter(g => g.items.length > 0), [groupedTransactions, sourceFilter, showBankFeesOnly, showSmsOnly, showBeneficiariesOnly]);
+  const paidArchive = useMemo(() => filterByBeneficiaries(filterBySms(filterByBankFees(filterBySource(transactions.filter(t => t.month === selectedMonth && (t.year || 2026) === selectedYear && t.status === 'paid' && t.type === transViewMode))))).sort((a, b) => new Date(b.date) - new Date(a.date)), [transactions, selectedMonth, selectedYear, transViewMode, sourceFilter, showBankFeesOnly, showSmsOnly, showBeneficiariesOnly]);
   const totalPending = pendingGroups.reduce((s, g) => s + g.items.length, 0);
   const isClosed = isMonthClosed(data, selectedYear, selectedMonth);
 
@@ -2423,7 +2534,7 @@ const TransactionsView = memo(({ groupedTransactions, transactions, selectedMont
   const approveAll = () => { if (isClosed) { addNotification({ type: 'error', title: 'محظور' }); return; } dispatch({ type: 'SHOW_CONFIRM', danger: false, title: 'اعتماد الكل', message: `سيتم اعتماد ${totalPending} عملية`, onConfirm: () => { saveHistory(); const ids = new Set(pendingGroups.flatMap(g => g.items.map(i => i.id))); dispatch({ type: 'UPDATE_TRANSACTIONS', payload: transactions.map(t => ids.has(t.id) ? { ...t, status: 'paid' } : t) }); addNotification({ type: 'success', title: 'تم الاعتماد' }); }, onCancel: () => dispatch({ type: 'HIDE_CONFIRM' }) }); };
   const reopenOne = (t) => { if (isMonthClosed(data, t.year || 2026, t.month)) { addNotification({ type: 'error', title: 'محظور' }); return; } dispatch({ type: 'UPDATE_TRANSACTIONS', payload: transactions.map(tr => tr.id === t.id ? { ...tr, status: 'pending' } : tr) }); addNotification({ type: 'warning', title: 'إعادة تعليق' }); };
   const monthTx = transactions.filter(t => t.month === selectedMonth && (t.year || 2026) === selectedYear);
-  const activeFiltersCount = (sourceFilter !== 'all' ? 1 : 0) + (statusFilter !== 'all' ? 1 : 0) + (showBankFeesOnly ? 1 : 0) + (showSmsOnly ? 1 : 0);
+  const activeFiltersCount = (sourceFilter !== 'all' ? 1 : 0) + (statusFilter !== 'all' ? 1 : 0) + (showBankFeesOnly ? 1 : 0) + (showSmsOnly ? 1 : 0) + (showBeneficiariesOnly ? 1 : 0);
 
   const dailyGroups = useMemo(() => groupTransactionsByDate(paidArchive), [paidArchive]);
 
@@ -2458,6 +2569,7 @@ const TransactionsView = memo(({ groupedTransactions, transactions, selectedMont
           <button onClick={onPrintMonthlyReport} className="btn btn-secondary text-[11px] px-2.5 py-1.5"><FileText size={12} /> PDF</button>
           <button onClick={() => setShowBankFeesOnly(v => !v)} className={`btn text-[11px] px-2.5 py-1.5 ${showBankFeesOnly ? 'btn-primary' : 'btn-secondary'}`}><Receipt size={12} /> رسوم بنكية</button>
           <button onClick={() => setShowSmsOnly(v => !v)} className={`btn text-[11px] px-2.5 py-1.5 ${showSmsOnly ? 'btn-primary' : 'btn-secondary'}`}><MessageSquare size={12} /> SMS</button>
+          <button onClick={() => setShowBeneficiariesOnly(v => !v)} className={`btn text-[11px] px-2.5 py-1.5 ${showBeneficiariesOnly ? 'btn-primary' : 'btn-secondary'}`}>👨‍👩‍👧 مصاريف شهرية</button>
           {isClosed ? (
             <>
               <div className="badge badge-success px-2 py-1 text-[10px]"><ShieldCheck size={10} /> مغلق</div>
@@ -2538,7 +2650,7 @@ const TransactionsView = memo(({ groupedTransactions, transactions, selectedMont
                             <Clock className="text-amber-500" size={16} />
                           </button>
                           <div className="flex-1 min-w-0">
-                            <p className="font-bold text-xs truncate">{t.description || 'بدون وصف'} <FamilyBadge tx={t} /> <SmsBadge tx={t} /> <ReceiptIndicator tx={t} dispatch={dispatch} /></p>
+                            <p className="font-bold text-xs truncate">{t.description || 'بدون وصف'} <FamilyBadge tx={t} /> <SmsBadge tx={t} /> <TeldaBadge tx={t} /> <ReceiptIndicator tx={t} dispatch={dispatch} /></p>
                             <p className="text-[10px] font-semibold mt-0.5" style={{ color: 'var(--text-muted)' }}>{t.date} • {PAYMENT_METHODS.find(p => p.id === t.method)?.label}</p>
                           </div>
                           <div className="flex items-center gap-1 flex-shrink-0">
@@ -2573,7 +2685,7 @@ const TransactionsView = memo(({ groupedTransactions, transactions, selectedMont
                   {group.items.map(t => (
                     <div key={t.id} className="card py-2.5 flex justify-between items-center gap-2">
                       <div className="min-w-0 flex-1">
-                        <p className="font-bold text-xs truncate">{t.type === 'income' ? '💰' : '💸'} {t.description || t.category} <FamilyBadge tx={t} /> <SmsBadge tx={t} /> <ReceiptIndicator tx={t} dispatch={dispatch} /></p>
+                        <p className="font-bold text-xs truncate">{t.type === 'income' ? '💰' : '💸'} {t.description || t.category} <FamilyBadge tx={t} /> <SmsBadge tx={t} /> <TeldaBadge tx={t} /> <ReceiptIndicator tx={t} dispatch={dispatch} /></p>
                         <p className="text-[10px] font-semibold" style={{ color: 'var(--text-muted)' }}>{PAYMENT_METHODS.find(p => p.id === t.method)?.label || ''} • {new Date(t.createdAt || Date.now()).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}</p>
                       </div>
                       <div className="flex items-center gap-1 flex-shrink-0">
@@ -2885,10 +2997,11 @@ const LoansView = memo(({ updatedLoans, cards, recurringItems, transactions, dis
               <div className="px-4 pb-4 space-y-1.5" style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '12px' }}>
                 {recurringItems.map(r => {
                   const isFee = BANK_FEE_CATEGORIES.has(r.category);
+                  const isMonthlyBen = isBeneficiaryCategory(r.category);
                   return (
-                    <div key={r.id} className="flex justify-between items-center p-2 rounded-lg" style={{ background: isFee ? 'rgba(220, 38, 38, 0.05)' : 'var(--bg-muted)' }}>
+                    <div key={r.id} className="flex justify-between items-center p-2 rounded-lg" style={{ background: isMonthlyBen ? 'rgba(217,119,6,0.05)' : isFee ? 'rgba(220, 38, 38, 0.05)' : 'var(--bg-muted)' }}>
                       <div className="min-w-0 flex-1">
-                        <p className="font-bold text-xs truncate">{r.title} {isFee && '🏦'}</p>
+                        <p className="font-bold text-xs truncate">{r.title} {isFee && '🏦'} {isMonthlyBen && '👨‍👩‍👧'}</p>
                         <p className="text-[10px] font-semibold" style={{ color: 'var(--text-muted)' }}>يوم {r.day}</p>
                       </div>
                       <div className="flex items-center gap-1.5 flex-shrink-0">
@@ -3322,6 +3435,7 @@ const CalendarView = memo(({ data, getAgendaItems, transactions, dispatch, saveH
     if (filterCat === 'loans') return i.title.includes('قسط') || i.title.includes('عقاري') || i.title.includes('محل هاني');
     if (filterCat === 'cards') return i.title.includes('بطاقة') || i.title.includes('سداد');
     if (filterCat === 'personal') return i.title.includes('محمود') || i.title.includes('سلفة') || i.title.includes('جامعة') || i.title.includes('مدرسة') || i.title.includes('تقويم');
+    if (filterCat === 'monthly') return i.desc === '👨‍👩‍👧 مصروف شهري';
     if (filterCat === 'recurring') return i.desc === 'التزام شهري متكرر' || i.desc === '💰 دخل شهري متكرر';
     if (filterCat === 'fees') return i.desc && i.desc.includes('رسم بنكي');
     return true;
@@ -3335,7 +3449,8 @@ const CalendarView = memo(({ data, getAgendaItems, transactions, dispatch, saveH
     saveHistory();
     const isIncome = item.desc && item.desc.includes('دخل');
     const isFee = item.desc && item.desc.includes('رسم بنكي');
-    const tx = { id: getSafeId(), type: isIncome ? 'income' : 'expense', kind: KIND.FINANCIAL, category: isIncome ? 'تكييف محمود' : isFee ? 'رسوم بنكية شهرية' : 'الالتزامات البنكية والتمويلية', amount: safeNumber(item.amount), description: item.title, method: 'instapay', date: item.date, month: m, year: y, monthIndex: d.getMonth(), subType: isIncome ? 'deposit' : 'withdrawal', status: 'paid' };
+    const isMonthly = item.desc === '👨‍👩‍👧 مصروف شهري';
+    const tx = { id: getSafeId(), type: isIncome ? 'income' : 'expense', kind: KIND.FINANCIAL, category: isMonthly ? item.title : isIncome ? 'تكييف محمود' : isFee ? 'رسوم بنكية شهرية' : 'الالتزامات البنكية والتمويلية', amount: safeNumber(item.amount), description: item.title, method: 'instapay', date: item.date, month: m, year: y, monthIndex: d.getMonth(), subType: isIncome ? 'deposit' : 'withdrawal', status: 'paid' };
     dispatch({ type: 'UPDATE_TRANSACTIONS', payload: [tx, ...transactions].sort((a, b) => new Date(b.date) - new Date(a.date)) });
     addNotification({ type: 'success', title: 'تم التسجيل' });
   };
@@ -3348,7 +3463,7 @@ const CalendarView = memo(({ data, getAgendaItems, transactions, dispatch, saveH
       </div>
       <div className="card py-2.5">
         <div className="flex gap-1.5 overflow-x-auto scroll-hide">
-          {[{ id: 'all', label: 'الكل' }, { id: 'loans', label: 'قروض' }, { id: 'cards', label: 'بطاقات' }, { id: 'personal', label: 'شخصي' }, { id: 'recurring', label: 'شهري' }, { id: 'fees', label: 'رسوم' }].map(f => (
+          {[{ id: 'all', label: 'الكل' }, { id: 'monthly', label: 'شهري' }, { id: 'loans', label: 'قروض' }, { id: 'cards', label: 'بطاقات' }, { id: 'personal', label: 'شخصي' }, { id: 'recurring', label: 'متكرر' }, { id: 'fees', label: 'رسوم' }].map(f => (
             <button key={f.id} onClick={() => setFilterCat(f.id)} className={`badge px-2.5 py-1.5 cursor-pointer whitespace-nowrap text-[10px] ${filterCat === f.id ? 'badge-brand' : 'badge-neutral'}`}>{f.label}</button>
           ))}
         </div>
@@ -3424,10 +3539,10 @@ const PinChangeModal = ({ onClose, addNotification }) => {
       </div>
     </Modal>
   );
-};
+});
 
 // ═══════════════════════════════════════════════════════
-// 🆕 SmsParserModal
+// SmsParserModal
 // ═══════════════════════════════════════════════════════
 const SmsParserModal = memo(({ isOpen, onClose, dispatch, addNotification, saveHistory, data }) => {
   const [rawText, setRawText] = useState('');
@@ -3857,7 +3972,7 @@ const EnhancedSidebar = memo(({ activeTab, dispatch, canUndo, onUndo }) => {
 });
 
 // ═══════════════════════════════════════════════════════
-// ProfessionalHeader — with SMS button
+// ProfessionalHeader
 // ═══════════════════════════════════════════════════════
 const ProfessionalHeader = memo(({ isDarkMode, dispatch, onOpenSms }) => (
   <header className="flex justify-between items-center gap-3 mb-4">
@@ -3979,7 +4094,7 @@ const PinLockScreen = ({ onSuccess, onLogout }) => {
 };
 
 // ═══════════════════════════════════════════════════════
-// dataReducer — with SMS modal
+// dataReducer
 // ═══════════════════════════════════════════════════════
 function dataReducer(state, action) {
   switch (action.type) {
@@ -4150,8 +4265,7 @@ const downloadBackupFromDrive = async (fileId) => {
 };
 
 const AUTO_BACKUP_LS_KEY = 'v76_last_drive_backup_ts';
-
-// ═══════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════
 // App Component
 // ═══════════════════════════════════════════════════════
 function App() {
@@ -4174,7 +4288,7 @@ function App() {
     expandedCardsSection: false, statusFilter: 'all',
     confirmDialog: { isOpen: false, title: '', message: '', onConfirm: null, onCancel: null, danger: false },
     isQuickTransferModalOpen: false,
-    quickTransferData: { from: 'cash', to: 'fawry', amount: '', fees: '', transferType: 'internal', externalEntity: '', date: getLocalISODate() },
+    quickTransferData: { from: 'cash', to: 'fawry', amount: '', fees: '', transferType: 'monthly', externalEntity: '', date: getLocalISODate(), beneficiaryId: null, forceCash: false },
     viewingCardStatement: null,
     viewingReceipt: null,
     isPinChangeOpen: false,
@@ -4443,7 +4557,15 @@ function App() {
         if (l.isReceivable && !l.paused && l.remaining > 0 && safeNumber(l.monthlyInstallment) > 0) { const d = parseInt(l.dueDay) || 1; let tm = cm, ty = cy; if (d < cd) { tm++; if (tm > 11) { tm = 0; ty++; } } items.push({ id: `ag-recv-${l.id}`, title: `تحصيل ${l.name}`, date: new Date(ty, tm, d).toISOString().split('T')[0], amount: safeNumber(l.monthlyInstallment), type: 'success', icon: TrendingUp, desc: '💰 مستحق لك' }); }
         if (l.autoGenerated && l.remaining > 0 && l.dueDate) { items.push({ id: `ag-auto-${l.id}`, title: l.name, date: l.dueDate, amount: l.remaining, type: 'warning', icon: Banknote, desc: l.description }); }
       });
-      recurringItems.forEach(r => { const d = parseInt(r.day) || 1; let tm = cm, ty = cy; if (d < cd) { tm++; if (tm > 11) { tm = 0; ty++; } } const isIncome = r.type === 'income'; const isFee = BANK_FEE_CATEGORIES.has(r.category); items.push({ id: `ag-rec-${r.id}`, title: r.title, date: new Date(ty, tm, d).toISOString().split('T')[0], amount: safeNumber(r.amount), type: isIncome ? 'success' : 'warning', icon: isIncome ? TrendingUp : isFee ? Receipt : Repeat, desc: isIncome ? '💰 دخل شهري متكرر' : isFee ? '🏦 رسم بنكي شهري' : 'التزام شهري متكرر' }); });
+      recurringItems.forEach(r => {
+        const d = parseInt(r.day) || 1; let tm = cm, ty = cy; if (d < cd) { tm++; if (tm > 11) { tm = 0; ty++; } }
+        const isIncome = r.type === 'income';
+        const isFee = BANK_FEE_CATEGORIES.has(r.category);
+        const isMonthlyBen = isBeneficiaryCategory(r.category);
+        const desc = isIncome ? '💰 دخل شهري متكرر' : isMonthlyBen ? '👨‍👩‍👧 مصروف شهري' : isFee ? '🏦 رسم بنكي شهري' : 'التزام شهري متكرر';
+        const icon = isIncome ? TrendingUp : isMonthlyBen ? Users : isFee ? Receipt : Repeat;
+        items.push({ id: `ag-rec-${r.id}`, title: r.title, date: new Date(ty, tm, d).toISOString().split('T')[0], amount: safeNumber(r.amount), type: isIncome ? 'success' : 'warning', icon, desc });
+      });
       return items.sort((a, b) => new Date(a.date) - new Date(b.date));
     } catch (err) { console.error(err); return []; }
   }, [cards, updatedLoans, recurringItems, data]);
@@ -4610,9 +4732,12 @@ function App() {
     }, onCancel: () => dispatch({ type: 'HIDE_CONFIRM' }) });
   }, [transactions, data, saveHistory, addNotification]);
 
+  // ═══════════════════════════════════════════════════════
+  // 🆕 handleQuickTransfer المُحدَّث (مصاريف شهرية + تحويلات)
+  // ═══════════════════════════════════════════════════════
   const handleQuickTransfer = useCallback((e) => {
     e.preventDefault(); if (isProcessing) return;
-    const transferType = quickTransferData.transferType || 'internal';
+    const transferType = quickTransferData.transferType || 'monthly';
     const amount = parseNumberInput(quickTransferData.amount);
     const fees = parseNumberInput(quickTransferData.fees || 0);
     const dateStr = quickTransferData.date || getLocalISODate();
@@ -4621,14 +4746,31 @@ function App() {
     const txYear = d.getFullYear(), txMonth = ALL_MONTHS[d.getMonth()];
     if (isMonthClosed(data, txYear, txMonth)) { addNotification({ type: 'error', title: 'محظور', message: `شهر ${txMonth} مغلق` }); return; }
 
+    // Validation حسب النوع
     if (transferType === 'fees') {
       if (fees <= 0) { addNotification({ type: 'error', title: 'تحقق', message: 'اكتب قيمة الرسوم' }); return; }
+    } else if (transferType === 'monthly') {
+      if (amount <= 0) { addNotification({ type: 'error', title: 'تحقق', message: 'اكتب المبلغ' }); return; }
+      if (!quickTransferData.beneficiaryId) { addNotification({ type: 'error', title: 'تحقق', message: 'اختر المستفيد' }); return; }
+      const ben = BENEFICIARIES.find(b => b.id === quickTransferData.beneficiaryId);
+      if (!ben) { addNotification({ type: 'error', title: 'تحقق', message: 'مستفيد غير معروف' }); return; }
+      const isFromBank = quickTransferData.from === 'cib_savings' || quickTransferData.from === 'aaib_savings';
+      if (isFromBank && !ben.hasTelda && quickTransferData.forceCash !== true) {
+        addNotification({
+          type: 'warning',
+          title: 'تحذير',
+          message: `${ben.name} ماعندوش Telda. استخدم Cash أو فعّل "تحويل كسحب نقدي"`,
+          duration: 6000
+        });
+        return;
+      }
     } else {
       if (amount <= 0) { addNotification({ type: 'error', title: 'تحقق', message: 'اكتب المبلغ' }); return; }
       if (transferType === 'internal' && quickTransferData.from === quickTransferData.to) { addNotification({ type: 'error', title: 'تحقق', message: 'اختر حسابين مختلفين' }); return; }
       if (transferType === 'external' && !quickTransferData.externalEntity?.trim()) { addNotification({ type: 'error', title: 'تحقق', message: 'اكتب اسم الجهة' }); return; }
     }
 
+    // Balance check
     if (ACCOUNT_METHOD_IDS.includes(quickTransferData.from)) {
       const fromBal = computeBalance(data, quickTransferData.from);
       const totalNeeded = transferType === 'fees' ? fees : (amount + fees);
@@ -4639,29 +4781,73 @@ function App() {
     processingTimeoutRef.current = setTimeout(() => {
       saveHistory();
       const fromLbl = PAYMENT_METHODS.find(p => p.id === quickTransferData.from)?.label || quickTransferData.from;
-      const toLbl = PAYMENT_METHODS.find(p => p.id === quickTransferData.to)?.label || quickTransferData.to;
       const date = getLocalISODate(d);
       const txs = [];
 
       if (transferType === 'internal') {
+        const toLbl = PAYMENT_METHODS.find(p => p.id === quickTransferData.to)?.label || quickTransferData.to;
         txs.push({ id: 'qt-w-' + getSafeId(), type: 'expense', kind: KIND.FINANCIAL, category: 'تحويلات', amount, description: `تحويل إلى ${toLbl}`, method: quickTransferData.from, date, month: txMonth, year: txYear, monthIndex: d.getMonth(), subType: 'withdrawal', status: 'paid', receipts: [] });
         txs.push({ id: 'qt-d-' + getSafeId(), type: 'income', kind: KIND.FINANCIAL, category: 'تحويلات واردة', amount, description: `تحويل من ${fromLbl}`, method: quickTransferData.to, date, month: txMonth, year: txYear, monthIndex: d.getMonth(), subType: 'deposit', status: 'paid', receipts: [] });
         if (fees > 0) {
-          txs.push({ id: 'qt-fee-' + getSafeId(), type: 'expense', kind: KIND.FINANCIAL, category: 'رسوم سحب كاش', amount: fees, description: `رسوم سحب كاش — ${toLbl}`, method: quickTransferData.from, date, month: txMonth, year: txYear, monthIndex: d.getMonth(), subType: 'withdrawal', status: 'paid', isTransferFee: true, receipts: [] });
+          txs.push({ id: 'qt-fee-' + getSafeId(), type: 'expense', kind: KIND.FINANCIAL, category: 'رسوم سحب كاش', amount: fees, description: `رسوم سحب كاش`, method: quickTransferData.from, date, month: txMonth, year: txYear, monthIndex: d.getMonth(), subType: 'withdrawal', status: 'paid', isTransferFee: true, receipts: [] });
         }
       } else if (transferType === 'external') {
-        txs.push({ id: 'qt-ext-' + getSafeId(), type: 'expense', kind: KIND.FINANCIAL, category: 'تحويلات', amount, description: `تحويل إلى ${quickTransferData.externalEntity.trim()}`, method: quickTransferData.from, date, month: txMonth, year: txYear, monthIndex: d.getMonth(), subType: 'withdrawal', status: 'paid', externalEntity: quickTransferData.externalEntity.trim(), receipts: [] });
+        txs.push({ id: 'qt-ext-' + getSafeId(), type: 'expense', kind: KIND.FINANCIAL, category: 'تحويلات', amount, description: `تحويل إلى ${quickTransferData.externalEntity.trim()}`, method: quickTransferData.from, date, month: txMonth, year: txYear, monthIndex: d.getMonth(), subType: 'withdrawal', status: 'paid', receipts: [] });
         if (fees > 0) {
           txs.push({ id: 'qt-fee-' + getSafeId(), type: 'expense', kind: KIND.FINANCIAL, category: 'رسوم تحويلات', amount: fees, description: `رسوم تحويل خارجي`, method: quickTransferData.from, date, month: txMonth, year: txYear, monthIndex: d.getMonth(), subType: 'withdrawal', status: 'paid', isTransferFee: true, receipts: [] });
         }
       } else if (transferType === 'fees') {
         txs.push({ id: 'qt-fee-' + getSafeId(), type: 'expense', kind: KIND.FINANCIAL, category: 'رسوم تحويلات', amount: fees, description: 'رسوم تحويلات يدوية', method: quickTransferData.from, date, month: txMonth, year: txYear, monthIndex: d.getMonth(), subType: 'withdrawal', status: 'paid', isTransferFee: true, receipts: [] });
+      } else if (transferType === 'monthly') {
+        const ben = BENEFICIARIES.find(b => b.id === quickTransferData.beneficiaryId);
+        const isFromBank = quickTransferData.from === 'cib_savings' || quickTransferData.from === 'aaib_savings';
+        const useTelda = isFromBank && ben.hasTelda && !quickTransferData.forceCash;
+        const finalMethod = useTelda ? ben.method : quickTransferData.from;
+        const finalDesc = useTelda
+          ? `مصروف شهري - ${ben.label} (Telda)`
+          : `مصروف شهري - ${ben.label}`;
+        const finalCategory = `مصروف شهري - ${ben.label}`;
+
+        txs.push({
+          id: 'monthly-' + getSafeId(),
+          type: 'expense',
+          kind: KIND.OPERATIONAL,
+          category: finalCategory,
+          amount,
+          description: finalDesc,
+          method: finalMethod,
+          date,
+          month: txMonth,
+          year: txYear,
+          monthIndex: d.getMonth(),
+          subType: 'withdrawal',
+          status: 'paid',
+          beneficiaryId: ben.id,
+          receipts: []
+        });
+
+        if (useTelda && fees > 0) {
+          txs.push({
+            id: 'monthly-fee-' + getSafeId(),
+            type: 'expense',
+            kind: KIND.FINANCIAL,
+            category: 'رسوم تحويلات',
+            amount: fees,
+            description: `رسوم تحويل - ${ben.label}`,
+            method: quickTransferData.from,
+            date, month: txMonth, year: txYear, monthIndex: d.getMonth(),
+            subType: 'withdrawal',
+            status: 'paid',
+            isTransferFee: true,
+            receipts: []
+          });
+        }
       }
 
       dispatch({ type: 'UPDATE_TRANSACTIONS', payload: [...txs, ...transactions].sort((a, b) => new Date(b.date) - new Date(a.date)) });
       dispatch({ type: 'SET_QUICK_TRANSFER_MODAL_OPEN', payload: false });
-      dispatch({ type: 'SET_QUICK_TRANSFER_DATA', payload: { from: 'cash', to: 'fawry', amount: '', fees: '', transferType: 'internal', externalEntity: '', date: getLocalISODate() } });
-      addNotification({ type: 'success', title: 'تم التحويل', message: `${txs.length} معاملة — ${date}` });
+      dispatch({ type: 'SET_QUICK_TRANSFER_DATA', payload: { from: 'cash', to: 'fawry', amount: '', fees: '', transferType: 'monthly', externalEntity: '', date: getLocalISODate(), beneficiaryId: null, forceCash: false } });
+      addNotification({ type: 'success', title: 'تم التسجيل', message: `${txs.length} معاملة — ${date}` });
       dispatch({ type: 'SET_IS_PROCESSING', payload: false });
       processingTimeoutRef.current = null;
     }, 600);
@@ -4700,16 +4886,6 @@ function App() {
     dispatch({ type: 'SHOW_CONFIRM', danger: true, title: 'حذف الالتزام', message: `سيتم حذف "${target?.title || ''}"`, onConfirm: () => { saveHistory(); const newRecurring = recurringItems.filter(i => i.id !== id); const newTx = (data.transactions || []).filter(t => !(t.sourceRecurringId === id && t.status !== 'paid')); const newMat = {}; Object.entries(data.materializedRecurring || {}).forEach(([k, ids]) => { newMat[k] = (ids || []).filter(x => x !== id); }); dispatch({ type: 'SET_DATA', payload: { ...data, recurringItems: newRecurring, transactions: newTx, materializedRecurring: newMat } }); addNotification({ type: 'success', title: 'تم الحذف' }); }, onCancel: () => dispatch({ type: 'HIDE_CONFIRM' }) });
   }, [recurringItems, data, saveHistory, addNotification]);
 
-  const handleExportCSV = useCallback(() => {
-    const header = "التاريخ,النوع,الفئة,الفئة الفرعية,الوصف,المبلغ,الطريقة,الحالة,الشهر,السنة,المُسجِّل,عدد الفواتير\n";
-    const rows = transactions.map(t => `${t.date},${t.type},${t.category},"${escapeHtml(t.subCategory || '')}","${escapeHtml(t.description || '')}",${safeNumber(t.amount)},${t.method},${t.status || 'pending'},${t.month},${t.year || 2026},${t.createdByName || 'أنا'},${t.receipts?.length || 0}`).join("\n");
-    const blob = new Blob(["\uFEFF" + header + rows], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url; a.download = `transactions_${getLocalISODate()}.csv`; a.click();
-    URL.revokeObjectURL(url);
-    addNotification({ type: 'success', title: 'تم التصدير' });
-  }, [transactions, addNotification]);
-
   const handleExport = useCallback(() => {
     const blob = new Blob([JSON.stringify({ data, budgets })], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -4736,9 +4912,11 @@ function App() {
       const bankFees = m.filter(t => t.status === 'paid' && BANK_FEE_CATEGORIES.has(t.category)).reduce((s, t) => s + safeNumber(t.amount), 0);
       const receiptsCount = m.filter(t => t.receipts?.length > 0).reduce((s, t) => s + t.receipts.length, 0);
       const smsCount = m.filter(t => t.source === 'sms').length;
+      const monthlyTotal = m.filter(t => isBeneficiaryCategory(t.category) && t.status === 'paid').reduce((s, t) => s + safeNumber(t.amount), 0);
       let text = `تحليل ${selectedMonth} ${selectedYear}\n\n`;
       text += `الدخل: ${fmt(inc)} ج.م\n`;
       text += `المصروف: ${fmt(exp)} ج.م\n`;
+      if (monthlyTotal > 0) text += `المصاريف الشهرية: ${fmt(monthlyTotal)} ج.م\n`;
       if (bankFees > 0) text += `الرسوم البنكية: ${fmt(bankFees)} ج.م\n`;
       if (receiptsCount > 0) text += `عدد الفواتير المرفقة: ${receiptsCount}\n`;
       if (smsCount > 0) text += `معاملات SMS: ${smsCount}\n`;
@@ -4786,14 +4964,97 @@ function App() {
         <ToastContainer notifications={notifications} removeNotification={removeNotification} />
         <ConfirmDialog confirmDialog={confirmDialog} dispatch={dispatch} />
         {isProcessing && (<div className="processing-overlay"><div className="processing-spinner mb-4"></div><h3 className="text-base font-bold mb-2">جاري تطبيق العملية</h3><button onClick={cancelProcessing} className="btn btn-secondary bg-red-500 text-white mt-3 text-xs">إلغاء</button></div>)}
+
         {viewingCardStatement && (() => {
           const card = viewingCardStatement;
           const monthData = (cardHistoryMap[card.id] || []).find(h => h.month === selectedMonth && h.year === selectedYear);
           const cardMethod = getCardMethod(card);
-          const cardTx = transactions.filter(t => t.method === cardMethod && t.month === selectedMonth && (t.year || 2026) === selectedYear).sort((a, b) => new Date(b.date) - new Date(a.date));
-          return (<div className="modal-backdrop z-[3500] no-print"><div className="w-full max-w-3xl rounded-2xl shadow-2xl overflow-hidden flex flex-col" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', maxHeight: 'calc(100dvh - 24px)' }}>
-            <div className="p-4" style={{ borderBottom: '1px solid var(--border-subtle)' }}><div className="flex justify-between items-start flex-wrap gap-2"><div className="flex items-center gap-2"><BankLogo type={`${card.bank.toLowerCase()}_card`} size={32} /><div><h3 className="text-base font-black">{card.bank} - {card.name}</h3><p className="text-[11px] font-semibold mt-0.5" style={{ color: 'var(--text-muted)' }}>{selectedMonth} {selectedYear}</p></div></div><div className="flex gap-1.5"><button type="button" onClick={() => exportPdf(`كشف ${card.bank}`, cardTx)} className="btn btn-primary text-[11px] py-1.5 px-2.5"><FileText size={12} /> PDF</button><button type="button" aria-label="إغلاق" onClick={() => dispatch({ type: 'SET_VIEWING_CARD_STATEMENT', payload: null })} className="btn btn-ghost p-1.5"><X size={16} /></button></div></div><div className="grid grid-cols-2 gap-2 mt-3"><div className="p-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/30"><p className="text-[10px] font-bold text-amber-700 dark:text-amber-400">بداية</p><p className="text-sm font-black mt-0.5">{fmt(monthData?.openingDebt || 0)}</p></div><div className="p-2.5 rounded-lg bg-blue-50 dark:bg-blue-950/30"><p className="text-[10px] font-bold text-blue-700 dark:text-blue-400">نهاية</p><p className="text-sm font-black text-blue-600 mt-0.5">{fmt(monthData?.closingDebt || 0)}</p></div></div></div>
-            <div className="flex-1 overflow-y-auto scroll-hide" style={{ minHeight: 0 }}>{cardTx.length === 0 ? <div className="p-12 text-center font-medium text-xs" style={{ color: 'var(--text-muted)' }}>لا توجد عمليات</div> : <div className="divide-y" style={{ borderColor: 'var(--border-subtle)' }}>{cardTx.map(t => (<div key={t.id} className="p-3 flex justify-between items-center gap-2"><div className="min-w-0 flex-1"><p className="font-bold text-xs truncate">{t.description || '-'} <SmsBadge tx={t} /> <ReceiptIndicator tx={t} dispatch={dispatch} /></p><p className="text-[10px] font-semibold mt-0.5" style={{ color: 'var(--text-muted)' }}>{t.date}</p></div><span className="font-black text-xs">{fmt(t.amount)}</span></div>))}</div>}</div></div></div>);
+          const allTx = transactions.filter(t => t.method === cardMethod && t.month === selectedMonth && (t.year || 2026) === selectedYear).sort((a, b) => new Date(b.date) - new Date(a.date));
+          const paidTx = allTx.filter(t => t.status === 'paid');
+          const pendingTx = allTx.filter(t => t.status !== 'paid');
+          const paidExpenses = paidTx.filter(t => t.type === 'expense').reduce((s, t) => s + safeNumber(t.amount), 0);
+          const pendingTotal = pendingTx.reduce((s, t) => s + safeNumber(t.amount), 0);
+
+          return (<div className="modal-backdrop z-[3500] no-print">
+            <div className="w-full max-w-3xl rounded-2xl shadow-2xl overflow-hidden flex flex-col" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', maxHeight: 'calc(100dvh - 24px)' }}>
+              <div className="p-4" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                <div className="flex justify-between items-start flex-wrap gap-2">
+                  <div className="flex items-center gap-2">
+                    <BankLogo type={`${card.bank.toLowerCase()}_card`} size={32} />
+                    <div>
+                      <h3 className="text-base font-black">{card.bank} - {card.name}</h3>
+                      <p className="text-[11px] font-semibold mt-0.5" style={{ color: 'var(--text-muted)' }}>{selectedMonth} {selectedYear}</p>
+                    </div>
+                  </div>
+                  <div className="flex gap-1.5">
+                    <button type="button" onClick={() => exportPdf(`كشف ${card.bank}`, paidTx)} className="btn btn-primary text-[11px] py-1.5 px-2.5"><FileText size={12} /> PDF</button>
+                    <button type="button" aria-label="إغلاق" onClick={() => dispatch({ type: 'SET_VIEWING_CARD_STATEMENT', payload: null })} className="btn btn-ghost p-1.5"><X size={16} /></button>
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-2 mt-3">
+                  <div className="p-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/30">
+                    <p className="text-[10px] font-bold text-amber-700 dark:text-amber-400">بداية</p>
+                    <p className="text-sm font-black mt-0.5">{fmt(monthData?.openingDebt || 0)}</p>
+                  </div>
+                  <div className="p-2.5 rounded-lg bg-red-50 dark:bg-red-950/30">
+                    <p className="text-[10px] font-bold text-red-700 dark:text-red-400">مشتريات</p>
+                    <p className="text-sm font-black text-red-600 mt-0.5">+{fmt(paidExpenses)}</p>
+                  </div>
+                  <div className="p-2.5 rounded-lg bg-blue-50 dark:bg-blue-950/30">
+                    <p className="text-[10px] font-bold text-blue-700 dark:text-blue-400">نهاية</p>
+                    <p className="text-sm font-black text-blue-600 mt-0.5">{fmt(monthData?.closingDebt || 0)}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex-1 overflow-y-auto scroll-hide" style={{ minHeight: 0 }}>
+                {paidTx.length === 0 && pendingTx.length === 0 ? (
+                  <div className="p-12 text-center font-medium text-xs" style={{ color: 'var(--text-muted)' }}>لا توجد عمليات</div>
+                ) : (<>
+                  {paidTx.length > 0 && (
+                    <div className="divide-y" style={{ borderColor: 'var(--border-subtle)' }}>
+                      {paidTx.map(t => (
+                        <div key={t.id} className="p-3 flex justify-between items-center gap-2">
+                          <div className="min-w-0 flex-1">
+                            <p className="font-bold text-xs truncate">
+                              {t.type === 'income' ? '💰 ' : '💸 '}{t.description || '-'} <SmsBadge tx={t} /> <TeldaBadge tx={t} /> <ReceiptIndicator tx={t} dispatch={dispatch} />
+                            </p>
+                            <p className="text-[10px] font-semibold mt-0.5" style={{ color: 'var(--text-muted)' }}>{t.date}</p>
+                          </div>
+                          <span className={`font-black text-xs ${t.type === 'income' ? 'text-emerald-600' : ''}`}>
+                            {t.type === 'income' ? '+' : '-'}{fmt(t.amount)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {pendingTx.length > 0 && (
+                    <div className="border-t" style={{ borderColor: 'var(--border-subtle)' }}>
+                      <div className="px-3 py-2 flex items-center justify-between gap-2" style={{ background: 'rgba(217,119,6,0.08)' }}>
+                        <div className="flex items-center gap-2">
+                          <Clock size={12} className="text-amber-600" />
+                          <span className="text-[11px] font-black text-amber-700 dark:text-amber-400">
+                            معلقة ({pendingTx.length}) — غير محتسبة
+                          </span>
+                        </div>
+                        <span className="text-[11px] font-black text-amber-700 dark:text-amber-400">{fmt(pendingTotal)} ج.م</span>
+                      </div>
+                      {pendingTx.map(t => (
+                        <div key={t.id} className="p-3 flex justify-between items-center gap-2" style={{ background: 'rgba(217,119,6,0.03)' }}>
+                          <div className="min-w-0 flex-1 opacity-80">
+                            <p className="font-bold text-xs truncate">{t.description || '-'} <SmsBadge tx={t} /></p>
+                            <p className="text-[10px] font-semibold mt-0.5" style={{ color: 'var(--text-muted)' }}>{t.date} • لم تُحتسب في المديونية</p>
+                          </div>
+                          <span className="font-black text-xs text-amber-700 dark:text-amber-400">{fmt(t.amount)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>)}
+              </div>
+            </div>
+          </div>);
         })()}
 
         {viewingReceipt && viewingReceipt.tx && (
@@ -4820,6 +5081,7 @@ function App() {
             </div>
           </div>
         )}
+
         {isPinChangeOpen && (
           <PinChangeModal onClose={() => dispatch({ type: 'SET_PIN_CHANGE_OPEN', payload: false })} addNotification={addNotification} />
         )}
@@ -4980,6 +5242,7 @@ function App() {
                   <select className="input-field text-[11px] font-bold w-full py-2" value={formData.linkedCardId || ''} onChange={e => dispatch({ type: 'SET_FORM_DATA', payload: { ...formData, linkedCardId: e.target.value ? Number(e.target.value) : '' } })}><option value="">بدون بطاقة</option>{cards.map(c => <option key={c.id} value={c.id}>{c.name} - {c.bank}</option>)}</select></div></details>)}
               {formData.category === 'مسحوبات محل هاني' && formMode === 'add' ? (<div className="grid grid-cols-2 gap-2"><button type="button" onClick={handleSaveAndNext} disabled={isProcessing} className="btn btn-secondary py-2.5 text-sm"><Zap size={14} /> حفظ + التالي</button><button type="submit" disabled={isProcessing} className="btn btn-primary py-2.5 text-sm"><Save size={14} /> حفظ</button></div>) : (<button type="submit" className="btn btn-primary w-full py-2.5 text-sm" disabled={isProcessing}>{isProcessing ? 'جاري الحفظ...' : <><Save size={14} /> {formData.status === 'paid' ? 'حفظ واعتماد' : 'حفظ كمعلق'}</>}</button>)}
             </form></div></div>)}
+
         {isAiModalOpen && (<div className="modal-backdrop no-print"><div className="w-full max-w-xl rounded-2xl shadow-2xl overflow-hidden animate-slideInBottom" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)' }}><div className="p-4 flex justify-between items-center" style={{ borderBottom: '1px solid var(--border-subtle)' }}><h3 className="text-sm font-black flex items-center gap-2"><Sparkles size={14} className="text-blue-500" /> المساعد</h3><button type="button" onClick={() => dispatch({ type: 'SET_AI_MODAL_OPEN', payload: false })} className="btn btn-ghost p-1.5"><X size={16} /></button></div><div className="p-4"><button type="button" onClick={handleAnalyzeFinances} disabled={isAiLoading} className="btn btn-primary w-full py-2.5 text-sm mb-3">{isAiLoading ? 'جاري التحليل...' : <><Sparkles size={14} /> تحليل الوضع المالي</>}</button>{aiResponse && <div className="p-3 rounded-lg whitespace-pre-line text-xs font-medium leading-relaxed" style={{ background: 'var(--bg-muted)' }}>{aiResponse}</div>}</div></div></div>)}
         {editingCard && (<div className="modal-backdrop no-print"><div className="w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden animate-slideInBottom max-h-[90dvh] flex flex-col" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)' }}><div className="p-4 flex justify-between items-center" style={{ borderBottom: '1px solid var(--border-subtle)' }}><h3 className="text-sm font-black">تعديل البطاقة</h3><button type="button" onClick={() => dispatch({ type: 'SET_EDITING_CARD', payload: null })} className="btn btn-ghost p-1.5"><X size={16} /></button></div>
           <form onSubmit={handleUpdateCard} className="p-4 space-y-2.5 overflow-y-auto scroll-hide">
@@ -5000,31 +5263,65 @@ function App() {
         {editingBudgetCategory && (<div className="modal-backdrop no-print"><div className="w-full max-w-sm rounded-2xl shadow-2xl p-5" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)' }}><h3 className="text-sm font-black mb-3">ميزانية: {editingBudgetCategory}</h3>
           <input type="text" inputMode="decimal" className="input-field text-base font-black text-blue-600 mb-3" value={budgetAmount} onChange={e => dispatch({ type: 'SET_BUDGET_AMOUNT', payload: e.target.value })} />
           <div className="flex gap-2"><button type="button" onClick={handleSaveBudget} className="btn btn-primary flex-1 text-sm">حفظ</button><button type="button" onClick={() => dispatch({ type: 'SET_EDITING_BUDGET_CATEGORY', payload: null })} className="btn btn-secondary flex-1 text-sm">إلغاء</button></div></div></div>)}
-        {isQuickTransferModalOpen && (<div className="modal-backdrop no-print"><div className="w-full max-w-md rounded-2xl shadow-2xl animate-slideInBottom" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)' }}><div className="p-4 flex justify-between items-center" style={{ borderBottom: '1px solid var(--border-subtle)' }}><h3 className="text-sm font-black flex items-center gap-2"><ArrowRight size={16} className="text-blue-500" /> تحويل</h3><button type="button" onClick={() => dispatch({ type: 'SET_QUICK_TRANSFER_MODAL_OPEN', payload: false })} className="btn btn-ghost p-1.5"><X size={16} /></button></div>
+
+        {isQuickTransferModalOpen && (<div className="modal-backdrop no-print"><div className="w-full max-w-md rounded-2xl shadow-2xl animate-slideInBottom" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)' }}><div className="p-4 flex justify-between items-center" style={{ borderBottom: '1px solid var(--border-subtle)' }}><h3 className="text-sm font-black flex items-center gap-2"><ArrowRight size={16} className="text-blue-500" /> تحويل / مصروف شهري</h3><button type="button" onClick={() => dispatch({ type: 'SET_QUICK_TRANSFER_MODAL_OPEN', payload: false })} className="btn btn-ghost p-1.5"><X size={16} /></button></div>
           <form onSubmit={handleQuickTransfer} className="p-4 space-y-3">
-            <div>
-              <div className="grid grid-cols-3 gap-1.5">
-                {[{ id: 'internal', label: 'حساباتي', icon: '🏠' }, { id: 'external', label: 'جهة خارجية', icon: '🌍' }, { id: 'fees', label: 'رسوم', icon: '💰' }].map(t => (
-                  <button key={t.id} type="button" onClick={() => dispatch({ type: 'SET_QUICK_TRANSFER_DATA', payload: { transferType: t.id } })} className={`p-2.5 rounded-lg text-[11px] font-bold transition-all border-2 flex flex-col items-center gap-1 ${quickTransferData.transferType === t.id ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400' : 'border-[color:var(--border-default)]'}`}>
-                    <span className="text-sm">{t.icon}</span><span>{t.label}</span>
-                  </button>
-                ))}
-              </div>
+            {/* Type switcher */}
+            <div className="grid grid-cols-4 gap-1.5">
+              {[
+                { id: 'monthly', label: 'مصروف شهري', icon: '👨‍👩‍👧' },
+                { id: 'internal', label: 'حساباتي', icon: '🏠' },
+                { id: 'external', label: 'جهة خارجية', icon: '🌍' },
+                { id: 'fees', label: 'رسوم', icon: '💰' }
+              ].map(t => (
+                <button key={t.id} type="button" onClick={() => dispatch({ type: 'SET_QUICK_TRANSFER_DATA', payload: { transferType: t.id, beneficiaryId: null, forceCash: false } })} className={`p-2 rounded-lg text-[10px] font-bold transition-all border-2 flex flex-col items-center gap-1 ${quickTransferData.transferType === t.id ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400' : 'border-[color:var(--border-default)]'}`}>
+                  <span className="text-sm">{t.icon}</span><span className="text-center leading-tight">{t.label}</span>
+                </button>
+              ))}
             </div>
+
+            {/* Beneficiary picker */}
+            {quickTransferData.transferType === 'monthly' && (
+              <div>
+                <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>المستفيد *</label>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {BENEFICIARIES.map(ben => (
+                    <button
+                      key={ben.id}
+                      type="button"
+                      onClick={() => dispatch({ type: 'SET_QUICK_TRANSFER_DATA', payload: { beneficiaryId: ben.id, amount: String(ben.defaultAmount), forceCash: false } })}
+                      className={`p-2.5 rounded-lg text-[11px] font-bold transition-all border-2 ${quickTransferData.beneficiaryId === ben.id ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400' : 'border-[color:var(--border-default)]'}`}
+                    >
+                      <div className="flex flex-col items-center gap-0.5">
+                        <span>{ben.label}</span>
+                        <span className="text-[9px] opacity-70">{fmt(ben.defaultAmount)} ج.م</span>
+                        {!ben.hasTelda && <span className="text-[8px] text-amber-600">نقدي فقط</span>}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* From / To */}
             <div className={`grid ${quickTransferData.transferType === 'internal' ? 'grid-cols-2' : 'grid-cols-1'} gap-2.5`}>
               <div>
-                <label className="text-[11px] font-bold block mb-1" style={{ color: 'var(--text-muted)' }}>من</label>
-                <select className="input-field text-sm py-2.5" value={quickTransferData.from} onChange={e => dispatch({ type: 'SET_QUICK_TRANSFER_DATA', payload: { from: e.target.value } })}>{PAYMENT_METHODS.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}</select>
+                <label className="text-[11px] font-bold block mb-1" style={{ color: 'var(--text-muted)' }}>من حساب</label>
+                <select className="input-field text-sm py-2.5" value={quickTransferData.from} onChange={e => dispatch({ type: 'SET_QUICK_TRANSFER_DATA', payload: { from: e.target.value, forceCash: false } })}>
+                  {PAYMENT_METHODS.filter(m => m.group === 'account').map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+                </select>
               </div>
               {quickTransferData.transferType === 'internal' && (<div>
                 <label className="text-[11px] font-bold block mb-1" style={{ color: 'var(--text-muted)' }}>إلى</label>
-                <select className="input-field text-sm py-2.5" value={quickTransferData.to} onChange={e => dispatch({ type: 'SET_QUICK_TRANSFER_DATA', payload: { to: e.target.value } })}>{PAYMENT_METHODS.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}</select>
+                <select className="input-field text-sm py-2.5" value={quickTransferData.to} onChange={e => dispatch({ type: 'SET_QUICK_TRANSFER_DATA', payload: { to: e.target.value } })}>{PAYMENT_METHODS.filter(m => m.group === 'account').map(m => <option key={m.id} value={m.id}>{m.label}</option>)}</select>
               </div>)}
               {quickTransferData.transferType === 'external' && (<div>
                 <label className="text-[11px] font-bold block mb-1" style={{ color: 'var(--text-muted)' }}>الجهة *</label>
                 <input type="text" className="input-field text-sm py-2.5" placeholder="اسم الجهة" value={quickTransferData.externalEntity || ''} onChange={e => dispatch({ type: 'SET_QUICK_TRANSFER_DATA', payload: { externalEntity: e.target.value } })} />
               </div>)}
             </div>
+
+            {/* Amount + Fees */}
             <div className={`grid ${quickTransferData.transferType === 'fees' ? 'grid-cols-1' : 'grid-cols-2'} gap-2.5`}>
               {quickTransferData.transferType !== 'fees' && (<div>
                 <label className="text-[11px] font-bold block mb-1" style={{ color: 'var(--text-muted)' }}>المبلغ</label>
@@ -5032,23 +5329,61 @@ function App() {
               </div>)}
               <div>
                 <label className="text-[11px] font-bold block mb-1" style={{ color: 'var(--text-muted)' }}>
-                  {quickTransferData.transferType === 'fees' ? 'الرسوم *' : 'رسوم سحب (اختياري)'}
+                  {quickTransferData.transferType === 'fees' ? 'الرسوم *' : 'رسوم (اختياري)'}
                 </label>
                 <input type="text" inputMode="decimal" className="input-field text-base font-black text-amber-600 text-center py-2.5" value={quickTransferData.fees || ''} onChange={e => dispatch({ type: 'SET_QUICK_TRANSFER_DATA', payload: { fees: e.target.value } })} placeholder="0.00" />
               </div>
             </div>
+
+            {/* Date */}
             <div>
               <label className="text-[11px] font-bold block mb-1" style={{ color: 'var(--text-muted)' }}>التاريخ</label>
               <input type="date" className="input-field text-sm font-bold py-2.5" value={quickTransferData.date || getLocalISODate()} onChange={e => dispatch({ type: 'SET_QUICK_TRANSFER_DATA', payload: { date: e.target.value } })} />
             </div>
-            {quickTransferData.transferType === 'internal' && parseNumberInput(quickTransferData.fees || 0) > 0 && (
-              <div className="p-2 rounded-lg bg-amber-50 dark:bg-amber-950/30 text-[10px] font-semibold text-amber-700 dark:text-amber-400 flex items-start gap-1.5">
-                <AlertTriangle size={12} className="flex-shrink-0 mt-0.5" />
-                <span>سيتم تسجيل 3 معاملات: سحب من المصدر + إيداع في الهدف + رسوم سحب كاش منفصلة</span>
-              </div>
-            )}
-            <button type="submit" className="btn btn-primary w-full py-2.5 text-sm" disabled={isProcessing}>{isProcessing ? 'جاري التنفيذ...' : 'تنفيذ التحويل'}</button>
+
+            {/* Warning: Anas has no Telda */}
+            {quickTransferData.transferType === 'monthly' && (() => {
+              const ben = BENEFICIARIES.find(b => b.id === quickTransferData.beneficiaryId);
+              const isFromBank = quickTransferData.from === 'cib_savings' || quickTransferData.from === 'aaib_savings';
+              if (ben && !ben.hasTelda && isFromBank) {
+                return (
+                  <div className="p-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 space-y-2">
+                    <div className="flex items-start gap-1.5">
+                      <AlertTriangle size={12} className="text-amber-600 flex-shrink-0 mt-0.5" />
+                      <span className="text-[10px] font-semibold text-amber-700 dark:text-amber-400">
+                        {ben.name} ماعندوش Telda. ممكن:
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => dispatch({ type: 'SET_QUICK_TRANSFER_DATA', payload: { forceCash: !quickTransferData.forceCash } })}
+                      className={`w-full p-2 rounded-lg text-[10px] font-black transition-all border-2 ${quickTransferData.forceCash ? 'border-amber-500 bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300' : 'border-amber-300 text-amber-700'}`}
+                    >
+                      {quickTransferData.forceCash ? '✓ ' : ''}تسجيلها كسحب نقدي من {quickTransferData.from === 'cib_savings' ? 'CIB' : 'AAIB'}
+                    </button>
+                    <p className="text-[9px] text-center text-amber-700 dark:text-amber-400">
+                      أو اختر Cash من الأعلى
+                    </p>
+                  </div>
+                );
+              }
+              if (ben && ben.hasTelda && isFromBank && !quickTransferData.forceCash) {
+                const methodLabel = ben.method === 'telda_shaimaa' ? 'Telda Shaimaa' : ben.method === 'telda_salma' ? 'Telda Salma' : 'Telda Abdelrahman';
+                return (
+                  <div className="p-2 rounded-lg bg-blue-50 dark:bg-blue-950/30 text-[10px] font-semibold text-blue-700 dark:text-blue-400 flex items-start gap-1.5">
+                    <CheckCircle2 size={12} className="flex-shrink-0 mt-0.5" />
+                    <span>تحويل عبر {methodLabel} — يمكنك إضافة رسوم تحويل</span>
+                  </div>
+                );
+              }
+              return null;
+            })()}
+
+            <button type="submit" className="btn btn-primary w-full py-2.5 text-sm" disabled={isProcessing}>
+              {isProcessing ? 'جاري التنفيذ...' : quickTransferData.transferType === 'monthly' ? 'تسجيل المصروف الشهري' : 'تنفيذ التحويل'}
+            </button>
           </form></div></div>)}
+
         {isRecurringModalOpen && (<div className="modal-backdrop no-print"><div className="w-full max-w-md rounded-2xl shadow-2xl animate-slideInBottom" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)' }}><div className="p-4 flex justify-between items-center" style={{ borderBottom: '1px solid var(--border-subtle)' }}><h3 className="text-sm font-black flex items-center gap-2"><Repeat size={14} className="text-blue-500" /> التزام متكرر</h3><button type="button" onClick={() => dispatch({ type: 'SET_RECURRING_MODAL_OPEN', payload: false })} className="btn btn-ghost p-1.5"><X size={16} /></button></div>
           <form onSubmit={handleSaveRecurring} className="p-4 space-y-2.5">
             <div><label className="text-[11px] font-bold block mb-1" style={{ color: 'var(--text-muted)' }}>العنوان</label><input type="text" required className="input-field text-sm" value={recurringFormData.title} onChange={e => dispatch({ type: 'SET_RECURRING_FORM_DATA', payload: { ...recurringFormData, title: e.target.value } })} /></div>
