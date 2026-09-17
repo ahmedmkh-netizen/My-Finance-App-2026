@@ -224,7 +224,7 @@ h1, h2, h3, h4 { font-weight: 800; letter-spacing: -0.02em; color: var(--text-pr
 .animate-shake { animation: shake 0.4s ease-in-out; }
 .animate-popIn { animation: popIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); }
 .text-gradient { background: linear-gradient(135deg, var(--brand) 0%, var(--brand-dark) 100%); background-clip: text; -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
 ::selection { background: var(--brand-soft); color: var(--brand-dark); }
 @media print { .no-print, .bottom-nav-container, .fab, button { display: none !important; } body, .glass, .card { background: white !important; color: black !important; box-shadow: none !important; } }
 .sidebar-group-title { font-size: 10px; font-weight: 900; letter-spacing: 0.08em; text-transform: uppercase; padding: 0 12px; margin-bottom: 6px; margin-top: 4px; color: var(--text-muted); }
@@ -259,7 +259,8 @@ import {
   ArrowUp, Undo2, LogOut, Lock, Unlock, Moon, Sun, ShieldCheck, RefreshCcw, Menu,
   Search, FileSpreadsheet, Settings as SettingsIcon, Target, CalendarDays, BarChart3, Bell, Sparkles, Bot,
   AlertTriangle, Clock, CheckCircle2, Zap, Hash, Coins, Filter, Eye, EyeOff, ShieldAlert,
-  Download, Upload, Cloud, Signal, PiggyBank, Landmark as BuildingBank, ArrowDownCircle, ArrowUpCircle, Wifi, Store as StoreIcon, Users, Activity, Sliders, Table, RotateCcw, Percent, LineChart, Delete, FileText, Briefcase, Gift, Receipt, ArrowLeftRight, Camera, ImageIcon
+  Download, Upload, Cloud, Signal, PiggyBank, Landmark as BuildingBank, ArrowDownCircle, ArrowUpCircle, Wifi, Store as StoreIcon, Users, Activity, Sliders, Table, RotateCcw, Percent, LineChart, Delete, FileText, Briefcase, Gift, Receipt, ArrowLeftRight, Camera, ImageIcon,
+  MessageSquare
 } from 'lucide-react';
 
 const firebaseConfig = { apiKey: "AIzaSyCEq-Trf1oFsvPF5tlMvqU83ea_J2DLZjs", authDomain: "finance-app-2026-3e318.firebaseapp.com", projectId: "finance-app-2026-3e318", storageBucket: "finance-app-2026-3e318.firebasestorage.app", messagingSenderId: "855414629770", appId: "1:855414629770:web:8bb07198b8245b63781473" };
@@ -304,6 +305,182 @@ const fmt = (n) => safeNumber(n).toLocaleString('en-US', { minimumFractionDigits
 const makeMonthKey = (year, month) => `${year}-${month}`;
 const parseMonthKey = (key) => { if (!key || typeof key !== 'string' || !key.includes('-')) return null; const [y, ...rest] = key.split('-'); const year = Number(y); if (isNaN(year)) return null; return { year, month: rest.join('-') }; };
 
+// ═══════════════════════════════════════════════════════
+// 🆕 SMS Bank Parser — يحلل رسائل البنوك المصرية
+// ═══════════════════════════════════════════════════════
+const parseBankSms = (rawInput) => {
+  const result = {
+    ok: false, bank: '', bankId: null, last4: null, amount: 0,
+    type: 'expense', subType: 'withdrawal',
+    date: getLocalISODate(),
+    method: null, linkedCardId: null,
+    description: '', balance: null,
+    rawText: String(rawInput || ''), notes: []
+  };
+
+  if (!rawInput || typeof rawInput !== 'string' || rawInput.trim().length < 5) {
+    result.notes.push('النص قصير جداً');
+    return result;
+  }
+
+  const text = toEnglishDigits(rawInput).replace(/\u00A0/g, ' ');
+
+  // 1) البنك
+  if (/\bCIB\b|Commercial International|SWYPE|Titanium|سي آي بي/i.test(text)) {
+    result.bank = 'CIB'; result.bankId = 'cib';
+  } else if (/\bAAIB\b|Arab African|العربي الأفريقي|العربي الافريقي|الإفريقي الدولي/i.test(text)) {
+    result.bank = 'AAIB'; result.bankId = 'aaib';
+  }
+
+  // 2) آخر 4 أرقام
+  const last4Patterns = [
+    /\b(?:ending|ends)\s*(?:with\s*)?(\d{4})\b/i,
+    /\bcard\s*(?:no\.?|number|#)?\s*[:\-]?\s*(?:\*{2,}|\.{2,}|x{2,})?\s*(\d{4})\b/i,
+    /(?:\*{2,}|\.{2,}|x{2,})\s*(\d{4})\b/i,
+    /رقم\s*(?:\*{2,}|\.{2,})?\s*(\d{4})\b/,
+    /بطاق[ةه]\s*(?:رقم\s*)?(?:\*{2,}|\.{2,})?\s*(\d{4})\b/
+  ];
+  for (const p of last4Patterns) {
+    const m = text.match(p);
+    if (m) { result.last4 = m[1]; break; }
+  }
+
+  // 3) نوع العملية
+  const incomeHints = [
+    /\bcredit(?:ed)?\b/i, /\bdeposit(?:ed)?\b/i, /\breceived\b/i, /\bsalary\b/i,
+    /\brefund\b/i, /\breimbursement\b/i, /\bcashback\b/i, /\badded\b/i,
+    /إيداع/, /تم إيداع/, /أضيف/, /تم إضافة/, /راتب/, /استرداد/, /كاش باك/, /وارد/, /دائن/
+  ];
+  const expenseHints = [
+    /\bdebit(?:ed)?\b/i, /\bpurchase\b/i, /\bwithdraw(?:al|n)?\b/i,
+    /\bpaid\b/i, /\bpayment\b/i, /\bcharge[d]?\b/i, /\bspent\b/i, /\batm\b/i,
+    /خصم/, /تم خصم/, /سحب/, /شراء/, /دفع/, /مدفوع/, /صادر/, /استخدام/, /مدين/
+  ];
+  const isIncome = incomeHints.some(r => r.test(text));
+  const isExpense = expenseHints.some(r => r.test(text));
+  if (isIncome && !isExpense) { result.type = 'income'; result.subType = 'deposit'; }
+  else if (isExpense && !isIncome) { result.type = 'expense'; result.subType = 'withdrawal'; }
+  else if (isIncome && isExpense) { result.notes.push('نوع العملية غير واضح — تم افتراض مصروف'); }
+  else { result.notes.push('لم يتم التعرف على نوع العملية'); }
+
+  // 4) المبلغ
+  const cur = '(?:EGP|LE|E£|ج\\.?م|جنيه|جم|ق\\.?م|ريال|SAR|USD|AED|درهم|دينار|\\$)';
+  const amtPatterns = [
+    new RegExp(`${cur}\\s*([0-9][0-9,]*\\.?[0-9]*)`, 'i'),
+    new RegExp(`([0-9][0-9,]*\\.?[0-9]*)\\s*${cur}`, 'i'),
+    /(?:amount|for|of|بقيمة|بمبلغ|مبلغ)\s*[:\s]*([0-9][0-9,]*\.?[0-9]*)/i
+  ];
+  for (const p of amtPatterns) {
+    const m = text.match(p);
+    if (m) {
+      const n = Number(m[1].replace(/,/g, ''));
+      if (n > 0 && n < 100000000) { result.amount = n; break; }
+    }
+  }
+  if (!result.amount) {
+    const all = text.match(/[0-9][0-9,]*\.?[0-9]*/g) || [];
+    const nums = all.map(s => Number(s.replace(/,/g, ''))).filter(n => n > 0 && n < 100000000);
+    if (nums.length) {
+      result.amount = Math.max(...nums);
+      result.notes.push('تم استخراج المبلغ تلقائياً — راجعه');
+    }
+  }
+
+  // 5) الرصيد
+  const balMatch = text.match(/(?:balance|الرصيد|رصيد)[^\d]{0,20}([0-9][0-9,]*\.?[0-9]*)/i);
+  if (balMatch) {
+    const b = Number(balMatch[1].replace(/,/g, ''));
+    if (b > 0 && b !== result.amount) result.balance = b;
+  }
+
+  // 6) التاريخ
+  const now = new Date();
+  let parsedDate = null;
+  const MONTHS_EN = { jan:1, feb:2, mar:3, apr:4, may:5, jun:6, jul:7, aug:8, sep:9, oct:10, nov:11, dec:12 };
+  const MONTHS_AR = { 'يناير':1,'فبراير':2,'مارس':3,'أبريل':4,'ابريل':4,'مايو':5,'يونيو':6,'يوليو':7,'أغسطس':8,'اغسطس':8,'سبتمبر':9,'أكتوبر':10,'اكتوبر':10,'نوفمبر':11,'ديسمبر':12 };
+
+  let m = text.match(/\b(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})\b/);
+  if (m) {
+    const d = +m[1], mo = +m[2]; let y = +m[3];
+    if (y < 100) y += 2000;
+    if (d >= 1 && d <= 31 && mo >= 1 && mo <= 12 && y >= 2020 && y <= 2100) {
+      parsedDate = new Date(y, mo - 1, d);
+    }
+  }
+  if (!parsedDate) {
+    m = text.match(/\b(\d{4})[\/\-\.](\d{1,2})[\/\-\.](\d{1,2})\b/);
+    if (m) {
+      const y = +m[1], mo = +m[2], d = +m[3];
+      if (d >= 1 && d <= 31 && mo >= 1 && mo <= 12 && y >= 2020 && y <= 2100) {
+        parsedDate = new Date(y, mo - 1, d);
+      }
+    }
+  }
+  if (!parsedDate) {
+    m = text.match(/\b(\d{1,2})[\s\-]*([A-Za-z]{3,9})[\s\-]*(\d{2,4})\b/);
+    if (m) {
+      const mo = MONTHS_EN[m[2].toLowerCase().slice(0, 3)];
+      if (mo) {
+        let y = +m[3]; if (y < 100) y += 2000;
+        parsedDate = new Date(y, mo - 1, +m[1]);
+      }
+    }
+  }
+  if (!parsedDate) {
+    const arNames = Object.keys(MONTHS_AR).join('|');
+    const re = new RegExp(`(\\d{1,2})\\s*(${arNames})\\s*(\\d{2,4})`);
+    m = text.match(re);
+    if (m) {
+      const mo = MONTHS_AR[m[2]];
+      let y = +m[3]; if (y < 100) y += 2000;
+      parsedDate = new Date(y, mo - 1, +m[1]);
+    }
+  }
+
+  if (parsedDate && !isNaN(parsedDate) && parsedDate <= now) {
+    result.date = getLocalISODate(parsedDate);
+  } else {
+    result.date = getLocalISODate(now);
+    if (parsedDate && !isNaN(parsedDate) && parsedDate > now) {
+      result.notes.push('التاريخ في المستقبل — تم استخدام اليوم');
+    }
+  }
+
+  // 7) التاجر
+  const merchantPatterns = [
+    /\bat\s+([A-Z][A-Z0-9\s&'\.\-]{2,40}?)(?:\s+on\s|\s+at\s|\s*[\.\,\n]|$)/i,
+    /\b(?:merchant|from|to)\s*[:\-]?\s*([A-Z][A-Z0-9\s&'\.\-]{2,40}?)(?:\s+on\s|\s*[\.\,\n]|$)/i,
+    /لدى\s+([^\.,\n]{2,40}?)(?:\s+يوم|\s+بتاريخ|\s*[\.\,\n]|$)/,
+    /في\s+([^\.,\n]{2,40}?)(?:\s+يوم|\s+بتاريخ|\s*[\.\,\n]|$)/
+  ];
+  for (const p of merchantPatterns) {
+    const mm = text.match(p);
+    if (mm && mm[1]) {
+      const desc = mm[1].trim().replace(/\s+/g, ' ');
+      if (desc.length >= 2 && !/^\d+$/.test(desc)) { result.description = desc; break; }
+    }
+  }
+  if (!result.description) {
+    const caps = text.match(/\b[A-Z][A-Z0-9&'\.\-]{2,}(?:\s+[A-Z][A-Z0-9&'\.\-]{2,}){0,4}\b/g) || [];
+    const filtered = caps.filter(w => !/^(CIB|AAIB|EGP|LE|ATM|SMS|OTP|REF|SWYPE|TITANIUM|SIGNATURE|MASTERCARD|VISA|USD|SAR|AED|THE|AND|FOR|OF|ON|AT|YOUR|CARD|WAS|USED)$/i.test(w));
+    if (filtered.length) result.description = filtered[0].trim();
+  }
+
+  // 8) ربط البطاقة
+  if (result.last4 === '1016') { result.method = 'cib_card'; result.linkedCardId = 1; result.bank = 'CIB'; }
+  else if (result.last4 === '0391') { result.method = 'aaib_card'; result.linkedCardId = 2; result.bank = 'AAIB'; }
+  else if (result.last4 === '2017') { result.method = 'cib_swype'; result.linkedCardId = 3; result.bank = 'CIB'; }
+  else if (result.bankId === 'cib') { result.method = 'cib_card'; result.linkedCardId = 1; }
+  else if (result.bankId === 'aaib') { result.method = 'aaib_card'; result.linkedCardId = 2; }
+
+  result.ok = result.amount > 0;
+  if (!result.ok) result.notes.push('لم يتم العثور على مبلغ');
+  if (!result.method) result.notes.push('لم يتم التعرف على البطاقة — اختر يدوياً');
+  if (!result.description) result.description = result.type === 'income' ? 'دخل من SMS' : 'مصروف من SMS';
+
+  return result;
+};
+
 // 🆕 ============ Validation ============
 const VALIDATION = {
   AMOUNT: { min: 0.01, max: 10000000, label: 'المبلغ' },
@@ -346,9 +523,9 @@ const isFutureDate = (d) => {
 };
 
 // ═══════════════════════════════════════════════════════
-// 🆕 Promise-based Modals — Stack/Queue based (fixes hang)
+// Promise-based Modals — Stack/Queue based
 // ═══════════════════════════════════════════════════════
-const _modalResolvers = new Map(); // id -> resolve
+const _modalResolvers = new Map();
 let _modalIdCounter = 0;
 
 const showInputModal = (opts) => {
@@ -367,7 +544,6 @@ const showConfirmModal = (opts) => {
   });
 };
 
-// Resolves the specific modal by id — no lost promises
 const resolveModal = (id, value) => {
   const resolve = _modalResolvers.get(id);
   if (resolve) {
@@ -376,7 +552,6 @@ const resolveModal = (id, value) => {
   }
 };
 
-// Safety: resolve all pending modals with null (e.g. on fatal error / unmount)
 const clearAllModals = () => {
   _modalResolvers.forEach((resolve) => resolve(null));
   _modalResolvers.clear();
@@ -437,18 +612,12 @@ const uploadReceipt = async (txId, file) => {
     throw new Error('فشل رفع الصورة');
   }
   const data = await res.json();
-  return {
-    url: data.secure_url,
-    path: data.public_id,
-    name: file.name,
-    size: data.bytes
-  };
+  return { url: data.secure_url, path: data.public_id, name: file.name, size: data.bytes };
 };
 
 const deleteReceipt = async (path) => {
   if (!path) return { success: false, reason: 'no_path' };
   try {
-    console.log('📌 Receipt marked for deletion (Cloudinary asset preserved):', path);
     try {
       const orphans = JSON.parse(localStorage.getItem('cloudinary_orphans') || '[]');
       orphans.push({ path, deletedAt: new Date().toISOString() });
@@ -457,7 +626,6 @@ const deleteReceipt = async (path) => {
     } catch {}
     return { success: true, reason: 'marked_orphan', path };
   } catch (e) {
-    console.warn('Delete receipt failed:', e);
     return { success: false, reason: 'error', error: e.message };
   }
 };
@@ -518,14 +686,8 @@ const CATEGORIES = {
   expense:['الالتزامات البنكية والتمويلية','مصروفات المعيشة اليومية','مسحوبات محل هاني','الملابس والمستلزمات الشخصية','الزكاة والتبرعات','التعليم والدروس والأنشطة','المصروفات النقدية الشهرية','شحن رصيد فوري','المرافق والخدمات – بولاق','المرافق والخدمات – العبور','الاتصالات وشحن الهواتف المحمولة','الصحة والرعاية الطبية','المستلزمات المنزلية والتموين','اللحوم والدواجن والأسماك','الطوارئ والاحتياطي النقدي','الصيانة والإصلاحات المنزلية','المواصلات والانتقالات','الترفيه والمناسبات الاجتماعية','مصاريف موسمية وسنوية','شحن محفظة','أقساط valU','مصاريف جامعات ومدارس','كازيون / العثيم','لحوم / أسماك / دواجن','توابل / خزين','خضروات','بقالة / فاكهة','منظفات','أدوية وكشف','مصروف نقدي','مصاريف وسلف شخصية','محافظ الكترونية','بنوك / فيزا / تمويل عقاري','تحويلات','رسوم تحويلات','رسوم بنكية شهرية','فوائد تأخير','رسوم سحب كاش','عمولة تحويل دولي','فواتير عهدة','مصروفات عهدة','أخرى']
 };
 
-const SYSTEM_LOAN_IDS = {
-  TAKYEEF: 'sys_takyeef_mahmoud',
-  HANY: 'sys_hany_shop'
-};
-const SYSTEM_LOAN_NAMES = {
-  [SYSTEM_LOAN_IDS.TAKYEEF]: 'تكييف محمود',
-  [SYSTEM_LOAN_IDS.HANY]: 'مسحوبات محل هاني'
-};
+const SYSTEM_LOAN_IDS = { TAKYEEF: 'sys_takyeef_mahmoud', HANY: 'sys_hany_shop' };
+const SYSTEM_LOAN_NAMES = { [SYSTEM_LOAN_IDS.TAKYEEF]: 'تكييف محمود', [SYSTEM_LOAN_IDS.HANY]: 'مسحوبات محل هاني' };
 
 const isTakyeefLoan = (l) => l && (l.systemId === SYSTEM_LOAN_IDS.TAKYEEF || (l.name && l.name.includes('تكييف محمود')));
 const isHanyLoan = (l) => l && (l.systemId === SYSTEM_LOAN_IDS.HANY || (l.name && l.name.includes('محل هاني')));
@@ -656,11 +818,6 @@ const getCardMethod = (card) => {
   return 'cib_card';
 };
 
-// ═══════════════════════════════════════════════════════
-// 🆕 Memoized computeCardDebt — WeakMap keyed on data reference
-//    (auto-invalidates when reducer produces new data)
-//    Historical queries (asOfDate provided) skip the cache
-// ═══════════════════════════════════════════════════════
 const _cardDebtCache = new WeakMap();
 
 const _computeCardDebtRaw = (data, card, asOfDate) => {
@@ -897,7 +1054,7 @@ class ErrorBoundary extends React.Component {
 }
 
 // ═══════════════════════════════════════════════════════
-// 🆕 Promise Modal Provider — Stack-based (LIFO)
+// Promise Modal Provider
 // ═══════════════════════════════════════════════════════
 const PromiseModalProvider = ({ children }) => {
   const [stack, setStack] = useState([]);
@@ -1001,7 +1158,7 @@ const PromiseModalProvider = ({ children }) => {
 };
 
 // ═══════════════════════════════════════════════════════
-// Generic Modal Component
+// Modal Component
 // ═══════════════════════════════════════════════════════
 const Modal = memo(({ isOpen, onClose, title, icon, size = 'md', children, footer, className = '' }) => {
   if (!isOpen) return null;
@@ -1090,6 +1247,11 @@ const BankFeeBadge = memo(({ tx }) => {
 const RecurringBadge = memo(({ tx }) => {
   if (!tx?.sourceRecurringId && !tx?.autoGenerated && !tx?.sourceReceivableId) return null;
   return <span className="badge badge-neutral">🔁</span>;
+});
+
+const SmsBadge = memo(({ tx }) => {
+  if (tx?.source !== 'sms') return null;
+  return <span className="badge badge-brand">📱 SMS</span>;
 });
 
 const FAMILY_MEMBERS = {
@@ -2246,12 +2408,14 @@ const TransactionsView = memo(({ groupedTransactions, transactions, selectedMont
   const [sourceFilter, setSourceFilter] = useState('all');
   const [showFilters, setShowFilters] = useState(false);
   const [showBankFeesOnly, setShowBankFeesOnly] = useState(false);
+  const [showSmsOnly, setShowSmsOnly] = useState(false);
 
   const filterBySource = (list) => { if (sourceFilter === 'all') return list; if (sourceFilter === 'self') return list.filter(t => !isFamilyTx(t)); return list.filter(t => t.createdBy === sourceFilter); };
   const filterByBankFees = (list) => showBankFeesOnly ? list.filter(t => isBankFee(t)) : list;
+  const filterBySms = (list) => showSmsOnly ? list.filter(t => t.source === 'sms') : list;
 
-  const pendingGroups = useMemo(() => groupedTransactions.map(g => ({ ...g, items: filterByBankFees(filterBySource(g.items.filter(t => t.status !== 'paid'))) })).filter(g => g.items.length > 0), [groupedTransactions, sourceFilter, showBankFeesOnly]);
-  const paidArchive = useMemo(() => filterByBankFees(filterBySource(transactions.filter(t => t.month === selectedMonth && (t.year || 2026) === selectedYear && t.status === 'paid' && t.type === transViewMode))).sort((a, b) => new Date(b.date) - new Date(a.date)), [transactions, selectedMonth, selectedYear, transViewMode, sourceFilter, showBankFeesOnly]);
+  const pendingGroups = useMemo(() => groupedTransactions.map(g => ({ ...g, items: filterBySms(filterByBankFees(filterBySource(g.items.filter(t => t.status !== 'paid')))) })).filter(g => g.items.length > 0), [groupedTransactions, sourceFilter, showBankFeesOnly, showSmsOnly]);
+  const paidArchive = useMemo(() => filterBySms(filterByBankFees(filterBySource(transactions.filter(t => t.month === selectedMonth && (t.year || 2026) === selectedYear && t.status === 'paid' && t.type === transViewMode)))).sort((a, b) => new Date(b.date) - new Date(a.date)), [transactions, selectedMonth, selectedYear, transViewMode, sourceFilter, showBankFeesOnly, showSmsOnly]);
   const totalPending = pendingGroups.reduce((s, g) => s + g.items.length, 0);
   const isClosed = isMonthClosed(data, selectedYear, selectedMonth);
 
@@ -2259,7 +2423,7 @@ const TransactionsView = memo(({ groupedTransactions, transactions, selectedMont
   const approveAll = () => { if (isClosed) { addNotification({ type: 'error', title: 'محظور' }); return; } dispatch({ type: 'SHOW_CONFIRM', danger: false, title: 'اعتماد الكل', message: `سيتم اعتماد ${totalPending} عملية`, onConfirm: () => { saveHistory(); const ids = new Set(pendingGroups.flatMap(g => g.items.map(i => i.id))); dispatch({ type: 'UPDATE_TRANSACTIONS', payload: transactions.map(t => ids.has(t.id) ? { ...t, status: 'paid' } : t) }); addNotification({ type: 'success', title: 'تم الاعتماد' }); }, onCancel: () => dispatch({ type: 'HIDE_CONFIRM' }) }); };
   const reopenOne = (t) => { if (isMonthClosed(data, t.year || 2026, t.month)) { addNotification({ type: 'error', title: 'محظور' }); return; } dispatch({ type: 'UPDATE_TRANSACTIONS', payload: transactions.map(tr => tr.id === t.id ? { ...tr, status: 'pending' } : tr) }); addNotification({ type: 'warning', title: 'إعادة تعليق' }); };
   const monthTx = transactions.filter(t => t.month === selectedMonth && (t.year || 2026) === selectedYear);
-  const activeFiltersCount = (sourceFilter !== 'all' ? 1 : 0) + (statusFilter !== 'all' ? 1 : 0) + (showBankFeesOnly ? 1 : 0);
+  const activeFiltersCount = (sourceFilter !== 'all' ? 1 : 0) + (statusFilter !== 'all' ? 1 : 0) + (showBankFeesOnly ? 1 : 0) + (showSmsOnly ? 1 : 0);
 
   const dailyGroups = useMemo(() => groupTransactionsByDate(paidArchive), [paidArchive]);
 
@@ -2293,6 +2457,7 @@ const TransactionsView = memo(({ groupedTransactions, transactions, selectedMont
         <div className="flex gap-1.5 mt-3 flex-wrap">
           <button onClick={onPrintMonthlyReport} className="btn btn-secondary text-[11px] px-2.5 py-1.5"><FileText size={12} /> PDF</button>
           <button onClick={() => setShowBankFeesOnly(v => !v)} className={`btn text-[11px] px-2.5 py-1.5 ${showBankFeesOnly ? 'btn-primary' : 'btn-secondary'}`}><Receipt size={12} /> رسوم بنكية</button>
+          <button onClick={() => setShowSmsOnly(v => !v)} className={`btn text-[11px] px-2.5 py-1.5 ${showSmsOnly ? 'btn-primary' : 'btn-secondary'}`}><MessageSquare size={12} /> SMS</button>
           {isClosed ? (
             <>
               <div className="badge badge-success px-2 py-1 text-[10px]"><ShieldCheck size={10} /> مغلق</div>
@@ -2373,7 +2538,7 @@ const TransactionsView = memo(({ groupedTransactions, transactions, selectedMont
                             <Clock className="text-amber-500" size={16} />
                           </button>
                           <div className="flex-1 min-w-0">
-                            <p className="font-bold text-xs truncate">{t.description || 'بدون وصف'} <FamilyBadge tx={t} /> <ReceiptIndicator tx={t} dispatch={dispatch} /></p>
+                            <p className="font-bold text-xs truncate">{t.description || 'بدون وصف'} <FamilyBadge tx={t} /> <SmsBadge tx={t} /> <ReceiptIndicator tx={t} dispatch={dispatch} /></p>
                             <p className="text-[10px] font-semibold mt-0.5" style={{ color: 'var(--text-muted)' }}>{t.date} • {PAYMENT_METHODS.find(p => p.id === t.method)?.label}</p>
                           </div>
                           <div className="flex items-center gap-1 flex-shrink-0">
@@ -2408,7 +2573,7 @@ const TransactionsView = memo(({ groupedTransactions, transactions, selectedMont
                   {group.items.map(t => (
                     <div key={t.id} className="card py-2.5 flex justify-between items-center gap-2">
                       <div className="min-w-0 flex-1">
-                        <p className="font-bold text-xs truncate">{t.type === 'income' ? '💰' : '💸'} {t.description || t.category} <FamilyBadge tx={t} /> <ReceiptIndicator tx={t} dispatch={dispatch} /></p>
+                        <p className="font-bold text-xs truncate">{t.type === 'income' ? '💰' : '💸'} {t.description || t.category} <FamilyBadge tx={t} /> <SmsBadge tx={t} /> <ReceiptIndicator tx={t} dispatch={dispatch} /></p>
                         <p className="text-[10px] font-semibold" style={{ color: 'var(--text-muted)' }}>{PAYMENT_METHODS.find(p => p.id === t.method)?.label || ''} • {new Date(t.createdAt || Date.now()).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}</p>
                       </div>
                       <div className="flex items-center gap-1 flex-shrink-0">
@@ -3262,6 +3427,200 @@ const PinChangeModal = ({ onClose, addNotification }) => {
 };
 
 // ═══════════════════════════════════════════════════════
+// 🆕 SmsParserModal
+// ═══════════════════════════════════════════════════════
+const SmsParserModal = memo(({ isOpen, onClose, dispatch, addNotification, saveHistory, data }) => {
+  const [rawText, setRawText] = useState('');
+  const [parsed, setParsed] = useState(null);
+  const [category, setCategory] = useState('');
+  const [method, setMethod] = useState('cash');
+
+  useEffect(() => {
+    if (!isOpen) {
+      setRawText(''); setParsed(null); setCategory(''); setMethod('cash');
+    }
+  }, [isOpen]);
+
+  const handlePaste = async () => {
+    try {
+      if (navigator.clipboard && navigator.clipboard.readText) {
+        const txt = await navigator.clipboard.readText();
+        if (txt && txt.trim()) {
+          setRawText(txt);
+          addNotification({ type: 'success', title: 'تم اللصق', duration: 2000 });
+          return;
+        }
+      }
+      addNotification({ type: 'info', title: 'الصق الرسالة يدوياً في الصندوق' });
+    } catch (e) {
+      addNotification({ type: 'info', title: 'الصق الرسالة يدوياً في الصندوق' });
+    }
+  };
+
+  const handleAnalyze = () => {
+    if (!rawText.trim()) { addNotification({ type: 'error', title: 'الصق رسالة البنك أولاً' }); return; }
+    const res = parseBankSms(rawText);
+    setParsed(res);
+    if (res.method) setMethod(res.method);
+    if (res.ok) {
+      addNotification({
+        type: 'success',
+        title: `تم التحليل: ${fmt(res.amount)} ج.م`,
+        message: `${res.type === 'income' ? 'دخل' : 'مصروف'} • ${res.bank || 'بنك غير معروف'}${res.last4 ? ' • ****' + res.last4 : ''}`,
+        duration: 4000
+      });
+    } else {
+      addNotification({
+        type: 'warning',
+        title: 'تحليل جزئي',
+        message: res.notes.join(' • ')
+      });
+    }
+  };
+
+  const handleSave = () => {
+    if (!parsed || !parsed.ok) { addNotification({ type: 'error', title: 'لا يوجد مبلغ صالح' }); return; }
+    if (!category) { addNotification({ type: 'error', title: 'اختر الفئة' }); return; }
+
+    const d = new Date(parsed.date);
+    const year = d.getFullYear();
+    const month = ALL_MONTHS[d.getMonth()];
+    if (isMonthClosed(data, year, month)) {
+      addNotification({ type: 'error', title: `شهر ${month} ${year} مغلق`, message: 'افتح الشهر أو غيّر التاريخ' });
+      return;
+    }
+
+    saveHistory();
+    const newTx = {
+      id: getSafeId(),
+      type: parsed.type,
+      subType: parsed.subType,
+      kind: KIND.OPERATIONAL,
+      category,
+      amount: parsed.amount,
+      description: parsed.description || 'SMS import',
+      method,
+      date: parsed.date,
+      month, year, monthIndex: d.getMonth(),
+      status: 'pending',
+      source: 'sms',
+      smsRawText: parsed.rawText,
+      smsBank: parsed.bank,
+      linkedCardId: parsed.linkedCardId || undefined,
+      receipts: []
+    };
+    dispatch({
+      type: 'UPDATE_TRANSACTIONS',
+      payload: [newTx, ...(data.transactions || [])].sort((a, b) => new Date(b.date) - new Date(a.date))
+    });
+    addNotification({
+      type: 'success',
+      title: 'تم الحفظ كمعلق',
+      message: 'راجعها واعتمدها من صفحة المعاملات',
+      duration: 5000
+    });
+    onClose();
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <Modal isOpen={true} onClose={onClose} title="تحليل رسالة بنك" icon="📱" size="lg">
+      <div className="space-y-3">
+        <div>
+          <div className="flex justify-between items-center mb-1.5">
+            <label className="text-[11px] font-bold" style={{ color: 'var(--text-muted)' }}>الصق رسالة البنك هنا</label>
+            <button type="button" onClick={handlePaste} className="text-[11px] font-black text-blue-600 flex items-center gap-1">
+              📋 لصق تلقائي
+            </button>
+          </div>
+          <textarea
+            className="input-field text-xs leading-relaxed font-semibold"
+            rows={6}
+            placeholder="مثال: CIB: Purchase of EGP 1500.00 on card ending 1016 at CARREFOUR on 17/09/2026. Available Balance: EGP 60000.00"
+            value={rawText}
+            onChange={e => setRawText(e.target.value)}
+            dir="auto"
+          />
+        </div>
+
+        <button
+          type="button"
+          onClick={handleAnalyze}
+          disabled={!rawText.trim()}
+          className="btn btn-primary w-full py-2.5 text-sm"
+        >
+          <Sparkles size={14} /> حلّل الرسالة
+        </button>
+
+        {parsed && (
+          <div className="space-y-3 pt-3 animate-fadeIn" style={{ borderTop: '1px solid var(--border-subtle)' }}>
+            <div className={`p-3 rounded-lg ${parsed.ok ? 'bg-emerald-50 dark:bg-emerald-950/30' : 'bg-amber-50 dark:bg-amber-950/30'}`}>
+              <div className="flex items-center gap-2 mb-2">
+                {parsed.ok
+                  ? <CheckCircle2 size={16} className="text-emerald-600" />
+                  : <AlertTriangle size={16} className="text-amber-600" />}
+                <span className={`font-black text-sm ${parsed.ok ? 'text-emerald-700 dark:text-emerald-400' : 'text-amber-700 dark:text-amber-400'}`}>
+                  {parsed.ok ? 'تم استخراج البيانات' : 'استخراج جزئي — راجع البيانات'}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs">
+                <div><span style={{ color: 'var(--text-muted)' }}>المبلغ:</span> <strong>{parsed.amount ? fmt(parsed.amount) + ' ج.م' : '—'}</strong></div>
+                <div><span style={{ color: 'var(--text-muted)' }}>النوع:</span> <strong>{parsed.type === 'income' ? 'دخل 💰' : 'مصروف 💸'}</strong></div>
+                <div><span style={{ color: 'var(--text-muted)' }}>البنك:</span> <strong>{parsed.bank || '—'}</strong></div>
+                <div><span style={{ color: 'var(--text-muted)' }}>البطاقة:</span> <strong>{parsed.last4 ? '****' + parsed.last4 : '—'}</strong></div>
+                <div><span style={{ color: 'var(--text-muted)' }}>التاريخ:</span> <strong>{parsed.date}</strong></div>
+                {parsed.balance && <div><span style={{ color: 'var(--text-muted)' }}>الرصيد:</span> <strong>{fmt(parsed.balance)} ج.م</strong></div>}
+              </div>
+              {parsed.description && (
+                <div className="mt-2 text-xs"><span style={{ color: 'var(--text-muted)' }}>الوصف:</span> <strong>{parsed.description}</strong></div>
+              )}
+              {parsed.notes.length > 0 && (
+                <div className="mt-2 pt-2 text-[10px] font-bold text-amber-700 dark:text-amber-400" style={{ borderTop: '1px dashed rgba(217,119,6,0.3)' }}>
+                  ⚠️ {parsed.notes.join(' • ')}
+                </div>
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-[11px] font-bold block mb-1" style={{ color: 'var(--text-muted)' }}>الفئة *</label>
+                <select className="input-field text-xs py-2" value={category} onChange={e => setCategory(e.target.value)}>
+                  <option value="">اختر...</option>
+                  {Object.entries(CATEGORY_GROUPS[parsed.type]).map(([g, items]) => (
+                    <optgroup key={g} label={g}>
+                      {items.map(c => <option key={c} value={c}>{c}</option>)}
+                    </optgroup>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-[11px] font-bold block mb-1" style={{ color: 'var(--text-muted)' }}>طريقة الدفع</label>
+                <select className="input-field text-xs py-2" value={method} onChange={e => setMethod(e.target.value)}>
+                  {PAYMENT_METHODS.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+                </select>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={!parsed.ok || !category}
+              className="btn btn-primary w-full py-2.5 text-sm"
+            >
+              <Save size={14} /> حفظ كمعلق
+            </button>
+            <p className="text-[10px] text-center leading-relaxed" style={{ color: 'var(--text-muted)' }}>
+              💡 تُحفظ كمعلقة — راجعها واعتمدها من صفحة المعاملات
+            </p>
+          </div>
+        )}
+      </div>
+    </Modal>
+  );
+});
+
+// ═══════════════════════════════════════════════════════
 // SettingsView
 // ═══════════════════════════════════════════════════════
 const SettingsView = memo(({ data, accountsData, cards, budgets, dispatch, saveHistory, addNotification, walletVisibility, onToggleVisibility }) => {
@@ -3498,9 +3857,9 @@ const EnhancedSidebar = memo(({ activeTab, dispatch, canUndo, onUndo }) => {
 });
 
 // ═══════════════════════════════════════════════════════
-// ProfessionalHeader
+// ProfessionalHeader — with SMS button
 // ═══════════════════════════════════════════════════════
-const ProfessionalHeader = memo(({ isDarkMode, dispatch }) => (
+const ProfessionalHeader = memo(({ isDarkMode, dispatch, onOpenSms }) => (
   <header className="flex justify-between items-center gap-3 mb-4">
     <div className="flex items-center gap-2.5">
       <div className="p-2 rounded-lg text-white shadow-sm" style={{ background: 'var(--brand)' }}><Wallet size={18} /></div>
@@ -3509,6 +3868,15 @@ const ProfessionalHeader = memo(({ isDarkMode, dispatch }) => (
       </div>
     </div>
     <div className="flex gap-1.5">
+      <button
+        type="button"
+        onClick={onOpenSms}
+        title="تحليل رسالة بنك"
+        className="btn text-[11px] py-1.5 px-2.5"
+        style={{ background: 'var(--bg-muted)', color: 'var(--text-primary)', border: '1px solid var(--border-default)' }}
+      >
+        <MessageSquare size={12} />
+      </button>
       <button type="button" onClick={() => dispatch({ type: 'SET_AI_MODAL_OPEN', payload: true })} className="btn btn-primary text-[11px] py-1.5 px-2.5"><Sparkles size={12} /></button>
       <div className="flex p-0.5 rounded-lg" style={{ background: 'var(--bg-muted)' }}>
         <button type="button" aria-label="فاتح" onClick={() => dispatch({ type: 'TOGGLE_DARK_MODE', payload: false })} className={`p-1.5 rounded-md transition-all ${!isDarkMode ? 'shadow-sm' : ''}`} style={!isDarkMode ? { background: 'var(--bg-card)', color: 'var(--brand)' } : { color: 'var(--text-muted)' }}><Sun size={12} /></button>
@@ -3611,7 +3979,7 @@ const PinLockScreen = ({ onSuccess, onLogout }) => {
 };
 
 // ═══════════════════════════════════════════════════════
-// dataReducer
+// dataReducer — with SMS modal
 // ═══════════════════════════════════════════════════════
 function dataReducer(state, action) {
   switch (action.type) {
@@ -3642,6 +4010,7 @@ function dataReducer(state, action) {
     case 'SET_IS_LOCKED': return { ...state, isLocked: action.payload };
     case 'SET_VIEWING_RECEIPT': return { ...state, viewingReceipt: action.payload };
     case 'SET_PIN_CHANGE_OPEN': return { ...state, isPinChangeOpen: action.payload };
+    case 'SET_SMS_MODAL_OPEN': return { ...state, isSmsModalOpen: action.payload };
     case 'ADD_NOTIFICATION': return { ...state, notifications: [...state.notifications, { id: Date.now() + Math.random(), ...action.payload }] };
     case 'REMOVE_NOTIFICATION': return { ...state, notifications: state.notifications.filter(n => n.id !== action.payload) };
     case 'UPDATE_TRANSACTIONS': return { ...state, data: { ...state.data, transactions: action.payload } };
@@ -3809,6 +4178,7 @@ function App() {
     viewingCardStatement: null,
     viewingReceipt: null,
     isPinChangeOpen: false,
+    isSmsModalOpen: false,
     walletVisibility: { fawry: true, etisalat: true, cib_savings: true, aaib_savings: true, cash: true },
     isProcessing: false, formErrors: {}
   });
@@ -3822,7 +4192,7 @@ function App() {
   const processingTimeoutRef = useRef(null);
   const lastRemoteRef = useRef(null);
 
-  const { data, activeTab, selectedYear, selectedMonth, transViewMode, catViewType, isFormOpen, formMode, formData, activeCategoryDetail, isLocked, isDarkMode, expandedGroup, budgets, editingCard, editingLoan, searchTerm, editingBudgetCategory, budgetAmount, isRecurringModalOpen, recurringFormData, notifications, isAiModalOpen, aiResponse, isAiLoading, history, expandedLedgers, expandedCardsSection, statusFilter, confirmDialog, isQuickTransferModalOpen, quickTransferData, viewingCardStatement, viewingReceipt, isPinChangeOpen, walletVisibility, isProcessing, formErrors } = state;
+  const { data, activeTab, selectedYear, selectedMonth, transViewMode, catViewType, isFormOpen, formMode, formData, activeCategoryDetail, isLocked, isDarkMode, expandedGroup, budgets, editingCard, editingLoan, searchTerm, editingBudgetCategory, budgetAmount, isRecurringModalOpen, recurringFormData, notifications, isAiModalOpen, aiResponse, isAiLoading, history, expandedLedgers, expandedCardsSection, statusFilter, confirmDialog, isQuickTransferModalOpen, quickTransferData, viewingCardStatement, viewingReceipt, isPinChangeOpen, isSmsModalOpen, walletVisibility, isProcessing, formErrors } = state;
   const { transactions = [], loans = [], cards = [], recurringItems = [], accountsData = DEFAULT_ACCOUNTS, monthlyPlans = {}, monthlySnapshots = {} } = data || {};
 
   useEffect(() => { const unsub = firebase.auth().onAuthStateChanged((user) => { setAuthLoading(false); setIsAuthenticated(!!(user && user.email === "ahmedmkh@gmail.com")); }); return () => unsub(); }, []);
@@ -4240,9 +4610,6 @@ function App() {
     }, onCancel: () => dispatch({ type: 'HIDE_CONFIRM' }) });
   }, [transactions, data, saveHistory, addNotification]);
 
-  // ═══════════════════════════════════════════════════════
-  // 🆕 handleQuickTransfer — fixed + date + fees for internal
-  // ═══════════════════════════════════════════════════════
   const handleQuickTransfer = useCallback((e) => {
     e.preventDefault(); if (isProcessing) return;
     const transferType = quickTransferData.transferType || 'internal';
@@ -4254,7 +4621,6 @@ function App() {
     const txYear = d.getFullYear(), txMonth = ALL_MONTHS[d.getMonth()];
     if (isMonthClosed(data, txYear, txMonth)) { addNotification({ type: 'error', title: 'محظور', message: `شهر ${txMonth} مغلق` }); return; }
 
-    // Validation حسب النوع
     if (transferType === 'fees') {
       if (fees <= 0) { addNotification({ type: 'error', title: 'تحقق', message: 'اكتب قيمة الرسوم' }); return; }
     } else {
@@ -4263,7 +4629,6 @@ function App() {
       if (transferType === 'external' && !quickTransferData.externalEntity?.trim()) { addNotification({ type: 'error', title: 'تحقق', message: 'اكتب اسم الجهة' }); return; }
     }
 
-    // Balance check
     if (ACCOUNT_METHOD_IDS.includes(quickTransferData.from)) {
       const fromBal = computeBalance(data, quickTransferData.from);
       const totalNeeded = transferType === 'fees' ? fees : (amount + fees);
@@ -4281,7 +4646,6 @@ function App() {
       if (transferType === 'internal') {
         txs.push({ id: 'qt-w-' + getSafeId(), type: 'expense', kind: KIND.FINANCIAL, category: 'تحويلات', amount, description: `تحويل إلى ${toLbl}`, method: quickTransferData.from, date, month: txMonth, year: txYear, monthIndex: d.getMonth(), subType: 'withdrawal', status: 'paid', receipts: [] });
         txs.push({ id: 'qt-d-' + getSafeId(), type: 'income', kind: KIND.FINANCIAL, category: 'تحويلات واردة', amount, description: `تحويل من ${fromLbl}`, method: quickTransferData.to, date, month: txMonth, year: txYear, monthIndex: d.getMonth(), subType: 'deposit', status: 'paid', receipts: [] });
-        // 🆕 رسوم السحب كمعاملة منفصلة (فئة رسوم سحب كاش)
         if (fees > 0) {
           txs.push({ id: 'qt-fee-' + getSafeId(), type: 'expense', kind: KIND.FINANCIAL, category: 'رسوم سحب كاش', amount: fees, description: `رسوم سحب كاش — ${toLbl}`, method: quickTransferData.from, date, month: txMonth, year: txYear, monthIndex: d.getMonth(), subType: 'withdrawal', status: 'paid', isTransferFee: true, receipts: [] });
         }
@@ -4371,11 +4735,13 @@ function App() {
       const totalReceivable = updatedLoans.filter(l => l.isReceivable).reduce((s, l) => s + l.remaining, 0);
       const bankFees = m.filter(t => t.status === 'paid' && BANK_FEE_CATEGORIES.has(t.category)).reduce((s, t) => s + safeNumber(t.amount), 0);
       const receiptsCount = m.filter(t => t.receipts?.length > 0).reduce((s, t) => s + t.receipts.length, 0);
+      const smsCount = m.filter(t => t.source === 'sms').length;
       let text = `تحليل ${selectedMonth} ${selectedYear}\n\n`;
       text += `الدخل: ${fmt(inc)} ج.م\n`;
       text += `المصروف: ${fmt(exp)} ج.م\n`;
       if (bankFees > 0) text += `الرسوم البنكية: ${fmt(bankFees)} ج.م\n`;
       if (receiptsCount > 0) text += `عدد الفواتير المرفقة: ${receiptsCount}\n`;
+      if (smsCount > 0) text += `معاملات SMS: ${smsCount}\n`;
       text += `\n`;
       text += savings > 0 ? `وفر: ${fmt(savings)} ج.م\n\n` : savings < 0 ? `عجز: ${fmt(Math.abs(savings))} ج.م\n\n` : `متعادل\n\n`;
       text += `المديونية: ${fmt(totalDebt)} ج.م\n`;
@@ -4427,7 +4793,7 @@ function App() {
           const cardTx = transactions.filter(t => t.method === cardMethod && t.month === selectedMonth && (t.year || 2026) === selectedYear).sort((a, b) => new Date(b.date) - new Date(a.date));
           return (<div className="modal-backdrop z-[3500] no-print"><div className="w-full max-w-3xl rounded-2xl shadow-2xl overflow-hidden flex flex-col" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', maxHeight: 'calc(100dvh - 24px)' }}>
             <div className="p-4" style={{ borderBottom: '1px solid var(--border-subtle)' }}><div className="flex justify-between items-start flex-wrap gap-2"><div className="flex items-center gap-2"><BankLogo type={`${card.bank.toLowerCase()}_card`} size={32} /><div><h3 className="text-base font-black">{card.bank} - {card.name}</h3><p className="text-[11px] font-semibold mt-0.5" style={{ color: 'var(--text-muted)' }}>{selectedMonth} {selectedYear}</p></div></div><div className="flex gap-1.5"><button type="button" onClick={() => exportPdf(`كشف ${card.bank}`, cardTx)} className="btn btn-primary text-[11px] py-1.5 px-2.5"><FileText size={12} /> PDF</button><button type="button" aria-label="إغلاق" onClick={() => dispatch({ type: 'SET_VIEWING_CARD_STATEMENT', payload: null })} className="btn btn-ghost p-1.5"><X size={16} /></button></div></div><div className="grid grid-cols-2 gap-2 mt-3"><div className="p-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/30"><p className="text-[10px] font-bold text-amber-700 dark:text-amber-400">بداية</p><p className="text-sm font-black mt-0.5">{fmt(monthData?.openingDebt || 0)}</p></div><div className="p-2.5 rounded-lg bg-blue-50 dark:bg-blue-950/30"><p className="text-[10px] font-bold text-blue-700 dark:text-blue-400">نهاية</p><p className="text-sm font-black text-blue-600 mt-0.5">{fmt(monthData?.closingDebt || 0)}</p></div></div></div>
-            <div className="flex-1 overflow-y-auto scroll-hide" style={{ minHeight: 0 }}>{cardTx.length === 0 ? <div className="p-12 text-center font-medium text-xs" style={{ color: 'var(--text-muted)' }}>لا توجد عمليات</div> : <div className="divide-y" style={{ borderColor: 'var(--border-subtle)' }}>{cardTx.map(t => (<div key={t.id} className="p-3 flex justify-between items-center gap-2"><div className="min-w-0 flex-1"><p className="font-bold text-xs truncate">{t.description || '-'} <ReceiptIndicator tx={t} dispatch={dispatch} /></p><p className="text-[10px] font-semibold mt-0.5" style={{ color: 'var(--text-muted)' }}>{t.date}</p></div><span className="font-black text-xs">{fmt(t.amount)}</span></div>))}</div>}</div></div></div>);
+            <div className="flex-1 overflow-y-auto scroll-hide" style={{ minHeight: 0 }}>{cardTx.length === 0 ? <div className="p-12 text-center font-medium text-xs" style={{ color: 'var(--text-muted)' }}>لا توجد عمليات</div> : <div className="divide-y" style={{ borderColor: 'var(--border-subtle)' }}>{cardTx.map(t => (<div key={t.id} className="p-3 flex justify-between items-center gap-2"><div className="min-w-0 flex-1"><p className="font-bold text-xs truncate">{t.description || '-'} <SmsBadge tx={t} /> <ReceiptIndicator tx={t} dispatch={dispatch} /></p><p className="text-[10px] font-semibold mt-0.5" style={{ color: 'var(--text-muted)' }}>{t.date}</p></div><span className="font-black text-xs">{fmt(t.amount)}</span></div>))}</div>}</div></div></div>);
         })()}
 
         {viewingReceipt && viewingReceipt.tx && (
@@ -4456,6 +4822,16 @@ function App() {
         )}
         {isPinChangeOpen && (
           <PinChangeModal onClose={() => dispatch({ type: 'SET_PIN_CHANGE_OPEN', payload: false })} addNotification={addNotification} />
+        )}
+        {isSmsModalOpen && (
+          <SmsParserModal
+            isOpen={true}
+            onClose={() => dispatch({ type: 'SET_SMS_MODAL_OPEN', payload: false })}
+            dispatch={dispatch}
+            addNotification={addNotification}
+            saveHistory={saveHistory}
+            data={data}
+          />
         )}
 
         {!isLocked && (<div className="bottom-nav-container no-print"><div className="scrollable-nav scroll-hide">
@@ -4542,7 +4918,7 @@ function App() {
         {!isLocked && (<button type="button" aria-label="إضافة" onClick={() => { dispatch({ type: 'SET_FORM_MODE', payload: 'add' }); dispatch({ type: 'SET_FORM_DATA', payload: { type: 'expense', category: '', amount: '', date: getLocalISODate(), method: 'cash', subType: 'withdrawal', status: 'pending', receipts: [] } }); dispatch({ type: 'SET_FORM_OPEN', payload: true }); }} className="fab no-print"><Plus size={22} /></button>)}
         <EnhancedSidebar activeTab={activeTab} dispatch={dispatch} canUndo={history.length > 0} onUndo={() => dispatch({ type: 'UNDO' })} />
         <main ref={mainContentRef} className="flex-1 overflow-y-auto p-3 lg:p-5 pt-9">
-          {isLocked ? (<div className="min-h-screen flex flex-col items-center justify-center no-print"><Lock size={48} className="mb-4 text-blue-500" /><h2 className="text-xl font-black mb-4">التطبيق مقفل</h2><button type="button" onClick={() => dispatch({ type: 'SET_IS_LOCKED', payload: false })} className="btn btn-primary px-6 py-3"><Unlock size={18} /> فتح</button></div>) : (<div className="max-w-6xl mx-auto space-y-4 animate-fadeIn pb-24"><ProfessionalHeader isDarkMode={isDarkMode} dispatch={dispatch} />{renderActiveView()}</div>)}
+          {isLocked ? (<div className="min-h-screen flex flex-col items-center justify-center no-print"><Lock size={48} className="mb-4 text-blue-500" /><h2 className="text-xl font-black mb-4">التطبيق مقفل</h2><button type="button" onClick={() => dispatch({ type: 'SET_IS_LOCKED', payload: false })} className="btn btn-primary px-6 py-3"><Unlock size={18} /> فتح</button></div>) : (<div className="max-w-6xl mx-auto space-y-4 animate-fadeIn pb-24"><ProfessionalHeader isDarkMode={isDarkMode} dispatch={dispatch} onOpenSms={() => dispatch({ type: 'SET_SMS_MODAL_OPEN', payload: true })} />{renderActiveView()}</div>)}
         </main>
 
         {isFormOpen && (
