@@ -1003,7 +1003,7 @@ const PromiseModalProvider = ({ children }) => {
 };
 
 // ═══════════════════════════════════════════════════════
-// 🆕 Generic Modal Component
+// Generic Modal Component
 // ═══════════════════════════════════════════════════════
 const Modal = memo(({ isOpen, onClose, title, icon, size = 'md', children, footer, className = '' }) => {
   if (!isOpen) return null;
@@ -2111,70 +2111,88 @@ const DashboardView = memo(({ data, financeSnapshot, liveBalances, totalLiquidit
 });
 
 // ═══════════════════════════════════════════════════════
-// CategoryDetailModal
+// 🆕 CategoryDetailModal — يعرض المعاملات مجمّعة بالأيام
 // ═══════════════════════════════════════════════════════
-const CategoryDetailModal = memo(({ activeCategoryDetail, detailedTransactions, detailedTotal, paidTotal, pendingTotal, selectedMonth, selectedYear, dispatch, handleDelete, printReport, exportPdf }) => (
-  <div className="fixed inset-0 z-[3000] no-print">
-    <div className="absolute inset-0 backdrop-blur-md animate-fadeIn" style={{ background: 'rgba(42, 36, 24, 0.55)' }} onClick={() => dispatch({ type: 'SET_ACTIVE_CATEGORY_DETAIL', payload: null })}></div>
-    <div className="relative h-full flex items-center justify-center p-2 md:p-4">
-      <div className="w-full max-w-5xl rounded-2xl shadow-2xl overflow-hidden flex flex-col" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', maxHeight: 'calc(100dvh - 20px)' }}>
-        <div className="p-4 flex-shrink-0" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-          <div className="flex justify-between items-start flex-wrap gap-3">
-            <div className="flex items-center gap-3 flex-1 min-w-0">
-              <span className="p-2 rounded-lg flex-shrink-0" style={{ background: 'var(--bg-muted)', color: CATEGORY_COLORS[activeCategoryDetail] }}><Layers size={18} /></span>
-              <div className="min-w-0">
-                <h3 className="text-base font-black truncate">{activeCategoryDetail}</h3>
-                <p className="text-[11px] font-semibold mt-0.5" style={{ color: 'var(--text-muted)' }}>{selectedMonth} {selectedYear} • {detailedTransactions.length}</p>
+const CategoryDetailModal = memo(({ activeCategoryDetail, detailedTransactions, detailedTotal, paidTotal, pendingTotal, selectedMonth, selectedYear, dispatch, handleDelete, printReport, exportPdf }) => {
+  // 🆕 تجميع المعاملات حسب اليوم
+  const dailyGroups = useMemo(() => groupTransactionsByDate(detailedTransactions), [detailedTransactions]);
+
+  return (
+    <div className="fixed inset-0 z-[3000] no-print">
+      <div className="absolute inset-0 backdrop-blur-md animate-fadeIn" style={{ background: 'rgba(42, 36, 24, 0.55)' }} onClick={() => dispatch({ type: 'SET_ACTIVE_CATEGORY_DETAIL', payload: null })}></div>
+      <div className="relative h-full flex items-center justify-center p-2 md:p-4">
+        <div className="w-full max-w-5xl rounded-2xl shadow-2xl overflow-hidden flex flex-col" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', maxHeight: 'calc(100dvh - 20px)' }}>
+          <div className="p-4 flex-shrink-0" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+            <div className="flex justify-between items-start flex-wrap gap-3">
+              <div className="flex items-center gap-3 flex-1 min-w-0">
+                <span className="p-2 rounded-lg flex-shrink-0" style={{ background: 'var(--bg-muted)', color: CATEGORY_COLORS[activeCategoryDetail] }}><Layers size={18} /></span>
+                <div className="min-w-0">
+                  <h3 className="text-base font-black truncate">{activeCategoryDetail}</h3>
+                  <p className="text-[11px] font-semibold mt-0.5" style={{ color: 'var(--text-muted)' }}>{selectedMonth} {selectedYear} • {detailedTransactions.length} معاملة • {dailyGroups.length} يوم</p>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <button type="button" aria-label="PDF" onClick={() => exportPdf(`تقرير ${activeCategoryDetail}`, detailedTransactions)} className="btn btn-secondary p-2"><FileText size={16} /></button>
+                <button type="button" aria-label="طباعة" onClick={() => printReport(`تقرير ${activeCategoryDetail}`, detailedTransactions)} className="btn btn-primary p-2"><Printer size={16} /></button>
+                <button type="button" aria-label="إغلاق" onClick={() => dispatch({ type: 'SET_ACTIVE_CATEGORY_DETAIL', payload: null })} className="btn btn-ghost p-2"><X size={18} /></button>
               </div>
             </div>
-            <div className="flex gap-2">
-              <button type="button" aria-label="PDF" onClick={() => exportPdf(`تقرير ${activeCategoryDetail}`, detailedTransactions)} className="btn btn-secondary p-2"><FileText size={16} /></button>
-              <button type="button" aria-label="طباعة" onClick={() => printReport(`تقرير ${activeCategoryDetail}`, detailedTransactions)} className="btn btn-primary p-2"><Printer size={16} /></button>
-              <button type="button" aria-label="إغلاق" onClick={() => dispatch({ type: 'SET_ACTIVE_CATEGORY_DETAIL', payload: null })} className="btn btn-ghost p-2"><X size={18} /></button>
+            <div className="grid grid-cols-3 gap-2 mt-3">
+              <div className="p-2 rounded-lg" style={{ background: 'var(--bg-muted)' }}>
+                <p className="text-[10px] font-bold" style={{ color: 'var(--text-muted)' }}>الإجمالي</p>
+                <p className="text-sm font-black text-blue-600">{fmt(detailedTotal)}</p>
+              </div>
+              <div className="p-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/30">
+                <p className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400">معتمد</p>
+                <p className="text-sm font-black text-emerald-600">{fmt(paidTotal)}</p>
+              </div>
+              <div className="p-2 rounded-lg bg-amber-50 dark:bg-amber-950/30">
+                <p className="text-[10px] font-bold text-amber-700 dark:text-amber-400">معلق</p>
+                <p className="text-sm font-black text-amber-600">{fmt(pendingTotal)}</p>
+              </div>
             </div>
           </div>
-          <div className="grid grid-cols-3 gap-2 mt-3">
-            <div className="p-2 rounded-lg" style={{ background: 'var(--bg-muted)' }}>
-              <p className="text-[10px] font-bold" style={{ color: 'var(--text-muted)' }}>الإجمالي</p>
-              <p className="text-sm font-black text-blue-600">{fmt(detailedTotal)}</p>
-            </div>
-            <div className="p-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/30">
-              <p className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400">معتمد</p>
-              <p className="text-sm font-black text-emerald-600">{fmt(paidTotal)}</p>
-            </div>
-            <div className="p-2 rounded-lg bg-amber-50 dark:bg-amber-950/30">
-              <p className="text-[10px] font-bold text-amber-700 dark:text-amber-400">معلق</p>
-              <p className="text-sm font-black text-amber-600">{fmt(pendingTotal)}</p>
-            </div>
-          </div>
-        </div>
-        <div className="flex-1 overflow-y-auto scroll-hide" style={{ minHeight: 0 }}>
-          {detailedTransactions.length === 0 ? (<div className="text-center py-16 font-medium text-sm" style={{ color: 'var(--text-muted)' }}>لا توجد معاملات</div>) : (
-            <div className="divide-y" style={{ borderColor: 'var(--border-subtle)' }}>
-              {detailedTransactions.map(t => (
-                <div key={t.id} className="p-3 flex justify-between items-center gap-3 hover:bg-[color:var(--bg-muted)]">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 flex-wrap mb-1">
-                      <span className="font-bold text-xs">{t.description || t.category}</span>
-                      <FamilyBadge tx={t} />
-                      <ReceiptIndicator tx={t} dispatch={dispatch} />
+          <div className="flex-1 overflow-y-auto scroll-hide" style={{ minHeight: 0 }}>
+            {detailedTransactions.length === 0 ? (
+              <div className="text-center py-16 font-medium text-sm" style={{ color: 'var(--text-muted)' }}>لا توجد معاملات</div>
+            ) : (
+              <div className="px-3 pb-4">
+                {dailyGroups.map(group => (
+                  <div key={group.date}>
+                    <DayGroupHeader label={group.label} total={group.total} count={group.items.length} />
+                    <div className="space-y-1.5">
+                      {group.items.map(t => (
+                        <div key={t.id} className="p-3 flex justify-between items-center gap-3 rounded-lg hover:bg-[color:var(--bg-muted)] transition-colors" style={{ background: 'var(--bg-muted)' }}>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2 flex-wrap mb-1">
+                              <span className="font-bold text-xs">{t.description || t.category}</span>
+                              <FamilyBadge tx={t} />
+                              <ReceiptIndicator tx={t} dispatch={dispatch} />
+                              {t.status !== 'paid' && <span className="badge badge-warning text-[10px]">⏳ معلق</span>}
+                            </div>
+                            <p className="text-[10px] font-semibold" style={{ color: 'var(--text-muted)' }}>
+                              {PAYMENT_METHODS.find(p => p.id === t.method)?.label}
+                              {t.createdAt ? ` • ${new Date(t.createdAt).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}` : ''}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-1 flex-shrink-0">
+                            <p className="font-black text-xs">{fmt(t.amount)}</p>
+                            <button type="button" aria-label="تعديل" onClick={() => { dispatch({ type: 'SET_FORM_MODE', payload: 'edit' }); dispatch({ type: 'SET_FORM_DATA', payload: t }); dispatch({ type: 'SET_FORM_OPEN', payload: true }); dispatch({ type: 'SET_ACTIVE_CATEGORY_DETAIL', payload: null }); }} className="btn btn-ghost p-1.5"><Edit size={12} /></button>
+                            <button type="button" aria-label="حذف" onClick={() => handleDelete(t.id)} className="btn btn-ghost p-1.5 text-red-500"><Trash2 size={12} /></button>
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                    <p className="text-[10px] font-semibold" style={{ color: 'var(--text-muted)' }}>{t.date} • {PAYMENT_METHODS.find(p => p.id === t.method)?.label}</p>
                   </div>
-                  <div className="flex items-center gap-1 flex-shrink-0">
-                    <p className="font-black text-xs">{fmt(t.amount)}</p>
-                    <button type="button" aria-label="تعديل" onClick={() => { dispatch({ type: 'SET_FORM_MODE', payload: 'edit' }); dispatch({ type: 'SET_FORM_DATA', payload: t }); dispatch({ type: 'SET_FORM_OPEN', payload: true }); dispatch({ type: 'SET_ACTIVE_CATEGORY_DETAIL', payload: null }); }} className="btn btn-ghost p-1.5"><Edit size={12} /></button>
-                    <button type="button" aria-label="حذف" onClick={() => handleDelete(t.id)} className="btn btn-ghost p-1.5 text-red-500"><Trash2 size={12} /></button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>
-  </div>
-));
+  );
+});
 
 // ═══════════════════════════════════════════════════════
 // CategoriesView
@@ -4022,7 +4040,6 @@ function App() {
       const method = getCardMethod(card);
       let debt = safeNumber(card.openingDebt);
 
-      // Build monthly deltas in ONE pass over transactions
       const deltas = {};
       allMonths.forEach(({ year, month }) => {
         deltas[`${year}|${month}`] = { expenses: 0, payments: 0, refunds: 0 };
