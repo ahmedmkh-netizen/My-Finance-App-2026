@@ -2106,8 +2106,40 @@ const TransactionsView = memo(({ groupedTransactions, transactions, selectedMont
   const filterByFamily = (list) => showFamilyOnly ? list.filter(t => isFamilyTx(t)) : list;
   const filterByType = (list) => transViewMode === 'all' ? list : list.filter(t => t.type === transViewMode);
 
-  const pendingGroups = useMemo(() => groupedTransactions.map(g => ({ ...g, items: filterByFamily(filterByNextMonth(filterByBeneficiaries(filterBySms(filterByBankFees(filterBySource(g.items.filter(t => t.status !== 'paid')))))))) })).filter(g => g.items.length > 0), [groupedTransactions, sourceFilter, showBankFeesOnly, showSmsOnly, showBeneficiariesOnly, showNextMonthOnly, showFamilyOnly]);
-  const paidArchive = useMemo(() => filterByFamily(filterByNextMonth(filterByBeneficiaries(filterBySms(filterByBankFees(filterBySource(filterByType(transactions.filter(t => t.month === selectedMonth && (t.year || 2026) === selectedYear && t.status === 'paid')))))))).sort((a, b) => new Date(b.date) - new Date(a.date)), [transactions, selectedMonth, selectedYear, transViewMode, sourceFilter, showBankFeesOnly, showSmsOnly, showBeneficiariesOnly, showNextMonthOnly, showFamilyOnly]);
+// 🎯 فلتر موحّد — يطبق كل الفلاتر بالتدريج
+const applyAllFilters = useCallback((list) => {
+  let result = list;
+  result = filterBySource(result);
+  result = filterByBankFees(result);
+  result = filterBySms(result);
+  result = filterByBeneficiaries(result);
+  result = filterByNextMonth(result);
+  result = filterByFamily(result);
+  return result;
+}, [sourceFilter, showBankFeesOnly, showSmsOnly, showBeneficiariesOnly, showNextMonthOnly, showFamilyOnly]);
+
+// 🎯 الالتزامات المعلقة — مرتبة حسب الفئة
+const pendingGroups = useMemo(() => {
+  return groupedTransactions
+    .map(g => ({
+      ...g,
+      items: applyAllFilters(g.items.filter(t => t.status !== 'paid'))
+    }))
+    .filter(g => g.items.length > 0);
+}, [groupedTransactions, applyAllFilters]);
+
+// 🎯 أرشيف المدفوعات — مرتب بالأحدث
+const paidArchive = useMemo(() => {
+  const baseFiltered = transactions.filter(t =>
+    t.month === selectedMonth &&
+    (t.year || 2026) === selectedYear &&
+    t.status === 'paid'
+  );
+  const typed = filterByType(baseFiltered);
+  const fullyFiltered = applyAllFilters(typed);
+  return fullyFiltered.slice().sort((a, b) => new Date(b.date) - new Date(a.date));
+}, [transactions, selectedMonth, selectedYear, transViewMode, applyAllFilters]);
+  
   const totalPending = pendingGroups.reduce((s, g) => s + g.items.length, 0);
   const isClosed = isMonthClosed(data, selectedYear, selectedMonth);
 
