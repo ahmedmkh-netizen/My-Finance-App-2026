@@ -959,7 +959,7 @@ const PromiseModalProvider = ({ children }) => {
     </React.Fragment>
   );
 };
-// ═══════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════
 // Modal Component
 // ═══════════════════════════════════════════════════════
 const Modal = memo(({ isOpen, onClose, title, icon, size = 'md', children, footer, className = '' }) => {
@@ -4286,7 +4286,7 @@ const EnhancedSidebar = memo(({ activeTab, dispatch, canUndo, onUndo }) => {
 });
 
 // ═══════════════════════════════════════════════════════
-// ProfessionalHeader — مع isOnline badge
+// ProfessionalHeader
 // ═══════════════════════════════════════════════════════
 const ProfessionalHeader = memo(({ isDarkMode, dispatch, onOpenSms, isOnline }) => (
   <header className="flex justify-between items-center gap-3 mb-4">
@@ -4499,7 +4499,28 @@ function dataReducer(state, action) {
 }
 
 // ═══════════════════════════════════════════════════════
-// App Component
+// ✅ دالة مساعدة: تنظيف undefined من الكائن قبل الحفظ في Firestore
+// ═══════════════════════════════════════════════════════
+const sanitizeForFirestore = (obj) => {
+  if (obj === null || obj === undefined) return obj;
+  if (Array.isArray(obj)) {
+    const arr = obj.map(sanitizeForFirestore).filter(v => v !== undefined);
+    return arr;
+  }
+  if (typeof obj === 'object') {
+    const cleaned = {};
+    Object.entries(obj).forEach(([k, v]) => {
+      const sanitized = sanitizeForFirestore(v);
+      if (sanitized !== undefined) cleaned[k] = sanitized;
+    });
+    return cleaned;
+  }
+  if (typeof obj === 'number' && !isFinite(obj)) return 0;
+  return obj;
+};
+
+// ═══════════════════════════════════════════════════════
+// App Component — كامل مع كل الدوال
 // ═══════════════════════════════════════════════════════
 function App() {
   const defMY = useMemo(() => getDefaultMonthYear(), []);
@@ -4515,7 +4536,6 @@ function App() {
     editingCard: null, editingLoan: null,
     searchTerm: '', editingBudgetCategory: null, budgetAmount: '',
     isRecurringModalOpen: false,
-    // ✅ recurringFormData مع nextMonth + variableAmount
     recurringFormData: {
       title: '', amount: '', day: 1, category: 'أخرى', type: 'expense',
       startMonth: '', endMonth: '', active: true,
@@ -4578,13 +4598,15 @@ function App() {
     return () => unsub();
   }, [isAuthenticated]);
 
+  // ✅ الحفظ مع sanitizeForFirestore
   useEffect(() => {
     if (isAuthenticated && data && data.transactions) {
       clearTimeout(saveTimeoutRef.current);
       saveTimeoutRef.current = setTimeout(() => {
         if (lastRemoteRef.current && JSON.stringify(data) === lastRemoteRef.current) return;
         try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch (e) {}
-        db.collection("finance_2026").doc("user_ahmed_data").set({ ...data, budgets }, { merge: true }).catch(err => console.error(err));
+        const payload = sanitizeForFirestore({ ...data, budgets });
+        db.collection("finance_2026").doc("user_ahmed_data").set(payload, { merge: true }).catch(err => console.error(err));
       }, 5000);
     }
     return () => clearTimeout(saveTimeoutRef.current);
@@ -4644,7 +4666,6 @@ function App() {
     مصروف: transactions.filter(t => t.month === m && (t.year || 2026) === selectedYear && t.type === 'expense').reduce((a, c) => a + safeNumber(c.amount), 0)
   })), [transactions, selectedYear]);
 
-  // ✅ updatedLoans مع items
   const updatedLoans = useMemo(() => {
     const map = transactions.reduce((acc, t) => { if (t.linkedLoanId && t.status === 'paid') acc[t.linkedLoanId] = (acc[t.linkedLoanId] || 0) + safeNumber(t.amount); return acc; }, {});
     const receivablesPaidMap = transactions.reduce((acc, t) => { if (t.sourceReceivableId && t.status === 'paid') acc[t.sourceReceivableId] = (acc[t.sourceReceivableId] || 0) + safeNumber(t.amount); return acc; }, {});
@@ -4721,7 +4742,6 @@ function App() {
     return acc.map(t => { const a = safeNumber(t.amount); bal += (t.subType === 'deposit') ? a : -a; return { ...t, runningBalance: bal }; }).reverse();
   }, [transactions, accountsData]);
 
-  // ✅ getAgendaItems مع دعم nextMonth + variableAmount
   const getAgendaItems = useCallback(() => {
     try {
       const today = new Date();
@@ -4754,9 +4774,7 @@ function App() {
         if (r.active === false) return;
         const d = parseInt(r.day) || 1;
         let tm = cm, ty = cy;
-        // ✅ nextMonth: الانتقال للشهر التالي
         if (r.nextMonth) { tm++; if (tm > 11) { tm = 0; ty++; } }
-        // لو اليوم فات، للشهر التالي
         if (d < cd) { tm++; if (tm > 11) { tm = 0; ty++; } }
         const targetInputMonth = `${ty}-${String(tm + 1).padStart(2, '0')}`;
         if (r.startMonth && targetInputMonth < r.startMonth) return;
@@ -4872,6 +4890,22 @@ function App() {
     }, 600);
   }, [quickTransferData, data, transactions, saveHistory, addNotification, isProcessing]);
 
+  // ✅ handleManualReconciliation — الدالة المفقودة سابقاً
+  const handleManualReconciliation = useCallback((walletKey, actualAmount) => {
+    const calc = computeBalance(data, walletKey);
+    const diff = safeNumber(actualAmount) - calc;
+    if (!actualAmount || Math.abs(diff) < 0.005) { addNotification({ type: 'info', title: 'الرصيد مطابق' }); return; }
+    const d = new Date();
+    const txYear = d.getFullYear(), txMonth = ALL_MONTHS[d.getMonth()];
+    if (isMonthClosed(data, txYear, txMonth)) { addNotification({ type: 'error', title: 'محظور' }); return; }
+    dispatch({ type: 'SHOW_CONFIRM', danger: false, title: 'تأكيد التسوية', message: `المحسوب: ${fmt(calc)}\nالفعلي: ${fmt(safeNumber(actualAmount))}`, onConfirm: () => {
+      saveHistory();
+      const tx = { id: 'adj-' + getSafeId(), type: diff > 0 ? 'income' : 'expense', kind: KIND.ADJUSTMENT, category: 'أخرى', amount: Math.abs(diff), description: 'تسوية رصيد', method: walletKey, date: getLocalISODate(d), month: txMonth, year: txYear, monthIndex: d.getMonth(), subType: diff > 0 ? 'deposit' : 'withdrawal', status: 'paid', receipts: [] };
+      dispatch({ type: 'UPDATE_TRANSACTIONS', payload: [tx, ...transactions].sort((a, b) => new Date(b.date) - new Date(a.date)) });
+      addNotification({ type: 'success', title: 'تمت التسوية' });
+    }, onCancel: () => dispatch({ type: 'HIDE_CONFIRM' }) });
+  }, [data, transactions, saveHistory, addNotification]);
+
   const handleUpdateLoan = useCallback((e) => {
     e.preventDefault();
     saveHistory();
@@ -4897,7 +4931,6 @@ function App() {
     addNotification({ type: 'success', title: 'تم الحفظ' });
   }, [budgets, editingBudgetCategory, budgetAmount, saveHistory, addNotification]);
 
-  // ✅ handleSaveRecurring مع nextMonth + variableAmount
   const handleSaveRecurring = useCallback((e) => {
     e.preventDefault();
     const titleCheck = validateText(recurringFormData.title, { min: 2, max: 100, label: 'العنوان' });
@@ -5206,7 +5239,6 @@ function App() {
           </div>
         )}
 
-        {/* ✅ نموذج المتكررة مع nextMonth + variableAmount */}
         {isRecurringModalOpen && (
           <div className="modal-backdrop no-print">
             <div className="w-full max-w-md rounded-2xl shadow-2xl animate-slideInBottom" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', maxHeight: 'calc(100dvh - 24px)', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
@@ -5222,8 +5254,6 @@ function App() {
                 </div>
                 <div><label className="text-[11px] font-bold block mb-1" style={{ color: 'var(--text-muted)' }}>النوع</label><select className="input-field text-sm" value={recurringFormData.type} onChange={e => dispatch({ type: 'SET_RECURRING_FORM_DATA', payload: { ...recurringFormData, type: e.target.value, category: '' } })}><option value="expense">مصروف</option><option value="income">دخل</option></select></div>
                 <div><label className="text-[11px] font-bold block mb-1" style={{ color: 'var(--text-muted)' }}>الفئة</label><select className="input-field text-sm" value={recurringFormData.category} onChange={e => dispatch({ type: 'SET_RECURRING_FORM_DATA', payload: { ...recurringFormData, category: e.target.value } })}>{CATEGORIES[recurringFormData.type].map(c => <option key={c} value={c}>{c}</option>)}</select></div>
-
-                {/* نطاق زمني */}
                 <div className="grid grid-cols-2 gap-2.5">
                   <div>
                     <label className="text-[11px] font-bold block mb-1" style={{ color: 'var(--text-muted)' }}>من شهر (اختياري)</label>
@@ -5234,8 +5264,6 @@ function App() {
                     <input type="month" className="input-field text-xs font-bold py-2" value={recurringFormData.endMonth || ''} onChange={e => dispatch({ type: 'SET_RECURRING_FORM_DATA', payload: { ...recurringFormData, endMonth: e.target.value } })} />
                   </div>
                 </div>
-
-                {/* ✅ خيار الشهر التالي */}
                 <label className="flex items-center gap-2.5 p-2.5 rounded-lg bg-blue-50 dark:bg-blue-950/30 cursor-pointer">
                   <input type="checkbox" checked={recurringFormData.nextMonth === true} onChange={e => dispatch({ type: 'SET_RECURRING_FORM_DATA', payload: { ...recurringFormData, nextMonth: e.target.checked } })} className="w-4 h-4 accent-blue-600" />
                   <div className="flex-1">
@@ -5243,8 +5271,6 @@ function App() {
                     <span className="text-[9px]" style={{ color: 'var(--text-muted)' }}>مثل الراتب، الإيجار، الزكاة، تكييف محمود</span>
                   </div>
                 </label>
-
-                {/* ✅ خيار المبلغ المتغير */}
                 <label className="flex items-center gap-2.5 p-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/30 cursor-pointer">
                   <input type="checkbox" checked={recurringFormData.variableAmount === true} onChange={e => dispatch({ type: 'SET_RECURRING_FORM_DATA', payload: { ...recurringFormData, variableAmount: e.target.checked } })} className="w-4 h-4 accent-amber-600" />
                   <div className="flex-1">
@@ -5252,13 +5278,10 @@ function App() {
                     <span className="text-[9px]" style={{ color: 'var(--text-muted)' }}>لا يولّد تلقائياً — تُدخله يدوياً (مثل عهدة إيماك)</span>
                   </div>
                 </label>
-
-                {/* active toggle */}
                 <label className="flex items-center gap-2.5 p-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 cursor-pointer">
                   <input type="checkbox" checked={recurringFormData.active !== false} onChange={e => dispatch({ type: 'SET_RECURRING_FORM_DATA', payload: { ...recurringFormData, active: e.target.checked } })} className="w-4 h-4 accent-emerald-600" />
                   <span className="text-xs font-bold text-emerald-700 dark:text-emerald-400">نشط (سيُولّد تلقائياً كل شهر)</span>
                 </label>
-
                 <button type="submit" className="btn btn-primary w-full py-2.5 text-sm"><Save size={14} /> {recurringFormData.id ? 'تحديث البند' : 'إضافة البند'}</button>
               </form>
             </div>
@@ -5280,5 +5303,3 @@ if (rootElement) {
 </script>
 </body>
 </html>
-
-  
