@@ -179,9 +179,10 @@ import {
   Search, FileSpreadsheet, Settings as SettingsIcon, Target, CalendarDays, BarChart3, Bell, Sparkles, Bot,
   AlertTriangle, Clock, CheckCircle2, Zap, Hash, Coins, Filter, Eye, EyeOff, ShieldAlert,
   Download, Upload, Cloud, Signal, PiggyBank, Landmark as BuildingBank, ArrowDownCircle, ArrowUpCircle, Wifi, Store as StoreIcon, Users, Activity, Sliders, Table, RotateCcw, Percent, LineChart, Delete, FileText, Briefcase, Gift, Receipt, ArrowLeftRight, Camera, ImageIcon,
-  MessageSquare, Inbox, UserCheck, XCircle, CheckCheck, Trash, ShieldX
+  MessageSquare, Inbox, UserCheck, XCircle, CheckCheck, Trash, ShieldX, ArrowLeftRight as TransferIcon, PieChart as PieIcon, Calculator as CalcIcon, BookOpen, TrendingUp as TrendUp
 } from 'lucide-react';
 
+// ═══ Firebase ═══
 const firebaseConfig = { apiKey: "AIzaSyCEq-Trf1oFsvPF5tlMvqU83ea_J2DLZjs", authDomain: "finance-app-2026-3e318.firebaseapp.com", projectId: "finance-app-2026-3e318", storageBucket: "finance-app-2026-3e318.firebasestorage.app", messagingSenderId: "855414629770", appId: "1:855414629770:web:8bb07198b8245b63781473" };
 if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
@@ -205,10 +206,15 @@ const CLOUDINARY_CLOUD_NAME = 'rs4dgpc';
 const CLOUDINARY_UPLOAD_PRESET = 'finance_receipts';
 const CLOUDINARY_UPLOAD_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`;
 
-const CURRENT_ENGINE_VERSION = 16;
+// ═══ Version ═══
+const CURRENT_ENGINE_VERSION = 17;  // 🆕 رُفع من 16 → 17
 const DEFAULT_PIN = '1033';
 const PIN_HASH_KEY = 'finance_pin_hash_v1';
-const KIND = { OPERATIONAL: 'operational', FINANCIAL: 'financial', ADJUSTMENT: 'adjustment' };
+
+// ═══ Transaction Kinds — الآن مع TRANSFER ═══
+const KIND = { OPERATIONAL: 'operational', FINANCIAL: 'financial', ADJUSTMENT: 'adjustment', TRANSFER: 'transfer' };
+const TX_TYPE = { INCOME: 'income', EXPENSE: 'expense', TRANSFER: 'transfer' };
+
 const CUSTODY_TYPE = { RECEIVE: 'receive', TRANSFER: 'transfer', SPEND_CASH: 'spend_cash', SPEND_CARD: 'spend_card', SETTLE: 'settle' };
 const CUSTODY_TYPE_LABELS = { receive: 'استلام عهدة', transfer: 'تحويل لحسابي', spend_cash: 'صرف كاش', spend_card: 'صرف من بطاقة', settle: 'تسوية نهائية' };
 const CUSTODY_TYPE_COLORS = { receive: '#2563EB', transfer: '#0EA5E9', spend_cash: '#F97316', spend_card: '#8B5CF6', settle: '#059669' };
@@ -217,6 +223,8 @@ const CASHBACK_STATUS = { EXPECTED: 'expected', PARTIAL: 'partial', RECEIVED: 'r
 const CASHBACK_STATUS_LABELS = { expected: 'متوقع', partial: 'جزئي', received: 'مستلم' };
 
 const DAILY_DHIKR = ["سُبْحَانَ اللَّهِ وَبِحَمْدِهِ، سُبْحَانَ اللَّهِ الْعَظِيمِ","لَا حَوْلَ وَلَا قُوَّةَ إِلَّا بِاللَّهِ الْعَلِيِّ الْعَظِيمِ","اللَّهُمَّ اكْفِنِي بِحَلَالِكَ عَنْ حَرَامِكَ، وَأَغْنِنِي بِفَضْلِكَ عَمَّنْ سِوَاكَ","أَسْتَغْفِرُ اللَّهَ الْعَظِيمَ، وَأَتُوبُ إِلَيْهِ","اللَّهُمَّ بَارِكْ لَنَا فِيمَا رَزَقْتَنَا وَقِنَا عَذَابَ النَّارِ","لَا إِلَهَ إِلَّا أَنْتَ سُبْحَانَكَ إِنِّي كُنْتُ مِنَ الظَّالِمِينَ","اللَّهُمَّ بِكَ أَصْبَحْنَا وَبِكَ أَمْسَيْنَا وَبِكَ نَحْيَا وَبِكَ نَمُوتُ","رَضِيتُ بِاللَّهِ رَبًّا وَبِالإِسْلَامِ دِينًا وَبِمُحَمَّدٍ نَبِيًّا","يَا حَيُّ يَا قَيُّومُ بِرَحْمَتِكَ أَسْتَغِيثُ أَصْلِحْ لِي شَأْنِي كُلَّهُ","اللَّهُمَّ إِنِّي أَسْأَلُكَ عِلْمًا نَافِعًا وَرِزقًا طَيِّبًا وَعَمَلًا مُتَقَبَّلًا"];
+
+// ═══ Helpers ═══
 const getSafeId = () => { try { return crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).substr(2,9)}`; } catch { return `${Date.now()}-${Math.random().toString(36).substr(2,9)}`; } };
 const normalizeText = (t) => !t ? "" : t.toString().replace(/[أإآ]/g,'ا').replace(/ى/g,'ي').replace(/ة/g,'ه').replace(/[\u064B-\u065F]/g,'').trim().toLowerCase();
 const getLocalISODate = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
@@ -234,33 +242,127 @@ const ALL_MONTHS_EARLY = ['يناير','فبراير','مارس','أبريل','�
 const inputMonthToKey = (v) => { if (!v || !/^\d{4}-\d{2}$/.test(String(v))) return null; const [y, m] = String(v).split('-').map(Number); if (m < 1 || m > 12 || isNaN(y)) return null; return `${y}-${ALL_MONTHS_EARLY[m - 1]}`; };
 const keyToInputMonth = (k) => { if (!k || typeof k !== 'string') return ''; const idx = k.indexOf('-'); if (idx < 0) return ''; const y = k.slice(0, idx); const mName = k.slice(idx + 1); const mIdx = ALL_MONTHS_EARLY.indexOf(mName); if (mIdx < 0 || !/^\d{4}$/.test(y)) return ''; return `${y}-${String(mIdx + 1).padStart(2, '0')}`; };
 
-// ═══ SMS Parser ═══
+// ═══ Constants ═══
+const STORAGE_KEY = 'finance_tracker_V80_SECURE';
+const LEGACY_KEYS = ['finance_tracker_V79_SECURE', 'finance_tracker_V78_SECURE', 'finance_tracker_V77_SECURE', 'finance_tracker_V76_SECURE'];
+const ALL_MONTHS = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
+const YEARS_CONFIG = { 2026: ['أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'], 2027: ALL_MONTHS, 2028: ALL_MONTHS };
+const YEARS_LIST = [2026, 2027, 2028];
+const getMonthsForYear = (y) => YEARS_CONFIG[y] || ALL_MONTHS;
+const getMonthIndex = (m) => ALL_MONTHS.indexOf(m);
+
+const getDefaultMonthYear = () => {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = ALL_MONTHS[now.getMonth()];
+  if (YEARS_CONFIG[y] && YEARS_CONFIG[y].includes(m)) return { year: y, month: m };
+  const fallbackYear = YEARS_LIST[0];
+  return { year: fallbackYear, month: getMonthsForYear(fallbackYear)[0] };
+};
+
+const CATEGORY_COLORS = { 'راتب شهري':'#10b981','عمل حر':'#3b82f6','استثمارات':'#8b5cf6','الالتزامات البنكية والتمويلية':'#ef4444','مصروفات المعيشة اليومية':'#f59e0b','مسحوبات محل هاني':'#f97316','الملابس والمستلزمات الشخصية':'#ec4899','الزكاة والتبرعات':'#14b8a6','التعليم والدروس والأنشطة':'#6366f1','المصروفات النقدية الشهرية':'#84cc16','المرافق والخدمات – بولاق':'#64748b','المرافق والخدمات – العبور':'#0ea5e9','الاتصالات وشحن الهواتف المحمولة':'#eab308','الصحة والرعاية الطبية':'#be123c','المستلزمات المنزلية والتموين':'#a855f7','اللحوم والدواجن والأسماك':'#be185d','الطوارئ والاحتياطي النقدي':'#dc2626','الصيانة والإصلاحات المنزلية':'#78716c','المواصلات والانتقالات':'#06b6d4','الترفيه والمناسبات الاجتماعية':'#d946ef','مصاريف موسمية وسنوية':'#22c55e','شحن رصيد فوري':'#eab308','أخرى':'#9ca3af','عهدة شركة إيماك':'#f59e0b','تحويلات واردة':'#8b5cf6','شحن محفظة':'#0ea5e9','تحويلات':'#6366f1','تكييف محمود':'#10b981','إيجار المحل':'#22d3ee','راتب AAIB':'#84cc16','Cash Back':'#10b981','عهدة إيماك WE':'#8b5cf6','أقساط valU':'#6366f1','مصاريف جامعات ومدارس':'#f59e0b','مشتريات بقالة هاني':'#f97316','أدوية وكشف':'#be123c','كازيون / العثيم':'#a855f7','لحوم / أسماك / دواجن':'#be185d','توابل / خزين':'#78716c','خضروات':'#22c55e','بقالة / فاكهة':'#84cc16','منظفات':'#06b6d4','كهرباء / نت / مياه (صفط)':'#64748b','كهرباء / نت / مياه (العبور)':'#0ea5e9','شحن تليفونات':'#eab308','مصروف نقدي':'#84cc16','مصاريف وسلف شخصية':'#ef4444','محافظ الكترونية':'#005CB9','بنوك / فيزا / تمويل عقاري':'#004996','رسوم تحويلات':'#64748b','رسوم بنكية شهرية':'#dc2626','فوائد تأخير':'#991b1b','رسوم سحب كاش':'#e11d48','عمولة تحويل دولي':'#7c3aed','استرداد كاش باك':'#10b981','فواتير عهدة':'#0891b2','مصروفات عهدة':'#0284c7','مصروف شهري - شيماء':'#8b5cf6','مصروف شهري - سلمى':'#ec4899','مصروف شهري - عبد الرحمن':'#10b981','مصروف شهري - أنس':'#3b82f6','تحويل داخلي':'#6366f1' };
+
+const PAYMENT_METHODS = [
+  // ═══ الحسابات (Accounts) ═══
+  { id:'cib_savings', label:'CIB Savings (1809)', group:'account', last4:'1809' },
+  { id:'aaib_savings', label:'AAIB Savings (2106)', group:'account', last4:'2106' },
+  { id:'cash', label:'Cash', group:'account', last4:null },
+  { id:'fawry', label:'Fawry', group:'account', last4:null },
+  { id:'etisalat', label:'Etisalat', group:'account', last4:null },
+  // ═══ البطاقات الائتمانية (Credit Cards) ═══
+  { id:'cib_card', label:'CIB Titanium (1016)', group:'card', last4:'1016', linkedCardId:1 },
+  { id:'cib_sub_9380', label:'CIB Sub (9380)', group:'card', last4:'9380', linkedCardId:1 },
+  { id:'cib_sub_9352', label:'CIB Sub (9352)', group:'card', last4:'9352', linkedCardId:1 },
+  { id:'cib_sub_2014', label:'CIB Sub (2014)', group:'card', last4:'2014', linkedCardId:1 },
+  { id:'aaib_card', label:'AAIB Signature (3391)', group:'card', last4:'3391', linkedCardId:2 },
+  // ═══ قنوات (Channels) ═══
+  { id:'instapay', label:'InstaPay', group:'channel', last4:null },
+  { id:'telda_shaimaa', label:'Telda Shaimaa', group:'channel', last4:null },
+  { id:'telda_salma', label:'Telda Salma', group:'channel', last4:null },
+  { id:'telda_abdelrahman', label:'Telda Abdelrahman', group:'channel', last4:null }
+];
+
+const ACCOUNT_KEYS = ['cib_savings', 'aaib_savings', 'cash', 'fawry', 'etisalat'];
+const CARD_METHOD_IDS = ['cib_card', 'cib_sub_9380', 'cib_sub_9352', 'cib_sub_2014', 'aaib_card'];
+const EXTERNAL_TRANSFER_METHOD_IDS = ['telda_shaimaa', 'telda_salma', 'telda_abdelrahman'];
+
+// ═══ خريطة ربط آخر 4 أرقام بالبطاقة/الحساب ═══
+const CARD_NUMBER_MAP = {
+  '1809': { method: 'cib_savings', linkedCardId: null, type: 'account', bank: 'CIB', name: 'CIB Savings' },
+  '2106': { method: 'aaib_savings', linkedCardId: null, type: 'account', bank: 'AAIB', name: 'AAIB Savings' },
+  '1016': { method: 'cib_card', linkedCardId: 1, type: 'card', bank: 'CIB', name: 'Titanium' },
+  '9380': { method: 'cib_sub_9380', linkedCardId: 1, type: 'card', bank: 'CIB', name: 'Sub Card 9380' },
+  '9352': { method: 'cib_sub_9352', linkedCardId: 1, type: 'card', bank: 'CIB', name: 'Sub Card 9352' },
+  '2014': { method: 'cib_sub_2014', linkedCardId: 1, type: 'card', bank: 'CIB', name: 'Sub Card 2014' },
+  '3391': { method: 'aaib_card', linkedCardId: 2, type: 'card', bank: 'AAIB', name: 'Signature' }
+};
+
+const BENEFICIARIES = [
+  { id: 'shaimaa', name: 'شيماء (البيت)', label: 'شيماء', defaultAmount: 5000, method: 'telda_shaimaa', hasTelda: true },
+  { id: 'salma', name: 'سلمى', label: 'سلمى', defaultAmount: 1200, method: 'telda_salma', hasTelda: true },
+  { id: 'abdelrahman', name: 'عبد الرحمن', label: 'عبد الرحمن', defaultAmount: 1200, method: 'telda_abdelrahman', hasTelda: true },
+  { id: 'anas', name: 'أنس', label: 'أنس', defaultAmount: 250, method: null, hasTelda: false }
+];
+
+const FINANCIAL_CATEGORIES = new Set(['الالتزامات البنكية والتمويلية','تكييف محمود','أقساط valU','تحويلات','بنوك / فيزا / تمويل عقاري','محافظ الكترونية','مصاريف وسلف شخصية','تحويلات واردة','شحن محفظة','شحن رصيد فوري','رسوم تحويلات','رسوم بنكية شهرية','فوائد تأخير','رسوم سحب كاش','عمولة تحويل دولي']);
+const BANK_FEE_CATEGORIES = new Set(['رسوم بنكية شهرية','فوائد تأخير','رسوم سحب كاش','عمولة تحويل دولي','رسوم تحويلات']);
+const TRANSFER_CATEGORY = 'تحويل داخلي';
+// ═══ SMS Parser (v3 — مع كل الأرقام الجديدة) ═══
 const parseBankSms = (rawInput) => {
   const result = { ok: false, bank: '', bankId: null, last4: null, amount: 0, type: 'expense', subType: 'withdrawal', date: getLocalISODate(), method: null, linkedCardId: null, description: '', balance: null, rawText: String(rawInput || ''), notes: [] };
   if (!rawInput || typeof rawInput !== 'string' || rawInput.trim().length < 5) { result.notes.push('النص قصير جداً'); return result; }
   const text = toEnglishDigits(rawInput).replace(/\u00A0/g, ' ');
+  
+  // 🎯 تحديد البنك
   if (/\bCIB\b|Commercial International|SWYPE|Titanium|سي آي بي/i.test(text)) { result.bank = 'CIB'; result.bankId = 'cib'; }
   else if (/\bAAIB\b|Arab African|العربي الأفريقي|العربي الافريقي|الإفريقي الدولي/i.test(text)) { result.bank = 'AAIB'; result.bankId = 'aaib'; }
-  const last4Patterns = [/\b(?:ending|ends)\s*(?:with\s*)?(\d{4})\b/i, /\bcard\s*(?:no\.?|number|#)?\s*[:\-]?\s*(?:\*{2,}|\.{2,}|x{2,})?\s*(\d{4})\b/i, /(?:\*{2,}|\.{2,}|x{2,})\s*(\d{4})\b/i, /رقم\s*(?:\*{2,}|\.{2,})?\s*(\d{4})\b/];
+  
+  // 🎯 استخراج آخر 4 أرقام
+  const last4Patterns = [
+    /\b(?:ending|ends)\s*(?:with\s*)?(\d{4})\b/i,
+    /\bcard\s*(?:no\.?|number|#)?\s*[:\-]?\s*(?:\*{2,}|\.{2,}|x{2,})?\s*(\d{4})\b/i,
+    /(?:\*{2,}|\.{2,}|x{2,})\s*(\d{4})\b/i,
+    /\b(?:acct|account)\s*(?:no\.?|number|#)?\s*[:\-]?\s*(?:\*{2,}|\.{2,})?\s*(\d{4})\b/i,
+    /رقم\s*(?:\*{2,}|\.{2,})?\s*(\d{4})\b/,
+    /\b(1809|2106|1016|9380|9352|2014|3391)\b/g  // 🆕 مباشرة من الأرقام المعروفة
+  ];
   for (const p of last4Patterns) { const m = text.match(p); if (m) { result.last4 = m[1]; break; } }
+  
+  // 🎯 ربط البطاقة/الحساب
+  if (result.last4 && CARD_NUMBER_MAP[result.last4]) {
+    const map = CARD_NUMBER_MAP[result.last4];
+    result.method = map.method;
+    result.linkedCardId = map.linkedCardId;
+    if (!result.bank) result.bank = map.bank;
+    result.isAccount = map.type === 'account';
+    result.isCard = map.type === 'card';
+  } else {
+    // 🔄 Fallback: حسب البنك
+    if (result.bank === 'CIB') { result.method = 'cib_savings'; result.isAccount = true; }
+    else if (result.bank === 'AAIB') { result.method = 'aaib_savings'; result.isAccount = true; }
+  }
+  
+  // 🎯 تحديد نوع العملية (دخل/مصروف)
   const incomeHints = [/\bcredit(?:ed)?\b/i, /\bdeposit(?:ed)?\b/i, /\breceived\b/i, /\bsalary\b/i, /\brefund\b/i, /\bcashback\b/i, /\badded\b/i, /إيداع/, /تم إيداع/, /أضيف/, /تم إضافة/, /راتب/, /استرداد/, /كاش باك/, /وارد/, /دائن/];
   const expenseHints = [/\bdebit(?:ed)?\b/i, /\bpurchase\b/i, /\bwithdraw(?:al|n)?\b/i, /\bpaid\b/i, /\bpayment\b/i, /\bcharge[d]?\b/i, /\bspent\b/i, /\batm\b/i, /خصم/, /تم خصم/, /سحب/, /شراء/, /دفع/, /مدفوع/, /صادر/, /مدين/];
   const isIncome = incomeHints.some(r => r.test(text));
   const isExpense = expenseHints.some(r => r.test(text));
   if (isIncome && !isExpense) { result.type = 'income'; result.subType = 'deposit'; }
   else if (isExpense && !isIncome) { result.type = 'expense'; result.subType = 'withdrawal'; }
+  
+  // 🎯 استخراج المبلغ
   const cur = '(?:EGP|LE|E£|ج\\.?م|جنيه|جم|ق\\.?م|ريال|SAR|USD|AED|درهم|دينار|\\$)';
   const amtPatterns = [new RegExp(`${cur}\\s*([0-9][0-9,]*\\.?[0-9]*)`, 'i'), new RegExp(`([0-9][0-9,]*\\.?[0-9]*)\\s*${cur}`, 'i'), /(?:amount|for|of|بقيمة|بمبلغ|مبلغ)\s*[:\s]*([0-9][0-9,]*\.?[0-9]*)/i];
   for (const p of amtPatterns) { const m = text.match(p); if (m) { const n = Number(m[1].replace(/,/g, '')); if (n > 0 && n < 100000000) { result.amount = n; break; } } }
   if (!result.amount) { const all = text.match(/[0-9][0-9,]*\.?[0-9]*/g) || []; const nums = all.map(s => Number(s.replace(/,/g, ''))).filter(n => n > 0 && n < 100000000); if (nums.length) { result.amount = Math.max(...nums); } }
+  
+  // 🎯 استخراج التاريخ
   const now = new Date();
   let parsedDate = null;
   let m = text.match(/\b(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})\b/);
   if (m) { const d = +m[1], mo = +m[2]; let y = +m[3]; if (y < 100) y += 2000; if (d >= 1 && d <= 31 && mo >= 1 && mo <= 12 && y >= 2020 && y <= 2100) parsedDate = new Date(y, mo - 1, d); }
   if (parsedDate && !isNaN(parsedDate) && parsedDate <= now) result.date = getLocalISODate(parsedDate);
-  if (result.last4 === '1016') { result.method = 'cib_card'; result.linkedCardId = 1; }
-  else if (result.last4 === '0391') { result.method = 'aaib_card'; result.linkedCardId = 2; }
-  else if (result.last4 === '2017') { result.method = 'cib_swype'; result.linkedCardId = 3; }
+  
   result.ok = result.amount > 0;
   if (!result.description) result.description = result.type === 'income' ? 'دخل من SMS' : 'مصروف من SMS';
   return result;
@@ -304,47 +406,7 @@ const compressImage = (file, maxWidth = 1280, quality = 0.75) => new Promise((re
 });
 const uploadReceipt = async (txId, file) => { const blob = await compressImage(file); const formData = new FormData(); formData.append('file', blob, `${txId}_${Date.now()}.jpg`); formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET); formData.append('folder', `receipts/${txId}`); const res = await fetch(CLOUDINARY_UPLOAD_URL, { method: 'POST', body: formData }); if (!res.ok) throw new Error('فشل رفع الصورة'); const data = await res.json(); return { url: data.secure_url, path: data.public_id, name: file.name, size: data.bytes }; };
 
-// ═══ Constants ═══
-const STORAGE_KEY = 'finance_tracker_V80_SECURE';
-const LEGACY_KEYS = ['finance_tracker_V79_SECURE', 'finance_tracker_V78_SECURE', 'finance_tracker_V77_SECURE', 'finance_tracker_V76_SECURE'];
-const ALL_MONTHS = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
-const YEARS_CONFIG = { 2026: ['أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'], 2027: ALL_MONTHS, 2028: ALL_MONTHS };
-const YEARS_LIST = [2026, 2027, 2028];
-const getMonthsForYear = (y) => YEARS_CONFIG[y] || ALL_MONTHS;
-const getMonthIndex = (m) => ALL_MONTHS.indexOf(m);
-
-const getDefaultMonthYear = () => {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = ALL_MONTHS[now.getMonth()];
-  if (YEARS_CONFIG[y] && YEARS_CONFIG[y].includes(m)) return { year: y, month: m };
-  const fallbackYear = YEARS_LIST[0];
-  return { year: fallbackYear, month: getMonthsForYear(fallbackYear)[0] };
-};
-
-const CATEGORY_COLORS = { 'راتب شهري':'#10b981','عمل حر':'#3b82f6','استثمارات':'#8b5cf6','الالتزامات البنكية والتمويلية':'#ef4444','مصروفات المعيشة اليومية':'#f59e0b','مسحوبات محل هاني':'#f97316','الملابس والمستلزمات الشخصية':'#ec4899','الزكاة والتبرعات':'#14b8a6','التعليم والدروس والأنشطة':'#6366f1','المصروفات النقدية الشهرية':'#84cc16','المرافق والخدمات – بولاق':'#64748b','المرافق والخدمات – العبور':'#0ea5e9','الاتصالات وشحن الهواتف المحمولة':'#eab308','الصحة والرعاية الطبية':'#be123c','المستلزمات المنزلية والتموين':'#a855f7','اللحوم والدواجن والأسماك':'#be185d','الطوارئ والاحتياطي النقدي':'#dc2626','الصيانة والإصلاحات المنزلية':'#78716c','المواصلات والانتقالات':'#06b6d4','الترفيه والمناسبات الاجتماعية':'#d946ef','مصاريف موسمية وسنوية':'#22c55e','شحن رصيد فوري':'#eab308','أخرى':'#9ca3af','عهدة شركة إيماك':'#f59e0b','تحويلات واردة':'#8b5cf6','شحن محفظة':'#0ea5e9','تحويلات':'#6366f1','تكييف محمود':'#10b981','إيجار المحل':'#22d3ee','راتب AAIB':'#84cc16','Cash Back':'#10b981','عهدة إيماك WE':'#8b5cf6','أقساط valU':'#6366f1','مصاريف جامعات ومدارس':'#f59e0b','مشتريات بقالة هاني':'#f97316','أدوية وكشف':'#be123c','كازيون / العثيم':'#a855f7','لحوم / أسماك / دواجن':'#be185d','توابل / خزين':'#78716c','خضروات':'#22c55e','بقالة / فاكهة':'#84cc16','منظفات':'#06b6d4','كهرباء / نت / مياه (صفط)':'#64748b','كهرباء / نت / مياه (العبور)':'#0ea5e9','شحن تليفونات':'#eab308','مصروف نقدي':'#84cc16','مصاريف وسلف شخصية':'#ef4444','محافظ الكترونية':'#005CB9','بنوك / فيزا / تمويل عقاري':'#004996','رسوم تحويلات':'#64748b','رسوم بنكية شهرية':'#dc2626','فوائد تأخير':'#991b1b','رسوم سحب كاش':'#e11d48','عمولة تحويل دولي':'#7c3aed','استرداد كاش باك':'#10b981','فواتير عهدة':'#0891b2','مصروفات عهدة':'#0284c7','مصروف شهري - شيماء':'#8b5cf6','مصروف شهري - سلمى':'#ec4899','مصروف شهري - عبد الرحمن':'#10b981','مصروف شهري - أنس':'#3b82f6' };
-
-const PAYMENT_METHODS = [
-  { id:'cib_savings', label:'CIB Savings', group:'account' },{ id:'aaib_savings', label:'AAIB Savings', group:'account' },
-  { id:'cash', label:'Cash', group:'account' },{ id:'fawry', label:'Fawry', group:'account' },{ id:'etisalat', label:'Etisalat', group:'account' },
-  { id:'cib_card', label:'CIB Master', group:'card' },{ id:'cib_swype', label:'CIB SWYPE', group:'card' },{ id:'aaib_card', label:'AAIB Visa', group:'card' },
-  { id:'instapay', label:'InstaPay', group:'channel' },{ id:'telda_shaimaa', label:'Telda Shaimaa', group:'channel' },
-  { id:'telda_salma', label:'Telda Salma', group:'channel' },{ id:'telda_abdelrahman', label:'Telda Abdelrahman', group:'channel' }
-];
-
-const ACCOUNT_KEYS = ['cib_savings', 'aaib_savings', 'cash', 'fawry', 'etisalat'];
-const EXTERNAL_TRANSFER_METHOD_IDS = ['telda_shaimaa', 'telda_salma', 'telda_abdelrahman'];
-
-const BENEFICIARIES = [
-  { id: 'shaimaa', name: 'شيماء (البيت)', label: 'شيماء', defaultAmount: 5000, method: 'telda_shaimaa', hasTelda: true },
-  { id: 'salma', name: 'سلمى', label: 'سلمى', defaultAmount: 1200, method: 'telda_salma', hasTelda: true },
-  { id: 'abdelrahman', name: 'عبد الرحمن', label: 'عبد الرحمن', defaultAmount: 1200, method: 'telda_abdelrahman', hasTelda: true },
-  { id: 'anas', name: 'أنس', label: 'أنس', defaultAmount: 250, method: null, hasTelda: false }
-];
-
-const FINANCIAL_CATEGORIES = new Set(['الالتزامات البنكية والتمويلية','تكييف محمود','أقساط valU','تحويلات','بنوك / فيزا / تمويل عقاري','محافظ الكترونية','مصاريف وسلف شخصية','تحويلات واردة','شحن محفظة','شحن رصيد فوري','رسوم تحويلات','رسوم بنكية شهرية','فوائد تأخير','رسوم سحب كاش','عمولة تحويل دولي']);
-const BANK_FEE_CATEGORIES = new Set(['رسوم بنكية شهرية','فوائد تأخير','رسوم سحب كاش','عمولة تحويل دولي','رسوم تحويلات']);
-
+// ═══ كتالوج الفئات ═══
 const CATEGORY_GROUPS = {
   income: { 'مصادر الدخل':['راتب شهري','عمل حر','استثمارات','راتب AAIB','إيجار المحل','Cash Back','استرداد كاش باك','تكييف محمود'], 'تحويلات':['عهدة شركة إيماك','عهدة إيماك WE','تحويلات واردة','شحن محفظة','شحن رصيد فوري'] },
   expense: {
@@ -354,32 +416,39 @@ const CATEGORY_GROUPS = {
     'رسوم بنكية':['رسوم بنكية شهرية','فوائد تأخير','رسوم سحب كاش','عمولة تحويل دولي','رسوم تحويلات'],
     'نقل وصحة وترفيه':['الصحة والرعاية الطبية','المواصلات والانتقالات','الترفيه والمناسبات الاجتماعية','الطوارئ والاحتياطي النقدي','مصاريف موسمية وسنوية','أدوية وكشف'],
     'مشتريات':['كازيون / العثيم','لحوم / أسماك / دواجن','توابل / خزين','خضروات','بقالة / فاكهة','منظفات','مصروف نقدي'],
-    'تحويلات':['تحويلات','مصاريف وسلف شخصية','محافظ الكترونية','بنوك / فيزا / تمويل عقاري'],
+    'تحويلات':['تحويلات','مصاريف وسلف شخصية','محافظ الكترونية','بنوك / فيزا / تمويل عقاري','تحويل داخلي'],
     'أخرى':['أخرى']
   }
 };
 
 const CATEGORIES = {
   income:['راتب شهري','عمل حر','استثمارات','راتب AAIB','إيجار المحل','عهدة شركة إيماك','عهدة إيماك WE','Cash Back','استرداد كاش باك','تكييف محمود','تحويلات واردة','شحن محفظة'],
-  expense:['الالتزامات البنكية والتمويلية','مصروفات المعيشة اليومية','مسحوبات محل هاني','الملابس والمستلزمات الشخصية','الزكاة والتبرعات','التعليم والدروس والأنشطة','المصروفات النقدية الشهرية','شحن رصيد فوري','المرافق والخدمات – بولاق','المرافق والخدمات – العبور','الاتصالات وشحن الهواتف المحمولة','الصحة والرعاية الطبية','المستلزمات المنزلية والتموين','اللحوم والدواجن والأسماك','الطوارئ والاحتياطي النقدي','الصيانة والإصلاحات المنزلية','المواصلات والانتقالات','الترفيه والمناسبات الاجتماعية','مصاريف موسمية وسنوية','شحن محفظة','أقساط valU','مصاريف جامعات ومدارس','كازيون / العثيم','لحوم / أسماك / دواجن','توابل / خزين','خضروات','بقالة / فاكهة','منظفات','أدوية وكشف','مصروف نقدي','مصاريف وسلف شخصية','محافظ الكترونية','بنوك / فيزا / تمويل عقاري','تحويلات','رسوم تحويلات','رسوم بنكية شهرية','فوائد تأخير','رسوم سحب كاش','عمولة تحويل دولي','فواتير عهدة','مصروفات عهدة','مصروف شهري - شيماء','مصروف شهري - سلمى','مصروف شهري - عبد الرحمن','مصروف شهري - أنس','أخرى']
+  expense:['الالتزامات البنكية والتمويلية','مصروفات المعيشة اليومية','مسحوبات محل هاني','الملابس والمستلزمات الشخصية','الزكاة والتبرعات','التعليم والدروس والأنشطة','المصروفات النقدية الشهرية','شحن رصيد فوري','المرافق والخدمات – بولاق','المرافق والخدمات – العبور','الاتصالات وشحن الهواتف المحمولة','الصحة والرعاية الطبية','المستلزمات المنزلية والتموين','اللحوم والدواجن والأسماك','الطوارئ والاحتياطي النقدي','الصيانة والإصلاحات المنزلية','المواصلات والانتقالات','الترفيه والمناسبات الاجتماعية','مصاريف موسمية وسنوية','شحن محفظة','أقساط valU','مصاريف جامعات ومدارس','كازيون / العثيم','لحوم / أسماك / دواجن','توابل / خزين','خضروات','بقالة / فاكهة','منظفات','أدوية وكشف','مصروف نقدي','مصاريف وسلف شخصية','محافظ الكترونية','بنوك / فيزا / تمويل عقاري','تحويلات','تحويل داخلي','رسوم تحويلات','رسوم بنكية شهرية','فوائد تأخير','رسوم سحب كاش','عمولة تحويل دولي','فواتير عهدة','مصروفات عهدة','مصروف شهري - شيماء','مصروف شهري - سلمى','مصروف شهري - عبد الرحمن','مصروف شهري - أنس','أخرى']
 };
 
 const SYSTEM_LOAN_IDS = { TAKYEEF: 'sys_takyeef_mahmoud', HANY: 'sys_hany_shop' };
 const isTakyeefLoan = (l) => l && (l.systemId === SYSTEM_LOAN_IDS.TAKYEEF || (l.name && l.name.includes('تكييف محمود')));
 const isHanyLoan = (l) => l && (l.systemId === SYSTEM_LOAN_IDS.HANY || (l.name && l.name.includes('محل هاني')));
 
+// ═══ DEFAULT_CARDS (مع 3391 بدل 0391، و 1809 و 2106 للسيفنق) ═══
 const DEFAULT_CARDS = [
-  { id:1, name:'Titanium', bank:'CIB', limit:100500, availableBalance:61186.11, openingDebt:39313.89, expiry:'01/29', holderName:'AHMED M. KHALIL', last4:'1016', dueDate:'05 من كل شهر', type:'mastercard', theme:'silver', cashbackRate:2 },
-  { id:2, name:'Signature', bank:'AAIB', limit:100000, availableBalance:67313.87, openingDebt:32686.13, expiry:'10/26', holderName:'AHMED M. KHALIL', last4:'0391', dueDate:'25 من كل شهر', type:'visa', theme:'black', cashbackRate:1.5 },
-  { id:3, name:'SWYPE', bank:'CIB', limit:49500, availableBalance:12274.29, openingDebt:37225.71, expiry:'01/29', holderName:'AHMED M. KHALIL', last4:'2017', dueDate:'05 من كل شهر', type:'mastercard', theme:'blue', cashbackRate:1 }
+  { id:1, name:'Titanium', bank:'CIB', limit:100500, availableBalance:61186.11, openingDebt:39313.89, expiry:'01/29', holderName:'AHMED M. KHALIL', last4:'1016', dueDate:'05 من كل شهر', type:'mastercard', theme:'silver', cashbackRate:2,
+    subCards: [
+      { last4: '9380', name: 'Sub Card 9380' },
+      { last4: '9352', name: 'Sub Card 9352' },
+      { last4: '2014', name: 'Sub Card 2014' }
+    ]
+  },
+  { id:2, name:'Signature', bank:'AAIB', limit:100000, availableBalance:67313.87, openingDebt:32686.13, expiry:'10/26', holderName:'AHMED M. KHALIL', last4:'3391', dueDate:'25 من كل شهر', type:'visa', theme:'black', cashbackRate:1.5, subCards: [] },
+  { id:3, name:'SWYPE', bank:'CIB', limit:49500, availableBalance:12274.29, openingDebt:37225.71, expiry:'01/29', holderName:'AHMED M. KHALIL', last4:'2017', dueDate:'05 من كل شهر', type:'mastercard', theme:'blue', cashbackRate:1, subCards: [] }
 ];
 
 const DEFAULT_ACCOUNTS = {
-  cib_savings: { balance: 151100, label: 'CIB Savings', lastUpdated: '2026-09-01' },
-  aaib_savings: { balance: 5098.01, label: 'AAIB Savings', lastUpdated: '2026-09-01' },
-  cash: { balance: 1100, label: 'Cash', lastUpdated: '2026-09-01' },
-  fawry: { balance: 0, label: 'Fawry', lastUpdated: '2026-09-01' },
-  etisalat: { balance: 0, label: 'Etisalat', lastUpdated: '2026-09-01' }
+  cib_savings: { balance: 151100, label: 'CIB Savings (1809)', lastUpdated: '2026-09-01', last4: '1809' },
+  aaib_savings: { balance: 5098.01, label: 'AAIB Savings (2106)', lastUpdated: '2026-09-01', last4: '2106' },
+  cash: { balance: 1100, label: 'Cash', lastUpdated: '2026-09-01', last4: null },
+  fawry: { balance: 0, label: 'Fawry', lastUpdated: '2026-09-01', last4: null },
+  etisalat: { balance: 0, label: 'Etisalat', lastUpdated: '2026-09-01', last4: null }
 };
 
 const DEFAULT_LOANS = [
@@ -399,24 +468,33 @@ const DEFAULT_LOANS = [
   { id:15, systemId: SYSTEM_LOAN_IDS.HANY, name:'مسحوبات محل هاني', autoMonthly:true, dueNextMonth:true, mergeIntoNextCycle:['2026-أغسطس'], category:'مسحوبات محل هاني', totalAmount:0, prePaidAmount:0, monthlyInstallment:0, dueDay:10, interest:'مستحق شهري', description:'مسحوبات يومية — تُحسب تلقائياً من قيود الشهر', type:'debt' }
 ];
 
-// ═══ DEFAULT_RECURRING مع الراتبين (r6 + r6b) ═══
+// ═══ DEFAULT_RECURRING مع method الجديد لكل بند ═══
 const DEFAULT_RECURRING = [
-  { id:'r1', title:'إيجار المحل', amount:900, day:10, category:'إيجار المحل', type:'income', startMonth:'2026-08', endMonth:null, active:true, nextMonth:true },
-  { id:'r2', title:'زكاة - إسماعيل', amount:800, day:7, category:'الزكاة والتبرعات', type:'income', startMonth:'2026-08', endMonth:null, active:true, nextMonth:true },
-  { id:'r3', title:'قسط تكييف محمود (دخل)', amount:2800, day:2, category:'تكييف محمود', type:'income', startMonth:'2026-08', endMonth:null, active:true, linkedLoanSystemId: SYSTEM_LOAN_IDS.TAKYEEF, nextMonth:true },
-  { id:'r6', title:'راتب شهري (حتى 2026)', amount:53466, day:7, category:'راتب شهري', type:'income', startMonth:'2026-08', endMonth:'2027-01', active:true, nextMonth:true },
-  { id:'r6b', title:'راتب شهري (من 2027)', amount:65000, day:7, category:'راتب شهري', type:'income', startMonth:'2027-02', endMonth:null, active:true, nextMonth:true },
-  { id:'r7', title:'عهدة إيماك - WE', amount:20000, day:10, category:'عهدة إيماك WE', type:'income', startMonth:'2026-08', endMonth:null, active:true, nextMonth:true, variableAmount:true },
-  { id:'r8', title:'Cash Back متوقع', amount:2700, day:28, category:'Cash Back', type:'income', startMonth:'2026-08', endMonth:null, active:true },
-  { id:'r4', title:'قسط شقة العبور', amount:5098.01, day:3, category:'الالتزامات البنكية والتمويلية', type:'expense', startMonth:'2026-08', endMonth:'2027-03', active:true },
-  { id:'r5', title:'قسط تقويم أسنان سلمى', amount:350, day:15, category:'الصحة والرعاية الطبية', type:'expense', startMonth:'2026-08', endMonth:'2026-12', active:true },
-  { id:'r9', title:'رسوم شهرية - CIB Titanium', amount:25, day:5, category:'رسوم بنكية شهرية', type:'expense', kind:'financial', linkedCardId:1, startMonth:'2026-08', endMonth:null, active:true },
-  { id:'r10', title:'رسوم شهرية - CIB SWYPE', amount:15, day:5, category:'رسوم بنكية شهرية', type:'expense', kind:'financial', linkedCardId:3, startMonth:'2026-08', endMonth:null, active:true },
-  { id:'r11', title:'رسوم شهرية - AAIB Signature', amount:20, day:25, category:'رسوم بنكية شهرية', type:'expense', kind:'financial', linkedCardId:2, startMonth:'2026-08', endMonth:null, active:true },
-  { id:'r12', title:'مصروف شهري - شيماء', amount:5000, day:1, category:'مصروف شهري - شيماء', type:'expense', startMonth:'2026-08', endMonth:null, active:true },
-  { id:'r13', title:'مصروف شهري - سلمى', amount:1200, day:1, category:'مصروف شهري - سلمى', type:'expense', startMonth:'2026-08', endMonth:null, active:true },
-  { id:'r14', title:'مصروف شهري - عبد الرحمن', amount:1200, day:1, category:'مصروف شهري - عبد الرحمن', type:'expense', startMonth:'2026-08', endMonth:null, active:true },
-  { id:'r15', title:'مصروف شهري - أنس', amount:250, day:1, category:'مصروف شهري - أنس', type:'expense', startMonth:'2026-08', endMonth:null, active:true }
+  // ═══ دخل ثابت (Salary + Rent + Zakat + Takyeef) ═══
+  { id:'r6', title:'راتب شهري (حتى 2026)', amount:53466, day:7, category:'راتب شهري', type:'income', method:'aaib_savings', startMonth:'2026-08', endMonth:'2027-01', active:true, nextMonth:true },
+  { id:'r6b', title:'راتب شهري (من 2027)', amount:65000, day:7, category:'راتب شهري', type:'income', method:'aaib_savings', startMonth:'2027-02', endMonth:null, active:true, nextMonth:true },
+  { id:'r1', title:'إيجار المحل', amount:900, day:10, category:'إيجار المحل', type:'income', method:'cash', startMonth:'2026-08', endMonth:null, active:true, nextMonth:true },
+  { id:'r2', title:'زكاة - إسماعيل', amount:800, day:7, category:'الزكاة والتبرعات', type:'income', method:'aaib_savings', startMonth:'2026-08', endMonth:null, active:true, nextMonth:true, flexibleMethod: ['aaib_savings', 'cib_savings'] },
+  { id:'r3', title:'قسط تكييف محمود (دخل)', amount:2800, day:2, category:'تكييف محمود', type:'income', method:'cash', startMonth:'2026-08', endMonth:null, active:true, linkedLoanSystemId: SYSTEM_LOAN_IDS.TAKYEEF, nextMonth:true },
+  
+  // ═══ دخل متغير ═══
+  { id:'r7', title:'عهدة إيماك - WE', amount:20000, day:10, category:'عهدة إيماك WE', type:'income', method:'cash', startMonth:'2026-08', endMonth:null, active:true, nextMonth:true, variableAmount:true },
+  { id:'r8', title:'Cash Back متوقع', amount:2700, day:28, category:'Cash Back', type:'income', method:'cib_card', startMonth:'2026-08', endMonth:null, active:true, linkedCardId: 1 },
+  
+  // ═══ مصروفات شهرية (التزامات بنكية) ═══
+  { id:'r4', title:'قسط شقة العبور', amount:5098.01, day:3, category:'الالتزامات البنكية والتمويلية', type:'expense', method:'aaib_savings', startMonth:'2026-08', endMonth:'2027-03', active:true },
+  { id:'r5', title:'قسط تقويم أسنان سلمى', amount:350, day:15, category:'الصحة والرعاية الطبية', type:'expense', method:'cash', startMonth:'2026-08', endMonth:'2026-12', active:true },
+  
+  // ═══ رسوم بنكية (بطاقات) ═══
+  { id:'r9', title:'رسوم شهرية - CIB Titanium', amount:25, day:5, category:'رسوم بنكية شهرية', type:'expense', kind:'financial', linkedCardId:1, method:'cib_card', startMonth:'2026-08', endMonth:null, active:true },
+  { id:'r10', title:'رسوم شهرية - CIB SWYPE', amount:15, day:5, category:'رسوم بنكية شهرية', type:'expense', kind:'financial', linkedCardId:3, method:'cib_savings', startMonth:'2026-08', endMonth:null, active:true },
+  { id:'r11', title:'رسوم شهرية - AAIB Signature', amount:20, day:25, category:'رسوم بنكية شهرية', type:'expense', kind:'financial', linkedCardId:2, method:'aaib_savings', startMonth:'2026-08', endMonth:null, active:true },
+  
+  // ═══ مصاريف شهرية (الأسرة) ═══
+  { id:'r12', title:'مصروف شهري - شيماء', amount:5000, day:1, category:'مصروف شهري - شيماء', type:'expense', method:'cash', startMonth:'2026-08', endMonth:null, active:true },
+  { id:'r13', title:'مصروف شهري - سلمى', amount:1200, day:1, category:'مصروف شهري - سلمى', type:'expense', method:'cash', startMonth:'2026-08', endMonth:null, active:true },
+  { id:'r14', title:'مصروف شهري - عبد الرحمن', amount:1200, day:1, category:'مصروف شهري - عبد الرحمن', type:'expense', method:'cash', startMonth:'2026-08', endMonth:null, active:true },
+  { id:'r15', title:'مصروف شهري - أنس', amount:250, day:1, category:'مصروف شهري - أنس', type:'expense', method:'cash', startMonth:'2026-08', endMonth:null, active:true }
 ];
 
 const DEFAULT_CUSTODY_ENTRIES = [{ id:'cust-demo-1', type:CUSTODY_TYPE.RECEIVE, amount:20000, date:'2026-09-01', description:'عهدة إيماك - WE (سبتمبر)', method:'cash', status:'open', relatedCategory:'عهدة إيماك WE' }];
@@ -431,13 +509,25 @@ const DEFAULT_MONTHLY_PLANS = {
 };
 
 const ACCOUNT_ICONS = { cib_savings: BuildingBank, aaib_savings: PiggyBank, cash: Wallet, fawry: StoreIcon, etisalat: Signal };
-const ACCOUNT_SHORT_NAMES = { cib_savings: 'CIB Savings', aaib_savings: 'AAIB Savings', cash: 'Cash', fawry: 'Fawry', etisalat: 'Etisalat' };
+const ACCOUNT_SHORT_NAMES = { cib_savings: 'CIB (1809)', aaib_savings: 'AAIB (2106)', cash: 'Cash', fawry: 'Fawry', etisalat: 'Etisalat' };
 
-const inferKind = (tx) => { if (tx.kind) return tx.kind; if (tx.category === 'أخرى' && (tx.description || '').includes('تسوية')) return KIND.ADJUSTMENT; if (FINANCIAL_CATEGORIES.has(tx.category)) return KIND.FINANCIAL; return KIND.OPERATIONAL; };
+// ═══ Inference ═══
+const inferKind = (tx) => { 
+  if (tx.kind) return tx.kind; 
+  if (tx.type === 'transfer') return KIND.TRANSFER;
+  if (tx.category === 'أخرى' && (tx.description || '').includes('تسوية')) return KIND.ADJUSTMENT; 
+  if (FINANCIAL_CATEGORIES.has(tx.category)) return KIND.FINANCIAL; 
+  return KIND.OPERATIONAL; 
+};
 const isBankFee = (tx) => BANK_FEE_CATEGORIES.has(tx?.category);
 const isBeneficiaryCategory = (cat) => typeof cat === 'string' && cat.startsWith('مصروف شهري - ');
+const isTransfer = (tx) => tx?.type === 'transfer' || tx?.kind === KIND.TRANSFER;
 const isMonthClosed = (data, year, month) => { const key = makeMonthKey(year, month); return Array.isArray(data?.closedMonths) && data.closedMonths.includes(key); };
 
+// ═══ Cashback detection ═══
+const isCashbackTx = (tx) => tx?.category === 'استرداد كاش باك' || tx?.category === 'Cash Back';
+
+// ═══ Invalidate snapshots ═══
 const invalidateSnapshotsFrom = (snapshots, year, month) => {
   const startIdx = getMonthIndex(month);
   if (startIdx < 0) return { snapshots: snapshots || {}, invalidated: 0 };
@@ -453,6 +543,7 @@ const invalidateSnapshotsFrom = (snapshots, year, month) => {
 
 const getAccountCutoff = (accountsData, key) => { const iso = accountsData?.[key]?.lastUpdated; if (!iso) return new Date(0); const d = new Date(iso); return isNaN(d) ? new Date(0) : d; };
 
+// ═══ computeBalance — لا يشمل الكاش باك على البطاقة ═══
 const computeBalance = (data, key, asOfDate) => {
   const accountsData = data?.accountsData || DEFAULT_ACCOUNTS;
   const base = safeNumber(accountsData[key]?.balance);
@@ -461,7 +552,16 @@ const computeBalance = (data, key, asOfDate) => {
   const backward = upper < cutoffDay;
   let bal = base;
   (data?.transactions || []).forEach(t => {
-    if (t.status !== 'paid' || t.method !== key) return;
+    if (t.status !== 'paid') return;
+    if (isTransfer(t)) {
+      // 🆕 التحويلات الداخلية: من - / إلى +
+      if (t.fromMethod === key) bal -= safeNumber(t.amount);
+      if (t.toMethod === key) bal += safeNumber(t.amount);
+      return;
+    }
+    if (t.method !== key) return;
+    // 🆕 الكاش باك على البطاقة لا يدخل حساب السيولة
+    if (isCashbackTx(t) && t.linkedCardId) return;
     const d = new Date(t.date);
     if (isNaN(d)) return;
     const amt = safeNumber(t.amount);
@@ -472,8 +572,14 @@ const computeBalance = (data, key, asOfDate) => {
   return bal;
 };
 
-const getCardMethod = (card) => { if (!card) return null; if (card.bank === 'CIB' && card.name === 'SWYPE') return 'cib_swype'; if (card.bank === 'AAIB') return 'aaib_card'; return 'cib_card'; };
+const getCardMethod = (card) => { 
+  if (!card) return null; 
+  if (card.id === 3 || (card.bank === 'CIB' && card.name === 'SWYPE')) return 'cib_swype'; 
+  if (card.bank === 'AAIB') return 'aaib_card'; 
+  return 'cib_card'; 
+};
 
+// ═══ computeCardDebt — كل البطاقات الفرعية تُحسب على البطاقة الأم ═══
 const _cardDebtCache = new WeakMap();
 const _computeCardDebtRaw = (data, card, asOfDate) => {
   if (!card) return 0;
@@ -485,8 +591,20 @@ const _computeCardDebtRaw = (data, card, asOfDate) => {
     const d = new Date(t.date);
     if (isNaN(d) || d > upper) return;
     const amt = safeNumber(t.amount);
+    
+    // 🆕 التحويلات: من بطاقة → زيادة في مديونيتها (سحب)
+    if (isTransfer(t) && t.fromMethod === method) { debt += amt; return; }
+    
+    // 🆕 الكاش باك على البطاقة → خصم من المديونية
+    if (isCashbackTx(t) && t.linkedCardId === card.id) { debt -= amt; return; }
+    
+    // سداد البطاقة (expense مع linkedCardId) → خصم من المديونية
     if (t.linkedCardId === card.id && t.type === 'expense' && !t.linkedLoanId) { debt -= amt; return; }
-    if (t.type === 'expense' && t.method === method) { debt += amt; return; }
+    
+    // الشراء على البطاقة (expense) → زيادة في المديونية
+    if (t.type === 'expense' && (t.method === method || CARD_METHOD_IDS.includes(t.method) && t.linkedCardId === card.id)) { debt += amt; return; }
+    
+    // الإيداع المباشر على البطاقة
     if (t.type === 'income' && t.method === method && t.subType === 'deposit') { debt -= amt; return; }
   });
   return Math.max(0, debt);
@@ -530,13 +648,17 @@ const computeCashbackSummary = (trackers) => {
   return { expected, received, pending: expected - received, list: trackers };
 };
 
+// ═══ Migration ═══
 const migrateCards = (cards) => {
   if (!Array.isArray(cards)) return DEFAULT_CARDS;
   return cards.map(c => {
-    if (c.openingDebt !== undefined && c.availableBalance !== undefined) return { ...c, cashbackRate: c.cashbackRate !== undefined ? safeNumber(c.cashbackRate) : 1 };
-    const limit = safeNumber(c.limit);
-    const oldOpening = safeNumber(c.openingBalance);
-    return { ...c, openingDebt: Math.max(0, limit - oldOpening), availableBalance: oldOpening, cashbackRate: safeNumber(c.cashbackRate, 1) };
+    // 🆕 تحديث 0391 → 3391
+    const updated = { ...c };
+    if (String(updated.last4) === '0391') updated.last4 = '3391';
+    if (updated.openingDebt !== undefined && updated.availableBalance !== undefined) return { ...updated, cashbackRate: safeNumber(updated.cashbackRate, 1), subCards: updated.subCards || [] };
+    const limit = safeNumber(updated.limit);
+    const oldOpening = safeNumber(updated.openingBalance);
+    return { ...updated, openingDebt: Math.max(0, limit - oldOpening), availableBalance: oldOpening, cashbackRate: safeNumber(updated.cashbackRate, 1), subCards: updated.subCards || [] };
   });
 };
 
@@ -562,7 +684,12 @@ const migrateTransaction = (t) => {
   if (monthIndex < 0 && month) { const norm = ALL_MONTHS.find(m => normalizeText(m) === normalizeText(month)); if (norm) { month = norm; monthIndex = getMonthIndex(norm); } }
   let subType = t.subType;
   if (!subType) subType = t.type === 'income' ? 'deposit' : 'withdrawal';
-  return { ...t, kind, year, month, monthIndex, subType, receipts: Array.isArray(t.receipts) ? t.receipts : [] };
+  // 🆕 تحديث method لو كان قديم
+  let method = t.method;
+  if (method === 'cib_card' && t.last4 === '9380') method = 'cib_sub_9380';
+  if (method === 'cib_card' && t.last4 === '9352') method = 'cib_sub_9352';
+  if (method === 'cib_card' && t.last4 === '2014') method = 'cib_sub_2014';
+  return { ...t, kind, year, month, monthIndex, subType, method, receipts: Array.isArray(t.receipts) ? t.receipts : [] };
 };
 
 const migrateRecurringItems = (items) => {
@@ -578,17 +705,25 @@ const migrateRecurringItems = (items) => {
     if (r.title && r.title.includes('تكييف محمود') && !migrated.linkedLoanSystemId) migrated.linkedLoanSystemId = SYSTEM_LOAN_IDS.TAKYEEF;
     if (migrated.nextMonth === undefined && r.title && NEXT_MONTH_TITLES.some(t => r.title.includes(t))) migrated.nextMonth = true;
     if (migrated.variableAmount === undefined && r.title && r.title.includes('عهدة إيماك')) migrated.variableAmount = true;
+    // 🆕 method افتراضي حسب الفئة
+    if (migrated.method === undefined || migrated.method === null) {
+      if (migrated.category === 'راتب شهري') migrated.method = 'aaib_savings';
+      else if (migrated.category === 'الزكاة والتبرعات') migrated.method = 'aaib_savings';
+      else if (migrated.category === 'إيجار المحل') migrated.method = 'cash';
+      else if (migrated.category === 'تكييف محمود') migrated.method = 'cash';
+      else migrated.method = 'cash';
+    }
     return migrated;
   });
 };
 
-// ═══ migrateData — مع إضافة الراتب الجديد تلقائيًا ═══
+// ═══ migrateData v17 — مع كل الإصلاحات ═══
 const migrateData = (parsed) => {
   if (!parsed) return parsed;
   const cards = Array.isArray(parsed.cards) ? parsed.cards : [];
   const loans = Array.isArray(parsed.loans) ? parsed.loans : [];
   const recurring = Array.isArray(parsed.recurringItems) ? parsed.recurringItems : [];
-  const hasSig = cards.some(c => c.name === 'Signature' && String(c.last4) === '0391');
+  const hasSig = cards.some(c => c.name === 'Signature' && (String(c.last4) === '3391' || String(c.last4) === '0391'));
   const hasSWYPE = cards.some(c => c.name === 'SWYPE');
   const hasTakyeef = loans.some(l => isTakyeefLoan(l));
   const hasHany = loans.some(l => isHanyLoan(l));
@@ -613,17 +748,24 @@ const migrateData = (parsed) => {
     recurringItems = [...(recurringItems || []), ...missingDefaults];
     console.warn('⚠️ Migration: تمت إضافة بنود أساسية مفقودة:', missingDefaults.map(r => r.title).join(' | '));
   }
-  // ✅ فحص إضافي: هل راتب 2027 موجود؟
+  // ✅ ضمان راتب 2027
   const hasSalary2027 = (recurringItems || []).some(r => r.id === 'r6b' || (r.category === 'راتب شهري' && safeNumber(r.amount) >= 65000));
   if (!hasSalary2027) {
-    recurringItems = [...(recurringItems || []), { id:'r6b', title:'راتب شهري (من 2027)', amount:65000, day:7, category:'راتب شهري', type:'income', startMonth:'2027-02', endMonth:null, active:true, nextMonth:true }];
+    recurringItems = [...(recurringItems || []), { id:'r6b', title:'راتب شهري (من 2027)', amount:65000, day:7, category:'راتب شهري', type:'income', method:'aaib_savings', startMonth:'2027-02', endMonth:null, active:true, nextMonth:true }];
     console.warn('⚠️ Migration: تمت إضافة راتب 2027 (65,000)');
   }
-  // ✅ ضمان إن راتب 2026 بيتوقف في يناير 2027
+  // ✅ ضمان راتب 2026 بيتوقف في يناير 2027
   recurringItems = (recurringItems || []).map(r => {
-    if (r.id === 'r6' && !r.endMonth) {
-      return { ...r, endMonth: '2027-01', title: r.title && r.title.includes('حتى 2026') ? r.title : 'راتب شهري (حتى 2026)' };
-    }
+    if (r.id === 'r6' && !r.endMonth) return { ...r, endMonth: '2027-01', title: r.title && r.title.includes('حتى 2026') ? r.title : 'راتب شهري (حتى 2026)' };
+    return r;
+  });
+  // ✅ ضمان method لكل بند
+  recurringItems = (recurringItems || []).map(r => {
+    if (r.method) return r;
+    if (r.category === 'راتب شهري') return { ...r, method: 'aaib_savings' };
+    if (r.category === 'الزكاة والتبرعات') return { ...r, method: 'aaib_savings' };
+    if (r.category === 'إيجار المحل') return { ...r, method: 'cash' };
+    if (r.category === 'تكييف محمود') return { ...r, method: 'cash' };
     return r;
   });
   recurringItems = migrateRecurringItems(recurringItems);
@@ -652,7 +794,7 @@ const getInitialData = () => {
   return { engineVersion: CURRENT_ENGINE_VERSION, recurringInitialized: true, transactions: [], loans: DEFAULT_LOANS, cards: DEFAULT_CARDS, accountsData: DEFAULT_ACCOUNTS, monthlyPlans: DEFAULT_MONTHLY_PLANS, recurringItems: DEFAULT_RECURRING, closedMonths: [], monthlySnapshots: {}, materializedRecurring: {}, notifiedItems: {}, custodyEntries: DEFAULT_CUSTODY_ENTRIES, cashbackTrackers: DEFAULT_CASHBACK_TRACKERS, deleteRequests: [], notifiedFamilyItems: {} };
 };
 
-// ═══ Materialize Recurring Items (v2 — FIXED) ═══
+// ═══ Materialize Recurring v3 — مع قراءة method ═══
 const materializeRecurringItems = (data, asOfDateStr) => {
   if (!data?.recurringItems?.length) return null;
   const now = asOfDateStr ? new Date(asOfDateStr) : new Date();
@@ -663,9 +805,7 @@ const materializeRecurringItems = (data, asOfDateStr) => {
   const newTxs = [];
   const loanPaidMap = {};
   existing.forEach(t => {
-    if (t.status === 'paid' && t.sourceReceivableId) {
-      loanPaidMap[t.sourceReceivableId] = (loanPaidMap[t.sourceReceivableId] || 0) + safeNumber(t.amount);
-    }
+    if (t.status === 'paid' && t.sourceReceivableId) loanPaidMap[t.sourceReceivableId] = (loanPaidMap[t.sourceReceivableId] || 0) + safeNumber(t.amount);
   });
 
   data.recurringItems.forEach(r => {
@@ -675,11 +815,8 @@ const materializeRecurringItems = (data, asOfDateStr) => {
     const day = safeNumber(r.day, 1);
     if (day < 1 || day > 31) return;
 
-    const baseYear = nowYear;
-    const baseMonthIdx = nowMonthIdx;
-
     for (const offset of [0, 1]) {
-      let matYear = baseYear, matMonthIdx = baseMonthIdx + offset;
+      let matYear = nowYear, matMonthIdx = nowMonthIdx + offset;
       if (matMonthIdx > 11) { matMonthIdx -= 12; matYear++; }
 
       let targetYear = matYear, targetMonthIdx = matMonthIdx;
@@ -701,11 +838,7 @@ const materializeRecurringItems = (data, asOfDateStr) => {
       const matKey = `${r.id}_${targetMonthKey}`;
       if (materialized[matKey]) continue;
 
-      const manualExists = existing.some(t =>
-        t.sourceRecurringId === r.id &&
-        t.month === targetMonth &&
-        (t.year || targetYear) === targetYear
-      );
+      const manualExists = existing.some(t => t.sourceRecurringId === r.id && t.month === targetMonth && (t.year || targetYear) === targetYear);
       if (manualExists) { materialized[matKey] = true; continue; }
 
       if (r.linkedLoanSystemId) {
@@ -716,11 +849,17 @@ const materializeRecurringItems = (data, asOfDateStr) => {
         }
       }
 
-      let method = 'cash';
+      // 🎯 الطريقة: الأولوية لـ r.method
+      let method = r.method || 'cash';
       let linkedCardId = r.linkedCardId;
-      if (linkedCardId) {
+      if (!r.method && linkedCardId) {
         const card = (data.cards || []).find(c => c.id === linkedCardId);
         if (card) method = getCardMethod(card);
+      }
+      // 🆕 لو method بطاقة → linkedCardId اشتق
+      if (!linkedCardId && CARD_METHOD_IDS.includes(method)) {
+        const pm = PAYMENT_METHODS.find(p => p.id === method);
+        linkedCardId = pm?.linkedCardId || null;
       }
 
       const isFee = BANK_FEE_CATEGORIES.has(r.category);
@@ -745,6 +884,10 @@ const materializeRecurringItems = (data, asOfDateStr) => {
         sourceRecurringId: r.id,
         nextMonthItem: !!r.nextMonth,
         linkedCardId: linkedCardId || undefined,
+        // 🆕 حقل يوضح أن هذا بند متكرر
+        fromRecurring: true,
+        // 🆕 لو فيه multiple methods (الزكاة)
+        flexibleMethod: r.flexibleMethod || undefined,
         receipts: [],
         createdAt: new Date().toISOString()
       });
@@ -760,7 +903,7 @@ const materializeRecurringItems = (data, asOfDateStr) => {
   };
 };
 
-// ═══ Monthly Plan Derivation (v2 — FIXED ليدعم الراتبين) ═══
+// ═══ deriveMonthlyPlanFromHistory v3 — مع فحص نطاق الشهر ═══
 const deriveMonthlyPlanFromHistory = (data, targetYear, targetMonth, monthsBack = 3) => {
   const transactions = data?.transactions || [];
   const recurringItems = data?.recurringItems || [];
@@ -773,7 +916,7 @@ const deriveMonthlyPlanFromHistory = (data, targetYear, targetMonth, monthsBack 
 
   const isCounted = (t) => t.status === 'paid' || t.status === 'pending';
 
-  // ✅ FIXED: يفلتر حسب الشهر المستهدف عشان ميزجش الراتبين
+  // ✅ فحص نطاق الشهر المستهدف + استبعاد التحويلات من الدخل
   const targetInputMonth = `${targetYear}-${String(targetIdx + 1).padStart(2, '0')}`;
   const deriveField = (histFn, recurringCat, recurringFilter = () => true) => {
     const histVal = histFn();
@@ -782,7 +925,6 @@ const deriveMonthlyPlanFromHistory = (data, targetYear, targetMonth, monthsBack 
     const recurring = recurringItems.filter(r => {
       if (r.active === false) return false;
       if (!recurringFilter(r)) return false;
-      // ✅ فحص نطاق الشهر المستهدف
       if (r.startMonth && targetInputMonth < r.startMonth) return false;
       if (r.endMonth && targetInputMonth > r.endMonth) return false;
       const normCat = normalizeText(r.category);
@@ -801,10 +943,11 @@ const deriveMonthlyPlanFromHistory = (data, targetYear, targetMonth, monthsBack 
     return count > 0 ? total / count : 0;
   };
 
+  // 🆕 استبعاد التحويلات
   const avgCashExpenses = () => {
     let total = 0, count = 0;
     refMonths.forEach(({ year, month }) => {
-      const sum = transactions.filter(t => isCounted(t) && t.type === 'expense' && t.method === 'cash' && t.month === month && (t.year || 2026) === year).reduce((s, t) => s + safeNumber(t.amount), 0);
+      const sum = transactions.filter(t => isCounted(t) && t.type === 'expense' && !isTransfer(t) && t.method === 'cash' && t.month === month && (t.year || 2026) === year).reduce((s, t) => s + safeNumber(t.amount), 0);
       if (sum > 0) { total += sum; count++; }
     });
     return count > 0 ? total / count : 0;
@@ -814,7 +957,7 @@ const deriveMonthlyPlanFromHistory = (data, targetYear, targetMonth, monthsBack 
   const avgFreeIncome = () => {
     let total = 0, count = 0;
     refMonths.forEach(({ year, month }) => {
-      const sum = transactions.filter(t => isCounted(t) && t.type === 'income' && t.month === month && (t.year || 2026) === year && !KNOWN_INCOME.has(t.category)).reduce((s, t) => s + safeNumber(t.amount), 0);
+      const sum = transactions.filter(t => isCounted(t) && t.type === 'income' && !isTransfer(t) && t.month === month && (t.year || 2026) === year && !KNOWN_INCOME.has(t.category)).reduce((s, t) => s + safeNumber(t.amount), 0);
       if (sum > 0) { total += sum; count++; }
     });
     return count > 0 ? total / count : 0;
@@ -839,6 +982,26 @@ const deriveMonthlyPlanFromHistory = (data, targetYear, targetMonth, monthsBack 
     plannedPayments: Math.round(sumActiveInstallments()),
     _meta: { refMonths: refMonths.map(m => `${m.month} ${m.year}`).join(' • '), hasRecurringFallback: salary > 0 }
   };
+};
+
+// ═══ Net Worth Calculator (جديد) ═══
+const computeNetWorth = (data, liveBalances, totalCardDebt, totalLoans, totalReceivable, custodyBalance) => {
+  const assets = {
+    cash: safeNumber(liveBalances.cash),
+    banks: safeNumber(liveBalances.cib_savings) + safeNumber(liveBalances.aaib_savings),
+    wallets: safeNumber(liveBalances.fawry) + safeNumber(liveBalances.etisalat),
+    receivables: safeNumber(totalReceivable),
+    others: 0
+  };
+  const liabilities = {
+    creditCards: safeNumber(totalCardDebt),
+    loans: safeNumber(totalLoans),
+    custody: custodyBalance > 0 ? safeNumber(custodyBalance) : 0,
+    personalDebts: 400 + 7100 // سلف شخصية
+  };
+  const totalAssets = Object.values(assets).reduce((s, v) => s + v, 0);
+  const totalLiabilities = Object.values(liabilities).reduce((s, v) => s + v, 0);
+  return { assets, liabilities, totalAssets, totalLiabilities, net: totalAssets - totalLiabilities };
 };
 
 const useOnlineStatus = () => {
@@ -945,7 +1108,8 @@ const BankLogo = memo(({ type, size = 40, className = "" }) => {
   const [err, setErr] = useState(false);
   const get = () => {
     switch(type) {
-      case 'cib_card': case 'cib_savings': case 'cib_swype': return "https://upload.wikimedia.org/wikipedia/commons/e/e0/Commercial_International_Bank_%28CIB%29_Logo.svg";
+      case 'cib_card': case 'cib_savings': case 'cib_swype': case 'cib_sub_9380': case 'cib_sub_9352': case 'cib_sub_2014':
+        return "https://upload.wikimedia.org/wikipedia/commons/e/e0/Commercial_International_Bank_%28CIB%29_Logo.svg";
       case 'aaib_card': case 'aaib_savings': return "https://upload.wikimedia.org/wikipedia/commons/2/22/Arab_African_International_Bank_logo.svg";
       case 'fawry': return "https://upload.wikimedia.org/wikipedia/commons/5/59/Fawry_logo.svg";
       case 'etisalat': return "https://upload.wikimedia.org/wikipedia/commons/e/e4/Etisalat_logo.svg";
@@ -963,8 +1127,8 @@ const BankLogo = memo(({ type, size = 40, className = "" }) => {
 const WALLET_CONFIGS = {
   fawry: { id:'fawry', title:'Fawry Wallet', subtitle:'Track deposits & payments', icon: StoreIcon, csvName:'Fawry' },
   etisalat: { id:'etisalat', title:'Etisalat Cash', subtitle:'Track deposits & withdrawals', icon: Signal, csvName:'Etisalat' },
-  cib_savings: { id:'cib_savings', title:'CIB Savings Account', subtitle:'Track transactions', icon: BuildingBank, csvName:'CIB_Savings' },
-  aaib_savings: { id:'aaib_savings', title:'AAIB Savings Account', subtitle:'Track transactions', icon: PiggyBank, csvName:'AAIB_Savings' }
+  cib_savings: { id:'cib_savings', title:'CIB Savings (1809)', subtitle:'Track transactions', icon: BuildingBank, csvName:'CIB_Savings' },
+  aaib_savings: { id:'aaib_savings', title:'AAIB Savings (2106)', subtitle:'Track transactions', icon: PiggyBank, csvName:'AAIB_Savings' }
 };
 
 const Toast = ({ notification, onClose }) => {
@@ -1013,6 +1177,8 @@ const RecurringBadge = memo(({ tx }) => { if (!tx?.sourceRecurringId) return nul
 const CarryoverBadge = memo(({ tx }) => { if (tx?.source !== 'carryover') return null; return <span className="badge badge-warning">📅 مرحّل</span>; });
 const NextMonthBadge = memo(({ tx }) => { if (!tx?.nextMonthItem) return null; return <span className="badge badge-brand" title="مستحق من الشهر التالي">⏭️ الشهر التالي</span>; });
 const VariableBadge = memo(({ tx }) => { if (!tx?.variableAmount) return null; return <span className="badge badge-warning" title="مبلغ متغير">⚠️ متغير</span>; });
+const TransferBadge = memo(({ tx }) => { if (!isTransfer(tx)) return null; return <span className="badge badge-brand">🔄 تحويل</span>; });
+const FlexibleMethodBadge = memo(({ tx }) => { if (!tx?.flexibleMethod) return null; return <span className="badge badge-warning" title="طريقة الدفع متغيرة">🔀 متغير</span>; });
 
 const FAMILY_MEMBERS = {
   ans: { name: 'أنس', bg: 'bg-blue-50 dark:bg-blue-950/40', text: 'text-blue-700 dark:text-blue-300', border: 'border-blue-200 dark:border-blue-900' },
@@ -1187,6 +1353,7 @@ const PendingCloseModal = memo(({ data, onClose, onAction }) => {
   );
 });
 
+// ═══ CustodyView ═══
 const CustodyView = memo(({ data, dispatch, saveHistory, addNotification }) => {
   const [showAdd, setShowAdd] = useState(false);
   const [filterType, setFilterType] = useState('all');
@@ -1334,6 +1501,7 @@ const CustodyView = memo(({ data, dispatch, saveHistory, addNotification }) => {
   );
 });
 
+// ═══ CashbackView — مع إصلاح الـ double-counting ═══
 const CashbackView = memo(({ data, dispatch, saveHistory, addNotification, cards, selectedYear, selectedMonth }) => {
   const [showAdd, setShowAdd] = useState(false);
   const [newTracker, setNewTracker] = useState({ cardId: cards[0]?.id || 1, month: selectedMonth, year: selectedYear, expectedAmount: '', receivedAmount: '', receivedDate: '', status: CASHBACK_STATUS.EXPECTED, notes: '' });
@@ -1370,7 +1538,24 @@ const CashbackView = memo(({ data, dispatch, saveHistory, addNotification, cards
     const updated = trackers.map(t => t.id === tracker.id ? { ...t, receivedAmount: t.expectedAmount, receivedDate: getLocalISODate(), status: CASHBACK_STATUS.RECEIVED } : t);
     dispatch({ type: 'UPDATE_CASHBACK_TRACKERS', payload: updated });
     const d = new Date();
-    const newTx = { id: getSafeId(), type: 'income', kind: KIND.OPERATIONAL, category: 'استرداد كاش باك', amount: safeNumber(tracker.expectedAmount), description: `كاش باك - ${card?.name || ''} (${useCard ? 'على البطاقة' : 'نقدي'})`, method, date: getLocalISODate(d), month: ALL_MONTHS[d.getMonth()], year: d.getFullYear(), monthIndex: d.getMonth(), subType: 'deposit', status: 'paid', linkedCardId: useCard && card ? card.id : undefined };
+    // 🆕 الكاش باك على البطاقة لا يدخل في السيولة (isCardAdjustment)
+    const newTx = {
+      id: getSafeId(),
+      type: 'income',
+      kind: KIND.OPERATIONAL,
+      category: 'استرداد كاش باك',
+      amount: safeNumber(tracker.expectedAmount),
+      description: `كاش باك - ${card?.name || ''} (${useCard ? 'على البطاقة' : 'نقدي'})`,
+      method,
+      date: getLocalISODate(d),
+      month: ALL_MONTHS[d.getMonth()],
+      year: d.getFullYear(),
+      monthIndex: d.getMonth(),
+      subType: 'deposit',
+      status: 'paid',
+      linkedCardId: useCard && card ? card.id : undefined,
+      isCardAdjustment: useCard  // 🆕 يمنع الحساب المزدوج
+    };
     dispatch({ type: 'UPDATE_TRANSACTIONS', payload: [newTx, ...(data.transactions || [])].sort((a, b) => new Date(b.date) - new Date(a.date)) });
     addNotification({ type: 'success', title: 'تم استلام الكاش باك', message: `${fmt(tracker.expectedAmount)} ج.م — ${useCard ? 'على البطاقة' : 'نقدي'}` });
   };
@@ -1394,6 +1579,10 @@ const CashbackView = memo(({ data, dispatch, saveHistory, addNotification, cards
           <div className="p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 text-center"><p className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400">مستلم</p><p className="text-sm font-black text-emerald-600 mt-0.5">{fmt(summary.received)}</p></div>
           <div className="p-2.5 rounded-xl bg-blue-50 dark:bg-blue-950/30 text-center"><p className="text-[10px] font-bold text-blue-700 dark:text-blue-400">متوقع</p><p className="text-sm font-black text-blue-600 mt-0.5">{fmt(summary.expected)}</p></div>
           <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/30 text-center"><p className="text-[10px] font-bold text-amber-700 dark:text-amber-400">معلق</p><p className="text-sm font-black text-amber-600 mt-0.5">{fmt(summary.pending)}</p></div>
+        </div>
+        <div className="mt-3 p-2 rounded-lg bg-blue-50 dark:bg-blue-950/30">
+          <p className="text-[10px] font-bold text-blue-700 dark:text-blue-400 mb-1">💡 ملاحظة:</p>
+          <p className="text-[9px]" style={{ color: 'var(--text-muted)' }}>الكاش باك على البطاقة يُخصم من المديونية فقط ولا يُضاف للسيولة (لمنع الحساب المزدوج)</p>
         </div>
       </div>
 
@@ -1569,8 +1758,8 @@ const MonthSelector = memo(({ selectedYear, selectedMonth, onSelectYear, onSelec
 });
 
 const EnhancedStatCard = ({ title, amount, icon: Icon, subtitle, isPrivate, color = 'emerald' }) => {
-  const colorMap = { emerald: 'text-emerald-600 dark:text-emerald-400', red: 'text-red-600 dark:text-red-400', blue: 'text-blue-600 dark:text-blue-400', purple: 'text-purple-600 dark:text-purple-400', amber: 'text-amber-600 dark:text-amber-400' };
-  const bgMap = { emerald: 'bg-emerald-50 dark:bg-emerald-950/30', red: 'bg-red-50 dark:bg-red-950/30', blue: 'bg-blue-50 dark:bg-blue-950/30', purple: 'bg-purple-50 dark:bg-purple-950/30', amber: 'bg-amber-50 dark:bg-amber-950/30' };
+  const colorMap = { emerald: 'text-emerald-600 dark:text-emerald-400', red: 'text-red-600 dark:text-red-400', blue: 'text-blue-600 dark:text-blue-400', purple: 'text-purple-600 dark:text-purple-400', amber: 'text-amber-600 dark:text-amber-400', slate: 'text-slate-600 dark:text-slate-400' };
+  const bgMap = { emerald: 'bg-emerald-50 dark:bg-emerald-950/30', red: 'bg-red-50 dark:bg-red-950/30', blue: 'bg-blue-50 dark:bg-blue-950/30', purple: 'bg-purple-50 dark:bg-purple-950/30', amber: 'bg-amber-50 dark:bg-amber-950/30', slate: 'bg-slate-50 dark:bg-slate-950/30' };
   return (
     <div className="stat-card">
       <div className="flex justify-between items-start mb-2">
@@ -1585,31 +1774,74 @@ const EnhancedStatCard = ({ title, amount, icon: Icon, subtitle, isPrivate, colo
   );
 };
 
-const QuickBalanceOverview = memo(({ balances, walletVisibility, onToggleVisibility }) => {
+// ═══ QuickBalanceOverview — مع صافي الثروة ═══
+const QuickBalanceOverview = memo(({ balances, walletVisibility, onToggleVisibility, data, totalCardDebt, totalLoans, totalReceivable, custodyBalance }) => {
   const [isVisible, setIsVisible] = useState(true);
+  const [showNetWorth, setShowNetWorth] = useState(false);
   const accounts = ACCOUNT_KEYS.map(k => ({ key: k, shortName: ACCOUNT_SHORT_NAMES[k] || k, balance: safeNumber(balances?.[k]), icon: ACCOUNT_ICONS[k] }));
   const total = accounts.reduce((s, a) => s + a.balance, 0);
+  const netWorth = useMemo(() => computeNetWorth(data, balances, totalCardDebt, totalLoans, totalReceivable, custodyBalance), [data, balances, totalCardDebt, totalLoans, totalReceivable, custodyBalance]);
+  
   return (
     <div className="card">
       <div className="flex justify-between items-center mb-3">
         <h3 className="font-bold text-sm flex items-center gap-2"><Coins className="text-blue-500" size={16} /> السيولة الفورية</h3>
-        <button onClick={() => setIsVisible(!isVisible)} className="text-[11px] text-blue-600 font-bold">{isVisible ? 'إخفاء' : 'إظهار'}</button>
+        <div className="flex gap-2">
+          <button onClick={() => setShowNetWorth(!showNetWorth)} className="text-[11px] font-bold" style={{ color: showNetWorth ? 'var(--brand)' : 'var(--text-muted)' }}>{showNetWorth ? '👁️ السيولة' : '📊 صافي الثروة'}</button>
+          <button onClick={() => setIsVisible(!isVisible)} className="text-[11px] text-blue-600 font-bold">{isVisible ? 'إخفاء' : 'إظهار'}</button>
+        </div>
       </div>
-      {isVisible && (
-        <React.Fragment>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2 mb-3">
-            {accounts.map(acc => (
-              <div key={acc.key} className="p-3 rounded-xl relative" style={{ background: 'var(--bg-muted)' }}>
-                <button type="button" aria-label="إظهار" onClick={(e) => { e.stopPropagation(); onToggleVisibility?.(acc.key); }} className="absolute top-1.5 left-1.5 p-1 rounded-md hover:bg-[color:var(--bg-card)] transition-colors" style={{ color: 'var(--text-muted)' }}>{walletVisibility?.[acc.key] ? <EyeOff size={13} /> : <Eye size={13} />}</button>
-                <div className="flex items-center gap-1.5 mb-2 pl-6"><acc.icon size={15} style={{ color: 'var(--text-secondary)' }} /><span className="text-[11px] font-bold truncate" style={{ color: 'var(--text-secondary)' }}>{acc.shortName}</span></div>
-                <div className="text-base font-black tracking-tight" style={{ color: 'var(--text-primary)' }}>{walletVisibility?.[acc.key] ? fmt(acc.balance) : '•••••'}</div>
+      
+      {showNetWorth ? (
+        // ═══ صافي الثروة ═══
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-2">
+            <div className="p-3 rounded-xl" style={{ background: 'rgba(5, 150, 105, 0.08)' }}>
+              <p className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 mb-2">الأصول (Assets)</p>
+              <div className="space-y-1 text-[11px]">
+                <div className="flex justify-between"><span style={{ color: 'var(--text-muted)' }}>كاش</span><strong className="text-emerald-600">{fmt(netWorth.assets.cash)}</strong></div>
+                <div className="flex justify-between"><span style={{ color: 'var(--text-muted)' }}>بنوك</span><strong className="text-emerald-600">{fmt(netWorth.assets.banks)}</strong></div>
+                <div className="flex justify-between"><span style={{ color: 'var(--text-muted)' }}>محافظ</span><strong className="text-emerald-600">{fmt(netWorth.assets.wallets)}</strong></div>
+                <div className="flex justify-between"><span style={{ color: 'var(--text-muted)' }}>مستحقات</span><strong className="text-emerald-600">{fmt(netWorth.assets.receivables)}</strong></div>
               </div>
-            ))}
+              <div className="mt-2 pt-2 flex justify-between" style={{ borderTop: '1px solid var(--border-subtle)' }}><span className="text-[11px] font-bold">إجمالي</span><strong className="text-emerald-700 dark:text-emerald-400">{fmt(netWorth.totalAssets)}</strong></div>
+            </div>
+            <div className="p-3 rounded-xl" style={{ background: 'rgba(220, 38, 38, 0.08)' }}>
+              <p className="text-[10px] font-bold text-red-700 dark:text-red-400 mb-2">الالتزامات</p>
+              <div className="space-y-1 text-[11px]">
+                <div className="flex justify-between"><span style={{ color: 'var(--text-muted)' }}>بطاقات</span><strong className="text-red-600">{fmt(netWorth.liabilities.creditCards)}</strong></div>
+                <div className="flex justify-between"><span style={{ color: 'var(--text-muted)' }}>قروض</span><strong className="text-red-600">{fmt(netWorth.liabilities.loans)}</strong></div>
+                <div className="flex justify-between"><span style={{ color: 'var(--text-muted)' }}>عهدة</span><strong className="text-red-600">{fmt(netWorth.liabilities.custody)}</strong></div>
+                <div className="flex justify-between"><span style={{ color: 'var(--text-muted)' }}>سلف</span><strong className="text-red-600">{fmt(netWorth.liabilities.personalDebts)}</strong></div>
+              </div>
+              <div className="mt-2 pt-2 flex justify-between" style={{ borderTop: '1px solid var(--border-subtle)' }}><span className="text-[11px] font-bold">إجمالي</span><strong className="text-red-700 dark:text-red-400">{fmt(netWorth.totalLiabilities)}</strong></div>
+            </div>
           </div>
-          <div className="p-3.5 rounded-xl bg-gradient-to-br from-blue-600 to-blue-800 text-white flex justify-between items-center">
-            <span className="font-bold text-sm">إجمالي السيولة</span>
-            <span className="text-2xl font-black tracking-tight">{fmt(total)}</span>
+          <div className={`p-3.5 rounded-xl text-white flex justify-between items-center ${netWorth.net >= 0 ? 'bg-gradient-to-br from-emerald-600 to-emerald-800' : 'bg-gradient-to-br from-red-600 to-red-800'}`}>
+            <span className="font-bold text-sm">{netWorth.net >= 0 ? '✅ صافي الثروة' : '⚠️ عجز صافي'}</span>
+            <span className="text-2xl font-black tracking-tight">{netWorth.net >= 0 ? '+' : ''}{fmt(netWorth.net)}</span>
           </div>
+        </div>
+      ) : (
+        // ═══ السيولة العادية ═══
+        <React.Fragment>
+          {isVisible && (
+            <React.Fragment>
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2 mb-3">
+                {accounts.map(acc => (
+                  <div key={acc.key} className="p-3 rounded-xl relative" style={{ background: 'var(--bg-muted)' }}>
+                    <button type="button" aria-label="إظهار" onClick={(e) => { e.stopPropagation(); onToggleVisibility?.(acc.key); }} className="absolute top-1.5 left-1.5 p-1 rounded-md hover:bg-[color:var(--bg-card)] transition-colors" style={{ color: 'var(--text-muted)' }}>{walletVisibility?.[acc.key] ? <EyeOff size={13} /> : <Eye size={13} />}</button>
+                    <div className="flex items-center gap-1.5 mb-2 pl-6"><acc.icon size={15} style={{ color: 'var(--text-secondary)' }} /><span className="text-[11px] font-bold truncate" style={{ color: 'var(--text-secondary)' }}>{acc.shortName}</span></div>
+                    <div className="text-base font-black tracking-tight" style={{ color: 'var(--text-primary)' }}>{walletVisibility?.[acc.key] ? fmt(acc.balance) : '•••••'}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="p-3.5 rounded-xl bg-gradient-to-br from-blue-600 to-blue-800 text-white flex justify-between items-center">
+                <span className="font-bold text-sm">إجمالي السيولة</span>
+                <span className="text-2xl font-black tracking-tight">{fmt(total)}</span>
+              </div>
+            </React.Fragment>
+          )}
         </React.Fragment>
       )}
     </div>
@@ -1622,13 +1854,14 @@ const MonthComparisonView = memo(({ transactions, selectedYear, selectedMonth })
   const prevYear = idx > 0 ? selectedYear : selectedYear - 1;
   const curTx = transactions.filter(t => t.month === selectedMonth && (t.year || 2026) === selectedYear);
   const prevTx = transactions.filter(t => t.month === prevMonth && (t.year || 2026) === prevYear);
-  const calc = (txs, type) => txs.filter(t => t.type === type && t.status === 'paid').reduce((s, t) => s + safeNumber(t.amount), 0);
+  // 🆕 استبعاد التحويلات الداخلية
+  const calc = (txs, type) => txs.filter(t => t.type === type && t.status === 'paid' && !isTransfer(t) && !isCashbackTx(t)).reduce((s, t) => s + safeNumber(t.amount), 0);
   const curInc = calc(curTx, 'income'), curExp = calc(curTx, 'expense');
   const prevInc = calc(prevTx, 'income'), prevExp = calc(prevTx, 'expense');
   const pct = (cur, prev) => prev === 0 ? (cur > 0 ? 100 : 0) : Math.round(((cur - prev) / prev) * 100);
   const catData = {};
-  curTx.filter(t => t.status === 'paid').forEach(t => { if (!catData[t.category]) catData[t.category] = { cur: 0, prev: 0, type: t.type }; catData[t.category].cur += safeNumber(t.amount); });
-  prevTx.filter(t => t.status === 'paid').forEach(t => { if (!catData[t.category]) catData[t.category] = { cur: 0, prev: 0, type: t.type }; catData[t.category].prev += safeNumber(t.amount); });
+  curTx.filter(t => t.status === 'paid' && !isTransfer(t) && !isCashbackTx(t)).forEach(t => { if (!catData[t.category]) catData[t.category] = { cur: 0, prev: 0, type: t.type }; catData[t.category].cur += safeNumber(t.amount); });
+  prevTx.filter(t => t.status === 'paid' && !isTransfer(t) && !isCashbackTx(t)).forEach(t => { if (!catData[t.category]) catData[t.category] = { cur: 0, prev: 0, type: t.type }; catData[t.category].prev += safeNumber(t.amount); });
   const catRows = Object.entries(catData).map(([cat, d]) => ({ cat, cur: d.cur, prev: d.prev, change: pct(d.cur, d.prev), type: d.type })).sort((a, b) => Math.abs(b.cur - b.prev) - Math.abs(a.cur - a.prev));
   return (
     <div className="space-y-4 animate-fadeIn pb-24">
@@ -1666,12 +1899,13 @@ const MonthComparisonView = memo(({ transactions, selectedYear, selectedMonth })
   );
 });
 
-// ═══ DashboardView (بدون بطاقة الراتب القادم) ═══
+// ═══ DashboardView — مع الإصلاحات المحاسبية الكاملة ═══
 const DashboardView = memo(({ data, financeSnapshot, liveBalances, totalLiquidity, walletVisibility, onToggleVisibility, dispatch, selectedYear, selectedMonth, transactions, cards, updatedLoans, chartData, isDarkMode, handleManualReconciliation, addNotification, onSelectYear, onSelectMonth }) => {
   const totalCardDebt = useMemo(() => cards.reduce((s, c) => s + computeCardDebt(data, c), 0), [cards, data]);
   const totalLoanDebt = useMemo(() => updatedLoans.filter(l => !l.isReceivable).reduce((s, l) => s + l.remaining, 0), [updatedLoans]);
+  const totalReceivable = useMemo(() => updatedLoans.filter(l => l.isReceivable).reduce((s, l) => s + l.remaining, 0), [updatedLoans]);
   const grandTotalDebt = totalCardDebt + totalLoanDebt;
-  const netPosition = totalLiquidity - grandTotalDebt;
+  const netPosition = totalLiquidity - grandTotalDebt; // 🆕 يشمل المستحقات ضمن netWorth
   const custodySummary = useMemo(() => computeCustodyBalance(data?.custodyEntries), [data?.custodyEntries]);
 
   const bankFeesMonth = useMemo(() => transactions.filter(t => t.status === 'paid' && t.type === 'expense' && BANK_FEE_CATEGORIES.has(t.category) && t.month === selectedMonth && (t.year || 2026) === selectedYear).reduce((s, t) => s + safeNumber(t.amount), 0), [transactions, selectedMonth, selectedYear]);
@@ -1685,7 +1919,7 @@ const DashboardView = memo(({ data, financeSnapshot, liveBalances, totalLiquidit
 
   const pieData = useMemo(() => {
     const acc = {};
-    transactions.filter(t => t.type === 'expense' && t.month === selectedMonth && (t.year || 2026) === selectedYear && t.status === 'paid' && safeNumber(t.amount) > 0).forEach(t => { acc[t.category] = (acc[t.category] || 0) + safeNumber(t.amount); });
+    transactions.filter(t => t.type === 'expense' && !isTransfer(t) && t.month === selectedMonth && (t.year || 2026) === selectedYear && t.status === 'paid' && safeNumber(t.amount) > 0).forEach(t => { acc[t.category] = (acc[t.category] || 0) + safeNumber(t.amount); });
     const sorted = Object.entries(acc).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
     if (sorted.length <= 5) return sorted;
     const top = sorted.slice(0, 4);
@@ -1694,9 +1928,22 @@ const DashboardView = memo(({ data, financeSnapshot, liveBalances, totalLiquidit
   }, [transactions, selectedMonth, selectedYear]);
 
   const net = financeSnapshot;
-  const monthPendingCount = transactions.filter(t => t.month === selectedMonth && (t.year || 2026) === selectedYear && t.status !== 'paid').length;
+  const monthPendingCount = transactions.filter(t => t.month === selectedMonth && (t.year || 2026) === selectedYear && t.status !== 'paid' && !isTransfer(t)).length;
   const prevMonthItems = useMemo(() => {
     return transactions.filter(t => t.month === selectedMonth && (t.year || 2026) === selectedYear && t.status !== 'paid' && t.nextMonthItem);
+  }, [transactions, selectedMonth, selectedYear]);
+
+  // 🆕 تحذيرات الميزانية
+  const budgetAlerts = useMemo(() => {
+    const budgets = JSON.parse(localStorage.getItem('budgets') || '{}');
+    const alerts = [];
+    Object.entries(budgets).forEach(([cat, limit]) => {
+      const spent = transactions.filter(t => t.category === cat && t.month === selectedMonth && (t.year || 2026) === selectedYear && t.status === 'paid' && t.type === 'expense').reduce((s, t) => s + safeNumber(t.amount), 0);
+      if (limit > 0 && spent >= limit * 0.8) {
+        alerts.push({ category: cat, spent, limit, pct: Math.round((spent / limit) * 100), exceeded: spent > limit });
+      }
+    });
+    return alerts.sort((a, b) => b.pct - a.pct).slice(0, 3);
   }, [transactions, selectedMonth, selectedYear]);
 
   return (
@@ -1715,6 +1962,24 @@ const DashboardView = memo(({ data, financeSnapshot, liveBalances, totalLiquidit
         </div>
       </div>
 
+      {/* 🆕 تحذيرات الميزانية */}
+      {budgetAlerts.length > 0 && (
+        <div className="card" style={{ background: 'var(--warning-soft)', borderColor: 'var(--warning)' }}>
+          <div className="flex items-start gap-2 mb-2">
+            <AlertTriangle size={16} className="text-amber-600 flex-shrink-0 mt-0.5" />
+            <p className="text-xs font-bold text-amber-700 dark:text-amber-400">⚠️ تنبيهات الميزانية ({budgetAlerts.length})</p>
+          </div>
+          <div className="space-y-1.5">
+            {budgetAlerts.map(alert => (
+              <div key={alert.category} className="flex justify-between items-center p-2 rounded-lg" style={{ background: 'var(--bg-card)' }}>
+                <span className="text-[11px] font-bold truncate flex-1">{alert.category}</span>
+                <span className={`badge text-[10px] ${alert.exceeded ? 'badge-danger' : 'badge-warning'}`}>{alert.pct}%</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {monthPendingCount > 0 && (
         <div className="card" style={{ background: 'var(--warning-soft)', borderColor: 'var(--warning)' }}>
           <div className="flex items-center gap-2">
@@ -1730,18 +1995,22 @@ const DashboardView = memo(({ data, financeSnapshot, liveBalances, totalLiquidit
         </div>
       )}
 
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-4 gap-2">
         <button onClick={() => { dispatch({ type: 'SET_FORM_MODE', payload: 'add' }); dispatch({ type: 'SET_FORM_DATA', payload: { type: 'expense', amount: '', date: getLocalISODate(), method: 'cash', subType: 'withdrawal', category: '', status: 'pending', receipts: [] } }); dispatch({ type: 'SET_FORM_OPEN', payload: true }); }} className="card py-3 flex flex-col items-center gap-1 active:scale-95">
           <div className="p-1.5 rounded-lg bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400"><TrendingDown size={16} /></div>
-          <span className="text-[11px] font-bold">مصروف</span>
+          <span className="text-[10px] font-bold">مصروف</span>
         </button>
         <button onClick={() => { dispatch({ type: 'SET_FORM_MODE', payload: 'add' }); dispatch({ type: 'SET_FORM_DATA', payload: { type: 'income', amount: '', date: getLocalISODate(), method: 'cash', subType: 'deposit', category: '', status: 'pending', receipts: [] } }); dispatch({ type: 'SET_FORM_OPEN', payload: true }); }} className="card py-3 flex flex-col items-center gap-1 active:scale-95">
           <div className="p-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400"><TrendingUp size={16} /></div>
-          <span className="text-[11px] font-bold">دخل</span>
+          <span className="text-[10px] font-bold">دخل</span>
+        </button>
+        <button onClick={() => dispatch({ type: 'SET_TRANSFER_MODAL_OPEN', payload: true })} className="card py-3 flex flex-col items-center gap-1 active:scale-95">
+          <div className="p-1.5 rounded-lg bg-purple-50 dark:bg-purple-950/30 text-purple-600 dark:text-purple-400"><ArrowLeftRight size={16} /></div>
+          <span className="text-[10px] font-bold">تحويل</span>
         </button>
         <button onClick={() => dispatch({ type: 'SET_QUICK_TRANSFER_MODAL_OPEN', payload: true })} className="card py-3 flex flex-col items-center gap-1 active:scale-95">
           <div className="p-1.5 rounded-lg bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400"><Layers size={16} /></div>
-          <span className="text-[11px] font-bold">تحويل / شهري</span>
+          <span className="text-[10px] font-bold">مصروف شهري</span>
         </button>
       </div>
 
@@ -1760,7 +2029,16 @@ const DashboardView = memo(({ data, financeSnapshot, liveBalances, totalLiquidit
         </button>
       </div>
 
-      <QuickBalanceOverview balances={liveBalances} walletVisibility={walletVisibility} onToggleVisibility={onToggleVisibility} />
+      <QuickBalanceOverview 
+        balances={liveBalances} 
+        walletVisibility={walletVisibility} 
+        onToggleVisibility={onToggleVisibility}
+        data={data}
+        totalCardDebt={totalCardDebt}
+        totalLoans={totalLoanDebt}
+        totalReceivable={totalReceivable}
+        custodyBalance={custodySummary.balance}
+      />
 
       <MonthSelector selectedYear={selectedYear} selectedMonth={selectedMonth} onSelectYear={onSelectYear} onSelectMonth={onSelectMonth} />
 
@@ -2022,15 +2300,15 @@ const CategoryDetailModal = memo(({ category, transactions, selectedMonth, selec
                         <div className="min-w-0 flex-1">
                           <p className="font-bold text-xs truncate">
                             {t.description || t.category}
-                            <FamilyBadge tx={t} /> <SmsBadge tx={t} /> <TeldaBadge tx={t} /> <RecurringBadge tx={t} /> <NextMonthBadge tx={t} /> <CarryoverBadge tx={t} /> <VariableBadge tx={t} />
+                            <FamilyBadge tx={t} /> <SmsBadge tx={t} /> <TeldaBadge tx={t} /> <RecurringBadge tx={t} /> <NextMonthBadge tx={t} /> <CarryoverBadge tx={t} /> <VariableBadge tx={t} /> <TransferBadge tx={t} />
                           </p>
                           <p className="text-[10px] font-semibold mt-0.5" style={{ color: 'var(--text-muted)' }}>
                             {PAYMENT_METHODS.find(p => p.id === t.method)?.label || t.method || '—'}
                             {t.status === 'paid' ? <span className="text-emerald-600 mr-2">✅ معتمد</span> : <span className="text-amber-600 mr-2">⏳ معلق</span>}
                           </p>
                         </div>
-                        <span className={`font-black text-xs flex-shrink-0 ${t.type === 'income' ? 'text-emerald-600' : 'text-red-600'}`}>
-                          {t.type === 'income' ? '+' : '−'}{fmt(t.amount)}
+                        <span className={`font-black text-xs flex-shrink-0 ${t.type === 'income' ? 'text-emerald-600' : t.type === 'transfer' ? 'text-purple-600' : 'text-red-600'}`}>
+                          {t.type === 'income' ? '+' : t.type === 'transfer' ? '🔄 ' : '−'}{fmt(t.amount)}
                         </span>
                       </div>
                     ))}
@@ -2059,9 +2337,9 @@ const CategoryDetailModal = memo(({ category, transactions, selectedMonth, selec
 });
 
 const CategoriesView = memo(({ transactions, selectedMonth, selectedYear, catViewType, budgets, dispatch, handleDelete, onSelectYear, onSelectMonth }) => {
-  const catTotals = useMemo(() => transactions.filter(t => t.type === catViewType && t.month === selectedMonth && (t.year || 2026) === selectedYear).reduce((acc, t) => { acc[t.category] = (acc[t.category] || 0) + safeNumber(t.amount); return acc; }, {}), [transactions, catViewType, selectedMonth, selectedYear]);
-  const catCounts = useMemo(() => transactions.filter(t => t.type === catViewType && t.month === selectedMonth && (t.year || 2026) === selectedYear).reduce((acc, t) => { acc[t.category] = (acc[t.category] || 0) + 1; return acc; }, {}), [transactions, catViewType, selectedMonth, selectedYear]);
-  const catPendingCounts = useMemo(() => transactions.filter(t => t.type === catViewType && t.month === selectedMonth && (t.year || 2026) === selectedYear && t.status !== 'paid').reduce((acc, t) => { acc[t.category] = (acc[t.category] || 0) + 1; return acc; }, {}), [transactions, catViewType, selectedMonth, selectedYear]);
+  const catTotals = useMemo(() => transactions.filter(t => t.type === catViewType && !isTransfer(t) && !isCashbackTx(t) && t.month === selectedMonth && (t.year || 2026) === selectedYear).reduce((acc, t) => { acc[t.category] = (acc[t.category] || 0) + safeNumber(t.amount); return acc; }, {}), [transactions, catViewType, selectedMonth, selectedYear]);
+  const catCounts = useMemo(() => transactions.filter(t => t.type === catViewType && !isTransfer(t) && !isCashbackTx(t) && t.month === selectedMonth && (t.year || 2026) === selectedYear).reduce((acc, t) => { acc[t.category] = (acc[t.category] || 0) + 1; return acc; }, {}), [transactions, catViewType, selectedMonth, selectedYear]);
+  const catPendingCounts = useMemo(() => transactions.filter(t => t.type === catViewType && !isTransfer(t) && !isCashbackTx(t) && t.month === selectedMonth && (t.year || 2026) === selectedYear && t.status !== 'paid').reduce((acc, t) => { acc[t.category] = (acc[t.category] || 0) + 1; return acc; }, {}), [transactions, catViewType, selectedMonth, selectedYear]);
 
   return (
     <div className="space-y-4 animate-fadeIn">
@@ -2100,6 +2378,7 @@ const CategoriesView = memo(({ transactions, selectedMonth, selectedYear, catVie
                   <div className="w-full rounded-full h-1 overflow-hidden" style={{ background: 'var(--bg-muted)' }}>
                     <div style={{ width: `${Math.min(100, (spent / budget) * 100)}%` }} className={`h-full ${overBudget ? 'bg-red-500' : 'bg-emerald-500'}`}></div>
                   </div>
+                  {overBudget && <p className="text-[8px] text-red-600 font-bold mt-1">تجاوزت بـ {fmt(spent - budget)} ج.م</p>}
                 </div>
               )}
             </div>
@@ -2119,6 +2398,7 @@ const TransactionsView = memo(({ groupedTransactions, transactions, selectedMont
   const [showBeneficiariesOnly, setShowBeneficiariesOnly] = useState(false);
   const [showNextMonthOnly, setShowNextMonthOnly] = useState(false);
   const [showFamilyOnly, setShowFamilyOnly] = useState(false);
+  const [showTransfersOnly, setShowTransfersOnly] = useState(false);
 
   const filterBySource = useCallback((list) => { if (sourceFilter === 'all') return list; if (sourceFilter === 'self') return list.filter(t => !isFamilyTx(t)); return list.filter(t => t.createdBy === sourceFilter); }, [sourceFilter]);
   const filterByBankFees = useCallback((list) => showBankFeesOnly ? list.filter(t => isBankFee(t)) : list, [showBankFeesOnly]);
@@ -2168,7 +2448,8 @@ const TransactionsView = memo(({ groupedTransactions, transactions, selectedMont
   const monthTx = transactions.filter(t => t.month === selectedMonth && (t.year || 2026) === selectedYear);
   const nextMonthCount = monthTx.filter(t => t.nextMonthItem && t.status !== 'paid').length;
   const familyCount = monthTx.filter(t => isFamilyTx(t)).length;
-  const activeFiltersCount = (sourceFilter !== 'all' ? 1 : 0) + (statusFilter !== 'all' ? 1 : 0) + (showBankFeesOnly ? 1 : 0) + (showSmsOnly ? 1 : 0) + (showBeneficiariesOnly ? 1 : 0) + (showNextMonthOnly ? 1 : 0) + (showFamilyOnly ? 1 : 0);
+  const transferCount = monthTx.filter(t => isTransfer(t)).length;
+  const activeFiltersCount = (sourceFilter !== 'all' ? 1 : 0) + (statusFilter !== 'all' ? 1 : 0) + (showBankFeesOnly ? 1 : 0) + (showSmsOnly ? 1 : 0) + (showBeneficiariesOnly ? 1 : 0) + (showNextMonthOnly ? 1 : 0) + (showFamilyOnly ? 1 : 0) + (showTransfersOnly ? 1 : 0);
   const dailyGroups = useMemo(() => groupTransactionsByDate(paidArchive), [paidArchive]);
 
   return (
@@ -2202,12 +2483,19 @@ const TransactionsView = memo(({ groupedTransactions, transactions, selectedMont
             <span className="text-[10px] font-bold text-purple-700 dark:text-purple-400">{familyCount} عملية من تطبيق العيلة (محل هاني)</span>
           </div>
         )}
+        {transferCount > 0 && (
+          <div className="mt-2 p-2 rounded-lg flex items-center gap-2" style={{ background: 'rgba(139, 92, 246, 0.08)' }}>
+            <span className="text-[11px] font-black">🔄</span>
+            <span className="text-[10px] font-bold" style={{ color: '#7c3aed' }}>{transferCount} تحويل داخلي (لا يُحسب من الدخل/المصروف)</span>
+          </div>
+        )}
         <div className="flex gap-1.5 mt-3 flex-wrap">
           <button onClick={() => setShowBankFeesOnly(v => !v)} className={`btn text-[11px] px-2.5 py-1.5 ${showBankFeesOnly ? 'btn-primary' : 'btn-secondary'}`}><Receipt size={12} /> رسوم بنكية</button>
           <button onClick={() => setShowSmsOnly(v => !v)} className={`btn text-[11px] px-2.5 py-1.5 ${showSmsOnly ? 'btn-primary' : 'btn-secondary'}`}><MessageSquare size={12} /> SMS</button>
           <button onClick={() => setShowBeneficiariesOnly(v => !v)} className={`btn text-[11px] px-2.5 py-1.5 ${showBeneficiariesOnly ? 'btn-primary' : 'btn-secondary'}`}>👨‍👩‍👧 مصاريف شهرية</button>
           <button onClick={() => setShowNextMonthOnly(v => !v)} className={`btn text-[11px] px-2.5 py-1.5 ${showNextMonthOnly ? 'btn-primary' : 'btn-secondary'}`}>⏭️ الشهر السابق</button>
           <button onClick={() => setShowFamilyOnly(v => !v)} className={`btn text-[11px] px-2.5 py-1.5 ${showFamilyOnly ? 'btn-primary' : 'btn-secondary'}`}>🛒 من العيلة</button>
+          <button onClick={() => setShowTransfersOnly(v => !v)} className={`btn text-[11px] px-2.5 py-1.5 ${showTransfersOnly ? 'btn-primary' : 'btn-secondary'}`}>🔄 تحويلات</button>
           {isClosed ? (
             <React.Fragment>
               <div className="badge badge-success px-2 py-1 text-[10px]"><ShieldCheck size={10} /> مغلق</div>
@@ -2295,7 +2583,7 @@ const TransactionsView = memo(({ groupedTransactions, transactions, selectedMont
                           <div className="flex-1 min-w-0">
                             <p className="font-bold text-xs truncate">
                               {t.description || 'بدون وصف'}{' '}
-                              <FamilyBadge tx={t} /> <SmsBadge tx={t} /> <TeldaBadge tx={t} /> <RecurringBadge tx={t} /> <NextMonthBadge tx={t} /> <CarryoverBadge tx={t} /> <VariableBadge tx={t} /> <ReceiptIndicator tx={t} dispatch={dispatch} />
+                              <FamilyBadge tx={t} /> <SmsBadge tx={t} /> <TeldaBadge tx={t} /> <RecurringBadge tx={t} /> <NextMonthBadge tx={t} /> <CarryoverBadge tx={t} /> <VariableBadge tx={t} /> <TransferBadge tx={t} /> <ReceiptIndicator tx={t} dispatch={dispatch} />
                             </p>
                             <p className="text-[10px] font-semibold mt-0.5" style={{ color: 'var(--text-muted)' }}>{t.date} • {PAYMENT_METHODS.find(p => p.id === t.method)?.label}</p>
                           </div>
@@ -2332,8 +2620,8 @@ const TransactionsView = memo(({ groupedTransactions, transactions, selectedMont
                     <div key={t.id} className="card py-2.5 flex justify-between items-center gap-2">
                       <div className="min-w-0 flex-1">
                         <p className="font-bold text-xs truncate">
-                          {t.type === 'income' ? '💰' : '💸'} {t.description || t.category}{' '}
-                          <FamilyBadge tx={t} /> <SmsBadge tx={t} /> <TeldaBadge tx={t} /> <RecurringBadge tx={t} /> <NextMonthBadge tx={t} /> <CarryoverBadge tx={t} /> <VariableBadge tx={t} /> <ReceiptIndicator tx={t} dispatch={dispatch} />
+                          {t.type === 'income' ? '💰' : t.type === 'transfer' ? '🔄' : '💸'} {t.description || t.category}{' '}
+                          <FamilyBadge tx={t} /> <SmsBadge tx={t} /> <TeldaBadge tx={t} /> <RecurringBadge tx={t} /> <NextMonthBadge tx={t} /> <CarryoverBadge tx={t} /> <VariableBadge tx={t} /> <TransferBadge tx={t} /> <ReceiptIndicator tx={t} dispatch={dispatch} />
                         </p>
                         <p className="text-[10px] font-semibold" style={{ color: 'var(--text-muted)' }}>{PAYMENT_METHODS.find(p => p.id === t.method)?.label || ''} • {new Date(t.createdAt || Date.now()).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}</p>
                       </div>
@@ -2560,7 +2848,7 @@ const HanyShopLedger = memo(({ loan, prevMonthLoan, addNotification }) => {
   );
 });
 
-// ═══ LoansView ═══
+// ═══ LoansView — مع إصلاح المستحقات (اختيار الحساب) ═══
 const LoansView = memo(({ updatedLoans, cards, recurringItems, transactions, dispatch, deleteRecurring, saveHistory, getLocalISODate, addNotification, data, selectedMonth, selectedYear }) => {
   const [showAdd, setShowAdd] = useState(false);
   const [activeTab, setActiveTab] = useState('loans');
@@ -2572,6 +2860,7 @@ const LoansView = memo(({ updatedLoans, cards, recurringItems, transactions, dis
       payload: {
         id: item.id, title: item.title, amount: String(item.amount), day: item.day,
         category: item.category, type: item.type,
+        method: item.method || 'cash',
         startMonth: item.startMonth || '', endMonth: item.endMonth || '',
         active: item.active !== false,
         kind: item.kind || null,
@@ -2650,18 +2939,74 @@ const LoansView = memo(({ updatedLoans, cards, recurringItems, transactions, dis
     addNotification({ type: 'success', title: 'تمت الإضافة' });
   };
 
-  const handleCollectReceivable = (loan, sourceTx) => {
+  // 🆕 handleCollectReceivable — يسأل عن الحساب
+  const handleCollectReceivable = async (loan, sourceTx) => {
     const d = new Date();
     const y = d.getFullYear(), m = ALL_MONTHS[d.getMonth()];
     if (isMonthClosed(data, y, m)) { addNotification({ type: 'error', title: 'الشهر مغلق' }); return; }
-    saveHistory();
+    
+    // 🆕 لو موجود مصدر (معاملة معلقة) — اسأل عن الحساب
     if (sourceTx) {
-      dispatch({ type: 'UPDATE_TRANSACTIONS', payload: transactions.map(t => t.id === sourceTx.id ? { ...t, status: 'paid', date: getLocalISODate(d) } : t) });
-      addNotification({ type: 'success', title: 'تم اعتماد القسط', message: `${fmt(sourceTx.amount)} ج.م` });
+      const methodChoice = await showInputModal({
+        title: 'من أين تم التحصيل؟',
+        icon: '💵',
+        message: `المبلغ: ${fmt(sourceTx.amount)} ج.م\n\n1 = Cash\n2 = CIB Savings (1809)\n3 = AAIB Savings (2106)`,
+        inputValue: '1',
+        numeric: true,
+        confirmText: 'اعتماد'
+      });
+      if (methodChoice === null) return;
+      const methods = ['cash', 'cib_savings', 'aaib_savings'];
+      const chosenMethod = methods[parseInt(methodChoice, 10) - 1];
+      if (!chosenMethod) { addNotification({ type: 'error', title: 'اختر 1 أو 2 أو 3' }); return; }
+      
+      saveHistory();
+      dispatch({ type: 'UPDATE_TRANSACTIONS', payload: transactions.map(t => t.id === sourceTx.id ? { ...t, status: 'paid', date: getLocalISODate(d), method: chosenMethod } : t) });
+      addNotification({ type: 'success', title: 'تم اعتماد القسط', message: `${fmt(sourceTx.amount)} ج.م — ${PAYMENT_METHODS.find(p => p.id === chosenMethod)?.label || chosenMethod}` });
     } else {
-      const newTx = { id: 'recv-manual-' + getSafeId(), type: 'income', kind: KIND.OPERATIONAL, category: 'تكييف محمود', amount: safeNumber(loan.monthlyInstallment), description: `تحصيل قسط ${loan.name} — ${m} ${y}`, method: 'cash', date: getLocalISODate(d), month: m, year: y, monthIndex: d.getMonth(), subType: 'deposit', status: 'paid', sourceReceivableId: loan.id };
+      // 🆕 تحصيل يدوي — اسأل عن المبلغ والحساب
+      const amountInput = await showInputModal({
+        title: 'تحصيل قسط',
+        icon: '💰',
+        message: `المبلغ المتوقع: ${fmt(loan.monthlyInstallment)} ج.م\n\nاكتب المبلغ المحصل:`,
+        inputValue: String(loan.monthlyInstallment),
+        numeric: true,
+        confirmText: 'التالي'
+      });
+      if (amountInput === null) return;
+      const collectedAmount = parseNumberInput(amountInput);
+      if (collectedAmount <= 0) { addNotification({ type: 'error', title: 'مبلغ غير صحيح' }); return; }
+      
+      const methodChoice = await showInputModal({
+        title: 'من أين تم التحصيل؟',
+        icon: '💵',
+        message: `المبلغ: ${fmt(collectedAmount)} ج.م\n\n1 = Cash\n2 = CIB Savings (1809)\n3 = AAIB Savings (2106)`,
+        inputValue: '1',
+        numeric: true,
+        confirmText: 'تحصيل'
+      });
+      if (methodChoice === null) return;
+      const methods = ['cash', 'cib_savings', 'aaib_savings'];
+      const chosenMethod = methods[parseInt(methodChoice, 10) - 1];
+      if (!chosenMethod) { addNotification({ type: 'error', title: 'اختر 1 أو 2 أو 3' }); return; }
+      
+      saveHistory();
+      const newTx = {
+        id: 'recv-manual-' + getSafeId(),
+        type: 'income',
+        kind: KIND.OPERATIONAL,
+        category: 'تكييف محمود',
+        amount: collectedAmount,
+        description: `تحصيل قسط ${loan.name} — ${m} ${y}`,
+        method: chosenMethod,
+        date: getLocalISODate(d),
+        month: m, year: y, monthIndex: d.getMonth(),
+        subType: 'deposit',
+        status: 'paid',
+        sourceReceivableId: loan.id
+      };
       dispatch({ type: 'UPDATE_TRANSACTIONS', payload: [newTx, ...transactions].sort((a, b) => new Date(b.date) - new Date(a.date)) });
-      addNotification({ type: 'success', title: 'تم التحصيل', message: `${fmt(loan.monthlyInstallment)} ج.م` });
+      addNotification({ type: 'success', title: 'تم التحصيل', message: `${fmt(collectedAmount)} ج.م — ${PAYMENT_METHODS.find(p => p.id === chosenMethod)?.label || chosenMethod}` });
     }
   };
 
@@ -2808,7 +3153,7 @@ const LoansView = memo(({ updatedLoans, cards, recurringItems, transactions, dis
                     <div className="flex justify-end gap-1.5 mt-2">
                       {loan.autoGenerated && (hasCarryover ? <div className="badge badge-success text-[10px]">تمت التسوية</div> : <button onClick={() => settleHany(loan)} className="btn btn-primary text-[10px] py-1 px-2"><CheckCircle2 size={10} /> تسوية</button>)}
                       {!loan.autoGenerated && loan.monthlyInstallment > 0 && (
-                        <button onClick={() => { dispatch({ type: 'SET_FORM_MODE', payload: 'add' }); dispatch({ type: 'SET_FORM_DATA', payload: { type: 'expense', category: 'الالتزامات البنكية والتمويلية', amount: loan.monthlyInstallment, description: `قسط ${loan.name}`, linkedLoanId: loan.id, method: 'instapay', date: getLocalISODate(), status: 'pending', subType: 'withdrawal', receipts: [] } }); dispatch({ type: 'SET_FORM_OPEN', payload: true }); }} className="btn btn-secondary text-[10px] py-1 px-2"><CheckCircle2 size={10} /> سداد</button>
+                        <button onClick={() => { dispatch({ type: 'SET_FORM_MODE', payload: 'add' }); dispatch({ type: 'SET_FORM_DATA', payload: { type: 'expense', category: 'الالتزامات البنكية والتمويلية', amount: loan.monthlyInstallment, description: `قسط ${loan.name}`, linkedLoanId: loan.id, method: 'aaib_savings', date: getLocalISODate(), status: 'pending', subType: 'withdrawal', receipts: [] } }); dispatch({ type: 'SET_FORM_OPEN', payload: true }); }} className="btn btn-secondary text-[10px] py-1 px-2"><CheckCircle2 size={10} /> سداد</button>
                       )}
                     </div>
                   )}
@@ -2841,7 +3186,9 @@ const LoansView = memo(({ updatedLoans, cards, recurringItems, transactions, dis
                           {isVariable && <span className="badge badge-warning text-[8px] px-1.5 py-0" title="مبلغ متغير">⚠️</span>}
                           <span className="badge badge-brand text-[9px] mr-1.5">✏️</span>
                         </p>
-                        <p className="text-[10px] font-semibold" style={{ color: 'var(--text-muted)' }}>يوم {r.day}{hasRange && ` • ${formatRange(r.startMonth)} ← ${formatRange(r.endMonth)}`}</p>
+                        <p className="text-[10px] font-semibold" style={{ color: 'var(--text-muted)' }}>
+                          يوم {r.day} • {PAYMENT_METHODS.find(p => p.id === r.method)?.label || r.method || 'cash'}{hasRange && ` • ${formatRange(r.startMonth)} ← ${formatRange(r.endMonth)}`}
+                        </p>
                       </div>
                       <div className="flex items-center gap-1.5 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
                         <span className={`font-black text-xs ${r.type === 'income' ? 'text-emerald-600' : 'text-red-500'}`}>{isVariable ? '—' : fmt(r.amount)}</span>
@@ -2877,7 +3224,7 @@ const WalletsAndCardsView = memo(({ cards, buildLedger, expandedLedgers, expande
     const limitCheck = validateAmount(newCard.limit, { min: 100, max: 10000000, label: 'الحد' });
     if (!limitCheck.valid) { addNotification({ type: 'error', title: 'خطأ', message: limitCheck.error }); return; }
     saveHistory();
-    dispatch({ type: 'UPDATE_CARDS', payload: [...cards, { ...newCard, id: Date.now(), limit: limitCheck.value, availableBalance: limitCheck.value, openingDebt: 0, cashbackRate: safeNumber(newCard.cashbackRate, 1) }] });
+    dispatch({ type: 'UPDATE_CARDS', payload: [...cards, { ...newCard, id: Date.now(), limit: limitCheck.value, availableBalance: limitCheck.value, openingDebt: 0, cashbackRate: safeNumber(newCard.cashbackRate, 1), subCards: [] }] });
     setShowAddCard(false);
     setNewCard({ name: '', bank: '', limit: '', last4: '', expiry: '', holderName: '', dueDate: '05 من كل شهر', theme: 'silver', cashbackRate: 1 });
     addNotification({ type: 'success', title: 'تمت الإضافة' });
@@ -2934,6 +3281,17 @@ const WalletsAndCardsView = memo(({ cards, buildLedger, expandedLedgers, expande
                           </div>
                         </div>
                       </div>
+                      {/* 🆕 البطاقات الفرعية */}
+                      {card.subCards && card.subCards.length > 0 && (
+                        <div className="p-2 rounded-lg" style={{ background: 'var(--bg-muted)' }}>
+                          <p className="text-[9px] font-bold mb-1.5" style={{ color: 'var(--text-muted)' }}>💳 بطاقات فرعية:</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {card.subCards.map(sub => (
+                              <span key={sub.last4} className="badge badge-neutral text-[9px]">•••• {sub.last4}</span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                       <div className="grid grid-cols-4 gap-1.5">
                         <div className="p-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 text-center"><p className="text-[9px] font-bold text-emerald-700 dark:text-emerald-400">متاح</p><p className="text-[10px] font-black text-emerald-600">{fmt(liveAvailable)}</p></div>
                         <div className="p-1.5 rounded-lg bg-red-50 dark:bg-red-950/30 text-center"><p className="text-[9px] font-bold text-red-700 dark:text-red-400">مديونية</p><p className="text-[10px] font-black text-red-600">{fmt(liveDebt)}</p></div>
@@ -3127,7 +3485,7 @@ const MonthlyPlanningView = memo(({ data, monthlyPlans, cards, loans, dispatch, 
           <ul className="text-[10px] space-y-0.5" style={{ color: 'var(--text-muted)' }}>
             <li>• <strong>راتب/إيجار/كاش باك/عهدة/زكاة</strong>: متوسط 3 شهور سابقة (paid + pending)</li>
             <li>• <strong>البديل التلقائي</strong>: لو السجل فاضي، يستمد من قيم البنود المتكررة النشطة</li>
-            <li>• <strong>الراتب</strong>: يتغير تلقائياً مع تغير البند (53,466 حتى 2027-01 ثم 65,000 من 2027-02)</li>
+            <li>• <strong>الراتب</strong>: يتغير تلقائياً (53,466 حتى 2027-01 ثم 65,000 من 2027-02)</li>
             <li>• <strong>نقدي</strong>: متوسط دخل خارج الفئات المعروفة</li>
             <li>• <strong>أي خلية عدلتها يدوياً</strong> تظهر بلون برتقالي ولن تُستمد تلقائياً (إلا لو الراتب صفر)</li>
           </ul>
@@ -3187,7 +3545,7 @@ const MonthlyPlanningView = memo(({ data, monthlyPlans, cards, loans, dispatch, 
                 { key: 'expectedRent', label: 'إيجار', hint: '⏭️ من الشهر السابق' },
                 { key: 'expectedCashback', label: 'كاش باك' },
                 { key: 'expectedEmakWE', label: 'عهدة', hint: '⚠️ متغير' },
-                { key: 'expectedZakat', label: 'زكاة', hint: '⏭️ من الشهر السابق' },
+                { key: 'expectedZakat', label: 'زكاة', hint: '🔀 متغير الحساب' },
                 { key: 'expectedCash', label: 'نقدي (دخل حر)' }
               ].map(row => (
                 <tr key={row.key}>
@@ -3268,8 +3626,8 @@ const PlannerView = memo(({ updatedLoans, cards, selectedMonth, selectedYear, mo
       const planExpenses = safeNumber(plan.expectedCashExpenses) + safeNumber(plan.plannedPayments);
 
       const monthTx = transactions.filter(t => t.month === month && (t.year || year) === year);
-      const pendingManualIncome = monthTx.filter(t => t.type === 'income' && t.status !== 'paid' && !t.sourceRecurringId && !t.sourceReceivableId).reduce((s, t) => s + safeNumber(t.amount), 0);
-      const pendingManualExpense = monthTx.filter(t => t.type === 'expense' && t.status !== 'paid' && !t.sourceRecurringId).reduce((s, t) => s + safeNumber(t.amount), 0);
+      const pendingManualIncome = monthTx.filter(t => t.type === 'income' && !isTransfer(t) && t.status !== 'paid' && !t.sourceRecurringId && !t.sourceReceivableId).reduce((s, t) => s + safeNumber(t.amount), 0);
+      const pendingManualExpense = monthTx.filter(t => t.type === 'expense' && !isTransfer(t) && t.status !== 'paid' && !t.sourceRecurringId).reduce((s, t) => s + safeNumber(t.amount), 0);
       const nextMonthItemCount = monthTx.filter(t => t.status !== 'paid' && t.nextMonthItem).length;
 
       const isFutureMonth = year > now.getFullYear() || (year === now.getFullYear() && getMonthIndex(month) > now.getMonth());
@@ -3447,7 +3805,7 @@ const LiquidityForecastView = memo(({ transactions, updatedLoans, recurringItems
     let incomeTotal = 0, incomeMonths = 0;
     months.forEach(({ year, month }) => {
       let monthIncome = 0;
-      transactions.filter(t => t.status === 'paid' && t.month === month && (t.year || 2026) === year).forEach(t => {
+      transactions.filter(t => t.status === 'paid' && !isTransfer(t) && t.month === month && (t.year || 2026) === year).forEach(t => {
         const amt = safeNumber(t.amount);
         if (t.type === 'income') monthIncome += amt;
         else if (t.type === 'expense') { const c = t.category || 'أخرى'; if (!catData[c]) catData[c] = { total: 0, samples: 0 }; catData[c].total += amt; catData[c].samples++; }
@@ -3466,8 +3824,8 @@ const LiquidityForecastView = memo(({ transactions, updatedLoans, recurringItems
     const y = now.getFullYear();
     const m = ALL_MONTHS[now.getMonth()];
     const monthTx = transactions.filter(t => t.month === m && (t.year || y) === y);
-    const paid = monthTx.filter(t => t.status === 'paid');
-    const pending = monthTx.filter(t => t.status !== 'paid');
+    const paid = monthTx.filter(t => t.status === 'paid' && !isTransfer(t));
+    const pending = monthTx.filter(t => t.status !== 'paid' && !isTransfer(t));
     const paidIncome = paid.filter(t => t.type === 'income').reduce((s, t) => s + safeNumber(t.amount), 0);
     const paidExpense = paid.filter(t => t.type === 'expense').reduce((s, t) => s + safeNumber(t.amount), 0);
     const pendingIncome = pending.filter(t => t.type === 'income').reduce((s, t) => s + safeNumber(t.amount), 0);
@@ -3498,8 +3856,8 @@ const LiquidityForecastView = memo(({ transactions, updatedLoans, recurringItems
       const planPayments = safeNumber(plan.plannedPayments);
       const hasPlan = planIncome > 0 || planCashExpenses > 0 || planPayments > 0;
       const monthTx = transactions.filter(t => t.month === month && (t.year || y) === y);
-      const pendingManualIncome = monthTx.filter(t => t.type === 'income' && t.status !== 'paid' && !t.autoGenerated && !t.sourceReceivableId).reduce((s, t) => s + safeNumber(t.amount), 0);
-      const pendingManualExpense = monthTx.filter(t => t.type === 'expense' && t.status !== 'paid' && !t.sourceRecurringId).reduce((s, t) => s + safeNumber(t.amount), 0);
+      const pendingManualIncome = monthTx.filter(t => t.type === 'income' && !isTransfer(t) && t.status !== 'paid' && !t.autoGenerated && !t.sourceReceivableId).reduce((s, t) => s + safeNumber(t.amount), 0);
+      const pendingManualExpense = monthTx.filter(t => t.type === 'expense' && !isTransfer(t) && t.status !== 'paid' && !t.sourceRecurringId).reduce((s, t) => s + safeNumber(t.amount), 0);
       const income = (hasPlan ? planIncome : historical.avgIncome) + pendingManualIncome;
       const expenses = hasPlan ? (planCashExpenses + planPayments + pendingManualExpense) : (historical.grandTotal + committedTotal + pendingManualExpense);
       const closing = balance + income - expenses;
@@ -3643,17 +4001,47 @@ const CalendarView = memo(({ data, getAgendaItems, transactions, dispatch, saveH
   const grouped = filtered.reduce((acc, item) => { const mn = new Date(item.date).toLocaleDateString('ar-EG', { month: 'long', year: 'numeric' }); if (!acc[mn]) acc[mn] = []; acc[mn].push(item); return acc; }, {});
   const urgentCount = filtered.filter(i => { const d = calculateDaysLeft(i.date); return d !== null && d <= 7 && d >= 0; }).length;
 
-  const quickPay = (item) => {
+  // 🆕 quickPay — مع اختيار الحساب
+  const quickPay = async (item) => {
     const d = new Date(item.date); if (isNaN(d)) return;
     const y = d.getFullYear(), m = ALL_MONTHS[d.getMonth()];
     if (data && isMonthClosed(data, y, m)) { addNotification({ type: 'error', title: 'محظور' }); return; }
+    
+    // 🆕 لو البند فيه method محدد، استخدمه — وإلا اسأل
+    let method = item.method || null;
+    if (!method) {
+      const methodChoice = await showInputModal({
+        title: 'من أي حساب؟',
+        icon: '💳',
+        message: `المبلغ: ${fmt(item.amount)} ج.م\n\n1 = Cash\n2 = CIB Savings (1809)\n3 = AAIB Savings (2106)`,
+        inputValue: '1',
+        numeric: true,
+        confirmText: 'تأكيد'
+      });
+      if (methodChoice === null) return;
+      const methods = ['cash', 'cib_savings', 'aaib_savings'];
+      method = methods[parseInt(methodChoice, 10) - 1] || 'cash';
+    }
+    
     saveHistory();
     const isIncome = item.desc && item.desc.includes('دخل');
     const isFee = item.desc && item.desc.includes('رسم بنكي');
     const isMonthly = item.desc === '👨‍👩‍👧 مصروف شهري';
-    const tx = { id: getSafeId(), type: isIncome ? 'income' : 'expense', kind: KIND.FINANCIAL, category: isMonthly ? item.title : isIncome ? 'تكييف محمود' : isFee ? 'رسوم بنكية شهرية' : 'الالتزامات البنكية والتمويلية', amount: safeNumber(item.amount), description: item.title, method: 'instapay', date: item.date, month: m, year: y, monthIndex: d.getMonth(), subType: isIncome ? 'deposit' : 'withdrawal', status: 'paid' };
+    const tx = { 
+      id: getSafeId(), 
+      type: isIncome ? 'income' : 'expense', 
+      kind: KIND.FINANCIAL, 
+      category: isMonthly ? item.title : isIncome ? 'تكييف محمود' : isFee ? 'رسوم بنكية شهرية' : 'الالتزامات البنكية والتمويلية', 
+      amount: safeNumber(item.amount), 
+      description: item.title, 
+      method, 
+      date: item.date, 
+      month: m, year: y, monthIndex: d.getMonth(), 
+      subType: isIncome ? 'deposit' : 'withdrawal', 
+      status: 'paid' 
+    };
     dispatch({ type: 'UPDATE_TRANSACTIONS', payload: [tx, ...transactions].sort((a, b) => new Date(b.date) - new Date(a.date)) });
-    addNotification({ type: 'success', title: 'تم التسجيل' });
+    addNotification({ type: 'success', title: 'تم التسجيل', message: `${PAYMENT_METHODS.find(p => p.id === method)?.label || method}` });
   };
 
   return (
@@ -3713,6 +4101,7 @@ const CalendarView = memo(({ data, getAgendaItems, transactions, dispatch, saveH
                       <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                         <span className="text-[10px] font-semibold" style={{ color: 'var(--text-muted)' }}>{item.date}</span>
                         {d !== null && <span className={`badge text-[9px] ${isOver ? 'badge-danger' : isUrg ? 'badge-warning' : 'badge-success'}`}>{isOver ? `متأخر ${Math.abs(d)}` : d === 0 ? 'اليوم!' : `${d} ي`}</span>}
+                        {item.method && <span className="text-[9px] font-bold" style={{ color: 'var(--brand)' }}>{PAYMENT_METHODS.find(p => p.id === item.method)?.label || item.method}</span>}
                         {item.desc && <span className="text-[9px]" style={{ color: 'var(--text-muted)' }}>{item.desc}</span>}
                       </div>
                     </div>
@@ -3759,7 +4148,7 @@ const PinChangeModal = ({ onClose, addNotification }) => {
   );
 };
 
-// ═══ SmsParserModal ═══
+// ═══ SmsParserModal — v3 مع الأرقام الجديدة ═══
 const SmsParserModal = memo(({ isOpen, onClose, dispatch, addNotification, saveHistory, data }) => {
   const [rawText, setRawText] = useState('');
   const [parsed, setParsed] = useState(null);
@@ -3783,8 +4172,16 @@ const SmsParserModal = memo(({ isOpen, onClose, dispatch, addNotification, saveH
     const res = parseBankSms(rawText);
     setParsed(res);
     if (res.method) setMethod(res.method);
-    if (res.ok) { addNotification({ type: 'success', title: `تم التحليل: ${fmt(res.amount)} ج.م`, message: `${res.type === 'income' ? 'دخل' : 'مصروف'} • ${res.bank || 'بنك غير معروف'}${res.last4 ? ' • ****' + res.last4 : ''}`, duration: 4000 }); }
-    else { addNotification({ type: 'warning', title: 'تحليل جزئي', message: res.notes.join(' • ') }); }
+    if (res.ok) { 
+      addNotification({ 
+        type: 'success', 
+        title: `تم التحليل: ${fmt(res.amount)} ج.م`, 
+        message: `${res.type === 'income' ? 'دخل' : 'مصروف'} • ${res.bank || 'بنك غير معروف'}${res.last4 ? ' • ****' + res.last4 : ''}`, 
+        duration: 4000 
+      }); 
+    } else { 
+      addNotification({ type: 'warning', title: 'تحليل جزئي', message: res.notes.join(' • ') }); 
+    }
   };
 
   const handleSave = () => {
@@ -3795,7 +4192,26 @@ const SmsParserModal = memo(({ isOpen, onClose, dispatch, addNotification, saveH
     const month = ALL_MONTHS[d.getMonth()];
     if (isMonthClosed(data, year, month)) { addNotification({ type: 'error', title: `شهر ${month} ${year} مغلق`, message: 'افتح الشهر أو غيّر التاريخ' }); return; }
     saveHistory();
-    const newTx = { id: getSafeId(), type: parsed.type, subType: parsed.subType, kind: KIND.OPERATIONAL, category, amount: parsed.amount, description: parsed.description || 'SMS import', method, date: parsed.date, month, year, monthIndex: d.getMonth(), status: 'pending', source: 'sms', smsRawText: parsed.rawText, smsBank: parsed.bank, linkedCardId: parsed.linkedCardId || undefined, receipts: [] };
+    const newTx = { 
+      id: getSafeId(), 
+      type: parsed.type, 
+      subType: parsed.subType, 
+      kind: KIND.OPERATIONAL, 
+      category, 
+      amount: parsed.amount, 
+      description: parsed.description || 'SMS import', 
+      method, 
+      date: parsed.date, 
+      month, 
+      year, 
+      monthIndex: d.getMonth(), 
+      status: 'pending', 
+      source: 'sms', 
+      smsRawText: parsed.rawText, 
+      smsBank: parsed.bank, 
+      linkedCardId: parsed.linkedCardId || undefined, 
+      receipts: [] 
+    };
     dispatch({ type: 'UPDATE_TRANSACTIONS', payload: [newTx, ...(data.transactions || [])].sort((a, b) => new Date(b.date) - new Date(a.date)) });
     addNotification({ type: 'success', title: 'تم الحفظ كمعلق', message: 'راجعها واعتمدها من صفحة المعاملات', duration: 5000 });
     onClose();
@@ -3811,7 +4227,11 @@ const SmsParserModal = memo(({ isOpen, onClose, dispatch, addNotification, saveH
             <label className="text-[11px] font-bold" style={{ color: 'var(--text-muted)' }}>الصق رسالة البنك هنا</label>
             <button type="button" onClick={handlePaste} className="text-[11px] font-black text-blue-600 flex items-center gap-1">📋 لصق تلقائي</button>
           </div>
-          <textarea className="input-field text-xs leading-relaxed font-semibold" rows={6} placeholder="مثال: CIB: Purchase of EGP 1500.00 on card ending 1016 at CARREFOUR on 17/09/2026" value={rawText} onChange={e => setRawText(e.target.value)} dir="auto" />
+          <textarea className="input-field text-xs leading-relaxed font-semibold" rows={6} placeholder="مثال: CIB: Purchase of EGP 1500.00 on card ending 1016..." value={rawText} onChange={e => setRawText(e.target.value)} dir="auto" />
+          <div className="mt-1.5 p-2 rounded-lg bg-blue-50 dark:bg-blue-950/30">
+            <p className="text-[9px] font-bold text-blue-700 dark:text-blue-400 mb-0.5">💡 الأرقام المدعومة:</p>
+            <p className="text-[9px]" style={{ color: 'var(--text-muted)' }}>1809 (CIB S)، 2106 (AAIB S)، 1016/9380/9352/2014 (CIB Cards)، 3391 (AAIB Card)</p>
+          </div>
         </div>
         <button type="button" onClick={handleAnalyze} disabled={!rawText.trim()} className="btn btn-primary w-full py-2.5 text-sm"><Sparkles size={14} /> حلّل الرسالة</button>
         {parsed && (
@@ -3826,6 +4246,7 @@ const SmsParserModal = memo(({ isOpen, onClose, dispatch, addNotification, saveH
                 <div><span style={{ color: 'var(--text-muted)' }}>النوع:</span> <strong>{parsed.type === 'income' ? 'دخل 💰' : 'مصروف 💸'}</strong></div>
                 <div><span style={{ color: 'var(--text-muted)' }}>البنك:</span> <strong>{parsed.bank || '—'}</strong></div>
                 <div><span style={{ color: 'var(--text-muted)' }}>البطاقة:</span> <strong>{parsed.last4 ? '****' + parsed.last4 : '—'}</strong></div>
+                <div><span style={{ color: 'var(--text-muted)' }}>الحساب:</span> <strong>{PAYMENT_METHODS.find(p => p.id === parsed.method)?.label || parsed.method || '—'}</strong></div>
                 <div><span style={{ color: 'var(--text-muted)' }}>التاريخ:</span> <strong>{parsed.date}</strong></div>
               </div>
             </div>
@@ -3847,6 +4268,194 @@ const SmsParserModal = memo(({ isOpen, onClose, dispatch, addNotification, saveH
         )}
       </div>
     </Modal>
+  );
+});
+
+// ═══ TransferModal — جديد (للتحويل بين الحسابات) ═══
+const TransferModal = memo(({ isOpen, onClose, dispatch, saveHistory, addNotification, data, liveBalances }) => {
+  const [fromMethod, setFromMethod] = useState('cib_savings');
+  const [toMethod, setToMethod] = useState('aaib_savings');
+  const [amount, setAmount] = useState('');
+  const [date, setDate] = useState(getLocalISODate());
+  const [description, setDescription] = useState('تحويل داخلي');
+  const [fees, setFees] = useState('');
+  const [feesMethod, setFeesMethod] = useState('cash');
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setFromMethod('cib_savings');
+      setToMethod('aaib_savings');
+      setAmount('');
+      setDate(getLocalISODate());
+      setDescription('تحويل داخلي');
+      setFees('');
+      setFeesMethod('cash');
+    }
+  }, [isOpen]);
+
+  if (!isOpen) return null;
+
+  const handleSave = (e) => {
+    e.preventDefault();
+    const amt = parseNumberInput(amount);
+    const feesAmt = parseNumberInput(fees);
+    if (amt <= 0) { addNotification({ type: 'error', title: 'اكتب مبلغ صحيح' }); return; }
+    if (fromMethod === toMethod) { addNotification({ type: 'error', title: 'اختر حسابين مختلفين' }); return; }
+    
+    const d = new Date(date);
+    const txYear = d.getFullYear(), txMonth = ALL_MONTHS[d.getMonth()];
+    if (isMonthClosed(data, txYear, txMonth)) { addNotification({ type: 'error', title: 'محظور' }); return; }
+
+    // ✅ تحذير لو المبلغ أكبر من رصيد الحساب المصدر
+    const fromBalance = safeNumber(liveBalances?.[fromMethod]);
+    if (ACCOUNT_KEYS.includes(fromMethod) && amt > fromBalance) {
+      dispatch({
+        type: 'SHOW_CONFIRM',
+        danger: true,
+        title: '⚠️ المبلغ أكبر من الرصيد',
+        message: `رصيد ${PAYMENT_METHODS.find(p => p.id === fromMethod)?.label}: ${fmt(fromBalance)} ج.م\nالمبلغ: ${fmt(amt)} ج.م\n\nهل تريد المتابعة؟`,
+        confirmText: 'متابعة',
+        onConfirm: () => executeTransfer(amt, feesAmt, d, txYear, txMonth),
+        onCancel: () => dispatch({ type: 'HIDE_CONFIRM' })
+      });
+      return;
+    }
+    executeTransfer(amt, feesAmt, d, txYear, txMonth);
+  };
+
+  const executeTransfer = (amt, feesAmt, d, txYear, txMonth) => {
+    setIsProcessing(true);
+    setTimeout(() => {
+      try {
+        saveHistory();
+        const txs = [];
+        // 🎯 معاملة التحويل الداخلي
+        txs.push({
+          id: 'transfer-' + getSafeId(),
+          type: 'transfer',
+          kind: KIND.TRANSFER,
+          category: TRANSFER_CATEGORY,
+          subType: 'transfer',
+          fromMethod,
+          toMethod,
+          amount: amt,
+          description: description || `تحويل من ${PAYMENT_METHODS.find(p => p.id === fromMethod)?.label} إلى ${PAYMENT_METHODS.find(p => p.id === toMethod)?.label}`,
+          method: fromMethod,  // للـ backward compat
+          date: getLocalISODate(d),
+          month: txMonth,
+          year: txYear,
+          monthIndex: d.getMonth(),
+          status: 'paid',
+          receipts: []
+        });
+        // 💰 لو فيه رسوم تحويل
+        if (feesAmt > 0) {
+          txs.push({
+            id: 'fee-' + getSafeId(),
+            type: 'expense',
+            kind: KIND.FINANCIAL,
+            category: 'رسوم تحويلات',
+            subType: 'withdrawal',
+            amount: feesAmt,
+            description: `رسوم تحويل من ${PAYMENT_METHODS.find(p => p.id === fromMethod)?.label}`,
+            method: feesMethod,
+            date: getLocalISODate(d),
+            month: txMonth,
+            year: txYear,
+            monthIndex: d.getMonth(),
+            status: 'paid',
+            receipts: []
+          });
+        }
+        
+        dispatch({ type: 'UPDATE_TRANSACTIONS', payload: [...txs, ...(data.transactions || [])].sort((a, b) => new Date(b.date) - new Date(a.date)) });
+        dispatch({ type: 'SET_TRANSFER_MODAL_OPEN', payload: false });
+        addNotification({ 
+          type: 'success', 
+          title: 'تم التحويل', 
+          message: `${fmt(amt)} ج.م من ${PAYMENT_METHODS.find(p => p.id === fromMethod)?.label} إلى ${PAYMENT_METHODS.find(p => p.id === toMethod)?.label}`,
+          duration: 5000
+        });
+      } catch (err) {
+        console.error(err);
+      }
+      setIsProcessing(false);
+    }, 400);
+  };
+
+  const fromBalance = safeNumber(liveBalances?.[fromMethod]);
+  const isAccountFrom = ACCOUNT_KEYS.includes(fromMethod);
+
+  return (
+    <div className="modal-backdrop no-print" onClick={(e) => { if (e.target === e.currentTarget && onClose) onClose(); }}>
+      <div className="w-full max-w-md rounded-2xl shadow-2xl animate-slideInBottom" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)' }}>
+        <div className="p-4 flex justify-between items-center" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+          <h3 className="text-sm font-black flex items-center gap-2">
+            <ArrowLeftRight size={16} className="text-purple-500" /> تحويل بين الحسابات
+          </h3>
+          <button type="button" onClick={onClose} className="btn btn-ghost p-1.5"><X size={16} /></button>
+        </div>
+        <form onSubmit={handleSave} className="p-4 space-y-3">
+          <div className="p-2.5 rounded-lg bg-purple-50 dark:bg-purple-950/30">
+            <p className="text-[10px] font-bold text-purple-700 dark:text-purple-400 mb-1">💡 التحويل لا يُحسب في الدخل/المصروف</p>
+            <p className="text-[9px]" style={{ color: 'var(--text-muted)' }}>ينقل المبلغ بين حساباتك (CIB ↔ AAIB ↔ Cash)</p>
+          </div>
+          
+          <div>
+            <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>من حساب *</label>
+            <select className="input-field text-sm py-2.5" value={fromMethod} onChange={e => setFromMethod(e.target.value)}>
+              {ACCOUNT_KEYS.map(k => <option key={k} value={k}>{PAYMENT_METHODS.find(p => p.id === k)?.label || k}</option>)}
+            </select>
+            {isAccountFrom && (
+              <p className="text-[10px] mt-1 font-semibold" style={{ color: fromBalance < 0 ? 'var(--danger)' : 'var(--text-muted)' }}>
+                الرصيد: {fmt(fromBalance)} ج.م
+              </p>
+            )}
+          </div>
+
+          <div className="flex justify-center">
+            <div className="p-1.5 rounded-full bg-purple-100 dark:bg-purple-950/40"><ArrowDown size={14} className="text-purple-600" /></div>
+          </div>
+
+          <div>
+            <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>إلى حساب *</label>
+            <select className="input-field text-sm py-2.5" value={toMethod} onChange={e => setToMethod(e.target.value)}>
+              {ACCOUNT_KEYS.filter(k => k !== fromMethod).map(k => <option key={k} value={k}>{PAYMENT_METHODS.find(p => p.id === k)?.label || k}</option>)}
+            </select>
+          </div>
+
+          <div>
+            <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>المبلغ *</label>
+            <input type="text" inputMode="decimal" className="input-field text-base font-black text-purple-600 text-center py-2.5" value={amount} onChange={e => setAmount(e.target.value)} placeholder="0.00" required />
+          </div>
+
+          <div>
+            <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>التاريخ *</label>
+            <input type="date" className="input-field text-sm font-bold py-2.5" value={date} onChange={e => setDate(e.target.value)} required />
+          </div>
+
+          <div>
+            <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>الوصف</label>
+            <input type="text" className="input-field text-sm py-2.5" value={description} onChange={e => setDescription(e.target.value)} placeholder="تحويل داخلي" />
+          </div>
+
+          <details className="p-2 rounded-lg" style={{ background: 'var(--bg-muted)' }}>
+            <summary className="cursor-pointer text-[11px] font-bold" style={{ color: 'var(--text-secondary)' }}>➕ رسوم تحويل (اختياري)</summary>
+            <div className="mt-2 space-y-2">
+              <input type="text" inputMode="decimal" className="input-field text-sm py-2" value={fees} onChange={e => setFees(e.target.value)} placeholder="0.00" />
+              <select className="input-field text-xs py-2" value={feesMethod} onChange={e => setFeesMethod(e.target.value)}>
+                {PAYMENT_METHODS.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+              </select>
+            </div>
+          </details>
+
+          <button type="submit" disabled={isProcessing} className="btn btn-primary w-full py-2.5 text-sm" style={{ background: 'var(--brand)' }}>
+            {isProcessing ? 'جاري التحويل...' : <React.Fragment><ArrowLeftRight size={14} /> تنفيذ التحويل</React.Fragment>}
+          </button>
+        </form>
+      </div>
+    </div>
   );
 });
 
@@ -3989,7 +4598,7 @@ const SettingsView = memo(({ data, accountsData, cards, budgets, dispatch, saveH
   const handleDriveBackupNow = async () => {
     setDriveBusy(true); setDriveStatus('جاري الرفع...');
     try {
-      const payload = { data, budgets, exportedAt: new Date().toISOString(), version: 'V80' };
+      const payload = { data, budgets, exportedAt: new Date().toISOString(), version: 'V80-v17' };
       const result = await uploadBackupToDrive(payload);
       localStorage.setItem(AUTO_BACKUP_LS_KEY, String(Date.now()));
       const folderId = localStorage.getItem(DRIVE_FOLDER_ID_LS_KEY) || DRIVE_DEFAULT_FOLDER_ID;
@@ -4055,13 +4664,15 @@ const SettingsView = memo(({ data, accountsData, cards, budgets, dispatch, saveH
           {ACCOUNT_KEYS.map(key => {
             const acc = localAccounts[key] || {};
             const Icon = ACCOUNT_ICONS[key] || Wallet;
+            const method = PAYMENT_METHODS.find(p => p.id === key);
             return (
               <div key={key} className="card">
                 <div className="flex justify-between items-center mb-3">
                   <div className="flex items-center gap-2">
                     <div className="p-1.5 rounded-lg" style={{ background: 'var(--bg-muted)', color: 'var(--text-secondary)' }}><Icon size={14} /></div>
-                    <h4 className="font-black text-xs">{acc.label || key}</h4>
+                    <h4 className="font-black text-xs">{method?.label || acc.label || key}</h4>
                   </div>
+                  {method?.last4 && <span className="badge badge-neutral text-[9px]">•••• {method.last4}</span>}
                 </div>
                 <div className="space-y-2.5">
                   <div><label className="block text-[10px] font-bold mb-1" style={{ color: 'var(--text-muted)' }}>الرصيد الأساسي</label><input type="text" inputMode="decimal" value={acc.balance ?? ''} onChange={e => handleAccountChange(key, 'balance', e.target.value)} className="input-field text-base font-black text-blue-600 text-center py-2" /></div>
@@ -4084,12 +4695,21 @@ const SettingsView = memo(({ data, accountsData, cards, budgets, dispatch, saveH
                 <div className="flex items-center gap-2 mb-3">
                   <div className="p-1.5 rounded-lg bg-purple-50 dark:bg-purple-950/30 text-purple-600 dark:text-purple-400"><CreditCard size={14} /></div>
                   <h3 className="font-black text-sm">{card.bank} - {card.name}</h3>
+                  <span className="badge badge-neutral text-[10px]">•••• {card.last4}</span>
                 </div>
                 <div className="grid grid-cols-3 gap-2 mb-3">
                   <div><label className="block text-[10px] font-bold mb-1" style={{ color: 'var(--text-muted)' }}>الحد</label><input type="text" inputMode="decimal" value={card.limit} onChange={e => handleCardChange(card.id, 'limit', e.target.value)} className="input-field font-black text-blue-600 text-center text-xs py-2" /></div>
                   <div><label className="block text-[10px] font-bold mb-1" style={{ color: 'var(--text-muted)' }}>مديونية أساسية</label><input type="text" inputMode="decimal" value={card.openingDebt} onChange={e => handleCardChange(card.id, 'openingDebt', e.target.value)} className="input-field font-black text-red-600 text-center text-xs py-2" /></div>
                   <div><label className="block text-[10px] font-bold mb-1" style={{ color: 'var(--text-muted)' }}>كاش باك %</label><input type="text" inputMode="decimal" value={card.cashbackRate || 1} onChange={e => handleCardChange(card.id, 'cashbackRate', e.target.value)} className="input-field font-black text-amber-600 text-center text-xs py-2" /></div>
                 </div>
+                {card.subCards && card.subCards.length > 0 && (
+                  <div className="p-2 rounded-lg mb-2" style={{ background: 'var(--bg-muted)' }}>
+                    <p className="text-[10px] font-bold mb-1.5" style={{ color: 'var(--text-muted)' }}>💳 بطاقات فرعية:</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {card.subCards.map(sub => <span key={sub.last4} className="badge badge-neutral text-[9px]">•••• {sub.last4}</span>)}
+                    </div>
+                  </div>
+                )}
                 <div className="p-2 rounded-lg text-center mt-2" style={{ background: 'var(--bg-muted)' }}>
                   <p className="text-[10px] font-semibold" style={{ color: 'var(--text-muted)' }}>المديونية الحية</p>
                   <p className="font-black text-red-600 text-sm">{fmt(liveDebt)} ج.م</p>
@@ -4147,12 +4767,15 @@ const SettingsView = memo(({ data, accountsData, cards, budgets, dispatch, saveH
 const ProfessionalTicker = memo(({ updatedLoans, cards, liveBalances, walletVisibility, custodyBalance, data }) => {
   const [quote] = useState(() => DAILY_DHIKR[Math.floor(Math.random() * DAILY_DHIKR.length)]);
   const totalDebt = updatedLoans.filter(l => !l.isReceivable).reduce((a, l) => a + l.remaining, 0) + cards.reduce((a, c) => a + computeCardDebt(data, c), 0);
+  const totalReceivable = updatedLoans.filter(l => l.isReceivable).reduce((a, l) => a + l.remaining, 0);
   const cashNow = safeNumber(liveBalances?.cash);
   const items = (
     <React.Fragment>
       <span className="ticker-item">💰 {walletVisibility.cash ? fmt(cashNow) : '•••••'} ج.م</span>
       <span className="opacity-30 mx-2">•</span>
       <span className="ticker-item">💳 {fmt(totalDebt)} ج.م</span>
+      <span className="opacity-30 mx-2">•</span>
+      <span className="ticker-item">💵 مستحقات {fmt(totalReceivable)} ج.م</span>
       <span className="opacity-30 mx-2">•</span>
       <span className="ticker-item">📋 عهدة {fmt(custodyBalance)} ج.م</span>
       <span className="opacity-30 mx-2">•</span>
@@ -4187,7 +4810,7 @@ const EnhancedSidebar = memo(({ activeTab, dispatch, canUndo, onUndo, deleteRequ
     <aside className="w-60 hidden lg:flex flex-col p-4 z-40 relative no-print" style={{ background: 'var(--bg-card)', borderLeft: '1px solid var(--border-subtle)' }}>
       <div className="flex items-center gap-2.5 mb-6">
         <div className="p-2 rounded-lg text-white" style={{ background: 'var(--brand)' }}><Wallet size={18} /></div>
-        <div><h2 className="font-black text-sm">المحفظة الذكية</h2><p className="text-[10px] font-semibold" style={{ color: 'var(--text-muted)' }}>V80</p></div>
+        <div><h2 className="font-black text-sm">المحفظة الذكية</h2><p className="text-[10px] font-semibold" style={{ color: 'var(--text-muted)' }}>V80 v17</p></div>
       </div>
       <nav className="flex-1 scroll-hide overflow-y-auto -mx-1 px-1">
         {groups.map(g => (
@@ -4256,7 +4879,7 @@ const LoginScreen = ({ onLogin }) => {
         <div className="flex flex-col items-center mb-8">
           <div className="w-20 h-20 rounded-3xl flex items-center justify-center mb-5 shadow-2xl" style={{ background: 'var(--brand)' }}><Wallet size={40} className="text-white" /></div>
           <h1 className="text-2xl font-black text-white mb-1">محفظتي المالية</h1>
-          <p className="text-sm font-medium" style={{ color: '#C8BEA8' }}>إدارة مالية ذكية</p>
+          <p className="text-sm font-medium" style={{ color: '#C8BEA8' }}>إدارة مالية ذكية — v17</p>
         </div>
         {error && (<div className="mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-300 text-xs font-bold flex items-center gap-2"><AlertTriangle size={14} /> {error}</div>)}
         <button onClick={handleGoogleLogin} disabled={isLoading} className="w-full bg-white text-slate-900 py-4 px-6 rounded-2xl font-black text-sm flex items-center justify-center gap-3 hover:bg-slate-100 active:scale-[0.98] shadow-xl disabled:opacity-50 transition-all">
@@ -4514,6 +5137,7 @@ function dataReducer(state, action) {
     case 'SET_VIEWING_RECEIPT': return { ...state, viewingReceipt: action.payload };
     case 'SET_PIN_CHANGE_OPEN': return { ...state, isPinChangeOpen: action.payload };
     case 'SET_SMS_MODAL_OPEN': return { ...state, isSmsModalOpen: action.payload };
+    case 'SET_TRANSFER_MODAL_OPEN': return { ...state, isTransferModalOpen: action.payload };
     case 'SET_PENDING_CLOSE_MODAL': return { ...state, pendingCloseModal: action.payload };
     case 'ADD_NOTIFICATION': return { ...state, notifications: [...state.notifications, { id: Date.now() + Math.random(), ...action.payload }] };
     case 'REMOVE_NOTIFICATION': return { ...state, notifications: state.notifications.filter(n => n.id !== action.payload) };
@@ -4618,7 +5242,7 @@ const sanitizeForFirestore = (obj) => {
   return obj;
 };
 
-// ═══ App — مع حماية المزامنة بين الأجهزة ═══
+// ═══ App — النسخة النهائية الكاملة ═══
 function App() {
   const defMY = useMemo(() => getDefaultMonthYear(), []);
   const [state, dispatch] = useReducer(dataReducer, {
@@ -4635,6 +5259,7 @@ function App() {
     isRecurringModalOpen: false,
     recurringFormData: {
       title: '', amount: '', day: 1, category: 'أخرى', type: 'expense',
+      method: 'cash',
       startMonth: '', endMonth: '', active: true,
       kind: null, linkedLoanSystemId: null, linkedCardId: null,
       nextMonth: false, variableAmount: false
@@ -4645,6 +5270,7 @@ function App() {
     expandedCardsSection: false, statusFilter: 'all',
     confirmDialog: { isOpen: false, title: '', message: '', onConfirm: null, onCancel: null, danger: false },
     isQuickTransferModalOpen: false,
+    isTransferModalOpen: false,
     quickTransferData: { from: 'cash', to: 'fawry', amount: '', fees: '', transferType: 'monthly', externalEntity: '', date: getLocalISODate(), beneficiaryId: null, forceCash: false },
     viewingCardStatement: null,
     viewingReceipt: null,
@@ -4667,13 +5293,13 @@ function App() {
   const lastRemoteRef = useRef(null);
   const lastMaterializeRef = useRef('');
   const lastFamilyNotifiedRef = useRef({});
-  // 🆕 حماية المزامنة بين الأجهزة
+  // 🆕 حماية المزامنة
   const isRemoteSynced = useRef(false);
   const hasLocalChanges = useRef(false);
   const lastRemoteTimestamp = useRef(0);
   const DEVICE_ID = useRef(`dev-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`);
 
-  const { data, activeTab, selectedYear, selectedMonth, transViewMode, catViewType, isFormOpen, formMode, formData, isLocked, isDarkMode, expandedGroup, budgets, editingCard, editingLoan, searchTerm, editingBudgetCategory, budgetAmount, isRecurringModalOpen, recurringFormData, notifications, history, expandedLedgers, expandedCardsSection, statusFilter, confirmDialog, isQuickTransferModalOpen, quickTransferData, viewingCardStatement, viewingReceipt, isPinChangeOpen, isSmsModalOpen, pendingCloseModal, walletVisibility, isProcessing, formErrors, activeCategoryDetail } = state;
+  const { data, activeTab, selectedYear, selectedMonth, transViewMode, catViewType, isFormOpen, formMode, formData, isLocked, isDarkMode, expandedGroup, budgets, editingCard, editingLoan, searchTerm, editingBudgetCategory, budgetAmount, isRecurringModalOpen, recurringFormData, notifications, history, expandedLedgers, expandedCardsSection, statusFilter, confirmDialog, isQuickTransferModalOpen, isTransferModalOpen, quickTransferData, viewingCardStatement, viewingReceipt, isPinChangeOpen, isSmsModalOpen, pendingCloseModal, walletVisibility, isProcessing, formErrors, activeCategoryDetail } = state;
   const { transactions = [], loans = [], cards = [], recurringItems = [], accountsData = DEFAULT_ACCOUNTS, monthlyPlans = {}, deleteRequests = [] } = data || {};
 
   const isOnline = useOnlineStatus();
@@ -4687,7 +5313,6 @@ function App() {
     return () => unsub();
   }, []);
 
-  // 🆕 onSnapshot — مع تعليم isRemoteSynced
   useEffect(() => {
     if (!isAuthenticated) return;
     const docRef = db.collection("finance_2026").doc("user_ahmed_data");
@@ -4696,7 +5321,6 @@ function App() {
         const raw = doc.data();
         const migrated = migrateData(raw);
         lastRemoteRef.current = JSON.stringify(migrated);
-        // 🆕 تحديث حالة المزامنة
         isRemoteSynced.current = true;
         lastRemoteTimestamp.current = safeNumber(raw._updatedAt, 0);
         if (raw._lastDevice && raw._lastDevice !== DEVICE_ID.current) {
@@ -4704,7 +5328,6 @@ function App() {
         } else {
           setLastSyncInfo(`${new Date(safeNumber(raw._updatedAt, Date.now())).toLocaleTimeString('ar-EG')} • نفس الجهاز`);
         }
-        console.log('📥 استلمنا من Firestore — device:', raw._lastDevice || 'unknown', '| time:', new Date(safeNumber(raw._updatedAt, 0)).toLocaleString('ar-EG'));
         if (raw.budgets && typeof raw.budgets === 'object') dispatch({ type: 'SET_BUDGETS', payload: raw.budgets });
         dispatch({ type: 'SET_DATA', payload: migrated });
 
@@ -4752,17 +5375,9 @@ function App() {
     return () => unsub();
   }, [isAuthenticated]);
 
-  // 🆕 useEffect الحفظ — مع حماية كاملة ضد Race Condition
   useEffect(() => {
     if (!isAuthenticated || !data || !data.transactions) return;
-    
-    // ✅ لا تحفظ قبل ما تستقبل أول قراءة من Firestore
-    if (!isRemoteSynced.current) {
-      console.log('⏸️ في انتظار أول مزامنة من السحابة...');
-      return;
-    }
-    
-    // ✅ لا تحفظ لو المستخدم مغيرش حاجة
+    if (!isRemoteSynced.current) return;
     if (!hasLocalChanges.current) return;
     
     clearTimeout(saveTimeoutRef.current);
@@ -4777,14 +5392,11 @@ function App() {
       
       try {
         const docRef = db.collection("finance_2026").doc("user_ahmed_data");
-        // 🆕 اقرأ النسخة السحابية الأول للتأكد من عدم وجود تعارض
         const remoteSnap = await docRef.get();
         const remoteData = remoteSnap.exists ? remoteSnap.data() : {};
         const remoteTime = safeNumber(remoteData._updatedAt, 0);
         
-        // ⚠️ لو السحابة أحدث من آخر قراءة عندنا → جهاز تاني عدّل
         if (remoteTime > lastRemoteTimestamp.current) {
-          console.warn('⚠️ السحابة أحدث — رفض الحفظ لتفادي التعارض');
           const migrated = migrateData(remoteData);
           lastRemoteRef.current = JSON.stringify(migrated);
           lastRemoteTimestamp.current = remoteTime;
@@ -4799,7 +5411,6 @@ function App() {
           return;
         }
         
-        // ✅ احفظ مع timestamp و device ID
         const payload = sanitizeForFirestore({ 
           ...data, 
           budgets,
@@ -4809,7 +5420,6 @@ function App() {
         await docRef.set(payload, { merge: true });
         hasLocalChanges.current = false;
         lastRemoteTimestamp.current = Date.now();
-        console.log('📤 تم الحفظ من:', DEVICE_ID.current);
       } catch (err) {
         console.error('Save error:', err);
       }
@@ -4818,7 +5428,6 @@ function App() {
     return () => clearTimeout(saveTimeoutRef.current);
   }, [data, isAuthenticated, budgets, addNotification]);
 
-  // Materialize Recurring
   useEffect(() => {
     if (!isAuthenticated || !data?.recurringItems?.length) return;
     const today = getLocalISODate();
@@ -4846,8 +5455,6 @@ function App() {
 
   const removeNotification = useCallback((id) => dispatch({ type: 'REMOVE_NOTIFICATION', payload: id }), []);
   const addNotification = useCallback((notification) => dispatch({ type: 'ADD_NOTIFICATION', payload: notification }), []);
-  
-  // 🆕 saveHistory — مع تعليم hasLocalChanges
   const saveHistory = useCallback(() => {
     hasLocalChanges.current = true;
     dispatch({ type: 'ADD_TO_HISTORY', payload: { data: JSON.parse(JSON.stringify(data)), budgets: JSON.parse(JSON.stringify(budgets)) } });
@@ -4864,22 +5471,29 @@ function App() {
   const custodySummary = useMemo(() => computeCustodyBalance(data?.custodyEntries), [data?.custodyEntries]);
   const pendingDeleteRequestsCount = useMemo(() => (deleteRequests || []).filter(r => r && r.status === 'pending').length, [deleteRequests]);
 
+  // 🆕 financeSnapshot — مع الإصلاحات المحاسبية
   const financeSnapshot = useMemo(() => {
     const opening = getOpeningBalance(data, 'cash', selectedYear, selectedMonth);
     const actualCashInHand = computeBalance(data, 'cash', endOfToday());
     const today = endOfToday();
-    const curMonth = transactions.filter(t => t.month === selectedMonth && (t.year || new Date(t.date).getFullYear()) === selectedYear);
-    const actualIncome = curMonth.filter(t => t.type === 'income' && t.status === 'paid' && t.method === 'cash' && new Date(t.date) <= today).reduce((s, t) => s + safeNumber(t.amount), 0);
-    const pendingIncome = curMonth.filter(t => t.type === 'income' && t.status !== 'paid' && t.method === 'cash').reduce((s, t) => s + safeNumber(t.amount), 0);
-    const paidCash = curMonth.filter(t => t.type === 'expense' && t.status === 'paid' && t.method === 'cash' && new Date(t.date) <= today).reduce((s, t) => s + safeNumber(t.amount), 0);
-    const pendingCash = curMonth.filter(t => t.type === 'expense' && t.status !== 'paid' && t.method === 'cash').reduce((s, t) => s + safeNumber(t.amount), 0);
+    const curMonth = transactions.filter(t => t.month === selectedMonth && (t.year || new Date(t.date).getFullYear()) === selectedYear && !isTransfer(t) && !isCashbackTx(t));
+    
+    // ✅ الدخل الحقيقي (paid فقط)
+    const actualIncome = curMonth.filter(t => t.type === 'income' && t.status === 'paid' && new Date(t.date) <= today).reduce((s, t) => s + safeNumber(t.amount), 0);
+    // ✅ الدخل المعلق (منفصل)
+    const pendingIncome = curMonth.filter(t => t.type === 'income' && t.status !== 'paid').reduce((s, t) => s + safeNumber(t.amount), 0);
+    // ✅ المصروف المدفوع
+    const paidCash = curMonth.filter(t => t.type === 'expense' && t.status === 'paid' && new Date(t.date) <= today).reduce((s, t) => s + safeNumber(t.amount), 0);
+    // ✅ المصروف المعلق
+    const pendingCash = curMonth.filter(t => t.type === 'expense' && t.status !== 'paid').reduce((s, t) => s + safeNumber(t.amount), 0);
+    
     return { opening, actualIncome, pendingIncome, paidCash, pendingCash, actualCashInHand, projectedClosingBalance: actualCashInHand + pendingIncome - pendingCash };
   }, [data, transactions, selectedYear, selectedMonth]);
 
   const chartData = useMemo(() => getMonthsForYear(selectedYear).map(m => ({
     name: m.slice(0, 3),
-    دخل: transactions.filter(t => t.month === m && (t.year || 2026) === selectedYear && t.type === 'income').reduce((a, c) => a + safeNumber(c.amount), 0),
-    مصروف: transactions.filter(t => t.month === m && (t.year || 2026) === selectedYear && t.type === 'expense').reduce((a, c) => a + safeNumber(c.amount), 0)
+    دخل: transactions.filter(t => t.month === m && (t.year || 2026) === selectedYear && t.type === 'income' && t.status === 'paid' && !isTransfer(t)).reduce((a, c) => a + safeNumber(c.amount), 0),
+    مصروف: transactions.filter(t => t.month === m && (t.year || 2026) === selectedYear && t.type === 'expense' && t.status === 'paid' && !isTransfer(t)).reduce((a, c) => a + safeNumber(c.amount), 0)
   })), [transactions, selectedYear]);
 
   const updatedLoans = useMemo(() => {
@@ -4926,7 +5540,7 @@ function App() {
   }, [transactions, loans]);
 
   const monthInsights = useMemo(() => {
-    const m = transactions.filter(t => t.month === selectedMonth && (t.year || 2026) === selectedYear);
+    const m = transactions.filter(t => t.month === selectedMonth && (t.year || 2026) === selectedYear && !isTransfer(t) && !isCashbackTx(t));
     const inc = m.filter(t => t.type === 'income' && t.status === 'paid').reduce((s, t) => s + safeNumber(t.amount), 0);
     const exp = m.filter(t => t.type === 'expense' && t.status === 'paid').reduce((s, t) => s + safeNumber(t.amount), 0);
     return { inc, exp, net: inc - exp };
@@ -4953,9 +5567,22 @@ function App() {
 
   const buildLedger = useCallback((methodId) => {
     const cutoffDay = dayStart(getAccountCutoff(accountsData, methodId));
-    const acc = transactions.filter(t => t.method === methodId && t.status === 'paid' && new Date(t.date) >= cutoffDay).sort((a, b) => new Date(a.date) - new Date(b.date));
+    const acc = transactions.filter(t => {
+      if (t.status !== 'paid') return false;
+      if (isTransfer(t)) return t.fromMethod === methodId || t.toMethod === methodId;
+      return t.method === methodId;
+    }).filter(t => new Date(t.date) >= cutoffDay).sort((a, b) => new Date(a.date) - new Date(b.date));
     let bal = safeNumber(accountsData?.[methodId]?.balance);
-    return acc.map(t => { const a = safeNumber(t.amount); bal += (t.subType === 'deposit') ? a : -a; return { ...t, runningBalance: bal }; }).reverse();
+    return acc.map(t => { 
+      const a = safeNumber(t.amount);
+      if (isTransfer(t)) {
+        if (t.fromMethod === methodId) bal -= a;
+        if (t.toMethod === methodId) bal += a;
+      } else {
+        bal += (t.subType === 'deposit') ? a : -a;
+      }
+      return { ...t, runningBalance: bal }; 
+    }).reverse();
   }, [transactions, accountsData]);
 
   const getAgendaItems = useCallback(() => {
@@ -4968,7 +5595,7 @@ function App() {
         const d = parseInt(c.dueDate) || 5;
         let tm = cm, ty = cy;
         if (d < cd) { tm++; if (tm > 11) { tm = 0; ty++; } }
-        items.push({ id: `ag-card-${c.id}`, title: `سداد ${c.bank} - ${c.name}`, date: new Date(ty, tm, d).toISOString().split('T')[0], amount: computeCardDebt(data, c), type: 'warning', icon: CreditCard, desc: 'استحقاق دوري' });
+        items.push({ id: `ag-card-${c.id}`, title: `سداد ${c.bank} - ${c.name}`, date: new Date(ty, tm, d).toISOString().split('T')[0], amount: computeCardDebt(data, c), type: 'warning', icon: CreditCard, desc: 'استحقاق دوري', method: c.bank === 'AAIB' ? 'aaib_savings' : 'cib_savings' });
       });
 
       updatedLoans.forEach(l => {
@@ -4976,13 +5603,13 @@ function App() {
           const d = parseInt(l.dueDay) || 1;
           let tm = cm, ty = cy;
           if (d < cd) { tm++; if (tm > 11) { tm = 0; ty++; } }
-          items.push({ id: `ag-loan-${l.id}`, title: `قسط ${l.name}`, date: new Date(ty, tm, d).toISOString().split('T')[0], amount: safeNumber(l.monthlyInstallment), type: 'danger', icon: Banknote, desc: l.description });
+          items.push({ id: `ag-loan-${l.id}`, title: `قسط ${l.name}`, date: new Date(ty, tm, d).toISOString().split('T')[0], amount: safeNumber(l.monthlyInstallment), type: 'danger', icon: Banknote, desc: l.description, method: 'aaib_savings' });
         }
         if (l.isReceivable && !l.paused && l.remaining > 0 && safeNumber(l.monthlyInstallment) > 0) {
           const d = parseInt(l.dueDay) || 1;
           let tm = cm, ty = cy;
           if (d < cd) { tm++; if (tm > 11) { tm = 0; ty++; } }
-          items.push({ id: `ag-recv-${l.id}`, title: `تحصيل ${l.name}`, date: new Date(ty, tm, d).toISOString().split('T')[0], amount: safeNumber(l.monthlyInstallment), type: 'success', icon: TrendingUp, desc: '💰 مستحق لك' });
+          items.push({ id: `ag-recv-${l.id}`, title: `تحصيل ${l.name}`, date: new Date(ty, tm, d).toISOString().split('T')[0], amount: safeNumber(l.monthlyInstallment), type: 'success', icon: TrendingUp, desc: '💰 مستحق لك', method: 'cash' });
         }
       });
 
@@ -5018,7 +5645,8 @@ function App() {
           type: isVariable ? 'warning' : (isIncome ? 'success' : 'warning'),
           icon, desc,
           nextMonth: isNextMonth,
-          variableAmount: isVariable
+          variableAmount: isVariable,
+          method: r.method || null
         });
       });
 
@@ -5056,7 +5684,25 @@ function App() {
         saveHistory();
         const finalSubType = formData.subType || (formData.type === 'income' ? 'deposit' : 'withdrawal');
         const status = formData.status || 'pending';
-        const newTx = { ...formData, id: formMode === 'edit' ? formData.id : getSafeId(), amount, month: txMonth, year: txYear, monthIndex: d.getMonth(), date: formData.date, subType: finalSubType, status, receipts: formData.receipts || [] };
+        // 🆕 ربط linkedCardId تلقائياً من method
+        let linkedCardId = formData.linkedCardId;
+        if (!linkedCardId && CARD_METHOD_IDS.includes(formData.method)) {
+          const pm = PAYMENT_METHODS.find(p => p.id === formData.method);
+          linkedCardId = pm?.linkedCardId || undefined;
+        }
+        const newTx = { 
+          ...formData, 
+          id: formMode === 'edit' ? formData.id : getSafeId(), 
+          amount, 
+          month: txMonth, 
+          year: txYear, 
+          monthIndex: d.getMonth(), 
+          date: formData.date, 
+          subType: finalSubType, 
+          status, 
+          linkedCardId,
+          receipts: formData.receipts || [] 
+        };
         const next = formMode === 'add' ? [...transactions, newTx] : transactions.map(t => t.id === newTx.id ? { ...newTx } : t);
         next.sort((a, b) => new Date(b.date) - new Date(a.date));
         dispatch({ type: 'UPDATE_TRANSACTIONS', payload: next });
@@ -5159,6 +5805,7 @@ function App() {
     const payload = {
       title: titleCheck.value, amount: amountCheck.value, day: safeNumber(recurringFormData.day, 1),
       category: recurringFormData.category, type: recurringFormData.type,
+      method: recurringFormData.method || 'cash',
       startMonth: recurringFormData.startMonth || null, endMonth: recurringFormData.endMonth || null,
       active: recurringFormData.active !== false, kind: recurringFormData.kind || null,
       linkedLoanSystemId: recurringFormData.linkedLoanSystemId || null, linkedCardId: recurringFormData.linkedCardId || null,
@@ -5173,7 +5820,7 @@ function App() {
       addNotification({ type: 'success', title: 'تمت الإضافة' });
     }
     dispatch({ type: 'SET_RECURRING_MODAL_OPEN', payload: false });
-    dispatch({ type: 'SET_RECURRING_FORM_DATA', payload: { title: '', amount: '', day: 1, category: 'أخرى', type: 'expense', startMonth: '', endMonth: '', active: true, kind: null, linkedLoanSystemId: null, linkedCardId: null, nextMonth: false, variableAmount: false } });
+    dispatch({ type: 'SET_RECURRING_FORM_DATA', payload: { title: '', amount: '', day: 1, category: 'أخرى', type: 'expense', method: 'cash', startMonth: '', endMonth: '', active: true, kind: null, linkedLoanSystemId: null, linkedCardId: null, nextMonth: false, variableAmount: false } });
   }, [recurringFormData, recurringItems, saveHistory, addNotification]);
 
   const deleteRecurring = useCallback((id) => {
@@ -5263,6 +5910,7 @@ function App() {
 
         {isPinChangeOpen && (<PinChangeModal onClose={() => dispatch({ type: 'SET_PIN_CHANGE_OPEN', payload: false })} addNotification={addNotification} />)}
         {isSmsModalOpen && (<SmsParserModal isOpen={true} onClose={() => dispatch({ type: 'SET_SMS_MODAL_OPEN', payload: false })} dispatch={dispatch} addNotification={addNotification} saveHistory={saveHistory} data={data} />)}
+        {isTransferModalOpen && (<TransferModal isOpen={true} onClose={() => dispatch({ type: 'SET_TRANSFER_MODAL_OPEN', payload: false })} dispatch={dispatch} saveHistory={saveHistory} addNotification={addNotification} data={data} liveBalances={liveBalances} />)}
         {activeCategoryDetail && (<CategoryDetailModal category={activeCategoryDetail} transactions={transactions} selectedMonth={selectedMonth} selectedYear={selectedYear} dispatch={dispatch} addNotification={addNotification} />)}
 
         {!isLocked && (
@@ -5339,6 +5987,7 @@ function App() {
           )}
         </main>
 
+        {/* ═══ Modal إضافة/تعديل معاملة ═══ */}
         {isFormOpen && (
           <div className="modal-backdrop no-print">
             <div className="w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden flex flex-col animate-slideInBottom" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', maxHeight: 'calc(100dvh - 24px)' }}>
@@ -5379,7 +6028,20 @@ function App() {
                 <div className="grid grid-cols-3 gap-2">
                   <div><label className="block text-[11px] font-bold mb-1" style={{ color: 'var(--text-muted)' }}>المبلغ</label><input type="text" inputMode="decimal" required className={`input-field text-sm font-black text-blue-600 text-center py-2.5 ${formErrors.amount ? 'error' : ''}`} value={formData.amount} onChange={e => dispatch({ type: 'SET_FORM_DATA', payload: { ...formData, amount: e.target.value } })} /></div>
                   <div><label className="block text-[11px] font-bold mb-1" style={{ color: 'var(--text-muted)' }}>التاريخ</label><input type="date" required className={`input-field text-[11px] font-bold py-2.5 ${formErrors.date ? 'error' : ''}`} value={formData.date} onChange={e => dispatch({ type: 'SET_FORM_DATA', payload: { ...formData, date: e.target.value } })} /></div>
-                  <div><label className="block text-[11px] font-bold mb-1" style={{ color: 'var(--text-muted)' }}>الدفع</label><select className="input-field text-[11px] font-bold py-2.5" value={formData.method} onChange={e => dispatch({ type: 'SET_FORM_DATA', payload: { ...formData, method: e.target.value } })}>{PAYMENT_METHODS.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}</select></div>
+                  <div>
+                    <label className="block text-[11px] font-bold mb-1" style={{ color: 'var(--text-muted)' }}>الدفع</label>
+                    <select className="input-field text-[11px] font-bold py-2.5" value={formData.method} onChange={e => dispatch({ type: 'SET_FORM_DATA', payload: { ...formData, method: e.target.value } })}>
+                      <optgroup label="الحسابات">
+                        {PAYMENT_METHODS.filter(m => m.group === 'account').map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+                      </optgroup>
+                      <optgroup label="البطاقات">
+                        {PAYMENT_METHODS.filter(m => m.group === 'card').map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+                      </optgroup>
+                      <optgroup label="قنوات">
+                        {PAYMENT_METHODS.filter(m => m.group === 'channel').map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+                      </optgroup>
+                    </select>
+                  </div>
                 </div>
                 <div><label className="block text-[11px] font-bold mb-1" style={{ color: 'var(--text-muted)' }}>الوصف</label><input type="text" className={`input-field font-bold text-sm py-2.5 ${formErrors.description ? 'error' : ''}`} value={formData.description || ''} onChange={e => dispatch({ type: 'SET_FORM_DATA', payload: { ...formData, description: e.target.value } })} placeholder="تفاصيل..." /></div>
                 <button type="submit" className="btn btn-primary w-full py-2.5 text-sm" disabled={isProcessing}>{isProcessing ? 'جاري الحفظ...' : <React.Fragment><Save size={14} /> {formData.status === 'paid' ? 'حفظ واعتماد' : 'حفظ كمعلق'}</React.Fragment>}</button>
@@ -5388,6 +6050,7 @@ function App() {
           </div>
         )}
 
+        {/* ═══ Modal تعديل البطاقة ═══ */}
         {editingCard && (
           <div className="modal-backdrop no-print">
             <div className="w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden animate-slideInBottom" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)' }}>
@@ -5408,6 +6071,7 @@ function App() {
           </div>
         )}
 
+        {/* ═══ Modal تعديل الالتزام ═══ */}
         {editingLoan && (
           <div className="modal-backdrop no-print">
             <div className="w-full max-w-md rounded-2xl shadow-2xl animate-slideInBottom" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)' }}>
@@ -5430,6 +6094,7 @@ function App() {
           </div>
         )}
 
+        {/* ═══ Modal الميزانية ═══ */}
         {editingBudgetCategory && (
           <div className="modal-backdrop no-print">
             <div className="w-full max-w-sm rounded-2xl shadow-2xl p-5" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)' }}>
@@ -5443,10 +6108,11 @@ function App() {
           </div>
         )}
 
+        {/* ═══ Modal مصروف شهري ═══ */}
         {isQuickTransferModalOpen && (
           <div className="modal-backdrop no-print">
             <div className="w-full max-w-md rounded-2xl shadow-2xl animate-slideInBottom" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)' }}>
-              <div className="p-4 flex justify-between items-center" style={{ borderBottom: '1px solid var(--border-subtle)' }}><h3 className="text-sm font-black flex items-center gap-2"><ArrowRight size={16} className="text-blue-500" /> تحويل / مصروف شهري</h3><button type="button" onClick={() => dispatch({ type: 'SET_QUICK_TRANSFER_MODAL_OPEN', payload: false })} className="btn btn-ghost p-1.5"><X size={16} /></button></div>
+              <div className="p-4 flex justify-between items-center" style={{ borderBottom: '1px solid var(--border-subtle)' }}><h3 className="text-sm font-black flex items-center gap-2"><ArrowRight size={16} className="text-blue-500" /> مصروف شهري</h3><button type="button" onClick={() => dispatch({ type: 'SET_QUICK_TRANSFER_MODAL_OPEN', payload: false })} className="btn btn-ghost p-1.5"><X size={16} /></button></div>
               <form onSubmit={handleQuickTransfer} className="p-4 space-y-3">
                 <div>
                   <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>المستفيد *</label>
@@ -5467,6 +6133,7 @@ function App() {
           </div>
         )}
 
+        {/* ═══ Modal التزام متكرر ═══ */}
         {isRecurringModalOpen && (
           <div className="modal-backdrop no-print">
             <div className="w-full max-w-md rounded-2xl shadow-2xl animate-slideInBottom" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', maxHeight: 'calc(100dvh - 24px)', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
@@ -5482,6 +6149,26 @@ function App() {
                 </div>
                 <div><label className="text-[11px] font-bold block mb-1" style={{ color: 'var(--text-muted)' }}>النوع</label><select className="input-field text-sm" value={recurringFormData.type} onChange={e => dispatch({ type: 'SET_RECURRING_FORM_DATA', payload: { ...recurringFormData, type: e.target.value, category: '' } })}><option value="expense">مصروف</option><option value="income">دخل</option></select></div>
                 <div><label className="text-[11px] font-bold block mb-1" style={{ color: 'var(--text-muted)' }}>الفئة</label><select className="input-field text-sm" value={recurringFormData.category} onChange={e => dispatch({ type: 'SET_RECURRING_FORM_DATA', payload: { ...recurringFormData, category: e.target.value } })}>{CATEGORIES[recurringFormData.type].map(c => <option key={c} value={c}>{c}</option>)}</select></div>
+                
+                {/* 🆕 طريقة الدفع */}
+                <div>
+                  <label className="text-[11px] font-bold block mb-1" style={{ color: 'var(--text-muted)' }}>طريقة الدفع / الحساب</label>
+                  <select className="input-field text-sm" value={recurringFormData.method || 'cash'} onChange={e => dispatch({ type: 'SET_RECURRING_FORM_DATA', payload: { ...recurringFormData, method: e.target.value } })}>
+                    <optgroup label="الحسابات">
+                      {PAYMENT_METHODS.filter(m => m.group === 'account').map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+                    </optgroup>
+                    <optgroup label="البطاقات">
+                      {PAYMENT_METHODS.filter(m => m.group === 'card').map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+                    </optgroup>
+                    <optgroup label="قنوات">
+                      {PAYMENT_METHODS.filter(m => m.group === 'channel').map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+                    </optgroup>
+                  </select>
+                  {recurringFormData.category === 'الزكاة والتبرعات' && (
+                    <p className="text-[9px] mt-1 font-semibold" style={{ color: 'var(--brand)' }}>💡 الزكاة متغيرة الحساب — يمكن تعديل طريقة الدفع عند الاعتماد</p>
+                  )}
+                </div>
+                
                 <div className="grid grid-cols-2 gap-2.5">
                   <div>
                     <label className="text-[11px] font-bold block mb-1" style={{ color: 'var(--text-muted)' }}>من شهر (اختياري)</label>
@@ -5520,6 +6207,7 @@ function App() {
   );
 }
 
+// ═══ Render Root ═══
 const rootElement = document.getElementById('root');
 if (rootElement) {
   setTimeout(() => { const l = document.getElementById('loading'); if (l) l.style.display = 'none'; }, 1000);
@@ -5528,4 +6216,7 @@ if (rootElement) {
 </script>
 </body>
 </html>
+
+
+
   
