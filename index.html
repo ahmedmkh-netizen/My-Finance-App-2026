@@ -652,7 +652,11 @@ const materializeRecurringItems = (data, asOfDateStr) => {
   const materialized = { ...(data.materializedRecurring || {}) };
   const newTxs = [];
   const loanPaidMap = {};
-  existing.forEach(t => { if (t.status === 'paid' && t.sourceReceivableId) loanPaidMap[t.sourceReceivableId] = (loanPaidMap[t.sourceReceivableId] || 0) + safeNumber(t.amount); });
+  existing.forEach(t => {
+    if (t.status === 'paid' && t.sourceReceivableId) {
+      loanPaidMap[t.sourceReceivableId] = (loanPaidMap[t.sourceReceivableId] || 0) + safeNumber(t.amount);
+    }
+  });
 
   data.recurringItems.forEach(r => {
     if (r.active === false) return;
@@ -660,45 +664,92 @@ const materializeRecurringItems = (data, asOfDateStr) => {
     if (r.variableAmount) return;
     const day = safeNumber(r.day, 1);
     if (day < 1 || day > 31) return;
-    let targetYear = nowYear, targetMonthIdx = nowMonthIdx;
-    if (r.nextMonth) { targetMonthIdx = nowMonthIdx + 1; if (targetMonthIdx > 11) { targetMonthIdx = 0; targetYear++; } }
-    const targetMonth = ALL_MONTHS[targetMonthIdx];
-    const targetMonthKey = makeMonthKey(targetYear, targetMonth);
-    const targetInputMonth = `${targetYear}-${String(targetMonthIdx + 1).padStart(2, '0')}`;
-    if (r.startMonth && targetInputMonth < r.startMonth) return;
-    if (r.endMonth && targetInputMonth > r.endMonth) return;
-    const targetDate = new Date(targetYear, targetMonthIdx, day);
-    if (targetDate > now) return;
-    const matKey = `${r.id}_${targetMonthKey}`;
-    if (materialized[matKey]) return;
-    const manualExists = existing.some(t => t.sourceRecurringId === r.id && t.month === targetMonth && (t.year || targetYear) === targetYear);
-    if (manualExists) { materialized[matKey] = true; return; }
-    if (r.linkedLoanSystemId) {
-      const linkedLoan = (data.loans || []).find(l => l.systemId === r.linkedLoanSystemId);
-      if (linkedLoan) { const collected = safeNumber(linkedLoan.prePaidAmount) + (loanPaidMap[linkedLoan.id] || 0); if (collected >= safeNumber(linkedLoan.totalAmount) - 0.005) return; }
+
+    const baseYear = nowYear;
+    const baseMonthIdx = nowMonthIdx;
+
+    for (const offset of [0, 1]) {
+      let matYear = baseYear, matMonthIdx = baseMonthIdx + offset;
+      if (matMonthIdx > 11) { matMonthIdx -= 12; matYear++; }
+
+      let targetYear = matYear, targetMonthIdx = matMonthIdx;
+      if (r.nextMonth) {
+        targetMonthIdx += 1;
+        if (targetMonthIdx > 11) { targetMonthIdx = 0; targetYear++; }
+      }
+
+      const targetMonth = ALL_MONTHS[targetMonthIdx];
+      const targetMonthKey = makeMonthKey(targetYear, targetMonth);
+      const targetInputMonth = `${targetYear}-${String(targetMonthIdx + 1).padStart(2, '0')}`;
+
+      if (r.startMonth && targetInputMonth < r.startMonth) continue;
+      if (r.endMonth && targetInputMonth > r.endMonth) continue;
+
+      const monthsAhead = (targetYear - nowYear) * 12 + (targetMonthIdx - nowMonthIdx);
+      if (monthsAhead > 1) continue;
+
+      const matKey = `${r.id}_${targetMonthKey}`;
+      if (materialized[matKey]) continue;
+
+      const manualExists = existing.some(t =>
+        t.sourceRecurringId === r.id &&
+        t.month === targetMonth &&
+        (t.year || targetYear) === targetYear
+      );
+      if (manualExists) { materialized[matKey] = true; continue; }
+
+      if (r.linkedLoanSystemId) {
+        const linkedLoan = (data.loans || []).find(l => l.systemId === r.linkedLoanSystemId);
+        if (linkedLoan) {
+          const collected = safeNumber(linkedLoan.prePaidAmount) + (loanPaidMap[linkedLoan.id] || 0);
+          if (collected >= safeNumber(linkedLoan.totalAmount) - 0.005) continue;
+        }
+      }
+
+      let method = 'cash';
+      let linkedCardId = r.linkedCardId;
+      if (linkedCardId) {
+        const card = (data.cards || []).find(c => c.id === linkedCardId);
+        if (card) method = getCardMethod(card);
+      }
+
+      const isFee = BANK_FEE_CATEGORIES.has(r.category);
+      const kind = r.kind || (isFee ? KIND.FINANCIAL : KIND.OPERATIONAL);
+
+      const targetDate = new Date(targetYear, targetMonthIdx, day);
+
+      newTxs.push({
+        id: `rec-${r.id}-${targetMonthKey}-${getSafeId()}`,
+        type: r.type,
+        subType: r.type === 'income' ? 'deposit' : 'withdrawal',
+        kind,
+        category: r.category,
+        amount: safeNumber(r.amount),
+        description: r.title || 'بند متكرر',
+        method,
+        date: getLocalISODate(targetDate),
+        month: targetMonth,
+        year: targetYear,
+        monthIndex: targetMonthIdx,
+        status: 'pending',
+        sourceRecurringId: r.id,
+        nextMonthItem: !!r.nextMonth,
+        linkedCardId: linkedCardId || undefined,
+        receipts: [],
+        createdAt: new Date().toISOString()
+      });
+      materialized[matKey] = true;
     }
-    let method = 'cash';
-    let linkedCardId = r.linkedCardId;
-    if (linkedCardId) { const card = (data.cards || []).find(c => c.id === linkedCardId); if (card) method = getCardMethod(card); }
-    const isFee = BANK_FEE_CATEGORIES.has(r.category);
-    const kind = r.kind || (isFee ? KIND.FINANCIAL : KIND.OPERATIONAL);
-    newTxs.push({
-      id: `rec-${r.id}-${targetMonthKey}-${getSafeId()}`,
-      type: r.type, subType: r.type === 'income' ? 'deposit' : 'withdrawal', kind,
-      category: r.category, amount: safeNumber(r.amount), description: r.title || 'بند متكرر',
-      method, date: getLocalISODate(targetDate), month: targetMonth, year: targetYear, monthIndex: targetMonthIdx,
-      status: 'pending', sourceRecurringId: r.id, nextMonthItem: !!r.nextMonth,
-      linkedCardId: linkedCardId || undefined,
-      receipts: [], createdAt: new Date().toISOString()
-    });
-    materialized[matKey] = true;
   });
 
   if (newTxs.length === 0) return null;
-  return { ...data, transactions: [...newTxs, ...existing].sort((a, b) => new Date(b.date) - new Date(a.date)), materializedRecurring: materialized };
+  return {
+    ...data,
+    transactions: [...newTxs, ...existing].sort((a, b) => new Date(b.date) - new Date(a.date)),
+    materializedRecurring: materialized
+  };
 };
-
-// ═══ Monthly Plan Derivation ═══
+  // ═══ Monthly Plan Derivation ═══
 const deriveMonthlyPlanFromHistory = (data, targetYear, targetMonth, monthsBack = 3) => {
   const transactions = data?.transactions || [];
   const recurringItems = data?.recurringItems || [];
