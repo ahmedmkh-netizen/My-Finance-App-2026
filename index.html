@@ -179,20 +179,35 @@ import {
   Search, FileSpreadsheet, Settings as SettingsIcon, Target, CalendarDays, BarChart3, Bell, Sparkles, Bot,
   AlertTriangle, Clock, CheckCircle2, Zap, Hash, Coins, Filter, Eye, EyeOff, ShieldAlert,
   Download, Upload, Cloud, Signal, PiggyBank, Landmark as BuildingBank, ArrowDownCircle, ArrowUpCircle, Wifi, Store as StoreIcon, Users, Activity, Sliders, Table, RotateCcw, Percent, LineChart, Delete, FileText, Briefcase, Gift, Receipt, ArrowLeftRight, Camera, ImageIcon,
-  MessageSquare
+  MessageSquare, Inbox, UserCheck, XCircle, CheckCheck, Trash, ShieldX
 } from 'lucide-react';
 
+// ═══ Firebase Init ═══
 const firebaseConfig = { apiKey: "AIzaSyCEq-Trf1oFsvPF5tlMvqU83ea_J2DLZjs", authDomain: "finance-app-2026-3e318.firebaseapp.com", projectId: "finance-app-2026-3e318", storageBucket: "finance-app-2026-3e318.firebasestorage.app", messagingSenderId: "855414629770", appId: "1:855414629770:web:8bb07198b8245b63781473" };
 if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 const storage = firebase.storage();
-
 db.enablePersistence({ synchronizeTabs: true }).catch((err) => { console.warn('Firestore persistence failed:', err.code); });
 
+// 🆕 Telegram config — نفس قناة العيلة
+const TELEGRAM_TOKEN = '8897959251:AAG0BnIngyXesnR__gY2T8GXw8mKGFX6Du0';
+const TELEGRAM_CHAT_ID = '8920381052';
+const TELEGRAM_ENABLED = true;
+
+const sendTelegram = (text) => {
+  if (!TELEGRAM_ENABLED) return;
+  fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ chat_id: TELEGRAM_CHAT_ID, text, parse_mode: 'Markdown', disable_notification: false })
+  }).then(r => r.json()).then(d => { if (!d.ok) console.warn('Telegram:', d); }).catch(e => console.warn('Telegram fetch:', e));
+};
+
+// ═══ Cloudinary ═══
 const CLOUDINARY_CLOUD_NAME = 'rs4dgpc';
 const CLOUDINARY_UPLOAD_PRESET = 'finance_receipts';
 const CLOUDINARY_UPLOAD_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`;
-
+// ═══ Version & Storage Keys ═══
 const CURRENT_ENGINE_VERSION = 15;
 const DEFAULT_PIN = '1033';
 const PIN_HASH_KEY = 'finance_pin_hash_v1';
@@ -206,6 +221,7 @@ const CASHBACK_STATUS_LABELS = { expected: 'متوقع', partial: 'جزئي', re
 
 const DAILY_DHIKR = ["سُبْحَانَ اللَّهِ وَبِحَمْدِهِ، سُبْحَانَ اللَّهِ الْعَظِيمِ","لَا حَوْلَ وَلَا قُوَّةَ إِلَّا بِاللَّهِ الْعَلِيِّ الْعَظِيمِ","اللَّهُمَّ اكْفِنِي بِحَلَالِكَ عَنْ حَرَامِكَ، وَأَغْنِنِي بِفَضْلِكَ عَمَّنْ سِوَاكَ","أَسْتَغْفِرُ اللَّهَ الْعَظِيمَ، وَأَتُوبُ إِلَيْهِ","اللَّهُمَّ بَارِكْ لَنَا فِيمَا رَزَقْتَنَا وَقِنَا عَذَابَ النَّارِ","لَا إِلَهَ إِلَّا أَنْتَ سُبْحَانَكَ إِنِّي كُنْتُ مِنَ الظَّالِمِينَ","اللَّهُمَّ بِكَ أَصْبَحْنَا وَبِكَ أَمْسَيْنَا وَبِكَ نَحْيَا وَبِكَ نَمُوتُ","رَضِيتُ بِاللَّهِ رَبًّا وَبِالإِسْلَامِ دِينًا وَبِمُحَمَّدٍ نَبِيًّا","يَا حَيُّ يَا قَيُّومُ بِرَحْمَتِكَ أَسْتَغِيثُ أَصْلِحْ لِي شَأْنِي كُلَّهُ","اللَّهُمَّ إِنِّي أَسْأَلُكَ عِلْمًا نَافِعًا وَرِزقًا طَيِّبًا وَعَمَلًا مُتَقَبَّلًا"];
 
+// ═══ Helpers ═══
 const getSafeId = () => { try { return crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).substr(2,9)}`; } catch { return `${Date.now()}-${Math.random().toString(36).substr(2,9)}`; } };
 const normalizeText = (t) => !t ? "" : t.toString().replace(/[أإآ]/g,'ا').replace(/ى/g,'ي').replace(/ة/g,'ه').replace(/[\u064B-\u065F]/g,'').trim().toLowerCase();
 const getLocalISODate = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
@@ -293,6 +309,7 @@ const compressImage = (file, maxWidth = 1280, quality = 0.75) => new Promise((re
 });
 const uploadReceipt = async (txId, file) => { const blob = await compressImage(file); const formData = new FormData(); formData.append('file', blob, `${txId}_${Date.now()}.jpg`); formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET); formData.append('folder', `receipts/${txId}`); const res = await fetch(CLOUDINARY_UPLOAD_URL, { method: 'POST', body: formData }); if (!res.ok) throw new Error('فشل رفع الصورة'); const data = await res.json(); return { url: data.secure_url, path: data.public_id, name: file.name, size: data.bytes }; };
 
+// ═══ Constants ═══
 const STORAGE_KEY = 'finance_tracker_V80_SECURE';
 const LEGACY_KEYS = ['finance_tracker_V79_SECURE', 'finance_tracker_V78_SECURE', 'finance_tracker_V77_SECURE', 'finance_tracker_V76_SECURE'];
 const ALL_MONTHS = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
@@ -388,15 +405,12 @@ const DEFAULT_LOANS = [
 ];
 
 const DEFAULT_RECURRING = [
-  // ═══ مصادر دخل الشهر التالي ═══
   { id:'r1', title:'إيجار المحل', amount:900, day:10, category:'إيجار المحل', type:'income', startMonth:'2026-08', endMonth:null, active:true, nextMonth:true },
   { id:'r2', title:'زكاة - إسماعيل', amount:800, day:7, category:'الزكاة والتبرعات', type:'income', startMonth:'2026-08', endMonth:null, active:true, nextMonth:true },
   { id:'r3', title:'قسط تكييف محمود (دخل)', amount:2800, day:2, category:'تكييف محمود', type:'income', startMonth:'2026-08', endMonth:null, active:true, linkedLoanSystemId: SYSTEM_LOAN_IDS.TAKYEEF, nextMonth:true },
   { id:'r6', title:'راتب شهري', amount:53466, day:7, category:'راتب شهري', type:'income', startMonth:'2026-08', endMonth:null, active:true, nextMonth:true },
   { id:'r7', title:'عهدة إيماك - WE', amount:20000, day:10, category:'عهدة إيماك WE', type:'income', startMonth:'2026-08', endMonth:null, active:true, nextMonth:true, variableAmount:true },
-  // ═══ مصادر دخل نفس الشهر ═══
   { id:'r8', title:'Cash Back متوقع', amount:2700, day:28, category:'Cash Back', type:'income', startMonth:'2026-08', endMonth:null, active:true },
-  // ═══ مصروفات شهرية ═══
   { id:'r4', title:'قسط شقة العبور', amount:5098.01, day:3, category:'الالتزامات البنكية والتمويلية', type:'expense', startMonth:'2026-08', endMonth:'2027-03', active:true },
   { id:'r5', title:'قسط تقويم أسنان سلمى', amount:350, day:15, category:'الصحة والرعاية الطبية', type:'expense', startMonth:'2026-08', endMonth:'2026-12', active:true },
   { id:'r9', title:'رسوم شهرية - CIB Titanium', amount:25, day:5, category:'رسوم بنكية شهرية', type:'expense', kind:'financial', linkedCardId:1, startMonth:'2026-08', endMonth:null, active:true },
@@ -589,20 +603,19 @@ const migrateData = (parsed) => {
   ACCOUNT_KEYS.forEach(k => { if (!accountsData[k]?.lastUpdated) accountsData[k] = { ...(DEFAULT_ACCOUNTS[k] || {}), ...(accountsData[k] || {}), lastUpdated: defaultCutoff }; });
   const withReceivable = (loans || []).map(l => { if (isTakyeefLoan(l)) return { ...l, systemId: SYSTEM_LOAN_IDS.TAKYEEF, isReceivable: true, type: 'receivable', interest: 'مستحق لنا شهرياً', paused: !!l.paused, totalInstallments: safeNumber(l.totalInstallments, 12), paidInstallments: safeNumber(l.paidInstallments, 1) }; return l; });
   const normalizedLoans = withReceivable.map(l => { if (isHanyLoan(l) && !l.autoMonthly) return { id: l.id || 15, systemId: SYSTEM_LOAN_IDS.HANY, name: 'مسحوبات محل هاني', autoMonthly: true, dueNextMonth: true, mergeIntoNextCycle: ['2026-أغسطس'], category: 'مسحوبات محل هاني', totalAmount: 0, prePaidAmount: 0, monthlyInstallment: 0, dueDay: 10, interest: 'مستحق شهري', description: 'مسحوبات يومية — تُحسب تلقائياً من قيود الشهر', type: 'debt' }; if (l && l.autoMonthly && !l.systemId) return { ...l, systemId: SYSTEM_LOAN_IDS.HANY }; if (l && l.autoMonthly && !l.mergeIntoNextCycle) return { ...l, mergeIntoNextCycle: ['2026-أغسطس'] }; return l; });
-let recurringItems = recurring;
-if (!parsed.recurringInitialized && recurring.length === 0) recurringItems = DEFAULT_RECURRING;
+  let recurringItems = recurring;
+  if (!parsed.recurringInitialized && recurring.length === 0) recurringItems = DEFAULT_RECURRING;
 
-// ✅ PATCH: ضمان وجود البنود الأساسية المفقودة (حتى مع recurringInitialized: true)
-const CRITICAL_DEFAULT_CATEGORIES = ['راتب شهري', 'عهدة إيماك WE', 'Cash Back'];
-const CRITICAL_DEFAULTS = DEFAULT_RECURRING.filter(r => CRITICAL_DEFAULT_CATEGORIES.includes(r.category));
-const existingCategories = new Set((recurringItems || []).map(r => r.category));
-const missingDefaults = CRITICAL_DEFAULTS.filter(d => !existingCategories.has(d.category));
-if (missingDefaults.length > 0) {
-  recurringItems = [...(recurringItems || []), ...missingDefaults];
-  console.warn('⚠️ Migration: تمت إضافة بنود أساسية مفقودة:', missingDefaults.map(r => r.title).join(' | '));
-}
-recurringItems = migrateRecurringItems(recurringItems);
-  
+  const CRITICAL_DEFAULT_CATEGORIES = ['راتب شهري', 'عهدة إيماك WE', 'Cash Back'];
+  const CRITICAL_DEFAULTS = DEFAULT_RECURRING.filter(r => CRITICAL_DEFAULT_CATEGORIES.includes(r.category));
+  const existingCategories = new Set((recurringItems || []).map(r => r.category));
+  const missingDefaults = CRITICAL_DEFAULTS.filter(d => !existingCategories.has(d.category));
+  if (missingDefaults.length > 0) {
+    recurringItems = [...(recurringItems || []), ...missingDefaults];
+    console.warn('⚠️ Migration: تمت إضافة بنود أساسية مفقودة:', missingDefaults.map(r => r.title).join(' | '));
+  }
+  recurringItems = migrateRecurringItems(recurringItems);
+
   const { openingBalance2026: _drop, ...rest } = parsed;
   return {
     ...rest, engineVersion: CURRENT_ENGINE_VERSION, recurringInitialized: true,
@@ -613,7 +626,11 @@ recurringItems = migrateRecurringItems(recurringItems);
     materializedRecurring: parsed.materializedRecurring && typeof parsed.materializedRecurring === 'object' ? parsed.materializedRecurring : {},
     notifiedItems: parsed.notifiedItems && typeof parsed.notifiedItems === 'object' ? parsed.notifiedItems : {},
     custodyEntries: Array.isArray(parsed.custodyEntries) ? parsed.custodyEntries : DEFAULT_CUSTODY_ENTRIES,
-    cashbackTrackers: Array.isArray(parsed.cashbackTrackers) ? parsed.cashbackTrackers : DEFAULT_CASHBACK_TRACKERS
+    cashbackTrackers: Array.isArray(parsed.cashbackTrackers) ? parsed.cashbackTrackers : DEFAULT_CASHBACK_TRACKERS,
+    // 🆕 طلبات المسح
+    deleteRequests: Array.isArray(parsed.deleteRequests) ? parsed.deleteRequests : [],
+    // 🆕 تمييز المعاملات القادمة من العيلة
+    notifiedFamilyItems: parsed.notifiedFamilyItems && typeof parsed.notifiedFamilyItems === 'object' ? parsed.notifiedFamilyItems : {}
   };
 };
 
@@ -622,10 +639,10 @@ const getInitialData = () => {
     const cached = localStorage.getItem(STORAGE_KEY) || LEGACY_KEYS.map(k => localStorage.getItem(k)).find(Boolean);
     if (cached) { const migrated = migrateData(JSON.parse(cached)); try { localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated)); } catch(e){} return migrated; }
   } catch (e) { console.warn(e); }
-  return { engineVersion: CURRENT_ENGINE_VERSION, recurringInitialized: true, transactions: [], loans: DEFAULT_LOANS, cards: DEFAULT_CARDS, accountsData: DEFAULT_ACCOUNTS, monthlyPlans: DEFAULT_MONTHLY_PLANS, recurringItems: DEFAULT_RECURRING, closedMonths: [], monthlySnapshots: {}, materializedRecurring: {}, notifiedItems: {}, custodyEntries: DEFAULT_CUSTODY_ENTRIES, cashbackTrackers: DEFAULT_CASHBACK_TRACKERS };
+  return { engineVersion: CURRENT_ENGINE_VERSION, recurringInitialized: true, transactions: [], loans: DEFAULT_LOANS, cards: DEFAULT_CARDS, accountsData: DEFAULT_ACCOUNTS, monthlyPlans: DEFAULT_MONTHLY_PLANS, recurringItems: DEFAULT_RECURRING, closedMonths: [], monthlySnapshots: {}, materializedRecurring: {}, notifiedItems: {}, custodyEntries: DEFAULT_CUSTODY_ENTRIES, cashbackTrackers: DEFAULT_CASHBACK_TRACKERS, deleteRequests: [], notifiedFamilyItems: {} };
 };
 
-// ═══ Materialize Recurring Items ═══
+// ═══ Materialize Recurring ═══
 const materializeRecurringItems = (data, asOfDateStr) => {
   if (!data?.recurringItems?.length) return null;
   const now = asOfDateStr ? new Date(asOfDateStr) : new Date();
@@ -641,39 +658,30 @@ const materializeRecurringItems = (data, asOfDateStr) => {
     if (r.active === false) return;
     if (!r.id || !r.type) return;
     if (r.variableAmount) return;
-
     const day = safeNumber(r.day, 1);
     if (day < 1 || day > 31) return;
-
     let targetYear = nowYear, targetMonthIdx = nowMonthIdx;
     if (r.nextMonth) { targetMonthIdx = nowMonthIdx + 1; if (targetMonthIdx > 11) { targetMonthIdx = 0; targetYear++; } }
     const targetMonth = ALL_MONTHS[targetMonthIdx];
     const targetMonthKey = makeMonthKey(targetYear, targetMonth);
     const targetInputMonth = `${targetYear}-${String(targetMonthIdx + 1).padStart(2, '0')}`;
-
     if (r.startMonth && targetInputMonth < r.startMonth) return;
     if (r.endMonth && targetInputMonth > r.endMonth) return;
-
     const targetDate = new Date(targetYear, targetMonthIdx, day);
     if (targetDate > now) return;
-
     const matKey = `${r.id}_${targetMonthKey}`;
     if (materialized[matKey]) return;
-
     const manualExists = existing.some(t => t.sourceRecurringId === r.id && t.month === targetMonth && (t.year || targetYear) === targetYear);
     if (manualExists) { materialized[matKey] = true; return; }
-
     if (r.linkedLoanSystemId) {
       const linkedLoan = (data.loans || []).find(l => l.systemId === r.linkedLoanSystemId);
       if (linkedLoan) { const collected = safeNumber(linkedLoan.prePaidAmount) + (loanPaidMap[linkedLoan.id] || 0); if (collected >= safeNumber(linkedLoan.totalAmount) - 0.005) return; }
     }
-
     let method = 'cash';
     let linkedCardId = r.linkedCardId;
     if (linkedCardId) { const card = (data.cards || []).find(c => c.id === linkedCardId); if (card) method = getCardMethod(card); }
     const isFee = BANK_FEE_CATEGORIES.has(r.category);
     const kind = r.kind || (isFee ? KIND.FINANCIAL : KIND.OPERATIONAL);
-
     newTxs.push({
       id: `rec-${r.id}-${targetMonthKey}-${getSafeId()}`,
       type: r.type, subType: r.type === 'income' ? 'deposit' : 'withdrawal', kind,
@@ -690,7 +698,7 @@ const materializeRecurringItems = (data, asOfDateStr) => {
   return { ...data, transactions: [...newTxs, ...existing].sort((a, b) => new Date(b.date) - new Date(a.date)), materializedRecurring: materialized };
 };
 
-// ═══ ✅ deriveMonthlyPlanFromHistory — مُحسَّن مع fallback ذكي ومطابقة نصية مرنة ═══
+// ═══ Monthly Plan Derivation ═══
 const deriveMonthlyPlanFromHistory = (data, targetYear, targetMonth, monthsBack = 3) => {
   const transactions = data?.transactions || [];
   const recurringItems = data?.recurringItems || [];
@@ -702,8 +710,6 @@ const deriveMonthlyPlanFromHistory = (data, targetYear, targetMonth, monthsBack 
   for (let i = 1; i <= monthsBack; i++) { mi--; if (mi < 0) { mi = 11; y--; } refMonths.push({ year: y, month: ALL_MONTHS[mi] }); }
 
   const isCounted = (t) => t.status === 'paid' || t.status === 'pending';
-
-  // ✅ fallback مع مطابقة نصية مرنة
   const deriveField = (histFn, recurringCat, recurringFilter = () => true) => {
     const histVal = histFn();
     if (histVal > 0) return Math.round(histVal);
@@ -717,7 +723,6 @@ const deriveMonthlyPlanFromHistory = (data, targetYear, targetMonth, monthsBack 
     const recVal = recurring.reduce((s, r) => s + safeNumber(r.amount), 0);
     return Math.round(recVal);
   };
-
   const avgIncomeCat = (cat) => {
     let total = 0, count = 0;
     refMonths.forEach(({ year, month }) => {
@@ -726,7 +731,6 @@ const deriveMonthlyPlanFromHistory = (data, targetYear, targetMonth, monthsBack 
     });
     return count > 0 ? total / count : 0;
   };
-
   const avgCashExpenses = () => {
     let total = 0, count = 0;
     refMonths.forEach(({ year, month }) => {
@@ -735,7 +739,6 @@ const deriveMonthlyPlanFromHistory = (data, targetYear, targetMonth, monthsBack 
     });
     return count > 0 ? total / count : 0;
   };
-
   const KNOWN_INCOME = new Set(['راتب شهري', 'إيجار المحل', 'استرداد كاش باك', 'Cash Back', 'عهدة إيماك WE', 'عهدة شركة إيماك', 'الزكاة والتبرعات', 'راتب AAIB', 'تكييف محمود']);
   const avgFreeIncome = () => {
     let total = 0, count = 0;
@@ -745,7 +748,6 @@ const deriveMonthlyPlanFromHistory = (data, targetYear, targetMonth, monthsBack 
     });
     return count > 0 ? total / count : 0;
   };
-
   const sumActiveInstallments = () => {
     const loans = data?.loans || [];
     return loans.filter(l => !l.isReceivable && !l.autoMonthly && safeNumber(l.monthlyInstallment) > 0).reduce((s, l) => s + safeNumber(l.monthlyInstallment), 0);
@@ -767,7 +769,6 @@ const deriveMonthlyPlanFromHistory = (data, targetYear, targetMonth, monthsBack 
   };
 };
 
-// ═══ useOnlineStatus ═══
 const useOnlineStatus = () => {
   const [online, setOnline] = useState(() => (typeof navigator !== 'undefined' ? navigator.onLine : true));
   useEffect(() => {
@@ -779,8 +780,7 @@ const useOnlineStatus = () => {
   }, []);
   return online;
 };
-
-// ═══ ErrorBoundary ═══
+  // ═══ ErrorBoundary ═══
 class ErrorBoundary extends React.Component {
   constructor(p) { super(p); this.state = { hasError: false, error: null }; }
   static getDerivedStateFromError(error) { return { hasError: true, error }; }
@@ -856,9 +856,7 @@ const PromiseModalProvider = ({ children }) => {
   );
 };
 
-// ═══════════════════════════════════════════════════════
-// Modal Component
-// ═══════════════════════════════════════════════════════
+// ═══ Modal ═══
 const Modal = memo(({ isOpen, onClose, title, icon, size = 'md', children, footer, className = '' }) => {
   if (!isOpen) return null;
   const sizeClass = { sm: 'max-w-sm', md: 'max-w-md', lg: 'max-w-lg', xl: 'max-w-xl', '2xl': 'max-w-2xl', '3xl': 'max-w-3xl', '5xl': 'max-w-5xl' }[size] || 'max-w-md';
@@ -873,9 +871,7 @@ const Modal = memo(({ isOpen, onClose, title, icon, size = 'md', children, foote
   );
 });
 
-// ═══════════════════════════════════════════════════════
-// Bank Logo
-// ═══════════════════════════════════════════════════════
+// ═══ Bank Logo ═══
 const BankLogo = memo(({ type, size = 40, className = "" }) => {
   const [err, setErr] = useState(false);
   const get = () => {
@@ -902,9 +898,7 @@ const WALLET_CONFIGS = {
   aaib_savings: { id:'aaib_savings', title:'AAIB Savings Account', subtitle:'Track transactions', icon: PiggyBank, csvName:'AAIB_Savings' }
 };
 
-// ═══════════════════════════════════════════════════════
-// Toast
-// ═══════════════════════════════════════════════════════
+// ═══ Toast ═══
 const Toast = ({ notification, onClose }) => {
   useEffect(() => { const t = setTimeout(onClose, notification.duration || 5000); return () => clearTimeout(t); }, [notification, onClose]);
   const icons = { success: CheckCircle2, error: AlertTriangle, warning: AlertTriangle, info: Bell };
@@ -926,9 +920,7 @@ const ToastContainer = ({ notifications, removeNotification }) => {
   return (<div className="toast-container no-print">{notifications.slice(-3).map(n => <Toast key={n.id} notification={n} onClose={() => removeNotification(n.id)} />)}</div>);
 };
 
-// ═══════════════════════════════════════════════════════
-// OfflineBanner + OnlineStatusBadge
-// ═══════════════════════════════════════════════════════
+// ═══ Offline / Online badges ═══
 const OfflineBanner = memo(({ online, lastSync, onRetry }) => {
   if (online) return null;
   return (
@@ -948,9 +940,7 @@ const OnlineStatusBadge = memo(({ online }) => (
   </div>
 ));
 
-// ═══════════════════════════════════════════════════════
-// Badges
-// ═══════════════════════════════════════════════════════
+// ═══ Badges ═══
 const SmsBadge = memo(({ tx }) => { if (tx?.source !== 'sms') return null; return <span className="badge badge-brand">📱 SMS</span>; });
 const TeldaBadge = memo(({ tx }) => { if (!EXTERNAL_TRANSFER_METHOD_IDS.includes(tx?.method)) return null; return <span className="badge badge-brand">💳 Telda</span>; });
 const RecurringBadge = memo(({ tx }) => { if (!tx?.sourceRecurringId) return null; return <span className="badge badge-warning" title="مولّد تلقائياً من بند متكرر">🔁 تلقائي</span>; });
@@ -958,6 +948,7 @@ const CarryoverBadge = memo(({ tx }) => { if (tx?.source !== 'carryover') return
 const NextMonthBadge = memo(({ tx }) => { if (!tx?.nextMonthItem) return null; return <span className="badge badge-brand" title="مستحق من الشهر التالي">⏭️ الشهر التالي</span>; });
 const VariableBadge = memo(({ tx }) => { if (!tx?.variableAmount) return null; return <span className="badge badge-warning" title="مبلغ متغير">⚠️ متغير</span>; });
 
+// 🆕 شارة العيلة
 const FAMILY_MEMBERS = {
   ans: { name: 'أنس', bg: 'bg-blue-50 dark:bg-blue-950/40', text: 'text-blue-700 dark:text-blue-300', border: 'border-blue-200 dark:border-blue-900' },
   abdelrahman: { name: 'عبد الرحمن', bg: 'bg-emerald-50 dark:bg-emerald-950/40', text: 'text-emerald-700 dark:text-emerald-300', border: 'border-emerald-200 dark:border-emerald-900' },
@@ -977,9 +968,7 @@ const ReceiptIndicator = memo(({ tx, dispatch }) => {
   );
 });
 
-// ═══════════════════════════════════════════════════════
-// Date Grouping
-// ═══════════════════════════════════════════════════════
+// ═══ Date Grouping ═══
 const groupTransactionsByDate = (list) => {
   const groups = {};
   list.forEach(t => { const d = t.date || 'unknown'; if (!groups[d]) groups[d] = []; groups[d].push(t); });
@@ -1010,23 +999,17 @@ const DayGroupHeader = memo(({ label, total, count }) => (
   </div>
 ));
 
-// ═══════════════════════════════════════════════════════
-// PendingCloseModal
-// ═══════════════════════════════════════════════════════
+// ═══ PendingCloseModal ═══
 const PendingCloseModal = memo(({ data, onClose, onAction }) => {
   const [expanded, setExpanded] = useState(true);
   const pending = data.pending || [];
   const totalIncome = pending.filter(t => t.type === 'income').reduce((s, t) => s + safeNumber(t.amount), 0);
   const totalExpense = pending.filter(t => t.type === 'expense').reduce((s, t) => s + safeNumber(t.amount), 0);
-
   return (
     <div className="modal-backdrop no-print" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="generic-modal max-w-lg">
         <div className="generic-modal-header">
-          <h3 className="text-base font-black flex items-center gap-2">
-            <AlertTriangle size={18} className="text-amber-500" />
-            عمليات معلقة قبل الإقفال
-          </h3>
+          <h3 className="text-base font-black flex items-center gap-2"><AlertTriangle size={18} className="text-amber-500" /> عمليات معلقة قبل الإقفال</h3>
           <button onClick={onClose} className="btn btn-ghost p-1.5"><X size={16} /></button>
         </div>
         <div className="generic-modal-body">
@@ -1070,9 +1053,7 @@ const PendingCloseModal = memo(({ data, onClose, onAction }) => {
   );
 });
 
-// ═══════════════════════════════════════════════════════
-// GenericLedgerComponent
-// ═══════════════════════════════════════════════════════
+// ═══ GenericLedger ═══
 const GenericLedgerComponent = memo(({ walletKey, ledgerData, liveBalance, isExpanded, onToggle, theme, onAddDeposit, onAddWithdrawal, walletVisibility, onToggleVisibility }) => {
   const [filter, setFilter] = useState('all');
   const [dateFilter, setDateFilter] = useState('');
@@ -1145,9 +1126,7 @@ const GenericLedgerComponent = memo(({ walletKey, ledgerData, liveBalance, isExp
   );
 });
 
-// ═══════════════════════════════════════════════════════
-// CustodyView
-// ═══════════════════════════════════════════════════════
+// ═══ CustodyView ═══
 const CustodyView = memo(({ data, dispatch, saveHistory, addNotification }) => {
   const [showAdd, setShowAdd] = useState(false);
   const [filterType, setFilterType] = useState('all');
@@ -1295,9 +1274,7 @@ const CustodyView = memo(({ data, dispatch, saveHistory, addNotification }) => {
   );
 });
 
-// ═══════════════════════════════════════════════════════
-// CashbackView
-// ═══════════════════════════════════════════════════════
+// ═══ CashbackView ═══
 const CashbackView = memo(({ data, dispatch, saveHistory, addNotification, cards, selectedYear, selectedMonth }) => {
   const [showAdd, setShowAdd] = useState(false);
   const [newTracker, setNewTracker] = useState({ cardId: cards[0]?.id || 1, month: selectedMonth, year: selectedYear, expectedAmount: '', receivedAmount: '', receivedDate: '', status: CASHBACK_STATUS.EXPECTED, notes: '' });
@@ -1410,9 +1387,7 @@ const CashbackView = memo(({ data, dispatch, saveHistory, addNotification, cards
   );
 });
 
-// ═══════════════════════════════════════════════════════
-// DuplicateDetectionSystem
-// ═══════════════════════════════════════════════════════
+// ═══ DuplicateDetection ═══
 const DuplicateDetectionSystem = ({ transactions, data, dispatch, addNotification, saveHistory }) => {
   const [threshold, setThreshold] = useState(2);
   const [selectedMonth, setSelectedMonth] = useState('all');
@@ -1495,9 +1470,7 @@ const DuplicateDetectionSystem = ({ transactions, data, dispatch, addNotificatio
   );
 };
 
-// ═══════════════════════════════════════════════════════
-// ConfirmDialog
-// ═══════════════════════════════════════════════════════
+// ═══ ConfirmDialog ═══
 const ConfirmDialog = ({ confirmDialog, dispatch }) => {
   if (!confirmDialog.isOpen) return null;
   const isDanger = confirmDialog.danger;
@@ -1518,9 +1491,7 @@ const ConfirmDialog = ({ confirmDialog, dispatch }) => {
   );
 };
 
-// ═══════════════════════════════════════════════════════
-// MonthSelector
-// ═══════════════════════════════════════════════════════
+// ═══ MonthSelector ═══
 const MonthSelector = memo(({ selectedYear, selectedMonth, onSelectYear, onSelectMonth, className = "" }) => {
   const months = getMonthsForYear(selectedYear);
   return (
@@ -1541,9 +1512,7 @@ const MonthSelector = memo(({ selectedYear, selectedMonth, onSelectYear, onSelec
   );
 });
 
-// ═══════════════════════════════════════════════════════
-// EnhancedStatCard
-// ═══════════════════════════════════════════════════════
+// ═══ EnhancedStatCard ═══
 const EnhancedStatCard = ({ title, amount, icon: Icon, subtitle, isPrivate, color = 'emerald' }) => {
   const colorMap = { emerald: 'text-emerald-600 dark:text-emerald-400', red: 'text-red-600 dark:text-red-400', blue: 'text-blue-600 dark:text-blue-400', purple: 'text-purple-600 dark:text-purple-400', amber: 'text-amber-600 dark:text-amber-400' };
   const bgMap = { emerald: 'bg-emerald-50 dark:bg-emerald-950/30', red: 'bg-red-50 dark:bg-red-950/30', blue: 'bg-blue-50 dark:bg-blue-950/30', purple: 'bg-purple-50 dark:bg-purple-950/30', amber: 'bg-amber-50 dark:bg-amber-950/30' };
@@ -1561,9 +1530,7 @@ const EnhancedStatCard = ({ title, amount, icon: Icon, subtitle, isPrivate, colo
   );
 };
 
-// ═══════════════════════════════════════════════════════
-// QuickBalanceOverview
-// ═══════════════════════════════════════════════════════
+// ═══ QuickBalanceOverview ═══
 const QuickBalanceOverview = memo(({ balances, walletVisibility, onToggleVisibility }) => {
   const [isVisible, setIsVisible] = useState(true);
   const accounts = ACCOUNT_KEYS.map(k => ({ key: k, shortName: ACCOUNT_SHORT_NAMES[k] || k, balance: safeNumber(balances?.[k]), icon: ACCOUNT_ICONS[k] }));
@@ -1595,9 +1562,7 @@ const QuickBalanceOverview = memo(({ balances, walletVisibility, onToggleVisibil
   );
 });
 
-// ═══════════════════════════════════════════════════════
-// MonthComparisonView
-// ═══════════════════════════════════════════════════════
+// ═══ MonthComparisonView ═══
 const MonthComparisonView = memo(({ transactions, selectedYear, selectedMonth }) => {
   const idx = getMonthIndex(selectedMonth);
   const prevMonth = idx > 0 ? ALL_MONTHS[idx - 1] : 'ديسمبر';
@@ -1647,9 +1612,7 @@ const MonthComparisonView = memo(({ transactions, selectedYear, selectedMonth })
     </div>
   );
 });
-// ═══════════════════════════════════════════════════════
-// DashboardView — مع بطاقة الراتب القادم داخل المكون
-// ═══════════════════════════════════════════════════════
+  // ═══ DashboardView ═══
 const DashboardView = memo(({ data, financeSnapshot, liveBalances, totalLiquidity, walletVisibility, onToggleVisibility, dispatch, selectedYear, selectedMonth, transactions, cards, updatedLoans, chartData, isDarkMode, handleManualReconciliation, addNotification, onSelectYear, onSelectMonth }) => {
   const totalCardDebt = useMemo(() => cards.reduce((s, c) => s + computeCardDebt(data, c), 0), [cards, data]);
   const totalLoanDebt = useMemo(() => updatedLoans.filter(l => !l.isReceivable).reduce((s, l) => s + l.remaining, 0), [updatedLoans]);
@@ -1676,7 +1639,6 @@ const DashboardView = memo(({ data, financeSnapshot, liveBalances, totalLiquidit
     return [...top, { name: 'أخرى', value: restVal }];
   }, [transactions, selectedMonth, selectedYear]);
 
-  // ✅ بطاقة الراتب القادم — محسوبة داخل المكون (لا IIFE خارجي)
   const nextSalaryInfo = useMemo(() => {
     const salaryItem = (data?.recurringItems || []).find(r => r.category === 'راتب شهري' && r.active !== false && r.type === 'income');
     if (!salaryItem) return null;
@@ -1711,7 +1673,6 @@ const DashboardView = memo(({ data, financeSnapshot, liveBalances, totalLiquidit
         </div>
       </div>
 
-      {/* ✅ بطاقة الراتب القادم — داخل المكون */}
       {nextSalaryInfo && (
         <div className="card p-3" style={{ background: 'var(--brand-soft)', borderColor: 'var(--brand)' }}>
           <div className="flex items-center justify-between flex-wrap gap-2">
@@ -1834,9 +1795,7 @@ const DashboardView = memo(({ data, financeSnapshot, liveBalances, totalLiquidit
   );
 });
 
-// ═══════════════════════════════════════════════════════
-// CategoryDetailModal — تفاصيل الفئة + عرض كل المعاملات + PDF + طباعة
-// ═══════════════════════════════════════════════════════
+// ═══ CategoryDetailModal ═══
 const CategoryDetailModal = memo(({ category, transactions, selectedMonth, selectedYear, dispatch, addNotification }) => {
   const [filterType, setFilterType] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
@@ -2076,9 +2035,7 @@ const CategoryDetailModal = memo(({ category, transactions, selectedMonth, selec
   );
 });
 
-// ═══════════════════════════════════════════════════════
-// CategoriesView
-// ═══════════════════════════════════════════════════════
+// ═══ CategoriesView ═══
 const CategoriesView = memo(({ transactions, selectedMonth, selectedYear, catViewType, budgets, dispatch, handleDelete, onSelectYear, onSelectMonth }) => {
   const catTotals = useMemo(() => transactions.filter(t => t.type === catViewType && t.month === selectedMonth && (t.year || 2026) === selectedYear).reduce((acc, t) => { acc[t.category] = (acc[t.category] || 0) + safeNumber(t.amount); return acc; }, {}), [transactions, catViewType, selectedMonth, selectedYear]);
   const catCounts = useMemo(() => transactions.filter(t => t.type === catViewType && t.month === selectedMonth && (t.year || 2026) === selectedYear).reduce((acc, t) => { acc[t.category] = (acc[t.category] || 0) + 1; return acc; }, {}), [transactions, catViewType, selectedMonth, selectedYear]);
@@ -2131,9 +2088,7 @@ const CategoriesView = memo(({ transactions, selectedMonth, selectedYear, catVie
   );
 });
 
-// ═══════════════════════════════════════════════════════
-// TransactionsView
-// ═══════════════════════════════════════════════════════
+// ═══ TransactionsView ═══
 const TransactionsView = memo(({ groupedTransactions, transactions, selectedMonth, selectedYear, transViewMode, statusFilter, searchTerm, expandedGroup, data, monthInsights, dispatch, handleDelete, addNotification, onSelectYear, onSelectMonth, saveHistory, onPrintMonthlyReport }) => {
   const [sourceFilter, setSourceFilter] = useState('all');
   const [showFilters, setShowFilters] = useState(false);
@@ -2141,16 +2096,18 @@ const TransactionsView = memo(({ groupedTransactions, transactions, selectedMont
   const [showSmsOnly, setShowSmsOnly] = useState(false);
   const [showBeneficiariesOnly, setShowBeneficiariesOnly] = useState(false);
   const [showNextMonthOnly, setShowNextMonthOnly] = useState(false);
+  const [showFamilyOnly, setShowFamilyOnly] = useState(false);
 
   const filterBySource = (list) => { if (sourceFilter === 'all') return list; if (sourceFilter === 'self') return list.filter(t => !isFamilyTx(t)); return list.filter(t => t.createdBy === sourceFilter); };
   const filterByBankFees = (list) => showBankFeesOnly ? list.filter(t => isBankFee(t)) : list;
   const filterBySms = (list) => showSmsOnly ? list.filter(t => t.source === 'sms') : list;
   const filterByBeneficiaries = (list) => showBeneficiariesOnly ? list.filter(t => isBeneficiaryCategory(t.category)) : list;
   const filterByNextMonth = (list) => showNextMonthOnly ? list.filter(t => t.nextMonthItem) : list;
+  const filterByFamily = (list) => showFamilyOnly ? list.filter(t => isFamilyTx(t)) : list;
   const filterByType = (list) => transViewMode === 'all' ? list : list.filter(t => t.type === transViewMode);
 
-  const pendingGroups = useMemo(() => groupedTransactions.map(g => ({ ...g, items: filterByNextMonth(filterByBeneficiaries(filterBySms(filterByBankFees(filterBySource(g.items.filter(t => t.status !== 'paid')))))) })).filter(g => g.items.length > 0), [groupedTransactions, sourceFilter, showBankFeesOnly, showSmsOnly, showBeneficiariesOnly, showNextMonthOnly]);
-  const paidArchive = useMemo(() => filterByNextMonth(filterByBeneficiaries(filterBySms(filterByBankFees(filterBySource(filterByType(transactions.filter(t => t.month === selectedMonth && (t.year || 2026) === selectedYear && t.status === 'paid'))))))).sort((a, b) => new Date(b.date) - new Date(a.date)), [transactions, selectedMonth, selectedYear, transViewMode, sourceFilter, showBankFeesOnly, showSmsOnly, showBeneficiariesOnly, showNextMonthOnly]);
+  const pendingGroups = useMemo(() => groupedTransactions.map(g => ({ ...g, items: filterByFamily(filterByNextMonth(filterByBeneficiaries(filterBySms(filterByBankFees(filterBySource(g.items.filter(t => t.status !== 'paid')))))))) })).filter(g => g.items.length > 0), [groupedTransactions, sourceFilter, showBankFeesOnly, showSmsOnly, showBeneficiariesOnly, showNextMonthOnly, showFamilyOnly]);
+  const paidArchive = useMemo(() => filterByFamily(filterByNextMonth(filterByBeneficiaries(filterBySms(filterByBankFees(filterBySource(filterByType(transactions.filter(t => t.month === selectedMonth && (t.year || 2026) === selectedYear && t.status === 'paid')))))))).sort((a, b) => new Date(b.date) - new Date(a.date)), [transactions, selectedMonth, selectedYear, transViewMode, sourceFilter, showBankFeesOnly, showSmsOnly, showBeneficiariesOnly, showNextMonthOnly, showFamilyOnly]);
   const totalPending = pendingGroups.reduce((s, g) => s + g.items.length, 0);
   const isClosed = isMonthClosed(data, selectedYear, selectedMonth);
 
@@ -2159,7 +2116,8 @@ const TransactionsView = memo(({ groupedTransactions, transactions, selectedMont
   const reopenOne = (t) => { if (isMonthClosed(data, t.year || 2026, t.month)) { addNotification({ type: 'error', title: 'محظور' }); return; } dispatch({ type: 'UPDATE_TRANSACTIONS', payload: transactions.map(tr => tr.id === t.id ? { ...tr, status: 'pending' } : tr) }); addNotification({ type: 'warning', title: 'إعادة تعليق' }); };
   const monthTx = transactions.filter(t => t.month === selectedMonth && (t.year || 2026) === selectedYear);
   const nextMonthCount = monthTx.filter(t => t.nextMonthItem && t.status !== 'paid').length;
-  const activeFiltersCount = (sourceFilter !== 'all' ? 1 : 0) + (statusFilter !== 'all' ? 1 : 0) + (showBankFeesOnly ? 1 : 0) + (showSmsOnly ? 1 : 0) + (showBeneficiariesOnly ? 1 : 0) + (showNextMonthOnly ? 1 : 0);
+  const familyCount = monthTx.filter(t => isFamilyTx(t)).length;
+  const activeFiltersCount = (sourceFilter !== 'all' ? 1 : 0) + (statusFilter !== 'all' ? 1 : 0) + (showBankFeesOnly ? 1 : 0) + (showSmsOnly ? 1 : 0) + (showBeneficiariesOnly ? 1 : 0) + (showNextMonthOnly ? 1 : 0) + (showFamilyOnly ? 1 : 0);
   const dailyGroups = useMemo(() => groupTransactionsByDate(paidArchive), [paidArchive]);
 
   return (
@@ -2187,11 +2145,18 @@ const TransactionsView = memo(({ groupedTransactions, transactions, selectedMont
             <span className="text-[10px] font-bold text-blue-700 dark:text-blue-400">{nextMonthCount} عملية مستحقة من الشهر السابق</span>
           </div>
         )}
+        {familyCount > 0 && (
+          <div className="mt-2 p-2 rounded-lg flex items-center gap-2 bg-purple-50 dark:bg-purple-950/30">
+            <span className="text-[11px] font-black">🛒</span>
+            <span className="text-[10px] font-bold text-purple-700 dark:text-purple-400">{familyCount} عملية من تطبيق العيلة (محل هاني)</span>
+          </div>
+        )}
         <div className="flex gap-1.5 mt-3 flex-wrap">
           <button onClick={() => setShowBankFeesOnly(v => !v)} className={`btn text-[11px] px-2.5 py-1.5 ${showBankFeesOnly ? 'btn-primary' : 'btn-secondary'}`}><Receipt size={12} /> رسوم بنكية</button>
           <button onClick={() => setShowSmsOnly(v => !v)} className={`btn text-[11px] px-2.5 py-1.5 ${showSmsOnly ? 'btn-primary' : 'btn-secondary'}`}><MessageSquare size={12} /> SMS</button>
           <button onClick={() => setShowBeneficiariesOnly(v => !v)} className={`btn text-[11px] px-2.5 py-1.5 ${showBeneficiariesOnly ? 'btn-primary' : 'btn-secondary'}`}>👨‍👩‍👧 مصاريف شهرية</button>
           <button onClick={() => setShowNextMonthOnly(v => !v)} className={`btn text-[11px] px-2.5 py-1.5 ${showNextMonthOnly ? 'btn-primary' : 'btn-secondary'}`}>⏭️ الشهر السابق</button>
+          <button onClick={() => setShowFamilyOnly(v => !v)} className={`btn text-[11px] px-2.5 py-1.5 ${showFamilyOnly ? 'btn-primary' : 'btn-secondary'}`}>🛒 من العيلة</button>
           {isClosed ? (
             <React.Fragment>
               <div className="badge badge-success px-2 py-1 text-[10px]"><ShieldCheck size={10} /> مغلق</div>
@@ -2336,9 +2301,7 @@ const TransactionsView = memo(({ groupedTransactions, transactions, selectedMont
     </div>
   );
 });
-  // ═══════════════════════════════════════════════════════
-// HanyShopLedger — سجل مسحوبات محل هاني
-// ═══════════════════════════════════════════════════════
+    // ═══ HanyShopLedger ═══
 const HanyShopLedger = memo(({ loan, prevMonthLoan, addNotification }) => {
   const [expanded, setExpanded] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -2545,9 +2508,7 @@ const HanyShopLedger = memo(({ loan, prevMonthLoan, addNotification }) => {
   );
 });
 
-// ═══════════════════════════════════════════════════════
-// LoansView
-// ═══════════════════════════════════════════════════════
+// ═══ LoansView ═══
 const LoansView = memo(({ updatedLoans, cards, recurringItems, transactions, dispatch, deleteRecurring, saveHistory, getLocalISODate, addNotification, data, selectedMonth, selectedYear }) => {
   const [showAdd, setShowAdd] = useState(false);
   const [activeTab, setActiveTab] = useState('loans');
@@ -2846,9 +2807,8 @@ const LoansView = memo(({ updatedLoans, cards, recurringItems, transactions, dis
     </div>
   );
 });
-// ═══════════════════════════════════════════════════════
-// WalletsAndCardsView
-// ═══════════════════════════════════════════════════════
+
+// ═══ WalletsAndCardsView ═══
 const WalletsAndCardsView = memo(({ cards, buildLedger, expandedLedgers, expandedCardsSection, selectedMonth, selectedYear, dispatch, handleDelete, handleAddWalletDeposit, handleAddWalletWithdrawal, walletVisibility, liveBalances, saveHistory, addNotification, data }) => {
   const [activeTab, setActiveTab] = useState('wallets');
   const [showAddCard, setShowAddCard] = useState(false);
@@ -2962,9 +2922,7 @@ const WalletsAndCardsView = memo(({ cards, buildLedger, expandedLedgers, expande
   );
 });
 
-// ═══════════════════════════════════════════════════════
-// MonthlyPlanningView — مع Auto-derive + Override + Fallback + deriveAllMonths مُصلَّح
-// ═══════════════════════════════════════════════════════
+// ═══ MonthlyPlanningView ═══
 const MonthlyPlanningView = memo(({ data, monthlyPlans, cards, loans, dispatch, saveHistory, addNotification }) => {
   const planningMonths = useMemo(() => {
     const now = new Date();
@@ -2981,34 +2939,25 @@ const MonthlyPlanningView = memo(({ data, monthlyPlans, cards, loans, dispatch, 
   const [derivedSources, setDerivedSources] = useState({});
   const [showSources, setShowSources] = useState(false);
 
-  // ✅ Auto-derive التلقائي مع fallback للبنود المتكررة
   useEffect(() => {
     const base = JSON.parse(JSON.stringify(monthlyPlans || {}));
     let derivedCount = 0;
     const newFlags = {};
     const newSources = {};
-
     planningMonths.forEach(m => {
       const key = pk(m);
       const existing = base[key] || {};
-      
-      // ✅ إعادة استمداد الراتب لو كان 0 رغم _userEdited
       const hasSalaryRecurring = (data.recurringItems || []).some(r => r.category === 'راتب شهري' && r.active !== false && r.type === 'income');
       const needsSalaryFix = hasSalaryRecurring && safeNumber(existing.expectedSalary) === 0;
-      
       if (existing._userEdited && !needsSalaryFix) return;
-      
       const derived = deriveMonthlyPlanFromHistory(data, m.year, m.month, 3);
       if (derived) {
         base[key] = { ...existing, ...derived, ...(existing._userEdited ? { _userEdited: true } : {}) };
-        ['expectedSalary','expectedRent','expectedCashback','expectedEmakWE','expectedZakat','expectedCash','expectedCashExpenses','plannedPayments'].forEach(f => {
-          newFlags[`${key}-${f}`] = true;
-        });
+        ['expectedSalary','expectedRent','expectedCashback','expectedEmakWE','expectedZakat','expectedCash','expectedCashExpenses','plannedPayments'].forEach(f => { newFlags[`${key}-${f}`] = true; });
         newSources[key] = derived._meta?.refMonths || '';
         derivedCount++;
       }
     });
-
     setLocalPlans(base);
     setDerivedFlags(newFlags);
     setDerivedSources(newSources);
@@ -3045,7 +2994,6 @@ const MonthlyPlanningView = memo(({ data, monthlyPlans, cards, loans, dispatch, 
     addNotification({ type: 'success', title: `تم استمداد ${m.month} ${m.year}`, message: `من: ${derived._meta.refMonths}`, duration: 5000 });
   };
 
-  // ✅ deriveAllMonths مُصلَّح بالكامل
   const deriveAllMonths = () => {
     const newPlans = { ...localPlans };
     const newFlags = { ...derivedFlags };
@@ -3054,13 +3002,9 @@ const MonthlyPlanningView = memo(({ data, monthlyPlans, cards, loans, dispatch, 
     planningMonths.forEach(m => {
       const key = pk(m);
       const existing = newPlans[key] || {};
-      
-      // ✅ إعادة استمداد الراتب لو كان 0 رغم _userEdited
       const hasSalaryRecurring = (data.recurringItems || []).some(r => r.category === 'راتب شهري' && r.active !== false && r.type === 'income');
       const needsSalaryFix = hasSalaryRecurring && safeNumber(existing.expectedSalary) === 0;
-      
       if (existing._userEdited && !needsSalaryFix) return;
-      
       const derived = deriveMonthlyPlanFromHistory(data, m.year, m.month, 3);
       if (derived) {
         newPlans[key] = { ...existing, ...derived, ...(existing._userEdited ? { _userEdited: true } : {}) };
@@ -3258,9 +3202,7 @@ const MonthlyPlanningView = memo(({ data, monthlyPlans, cards, loans, dispatch, 
   );
 });
 
-// ═══════════════════════════════════════════════════════
-// PlannerView
-// ═══════════════════════════════════════════════════════
+// ═══ PlannerView ═══
 const PlannerView = memo(({ updatedLoans, cards, selectedMonth, selectedYear, monthlyPlans, totalLiquidityNow, data, transactions = [], recurringItems = [] }) => {
   const projection = useMemo(() => {
     const seq = [];
@@ -3436,9 +3378,7 @@ const PlannerView = memo(({ updatedLoans, cards, selectedMonth, selectedYear, mo
   );
 });
 
-// ═══════════════════════════════════════════════════════
-// LiquidityForecastView
-// ═══════════════════════════════════════════════════════
+// ═══ LiquidityForecastView ═══
 const ForecastRow = ({ label, value, color, prefix }) => (
   <div className="flex justify-between items-center">
     <span className="text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>{label}</span>
@@ -3634,9 +3574,7 @@ const LiquidityForecastView = memo(({ transactions, updatedLoans, recurringItems
   );
 });
 
-// ═══════════════════════════════════════════════════════
-// CalendarView
-// ═══════════════════════════════════════════════════════
+// ═══ CalendarView ═══
 const CalendarView = memo(({ data, getAgendaItems, transactions, dispatch, saveHistory, addNotification }) => {
   const [filterCat, setFilterCat] = useState('all');
   const items = getAgendaItems();
@@ -3741,9 +3679,7 @@ const CalendarView = memo(({ data, getAgendaItems, transactions, dispatch, saveH
     </div>
   );
 });
-// ═══════════════════════════════════════════════════════
-// PinChangeModal
-// ═══════════════════════════════════════════════════════
+// ═══ PinChangeModal ═══
 const PinChangeModal = ({ onClose, addNotification }) => {
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
@@ -3772,9 +3708,7 @@ const PinChangeModal = ({ onClose, addNotification }) => {
   );
 };
 
-// ═══════════════════════════════════════════════════════
-// SmsParserModal
-// ═══════════════════════════════════════════════════════
+// ═══ SmsParserModal ═══
 const SmsParserModal = memo(({ isOpen, onClose, dispatch, addNotification, saveHistory, data }) => {
   const [rawText, setRawText] = useState('');
   const [parsed, setParsed] = useState(null);
@@ -3865,9 +3799,7 @@ const SmsParserModal = memo(({ isOpen, onClose, dispatch, addNotification, saveH
   );
 });
 
-// ═══════════════════════════════════════════════════════
-// Google Drive Helpers
-// ═══════════════════════════════════════════════════════
+// ═══ Google Drive Helpers ═══
 const DRIVE_CLIENT_ID = '190006477168-odmpreq26b618rdn1dsg4k1aag3k056g.apps.googleusercontent.com';
 const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive';
 const DRIVE_FOLDER_NAME = 'Finance Backups';
@@ -3962,9 +3894,7 @@ const downloadBackupFromDrive = async (fileId) => {
   return await res.json();
 };
 
-// ═══════════════════════════════════════════════════════
-// SettingsView
-// ═══════════════════════════════════════════════════════
+// ═══ SettingsView ═══
 const SettingsView = memo(({ data, accountsData, cards, budgets, dispatch, saveHistory, addNotification }) => {
   const [localAccounts, setLocalAccounts] = useState(() => JSON.parse(JSON.stringify(accountsData)));
   const [localCards, setLocalCards] = useState(() => cards.map(c => ({ ...c })));
@@ -4162,9 +4092,7 @@ const SettingsView = memo(({ data, accountsData, cards, budgets, dispatch, saveH
   );
 });
 
-// ═══════════════════════════════════════════════════════
-// ProfessionalTicker
-// ═══════════════════════════════════════════════════════
+// ═══ ProfessionalTicker ═══
 const ProfessionalTicker = memo(({ updatedLoans, cards, liveBalances, walletVisibility, custodyBalance, data }) => {
   const [quote] = useState(() => DAILY_DHIKR[Math.floor(Math.random() * DAILY_DHIKR.length)]);
   const totalDebt = updatedLoans.filter(l => !l.isReceivable).reduce((a, l) => a + l.remaining, 0) + cards.reduce((a, c) => a + computeCardDebt(data, c), 0);
@@ -4191,15 +4119,18 @@ const ProfessionalTicker = memo(({ updatedLoans, cards, liveBalances, walletVisi
   );
 });
 
-// ═══════════════════════════════════════════════════════
-// EnhancedSidebar
-// ═══════════════════════════════════════════════════════
-const EnhancedSidebar = memo(({ activeTab, dispatch, canUndo, onUndo }) => {
+// ═══ EnhancedSidebar — مع Badge طلبات المسح ═══
+const EnhancedSidebar = memo(({ activeTab, dispatch, canUndo, onUndo, deleteRequestsCount }) => {
   const groups = [
     { title: 'الرئيسية', items: [{ id: 'dashboard', label: 'لوحة التحكم', icon: LayoutDashboard }, { id: 'transactions', label: 'المعاملات', icon: ArrowUpRight }] },
     { title: 'المتابعة', items: [{ id: 'categories', label: 'الفئات', icon: Layers }, { id: 'loans', label: 'الالتزامات والعهد', icon: Banknote }, { id: 'cards', label: 'المحافظ والكاش باك', icon: CreditCard }] },
     { title: 'التخطيط', items: [{ id: 'planning', label: 'التخطيط الشهري', icon: Table }, { id: 'planner', label: 'المخطط', icon: Target }, { id: 'forecast', label: 'التوقع', icon: LineChart }, { id: 'comparison', label: 'المقارنة', icon: Activity }] },
-    { title: 'الأدوات', items: [{ id: 'calendar', label: 'الأجندة', icon: CalendarDays }, { id: 'duplicates', label: 'المكررات', icon: Filter }, { id: 'settings', label: 'الإعدادات', icon: Sliders }] }
+    { title: 'الأدوات', items: [
+      { id: 'deleteRequests', label: 'طلبات المسح', icon: Inbox, badge: deleteRequestsCount },
+      { id: 'calendar', label: 'الأجندة', icon: CalendarDays },
+      { id: 'duplicates', label: 'المكررات', icon: Filter },
+      { id: 'settings', label: 'الإعدادات', icon: Sliders }
+    ]}
   ];
   return (
     <aside className="w-60 hidden lg:flex flex-col p-4 z-40 relative no-print" style={{ background: 'var(--bg-card)', borderLeft: '1px solid var(--border-subtle)' }}>
@@ -4211,11 +4142,15 @@ const EnhancedSidebar = memo(({ activeTab, dispatch, canUndo, onUndo }) => {
         {groups.map(g => (
           <div key={g.title} className="sidebar-group">
             <p className="sidebar-group-title">{g.title}</p>
-            {g.items.map(item => (
-              <button key={item.id} type="button" onClick={() => dispatch({ type: 'SET_ACTIVE_TAB', payload: item.id })} className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg transition-all font-bold text-xs mb-0.5 ${activeTab === item.id ? 'text-white shadow-sm' : ''}`} style={activeTab === item.id ? { background: 'var(--brand)' } : { color: 'var(--text-secondary)' }}>
-                <item.icon size={15} /><span>{item.label}</span>
-              </button>
-            ))}
+            {g.items.map(item => {
+              const Icon = item.icon;
+              return (
+                <button key={item.id} type="button" onClick={() => dispatch({ type: 'SET_ACTIVE_TAB', payload: item.id })} className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg transition-all font-bold text-xs mb-0.5 relative ${activeTab === item.id ? 'text-white shadow-sm' : ''}`} style={activeTab === item.id ? { background: 'var(--brand)' } : { color: 'var(--text-secondary)' }}>
+                  <Icon size={15} /><span className="flex-1 text-right">{item.label}</span>
+                  {item.badge > 0 && <span className="badge badge-warning text-[9px] px-1.5 py-0 flex-shrink-0">{item.badge}</span>}
+                </button>
+              );
+            })}
           </div>
         ))}
       </nav>
@@ -4226,10 +4161,8 @@ const EnhancedSidebar = memo(({ activeTab, dispatch, canUndo, onUndo }) => {
   );
 });
 
-// ═══════════════════════════════════════════════════════
-// ProfessionalHeader
-// ═══════════════════════════════════════════════════════
-const ProfessionalHeader = memo(({ isDarkMode, dispatch, onOpenSms, isOnline }) => (
+// ═══ ProfessionalHeader ═══
+const ProfessionalHeader = memo(({ isDarkMode, dispatch, onOpenSms, isOnline, deleteRequestsCount, onOpenDeleteRequests }) => (
   <header className="flex justify-between items-center gap-3 mb-4">
     <div className="flex items-center gap-2.5">
       <div className="p-2 rounded-lg text-white shadow-sm" style={{ background: 'var(--brand)' }}><Wallet size={18} /></div>
@@ -4239,6 +4172,12 @@ const ProfessionalHeader = memo(({ isDarkMode, dispatch, onOpenSms, isOnline }) 
       </div>
     </div>
     <div className="flex gap-1.5">
+      {deleteRequestsCount > 0 && (
+        <button type="button" onClick={onOpenDeleteRequests} title="طلبات المسح" className="btn text-[11px] py-1.5 px-2.5 relative" style={{ background: 'var(--warning-soft)', color: 'var(--warning)', border: '1px solid var(--warning)' }}>
+          <Inbox size={12} />
+          <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[9px] rounded-full flex items-center justify-center font-black">{deleteRequestsCount}</span>
+        </button>
+      )}
       <button type="button" onClick={onOpenSms} title="تحليل رسالة بنك" className="btn text-[11px] py-1.5 px-2.5" style={{ background: 'var(--bg-muted)', color: 'var(--text-primary)', border: '1px solid var(--border-default)' }}><MessageSquare size={12} /></button>
       <div className="flex p-0.5 rounded-lg" style={{ background: 'var(--bg-muted)' }}>
         <button type="button" aria-label="فاتح" onClick={() => dispatch({ type: 'TOGGLE_DARK_MODE', payload: false })} className={`p-1.5 rounded-md transition-all ${!isDarkMode ? 'shadow-sm' : ''}`} style={!isDarkMode ? { background: 'var(--bg-card)', color: 'var(--brand)' } : { color: 'var(--text-muted)' }}><Sun size={12} /></button>
@@ -4248,9 +4187,7 @@ const ProfessionalHeader = memo(({ isDarkMode, dispatch, onOpenSms, isOnline }) 
   </header>
 ));
 
-// ═══════════════════════════════════════════════════════
-// LoginScreen + PinLockScreen
-// ═══════════════════════════════════════════════════════
+// ═══ LoginScreen + PinLockScreen ═══
 const LoginScreen = ({ onLogin }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -4325,8 +4262,185 @@ const PinLockScreen = ({ onSuccess, onLogout }) => {
 };
 
 // ═══════════════════════════════════════════════════════
-// dataReducer
+// 🆕 DeleteRequestsView — إدارة طلبات المسح من العيلة
 // ═══════════════════════════════════════════════════════
+const DeleteRequestsView = memo(({ data, dispatch, saveHistory, addNotification }) => {
+  const requests = (data?.deleteRequests || []).filter(r => r && r.status === 'pending');
+  const history = (data?.deleteRequests || []).filter(r => r && r.status !== 'pending').sort((a, b) => (b.processedAt || 0) - (a.processedAt || 0)).slice(0, 10);
+  const [filterFamily, setFilterFamily] = useState('all');
+
+  const filteredRequests = useMemo(() => {
+    if (filterFamily === 'all') return requests;
+    return requests.filter(r => r.requestedBy === filterFamily);
+  }, [requests, filterFamily]);
+
+  const requestCountByUser = useMemo(() => {
+    const map = {};
+    requests.forEach(r => { map[r.requestedBy] = (map[r.requestedBy] || 0) + 1; });
+    return map;
+  }, [requests]);
+
+  const handleApprove = (req) => {
+    const txId = req.txId;
+    const txSnapshot = req.txSnapshot;
+    dispatch({ type: 'SHOW_CONFIRM', danger: true, title: 'تأكيد الحذف', message: `سيتم حذف:\n${txSnapshot?.description || ''}\n${fmt(txSnapshot?.amount || 0)} ج.م\n\nبطلب من: ${req.requestedByName}\nالسبب: ${req.reason}`, confirmText: 'احذف', onConfirm: () => {
+      saveHistory();
+      const newTxs = (data.transactions || []).filter(t => t.id !== txId);
+      const newReqs = (data.deleteRequests || []).map(r => r.id === req.id ? { ...r, status: 'approved', processedAt: Date.now() } : r);
+      dispatch({ type: 'SET_DATA', payload: { ...data, transactions: newTxs, deleteRequests: newReqs } });
+      addNotification({ type: 'success', title: 'تم الحذف', message: `${req.requestedByName} هيتشوف الإشعار` });
+
+      // 📤 إشعار تليجرام بالموافقة
+      const tgMsg = `✅ *تمت الموافقة على طلب المسح*\n━━━━━━━━━━━━━━━\n📦 ${txSnapshot?.description || ''}\n💰 ${fmt(txSnapshot?.amount || 0)} ج.م\n👤 بطلب من: ${req.requestedByName}\n📝 السبب: ${req.reason}\n🕐 ${new Date().toLocaleString('ar-EG')}`;
+      sendTelegram(tgMsg);
+    }, onCancel: () => dispatch({ type: 'HIDE_CONFIRM' }) });
+  };
+
+  const handleReject = (req) => {
+    dispatch({ type: 'SHOW_CONFIRM', danger: false, title: 'رفض الطلب', message: `سيتم رفض طلب المسح من ${req.requestedByName}\n\nالسبب: ${req.reason}`, confirmText: 'ارفض', onConfirm: () => {
+      saveHistory();
+      const newReqs = (data.deleteRequests || []).map(r => r.id === req.id ? { ...r, status: 'rejected', processedAt: Date.now() } : r);
+      dispatch({ type: 'SET_DATA', payload: { ...data, deleteRequests: newReqs } });
+      addNotification({ type: 'info', title: 'تم الرفض' });
+
+      const tgMsg = `❌ *تم رفض طلب المسح*\n━━━━━━━━━━━━━━━\n📦 ${req.txSnapshot?.description || ''}\n💰 ${fmt(req.txSnapshot?.amount || 0)} ج.م\n👤 مقدم الطلب: ${req.requestedByName}\n📝 السبب المذكور: ${req.reason}\n🕐 ${new Date().toLocaleString('ar-EG')}`;
+      sendTelegram(tgMsg);
+    }, onCancel: () => dispatch({ type: 'HIDE_CONFIRM' }) });
+  };
+
+  const handleClearHistory = () => {
+    dispatch({ type: 'SHOW_CONFIRM', danger: true, title: 'مسح السجل', message: 'سيتم حذف الطلبات المعالجة فقط (المعلقة هتفضل)', onConfirm: () => {
+      saveHistory();
+      const cleaned = (data.deleteRequests || []).filter(r => r.status === 'pending');
+      dispatch({ type: 'SET_DATA', payload: { ...data, deleteRequests: cleaned } });
+      addNotification({ type: 'success', title: 'تم التنظيف' });
+    }, onCancel: () => dispatch({ type: 'HIDE_CONFIRM' }) });
+  };
+
+  const familyUsers = [
+    { id: 'all', name: 'الكل', emoji: '👥' },
+    { id: 'ans', name: 'أنس', emoji: '👨' },
+    { id: 'abdelrahman', name: 'عبد الرحمن', emoji: '👦' },
+    { id: 'salma', name: 'سلمى', emoji: '👧' },
+    { id: 'om_abdo', name: 'أم عبده', emoji: '👩' }
+  ];
+
+  return (
+    <div className="space-y-4 animate-fadeIn pb-24">
+      <div className="card">
+        <div className="flex justify-between items-center flex-wrap gap-3">
+          <div className="flex items-center gap-3">
+            <div className={`p-2 rounded-lg ${requests.length > 0 ? 'bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400' : 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400'}`}>
+              {requests.length > 0 ? <Inbox size={18} /> : <CheckCheck size={18} />}
+            </div>
+            <div>
+              <h2 className="text-base font-black">طلبات المسح</h2>
+              <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                {requests.length > 0 ? `${requests.length} طلب في انتظار مراجعتك` : 'لا توجد طلبات جديدة'}
+              </p>
+            </div>
+          </div>
+          {history.length > 0 && (
+            <button onClick={handleClearHistory} className="btn btn-secondary text-[11px] px-2.5 py-1.5"><Trash size={12} /> مسح السجل</button>
+          )}
+        </div>
+      </div>
+
+      {requests.length > 0 && (
+        <div className="card py-2.5">
+          <div className="flex gap-1.5 overflow-x-auto scroll-hide">
+            {familyUsers.map(u => {
+              const count = u.id === 'all' ? requests.length : (requestCountByUser[u.id] || 0);
+              return (
+                <button key={u.id} onClick={() => setFilterFamily(u.id)} className={`badge px-2.5 py-1.5 cursor-pointer whitespace-nowrap text-[10px] ${filterFamily === u.id ? 'badge-brand' : 'badge-neutral'}`}>
+                  {u.emoji} {u.name} {count > 0 && `(${count})`}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {filteredRequests.length === 0 ? (
+        <div className="card text-center p-12">
+          <CheckCircle2 size={40} className="text-emerald-500 mx-auto mb-3" />
+          <h3 className="text-base font-black mb-2">{requests.length === 0 ? 'مفيش طلبات مسح' : 'مفيش طلبات للفلتر ده'}</h3>
+          <p className="text-xs" style={{ color: 'var(--text-muted)' }}>لما حد من العيلة يطلب مسح معاملة، هيظهر هنا</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {filteredRequests.map(req => {
+            const famInfo = FAMILY_MEMBERS[req.requestedBy] || { name: req.requestedByName, bg: 'bg-slate-50 dark:bg-slate-950/40', text: 'text-slate-700 dark:text-slate-300', border: 'border-slate-200 dark:border-slate-900' };
+            const timeAgo = (() => {
+              const diff = Date.now() - (req.requestedAt || 0);
+              const mins = Math.floor(diff / 60000);
+              if (mins < 1) return 'الآن';
+              if (mins < 60) return `منذ ${mins} دقيقة`;
+              const hours = Math.floor(mins / 60);
+              if (hours < 24) return `منذ ${hours} ساعة`;
+              return `منذ ${Math.floor(hours / 24)} يوم`;
+            })();
+            return (
+              <div key={req.id} className="card" style={{ borderColor: 'var(--warning)' }}>
+                <div className="flex justify-between items-start gap-3 mb-3 flex-wrap">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className={`badge ${famInfo.bg} ${famInfo.text} border ${famInfo.border}`}>{FAMILY_MEMBERS[req.requestedBy]?.name || req.requestedByName}</span>
+                    <span className="badge badge-warning">⏳ قيد المراجعة</span>
+                    <span className="text-[10px] font-semibold" style={{ color: 'var(--text-muted)' }}>{timeAgo}</span>
+                  </div>
+                </div>
+                <div className="p-3 rounded-lg mb-3" style={{ background: 'var(--bg-muted)' }}>
+                  <div className="flex justify-between items-start gap-2 mb-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="font-black text-sm truncate">{req.txSnapshot?.description || 'بدون وصف'}</p>
+                      <p className="text-[10px] font-semibold mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                        {req.txSnapshot?.category} • {req.txSnapshot?.date}
+                      </p>
+                    </div>
+                    <span className="font-black text-red-600 text-base flex-shrink-0">{fmt(req.txSnapshot?.amount || 0)} ج.م</span>
+                  </div>
+                  <div className="p-2 rounded-md" style={{ background: 'var(--warning-soft)' }}>
+                    <p className="text-[10px] font-bold text-amber-700 dark:text-amber-400 mb-0.5">📝 السبب:</p>
+                    <p className="text-xs font-semibold">{req.reason}</p>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={() => handleReject(req)} className="btn btn-secondary flex-1 text-xs"><XCircle size={14} /> رفض</button>
+                  <button onClick={() => handleApprove(req)} className="btn flex-1 text-xs" style={{ background: 'var(--danger)', color: 'white' }}><CheckCircle2 size={14} /> موافقة وحذف</button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {history.length > 0 && (
+        <details className="card p-0 overflow-hidden">
+          <summary className="p-4 cursor-pointer list-none flex items-center justify-between">
+            <h3 className="font-black text-sm flex items-center gap-2"><Clock size={14} style={{ color: 'var(--text-muted)' }} /> سجل الطلبات المعالجة ({history.length})</h3>
+            <ChevronDown size={14} style={{ color: 'var(--text-muted)' }} />
+          </summary>
+          <div className="px-4 pb-4 space-y-1.5" style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '12px' }}>
+            {history.map(h => (
+              <div key={h.id} className="flex justify-between items-center gap-2 p-2 rounded-lg text-xs" style={{ background: 'var(--bg-muted)' }}>
+                <div className="flex items-center gap-2 min-w-0 flex-1">
+                  <span className={`badge ${h.status === 'approved' ? 'badge-success' : 'badge-danger'} text-[9px]`}>{h.status === 'approved' ? '✅ مقبول' : '❌ مرفوض'}</span>
+                  <div className="min-w-0">
+                    <p className="font-bold truncate">{h.txSnapshot?.description || 'بدون وصف'}</p>
+                    <p className="text-[9px]" style={{ color: 'var(--text-muted)' }}>{h.requestedByName} • {new Date(h.processedAt).toLocaleDateString('ar-EG')}</p>
+                  </div>
+                </div>
+                <span className="font-black text-red-600 text-[11px] flex-shrink-0">{fmt(h.txSnapshot?.amount || 0)}</span>
+              </div>
+            ))}
+          </div>
+        </details>
+      )}
+    </div>
+  );
+});
+
+// ═══ dataReducer ═══
 function dataReducer(state, action) {
   switch (action.type) {
     case 'SET_DATA': return { ...state, data: action.payload };
@@ -4435,13 +4549,12 @@ function dataReducer(state, action) {
     }
     case 'TOGGLE_WALLET_VISIBILITY': return { ...state, walletVisibility: { ...state.walletVisibility, [action.payload]: !state.walletVisibility[action.payload] } };
     case 'SET_IS_PROCESSING': return { ...state, isProcessing: action.payload };
+    case 'UPDATE_DELETE_REQUESTS': return { ...state, data: { ...state.data, deleteRequests: action.payload } };
     default: return state;
   }
 }
 
-// ═══════════════════════════════════════════════════════
-// sanitizeForFirestore — إزالة undefined قبل الحفظ
-// ═══════════════════════════════════════════════════════
+// ═══ sanitizeForFirestore ═══
 const sanitizeForFirestore = (obj) => {
   if (obj === null || obj === undefined) return obj;
   if (Array.isArray(obj)) {
@@ -4460,9 +4573,7 @@ const sanitizeForFirestore = (obj) => {
   return obj;
 };
 
-// ═══════════════════════════════════════════════════════
-// App Component
-// ═══════════════════════════════════════════════════════
+// ═══ App ═══
 function App() {
   const defMY = useMemo(() => getDefaultMonthYear(), []);
   const [state, dispatch] = useReducer(dataReducer, {
@@ -4509,9 +4620,10 @@ function App() {
   const processingTimeoutRef = useRef(null);
   const lastRemoteRef = useRef(null);
   const lastMaterializeRef = useRef('');
+  const lastFamilyNotifiedRef = useRef({});   // 🆕 لتتبع المعاملات الجديدة من العيلة
 
   const { data, activeTab, selectedYear, selectedMonth, transViewMode, catViewType, isFormOpen, formMode, formData, isLocked, isDarkMode, expandedGroup, budgets, editingCard, editingLoan, searchTerm, editingBudgetCategory, budgetAmount, isRecurringModalOpen, recurringFormData, notifications, history, expandedLedgers, expandedCardsSection, statusFilter, confirmDialog, isQuickTransferModalOpen, quickTransferData, viewingCardStatement, viewingReceipt, isPinChangeOpen, isSmsModalOpen, pendingCloseModal, walletVisibility, isProcessing, formErrors, activeCategoryDetail } = state;
-  const { transactions = [], loans = [], cards = [], recurringItems = [], accountsData = DEFAULT_ACCOUNTS, monthlyPlans = {} } = data || {};
+  const { transactions = [], loans = [], cards = [], recurringItems = [], accountsData = DEFAULT_ACCOUNTS, monthlyPlans = {}, deleteRequests = [] } = data || {};
 
   const isOnline = useOnlineStatus();
   const prevOnlineRef = useRef(isOnline);
@@ -4524,6 +4636,7 @@ function App() {
     return () => unsub();
   }, []);
 
+  // 🆕 مراقبة الـ Firestore + الكشف عن المعاملات الجديدة من العيلة + طلبات المسح
   useEffect(() => {
     if (!isAuthenticated) return;
     const docRef = db.collection("finance_2026").doc("user_ahmed_data");
@@ -4534,12 +4647,55 @@ function App() {
         lastRemoteRef.current = JSON.stringify(migrated);
         if (raw.budgets && typeof raw.budgets === 'object') dispatch({ type: 'SET_BUDGETS', payload: raw.budgets });
         dispatch({ type: 'SET_DATA', payload: migrated });
+
+        // 🆕 إشعار تلقائي عند وصول طلب مسح جديد
+        const pendingReqs = (raw.deleteRequests || []).filter(r => r && r.status === 'pending');
+        if (pendingReqs.length > 0) {
+          const lastNotified = sessionStorage.getItem('lastDelReqNotified') || '';
+          const sig = pendingReqs.map(r => r.id).sort().join(',');
+          if (sig !== lastNotified) {
+            sessionStorage.setItem('lastDelReqNotified', sig);
+            const latest = pendingReqs.reduce((a, b) => (b.requestedAt || 0) > (a.requestedAt || 0) ? b : a, pendingReqs[0]);
+            dispatch({
+              type: 'ADD_NOTIFICATION',
+              payload: {
+                type: 'warning',
+                title: `🗑️ ${pendingReqs.length} طلب مسح`,
+                message: `${latest.requestedByName}: ${latest.txSnapshot?.description || ''} — ${fmt(latest.txSnapshot?.amount || 0)} ج.م (${latest.reason})`,
+                duration: 12000
+              }
+            });
+          }
+        }
+
+        // 🆕 إشعار تلقائي عند معاملة جديدة من العيلة
+        const familyTxs = (raw.transactions || []).filter(t => t.source === 'family-app');
+        const notifiedMap = lastFamilyNotifiedRef.current;
+        familyTxs.forEach(t => {
+          if (!notifiedMap[t.id]) {
+            notifiedMap[t.id] = true;
+            // إشعار فقط للمعاملات الجديدة (خلال آخر 5 دقائق)
+            const isRecent = t.createdAt && (Date.now() - t.createdAt < 5 * 60 * 1000);
+            if (isRecent && t.createdBy) {
+              const member = FAMILY_MEMBERS[t.createdBy];
+              dispatch({
+                type: 'ADD_NOTIFICATION',
+                payload: {
+                  type: 'success',
+                  title: `🛒 ${member?.name || t.createdByName || 'العيلة'}`,
+                  message: `${t.description || ''} — ${fmt(t.amount)} ج.م`,
+                  duration: 8000
+                }
+              });
+            }
+          }
+        });
       }
     });
     return () => unsub();
   }, [isAuthenticated]);
 
-  // ✅ الحفظ مع sanitizeForFirestore
+  // الحفظ مع sanitize
   useEffect(() => {
     if (isAuthenticated && data && data.transactions) {
       clearTimeout(saveTimeoutRef.current);
@@ -4553,6 +4709,7 @@ function App() {
     return () => clearTimeout(saveTimeoutRef.current);
   }, [data, isAuthenticated, budgets]);
 
+  // Materialize Recurring
   useEffect(() => {
     if (!isAuthenticated || !data?.recurringItems?.length) return;
     const today = getLocalISODate();
@@ -4588,6 +4745,7 @@ function App() {
   const liveBalances = useMemo(() => { const b = {}; ACCOUNT_KEYS.forEach(k => { b[k] = computeBalance(data, k); }); return b; }, [data]);
   const totalLiquidity = useMemo(() => ACCOUNT_KEYS.reduce((s, k) => s + liveBalances[k], 0), [liveBalances]);
   const custodySummary = useMemo(() => computeCustodyBalance(data?.custodyEntries), [data?.custodyEntries]);
+  const pendingDeleteRequestsCount = useMemo(() => (deleteRequests || []).filter(r => r && r.status === 'pending').length, [deleteRequests]);
 
   const financeSnapshot = useMemo(() => {
     const opening = getOpeningBalance(data, 'cash', selectedYear, selectedMonth);
@@ -4683,7 +4841,6 @@ function App() {
     return acc.map(t => { const a = safeNumber(t.amount); bal += (t.subType === 'deposit') ? a : -a; return { ...t, runningBalance: bal }; }).reverse();
   }, [transactions, accountsData]);
 
-  // ✅ getAgendaItems مع الإصلاح الصحيح (else if)
   const getAgendaItems = useCallback(() => {
     try {
       const today = new Date();
@@ -4716,7 +4873,6 @@ function App() {
         if (r.active === false) return;
         const d = parseInt(r.day) || 1;
         let tm = cm, ty = cy;
-        // ✅ إصلاح: else if بدلاً من if (يتجنب الانتقال المزدوج)
         if (r.nextMonth) {
           tm++; if (tm > 11) { tm = 0; ty++; }
         } else if (d < cd) {
@@ -4836,7 +4992,6 @@ function App() {
     }, 600);
   }, [quickTransferData, data, transactions, saveHistory, addNotification, isProcessing]);
 
-  // ✅ handleManualReconciliation — الدالة التي كانت مفقودة
   const handleManualReconciliation = useCallback((walletKey, actualAmount) => {
     const calc = computeBalance(data, walletKey);
     const diff = safeNumber(actualAmount) - calc;
@@ -4973,6 +5128,7 @@ function App() {
       case 'comparison': return <MonthComparisonView transactions={transactions} selectedYear={selectedYear} selectedMonth={selectedMonth} />;
       case 'calendar': return <CalendarView data={data} getAgendaItems={getAgendaItems} transactions={transactions} dispatch={dispatch} saveHistory={saveHistory} addNotification={addNotification} />;
       case 'duplicates': return <DuplicateDetectionSystem transactions={transactions} data={data} dispatch={dispatch} addNotification={addNotification} saveHistory={saveHistory} />;
+      case 'deleteRequests': return <DeleteRequestsView data={data} dispatch={dispatch} saveHistory={saveHistory} addNotification={addNotification} />;
       case 'settings': return <SettingsView data={data} accountsData={accountsData} cards={cards} budgets={budgets} dispatch={dispatch} saveHistory={saveHistory} addNotification={addNotification} />;
       default: return null;
     }
@@ -4998,7 +5154,10 @@ function App() {
               {[{ id: 'dashboard', label: 'الرئيسية', icon: LayoutDashboard }, { id: 'transactions', label: 'المعاملات', icon: ArrowUpRight }, { id: 'cards', label: 'المحافظ', icon: CreditCard }, { id: 'calendar', label: 'الأجندة', icon: CalendarDays }].map(item => (
                 <button key={item.id} type="button" onClick={() => dispatch({ type: 'SET_ACTIVE_TAB', payload: item.id })} className={`nav-btn ${activeTab === item.id ? 'active' : ''}`}><item.icon size={19} /><span>{item.label}</span></button>
               ))}
-              <button type="button" onClick={() => setIsDrawerOpen(true)} className="nav-btn" style={{ color: 'var(--brand)' }}><Menu size={19} /><span>المزيد</span></button>
+              <button type="button" onClick={() => setIsDrawerOpen(true)} className="nav-btn relative" style={{ color: 'var(--brand)' }}>
+                <Menu size={19} /><span>المزيد</span>
+                {pendingDeleteRequestsCount > 0 && <span className="absolute top-1 right-2 w-4 h-4 bg-red-500 text-white text-[9px] rounded-full flex items-center justify-center font-black">{pendingDeleteRequestsCount}</span>}
+              </button>
             </div>
           </div>
         )}
@@ -5024,6 +5183,12 @@ function App() {
                     ))}
                   </div>
                 </div>
+                <div><p className="sidebar-group-title">طلبات المسح</p>
+                  <button onClick={() => { dispatch({ type: 'SET_ACTIVE_TAB', payload: 'deleteRequests' }); setIsDrawerOpen(false); }} className="w-full flex items-center justify-between gap-2 p-3 rounded-lg text-xs font-bold" style={{ background: pendingDeleteRequestsCount > 0 ? 'var(--warning-soft)' : 'var(--bg-muted)', color: pendingDeleteRequestsCount > 0 ? 'var(--warning)' : 'var(--text-secondary)' }}>
+                    <span className="flex items-center gap-2"><Inbox size={14} /><span>إدارة طلبات المسح</span></span>
+                    {pendingDeleteRequestsCount > 0 && <span className="badge badge-warning text-[10px] px-2 py-0">{pendingDeleteRequestsCount} جديد</span>}
+                  </button>
+                </div>
                 <div><p className="sidebar-group-title">الإعدادات</p>
                   <div className="grid grid-cols-2 gap-1.5">
                     <button onClick={() => { handleExport(); setIsDrawerOpen(false); }} className="flex items-center gap-2 p-2.5 rounded-lg text-xs font-bold" style={{ background: 'var(--bg-muted)', color: 'var(--text-secondary)' }}><Download size={14} className="text-blue-500" /><span className="truncate">حفظ نسخة</span></button>
@@ -5040,7 +5205,7 @@ function App() {
 
         {!isLocked && (<button type="button" aria-label="إضافة" onClick={() => { dispatch({ type: 'SET_FORM_MODE', payload: 'add' }); dispatch({ type: 'SET_FORM_DATA', payload: { type: 'expense', category: '', amount: '', date: getLocalISODate(), method: 'cash', subType: 'withdrawal', status: 'pending', receipts: [] } }); dispatch({ type: 'SET_FORM_OPEN', payload: true }); }} className="fab no-print"><Plus size={22} /></button>)}
 
-        <EnhancedSidebar activeTab={activeTab} dispatch={dispatch} canUndo={history.length > 0} onUndo={() => dispatch({ type: 'UNDO' })} />
+        <EnhancedSidebar activeTab={activeTab} dispatch={dispatch} canUndo={history.length > 0} onUndo={() => dispatch({ type: 'UNDO' })} deleteRequestsCount={pendingDeleteRequestsCount} />
 
         <main ref={mainContentRef} className="flex-1 overflow-y-auto p-3 lg:p-5 pt-9">
           {isLocked ? (
@@ -5051,7 +5216,7 @@ function App() {
             </div>
           ) : (
             <div className="max-w-6xl mx-auto space-y-4 animate-fadeIn pb-24">
-              <ProfessionalHeader isDarkMode={isDarkMode} dispatch={dispatch} onOpenSms={() => dispatch({ type: 'SET_SMS_MODAL_OPEN', payload: true })} isOnline={isOnline} />
+              <ProfessionalHeader isDarkMode={isDarkMode} dispatch={dispatch} onOpenSms={() => dispatch({ type: 'SET_SMS_MODAL_OPEN', payload: true })} isOnline={isOnline} deleteRequestsCount={pendingDeleteRequestsCount} onOpenDeleteRequests={() => dispatch({ type: 'SET_ACTIVE_TAB', payload: 'deleteRequests' })} />
               {renderActiveView()}
             </div>
           )}
@@ -5238,9 +5403,7 @@ function App() {
   );
 }
 
-// ═══════════════════════════════════════════════════════
-// Render Root
-// ═══════════════════════════════════════════════════════
+// ═══ Render Root ═══
 const rootElement = document.getElementById('root');
 if (rootElement) {
   setTimeout(() => { const l = document.getElementById('loading'); if (l) l.style.display = 'none'; }, 1000);
@@ -5249,7 +5412,11 @@ if (rootElement) {
 </script>
 </body>
 </html>
-                                                   
+
+
+  
+
+
 
 
   
