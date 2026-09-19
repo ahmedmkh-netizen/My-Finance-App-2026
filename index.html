@@ -794,6 +794,40 @@ const getInitialData = () => {
   return { engineVersion: CURRENT_ENGINE_VERSION, recurringInitialized: true, transactions: [], loans: DEFAULT_LOANS, cards: DEFAULT_CARDS, accountsData: DEFAULT_ACCOUNTS, monthlyPlans: DEFAULT_MONTHLY_PLANS, recurringItems: DEFAULT_RECURRING, closedMonths: [], monthlySnapshots: {}, materializedRecurring: {}, notifiedItems: {}, custodyEntries: DEFAULT_CUSTODY_ENTRIES, cashbackTrackers: DEFAULT_CASHBACK_TRACKERS, deleteRequests: [], notifiedFamilyItems: {} };
 };
 
+  // ═══ إزالة تكرار البنود المتكررة (نفس sourceRecurringId في نفس الشهر) ═══
+const dedupeRecurringTransactions = (transactions) => {
+  const seen = new Map();
+  const toRemove = new Set();
+  const result = [];
+  
+  transactions.forEach(t => {
+    if (!t.sourceRecurringId) {
+      result.push(t);
+      return;
+    }
+    const key = `${t.sourceRecurringId}_${t.year || 2026}_${t.month}`;
+    if (seen.has(key)) {
+      const existing = seen.get(key);
+      const existingTime = new Date(existing.createdAt || 0).getTime();
+      const currentTime = new Date(t.createdAt || 0).getTime();
+      if (currentTime >= existingTime) {
+        toRemove.add(t.id);
+      } else {
+        toRemove.add(existing.id);
+        const idx = result.findIndex(x => x.id === existing.id);
+        if (idx >= 0) result.splice(idx, 1);
+        seen.set(key, t);
+        result.push(t);
+      }
+    } else {
+      seen.set(key, t);
+      result.push(t);
+    }
+  });
+  
+  return { deduped: result, removedIds: [...toRemove] };
+};
+
 // ═══ Materialize Recurring v3 — مع قراءة method ═══
 const materializeRecurringItems = (data, asOfDateStr) => {
   if (!data?.recurringItems?.length) return null;
@@ -815,8 +849,11 @@ const materializeRecurringItems = (data, asOfDateStr) => {
     const day = safeNumber(r.day, 1);
     if (day < 1 || day > 31) return;
 
-    for (const offset of [0, 1]) {
-      let matYear = nowYear, matMonthIdx = nowMonthIdx + offset;
+// 🆕 nextMonth items تحتاج توليد لـ 3 شهور (لأنها "مُقدَّمة" بشهر)
+const offsets = r.nextMonth ? [0, 1, 2] : [0, 1];
+for (const offset of offsets) {
+  
+          let matYear = nowYear, matMonthIdx = nowMonthIdx + offset;
       if (matMonthIdx > 11) { matMonthIdx -= 12; matYear++; }
 
       let targetYear = matYear, targetMonthIdx = matMonthIdx;
@@ -832,9 +869,11 @@ const materializeRecurringItems = (data, asOfDateStr) => {
       if (r.startMonth && targetInputMonth < r.startMonth) continue;
       if (r.endMonth && targetInputMonth > r.endMonth) continue;
 
-      const monthsAhead = (targetYear - nowYear) * 12 + (targetMonthIdx - nowMonthIdx);
-      if (monthsAhead > 1) continue;
-
+const monthsAhead = (targetYear - nowYear) * 12 + (targetMonthIdx - nowMonthIdx);
+// 🆕 للـ nextMonth نسمح بـ 3 شهور، وللعادي 2 شهور
+const maxAhead = r.nextMonth ? 3 : 2;
+if (monthsAhead > maxAhead) continue;
+  
       const matKey = `${r.id}_${targetMonthKey}`;
       if (materialized[matKey]) continue;
 
@@ -894,15 +933,17 @@ const materializeRecurringItems = (data, asOfDateStr) => {
       materialized[matKey] = true;
     }
   });
-
   if (newTxs.length === 0) return null;
+  const combined = [...newTxs, ...existing].sort((a, b) => new Date(b.date) - new Date(a.date));
+  // 🆕 إزالة التكرار
+  const { deduped } = dedupeRecurringTransactions(combined);
   return {
     ...data,
-    transactions: [...newTxs, ...existing].sort((a, b) => new Date(b.date) - new Date(a.date)),
+    transactions: deduped,
     materializedRecurring: materialized
   };
 };
-
+  
 // ═══ deriveMonthlyPlanFromHistory v3 — مع فحص نطاق الشهر ═══
 const deriveMonthlyPlanFromHistory = (data, targetYear, targetMonth, monthsBack = 3) => {
   const transactions = data?.transactions || [];
@@ -5435,6 +5476,7 @@ function App() {
     const sig = `${today}_${data.recurringItems.length}_${data.recurringItems.filter(r => r.active !== false).length}_${matKeysCount}`;
     if (lastMaterializeRef.current === sig) return;
     lastMaterializeRef.current = sig;
+
     const updated = materializeRecurringItems(data, today);
     if (updated) {
       const added = updated.transactions.length - (data.transactions?.length || 0);
