@@ -589,9 +589,20 @@ const migrateData = (parsed) => {
   ACCOUNT_KEYS.forEach(k => { if (!accountsData[k]?.lastUpdated) accountsData[k] = { ...(DEFAULT_ACCOUNTS[k] || {}), ...(accountsData[k] || {}), lastUpdated: defaultCutoff }; });
   const withReceivable = (loans || []).map(l => { if (isTakyeefLoan(l)) return { ...l, systemId: SYSTEM_LOAN_IDS.TAKYEEF, isReceivable: true, type: 'receivable', interest: 'مستحق لنا شهرياً', paused: !!l.paused, totalInstallments: safeNumber(l.totalInstallments, 12), paidInstallments: safeNumber(l.paidInstallments, 1) }; return l; });
   const normalizedLoans = withReceivable.map(l => { if (isHanyLoan(l) && !l.autoMonthly) return { id: l.id || 15, systemId: SYSTEM_LOAN_IDS.HANY, name: 'مسحوبات محل هاني', autoMonthly: true, dueNextMonth: true, mergeIntoNextCycle: ['2026-أغسطس'], category: 'مسحوبات محل هاني', totalAmount: 0, prePaidAmount: 0, monthlyInstallment: 0, dueDay: 10, interest: 'مستحق شهري', description: 'مسحوبات يومية — تُحسب تلقائياً من قيود الشهر', type: 'debt' }; if (l && l.autoMonthly && !l.systemId) return { ...l, systemId: SYSTEM_LOAN_IDS.HANY }; if (l && l.autoMonthly && !l.mergeIntoNextCycle) return { ...l, mergeIntoNextCycle: ['2026-أغسطس'] }; return l; });
-  let recurringItems = recurring;
-  if (!parsed.recurringInitialized && recurring.length === 0) recurringItems = DEFAULT_RECURRING;
-  recurringItems = migrateRecurringItems(recurringItems);
+let recurringItems = recurring;
+if (!parsed.recurringInitialized && recurring.length === 0) recurringItems = DEFAULT_RECURRING;
+
+// ✅ PATCH: ضمان وجود البنود الأساسية المفقودة (حتى مع recurringInitialized: true)
+const CRITICAL_DEFAULT_CATEGORIES = ['راتب شهري', 'عهدة إيماك WE', 'Cash Back'];
+const CRITICAL_DEFAULTS = DEFAULT_RECURRING.filter(r => CRITICAL_DEFAULT_CATEGORIES.includes(r.category));
+const existingCategories = new Set((recurringItems || []).map(r => r.category));
+const missingDefaults = CRITICAL_DEFAULTS.filter(d => !existingCategories.has(d.category));
+if (missingDefaults.length > 0) {
+  recurringItems = [...(recurringItems || []), ...missingDefaults];
+  console.warn('⚠️ Migration: تمت إضافة بنود أساسية مفقودة:', missingDefaults.map(r => r.title).join(' | '));
+}
+recurringItems = migrateRecurringItems(recurringItems);
+  
   const { openingBalance2026: _drop, ...rest } = parsed;
   return {
     ...rest, engineVersion: CURRENT_ENGINE_VERSION, recurringInitialized: true,
