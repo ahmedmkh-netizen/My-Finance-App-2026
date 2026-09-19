@@ -217,7 +217,6 @@ const CASHBACK_STATUS = { EXPECTED: 'expected', PARTIAL: 'partial', RECEIVED: 'r
 const CASHBACK_STATUS_LABELS = { expected: 'متوقع', partial: 'جزئي', received: 'مستلم' };
 
 const DAILY_DHIKR = ["سُبْحَانَ اللَّهِ وَبِحَمْدِهِ، سُبْحَانَ اللَّهِ الْعَظِيمِ","لَا حَوْلَ وَلَا قُوَّةَ إِلَّا بِاللَّهِ الْعَلِيِّ الْعَظِيمِ","اللَّهُمَّ اكْفِنِي بِحَلَالِكَ عَنْ حَرَامِكَ، وَأَغْنِنِي بِفَضْلِكَ عَمَّنْ سِوَاكَ","أَسْتَغْفِرُ اللَّهَ الْعَظِيمَ، وَأَتُوبُ إِلَيْهِ","اللَّهُمَّ بَارِكْ لَنَا فِيمَا رَزَقْتَنَا وَقِنَا عَذَابَ النَّارِ","لَا إِلَهَ إِلَّا أَنْتَ سُبْحَانَكَ إِنِّي كُنْتُ مِنَ الظَّالِمِينَ","اللَّهُمَّ بِكَ أَصْبَحْنَا وَبِكَ أَمْسَيْنَا وَبِكَ نَحْيَا وَبِكَ نَمُوتُ","رَضِيتُ بِاللَّهِ رَبًّا وَبِالإِسْلَامِ دِينًا وَبِمُحَمَّدٍ نَبِيًّا","يَا حَيُّ يَا قَيُّومُ بِرَحْمَتِكَ أَسْتَغِيثُ أَصْلِحْ لِي شَأْنِي كُلَّهُ","اللَّهُمَّ إِنِّي أَسْأَلُكَ عِلْمًا نَافِعًا وَرِزقًا طَيِّبًا وَعَمَلًا مُتَقَبَّلًا"];
-
 const getSafeId = () => { try { return crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).substr(2,9)}`; } catch { return `${Date.now()}-${Math.random().toString(36).substr(2,9)}`; } };
 const normalizeText = (t) => !t ? "" : t.toString().replace(/[أإآ]/g,'ا').replace(/ى/g,'ي').replace(/ة/g,'ه').replace(/[\u064B-\u065F]/g,'').trim().toLowerCase();
 const getLocalISODate = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
@@ -235,6 +234,7 @@ const ALL_MONTHS_EARLY = ['يناير','فبراير','مارس','أبريل','�
 const inputMonthToKey = (v) => { if (!v || !/^\d{4}-\d{2}$/.test(String(v))) return null; const [y, m] = String(v).split('-').map(Number); if (m < 1 || m > 12 || isNaN(y)) return null; return `${y}-${ALL_MONTHS_EARLY[m - 1]}`; };
 const keyToInputMonth = (k) => { if (!k || typeof k !== 'string') return ''; const idx = k.indexOf('-'); if (idx < 0) return ''; const y = k.slice(0, idx); const mName = k.slice(idx + 1); const mIdx = ALL_MONTHS_EARLY.indexOf(mName); if (mIdx < 0 || !/^\d{4}$/.test(y)) return ''; return `${y}-${String(mIdx + 1).padStart(2, '0')}`; };
 
+// ═══ SMS Parser ═══
 const parseBankSms = (rawInput) => {
   const result = { ok: false, bank: '', bankId: null, last4: null, amount: 0, type: 'expense', subType: 'withdrawal', date: getLocalISODate(), method: null, linkedCardId: null, description: '', balance: null, rawText: String(rawInput || ''), notes: [] };
   if (!rawInput || typeof rawInput !== 'string' || rawInput.trim().length < 5) { result.notes.push('النص قصير جداً'); return result; }
@@ -266,6 +266,7 @@ const parseBankSms = (rawInput) => {
   return result;
 };
 
+// ═══ Validation ═══
 const validateAmount = (raw, opts = {}) => {
   const cfg = { min: 0.01, max: 10000000, ...opts };
   const cleaned = toEnglishDigits(String(raw ?? '')).replace(/[^\d.\-]/g, '');
@@ -278,17 +279,20 @@ const validateAmount = (raw, opts = {}) => {
 const validateText = (raw, opts = {}) => { const cfg = { min: 1, max: 500, label: 'النص', ...opts }; const s = String(raw || '').trim(); if (s.length < cfg.min) return { valid: false, error: `${cfg.label} مطلوب` }; if (s.length > cfg.max) return { valid: false, error: `${cfg.label} طويل جداً` }; return { valid: true, value: s }; };
 const validateDate = (raw) => { if (!raw) return { valid: false, error: 'التاريخ مطلوب' }; const d = new Date(raw); if (isNaN(d)) return { valid: false, error: 'تاريخ غير صالح' }; const year = d.getFullYear(); if (year < 2020 || year > 2100) return { valid: false, error: 'السنة خارج النطاق' }; return { valid: true, value: d }; };
 
+// ═══ Promise Modals ═══
 const _modalResolvers = new Map();
 let _modalIdCounter = 0;
 const showInputModal = (opts) => new Promise((resolve) => { const id = ++_modalIdCounter; _modalResolvers.set(id, resolve); window.dispatchEvent(new CustomEvent('show-input-modal', { detail: { ...opts, _id: id } })); });
 const resolveModal = (id, value) => { const resolve = _modalResolvers.get(id); if (resolve) { _modalResolvers.delete(id); resolve(value); } };
 const clearAllModals = () => { _modalResolvers.forEach((resolve) => resolve(null)); _modalResolvers.clear(); };
 
+// ═══ PIN ═══
 const hashPin = async (pin) => { try { const encoder = new TextEncoder(); const data = encoder.encode('fintracker_v1_' + pin); const hashBuf = await crypto.subtle.digest('SHA-256', data); return Array.from(new Uint8Array(hashBuf)).map(b => b.toString(16).padStart(2, '0')).join(''); } catch { return 'plain_' + pin; } };
 const getStoredPinHash = () => localStorage.getItem(PIN_HASH_KEY);
 const savePinHash = async (pin) => { localStorage.setItem(PIN_HASH_KEY, await hashPin(pin)); };
 const verifyPin = async (pin) => { const stored = getStoredPinHash(); if (!stored) return pin === DEFAULT_PIN; return (await hashPin(pin)) === stored; };
 
+// ═══ Receipts ═══
 const MAX_RECEIPT_SIZE_MB = 5;
 const compressImage = (file, maxWidth = 1280, quality = 0.75) => new Promise((resolve, reject) => {
   if (!file.type.startsWith('image/')) return reject(new Error('الملف ليس صورة'));
@@ -300,6 +304,7 @@ const compressImage = (file, maxWidth = 1280, quality = 0.75) => new Promise((re
 });
 const uploadReceipt = async (txId, file) => { const blob = await compressImage(file); const formData = new FormData(); formData.append('file', blob, `${txId}_${Date.now()}.jpg`); formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET); formData.append('folder', `receipts/${txId}`); const res = await fetch(CLOUDINARY_UPLOAD_URL, { method: 'POST', body: formData }); if (!res.ok) throw new Error('فشل رفع الصورة'); const data = await res.json(); return { url: data.secure_url, path: data.public_id, name: file.name, size: data.bytes }; };
 
+// ═══ Constants ═══
 const STORAGE_KEY = 'finance_tracker_V80_SECURE';
 const LEGACY_KEYS = ['finance_tracker_V79_SECURE', 'finance_tracker_V78_SECURE', 'finance_tracker_V77_SECURE', 'finance_tracker_V76_SECURE'];
 const ALL_MONTHS = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
@@ -394,6 +399,7 @@ const DEFAULT_LOANS = [
   { id:15, systemId: SYSTEM_LOAN_IDS.HANY, name:'مسحوبات محل هاني', autoMonthly:true, dueNextMonth:true, mergeIntoNextCycle:['2026-أغسطس'], category:'مسحوبات محل هاني', totalAmount:0, prePaidAmount:0, monthlyInstallment:0, dueDay:10, interest:'مستحق شهري', description:'مسحوبات يومية — تُحسب تلقائياً من قيود الشهر', type:'debt' }
 ];
 
+// ═══ DEFAULT_RECURRING مع الراتبين (r6 + r6b) ═══
 const DEFAULT_RECURRING = [
   { id:'r1', title:'إيجار المحل', amount:900, day:10, category:'إيجار المحل', type:'income', startMonth:'2026-08', endMonth:null, active:true, nextMonth:true },
   { id:'r2', title:'زكاة - إسماعيل', amount:800, day:7, category:'الزكاة والتبرعات', type:'income', startMonth:'2026-08', endMonth:null, active:true, nextMonth:true },
@@ -576,6 +582,7 @@ const migrateRecurringItems = (items) => {
   });
 };
 
+// ═══ migrateData — مع إضافة الراتب الجديد تلقائيًا ═══
 const migrateData = (parsed) => {
   if (!parsed) return parsed;
   const cards = Array.isArray(parsed.cards) ? parsed.cards : [];
@@ -597,7 +604,7 @@ const migrateData = (parsed) => {
   let recurringItems = recurring;
   if (!parsed.recurringInitialized && recurring.length === 0) recurringItems = DEFAULT_RECURRING;
 
-  // إضافة البنود الأساسية المفقودة (بما فيها الراتب الجديد)
+  // إضافة البنود الأساسية المفقودة
   const CRITICAL_DEFAULT_CATEGORIES = ['راتب شهري', 'عهدة إيماك WE', 'Cash Back'];
   const CRITICAL_DEFAULTS = DEFAULT_RECURRING.filter(r => CRITICAL_DEFAULT_CATEGORIES.includes(r.category));
   const existingCategories = new Set((recurringItems || []).map(r => r.category));
@@ -606,13 +613,13 @@ const migrateData = (parsed) => {
     recurringItems = [...(recurringItems || []), ...missingDefaults];
     console.warn('⚠️ Migration: تمت إضافة بنود أساسية مفقودة:', missingDefaults.map(r => r.title).join(' | '));
   }
-  // 🆕 فحص إضافي: هل راتب 2027 موجود؟ لو لا، أضفه
+  // ✅ فحص إضافي: هل راتب 2027 موجود؟
   const hasSalary2027 = (recurringItems || []).some(r => r.id === 'r6b' || (r.category === 'راتب شهري' && safeNumber(r.amount) >= 65000));
   if (!hasSalary2027) {
     recurringItems = [...(recurringItems || []), { id:'r6b', title:'راتب شهري (من 2027)', amount:65000, day:7, category:'راتب شهري', type:'income', startMonth:'2027-02', endMonth:null, active:true, nextMonth:true }];
     console.warn('⚠️ Migration: تمت إضافة راتب 2027 (65,000)');
   }
-  // 🆕 ضمان إن راتب 2026 بيتوقف في يناير 2027
+  // ✅ ضمان إن راتب 2026 بيتوقف في يناير 2027
   recurringItems = (recurringItems || []).map(r => {
     if (r.id === 'r6' && !r.endMonth) {
       return { ...r, endMonth: '2027-01', title: r.title && r.title.includes('حتى 2026') ? r.title : 'راتب شهري (حتى 2026)' };
@@ -753,7 +760,7 @@ const materializeRecurringItems = (data, asOfDateStr) => {
   };
 };
 
-// ═══ Monthly Plan Derivation (v2 — with month-range filtering) ═══
+// ═══ Monthly Plan Derivation (v2 — FIXED ليدعم الراتبين) ═══
 const deriveMonthlyPlanFromHistory = (data, targetYear, targetMonth, monthsBack = 3) => {
   const transactions = data?.transactions || [];
   const recurringItems = data?.recurringItems || [];
@@ -1108,8 +1115,7 @@ const PendingCloseModal = memo(({ data, onClose, onAction }) => {
     </div>
   );
 });
-
-const GenericLedgerComponent = memo(({ walletKey, ledgerData, liveBalance, isExpanded, onToggle, theme, onAddDeposit, onAddWithdrawal, walletVisibility, onToggleVisibility }) => {
+  const GenericLedgerComponent = memo(({ walletKey, ledgerData, liveBalance, isExpanded, onToggle, theme, onAddDeposit, onAddWithdrawal, walletVisibility, onToggleVisibility }) => {
   const [filter, setFilter] = useState('all');
   const [dateFilter, setDateFilter] = useState('');
   const validatedLedger = useMemo(() => {
@@ -1812,8 +1818,7 @@ const DashboardView = memo(({ data, financeSnapshot, liveBalances, totalLiquidit
     </div>
   );
 });
-
-// ═══ CategoryDetailModal ═══
+  // ═══ CategoryDetailModal ═══
 const CategoryDetailModal = memo(({ category, transactions, selectedMonth, selectedYear, dispatch, addNotification }) => {
   const [filterType, setFilterType] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
@@ -1931,7 +1936,7 @@ const CategoryDetailModal = memo(({ category, transactions, selectedMonth, selec
       element.querySelectorAll('.scroll-hide, .pdf-expand').forEach(el => { el.style.maxHeight = 'none'; el.style.overflow = 'visible'; });
       const wrapper = document.createElement('div');
       wrapper.style.cssText = 'background:white;padding:20px;font-family:Cairo,sans-serif;direction:rtl;';
-      wrapper.innerHTML = `<div style="text-align:center;padding-bottom:12px;border-bottom:3px solid #2563EB;margin-bottom:16px;"><h1 style="font-size:20px;font-weight:900;color:#1E40AF;margin:0 0 4px;">📊 ${category}</h1><p style="font-size:12px;color:#6b7280;font-weight:600;margin:0;">${selectedMonth} ${selectedYear} • ${new Date().toLocaleDateString('ar-EG')}</p></div>`;
+      wrapper.innerHTML = `<div style="text-align:center;padding-bottom:12px;border-bottom:3px solid #2563EB;margin-bottom:16px;"><h1 style="font-size:20px;font-weight:900;color:#1E40AF;margin:0 0 4px;">📊 ${category}</h1><p style="font-size:12px;color:#6b7280;font-weight:600;margin:0;">${selectedMonth} ${selectedYear} • تم انشاء التقرير: ${new Date().toLocaleDateString('ar-EG')}</p></div>`;
       wrapper.appendChild(element);
       const opt = { margin: [10, 8, 10, 8], filename: `فئة_${category.replace(/[\/\\:*?"<>|]/g, '_')}_${selectedMonth}_${selectedYear}.pdf`, image: { type: 'jpeg', quality: 0.95 }, html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff', logging: false }, jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }, pagebreak: { mode: ['avoid-all', 'css', 'legacy'] } };
       await window.html2pdf().set(opt).from(wrapper).save();
@@ -2105,6 +2110,7 @@ const CategoriesView = memo(({ transactions, selectedMonth, selectedYear, catVie
   );
 });
 
+// ═══ TransactionsView ═══
 const TransactionsView = memo(({ groupedTransactions, transactions, selectedMonth, selectedYear, transViewMode, statusFilter, searchTerm, expandedGroup, data, monthInsights, dispatch, handleDelete, addNotification, onSelectYear, onSelectMonth, saveHistory, onPrintMonthlyReport }) => {
   const [sourceFilter, setSourceFilter] = useState('all');
   const [showFilters, setShowFilters] = useState(false);
@@ -2853,7 +2859,7 @@ const LoansView = memo(({ updatedLoans, cards, recurringItems, transactions, dis
     </div>
   );
 });
-
+  // ═══ WalletsAndCardsView ═══
 const WalletsAndCardsView = memo(({ cards, buildLedger, expandedLedgers, expandedCardsSection, selectedMonth, selectedYear, dispatch, handleDelete, handleAddWalletDeposit, handleAddWalletWithdrawal, walletVisibility, liveBalances, saveHistory, addNotification, data }) => {
   const [activeTab, setActiveTab] = useState('wallets');
   const [showAddCard, setShowAddCard] = useState(false);
@@ -2967,6 +2973,7 @@ const WalletsAndCardsView = memo(({ cards, buildLedger, expandedLedgers, expande
   );
 });
 
+// ═══ MonthlyPlanningView ═══
 const MonthlyPlanningView = memo(({ data, monthlyPlans, cards, loans, dispatch, saveHistory, addNotification }) => {
   const planningMonths = useMemo(() => {
     const now = new Date();
@@ -3246,6 +3253,7 @@ const MonthlyPlanningView = memo(({ data, monthlyPlans, cards, loans, dispatch, 
   );
 });
 
+// ═══ PlannerView ═══
 const PlannerView = memo(({ updatedLoans, cards, selectedMonth, selectedYear, monthlyPlans, totalLiquidityNow, data, transactions = [], recurringItems = [] }) => {
   const projection = useMemo(() => {
     const seq = [];
@@ -3421,6 +3429,7 @@ const PlannerView = memo(({ updatedLoans, cards, selectedMonth, selectedYear, mo
   );
 });
 
+// ═══ LiquidityForecastView ═══
 const ForecastRow = ({ label, value, color, prefix }) => (
   <div className="flex justify-between items-center">
     <span className="text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>{label}</span>
@@ -3616,6 +3625,7 @@ const LiquidityForecastView = memo(({ transactions, updatedLoans, recurringItems
   );
 });
 
+// ═══ CalendarView ═══
 const CalendarView = memo(({ data, getAgendaItems, transactions, dispatch, saveHistory, addNotification }) => {
   const [filterCat, setFilterCat] = useState('all');
   const items = getAgendaItems();
@@ -3720,7 +3730,7 @@ const CalendarView = memo(({ data, getAgendaItems, transactions, dispatch, saveH
     </div>
   );
 });
-
+  // ═══ PinChangeModal ═══
 const PinChangeModal = ({ onClose, addNotification }) => {
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
@@ -3749,6 +3759,7 @@ const PinChangeModal = ({ onClose, addNotification }) => {
   );
 };
 
+// ═══ SmsParserModal ═══
 const SmsParserModal = memo(({ isOpen, onClose, dispatch, addNotification, saveHistory, data }) => {
   const [rawText, setRawText] = useState('');
   const [parsed, setParsed] = useState(null);
@@ -3839,6 +3850,7 @@ const SmsParserModal = memo(({ isOpen, onClose, dispatch, addNotification, saveH
   );
 });
 
+// ═══ Google Drive Helpers ═══
 const DRIVE_CLIENT_ID = '190006477168-odmpreq26b618rdn1dsg4k1aag3k056g.apps.googleusercontent.com';
 const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive';
 const DRIVE_FOLDER_NAME = 'Finance Backups';
@@ -3933,6 +3945,7 @@ const downloadBackupFromDrive = async (fileId) => {
   return await res.json();
 };
 
+// ═══ SettingsView ═══
 const SettingsView = memo(({ data, accountsData, cards, budgets, dispatch, saveHistory, addNotification }) => {
   const [localAccounts, setLocalAccounts] = useState(() => JSON.parse(JSON.stringify(accountsData)));
   const [localCards, setLocalCards] = useState(() => cards.map(c => ({ ...c })));
@@ -4130,6 +4143,7 @@ const SettingsView = memo(({ data, accountsData, cards, budgets, dispatch, saveH
   );
 });
 
+// ═══ ProfessionalTicker ═══
 const ProfessionalTicker = memo(({ updatedLoans, cards, liveBalances, walletVisibility, custodyBalance, data }) => {
   const [quote] = useState(() => DAILY_DHIKR[Math.floor(Math.random() * DAILY_DHIKR.length)]);
   const totalDebt = updatedLoans.filter(l => !l.isReceivable).reduce((a, l) => a + l.remaining, 0) + cards.reduce((a, c) => a + computeCardDebt(data, c), 0);
@@ -4156,6 +4170,7 @@ const ProfessionalTicker = memo(({ updatedLoans, cards, liveBalances, walletVisi
   );
 });
 
+// ═══ EnhancedSidebar ═══
 const EnhancedSidebar = memo(({ activeTab, dispatch, canUndo, onUndo, deleteRequestsCount }) => {
   const groups = [
     { title: 'الرئيسية', items: [{ id: 'dashboard', label: 'لوحة التحكم', icon: LayoutDashboard }, { id: 'transactions', label: 'المعاملات', icon: ArrowUpRight }] },
@@ -4197,13 +4212,15 @@ const EnhancedSidebar = memo(({ activeTab, dispatch, canUndo, onUndo, deleteRequ
   );
 });
 
-const ProfessionalHeader = memo(({ isDarkMode, dispatch, onOpenSms, isOnline, deleteRequestsCount, onOpenDeleteRequests }) => (
+// ═══ ProfessionalHeader ═══
+const ProfessionalHeader = memo(({ isDarkMode, dispatch, onOpenSms, isOnline, deleteRequestsCount, onOpenDeleteRequests, lastSyncInfo }) => (
   <header className="flex justify-between items-center gap-3 mb-4">
     <div className="flex items-center gap-2.5">
       <div className="p-2 rounded-lg text-white shadow-sm" style={{ background: 'var(--brand)' }}><Wallet size={18} /></div>
       <div>
         <h1 className="text-base font-black">محفظتي المالية</h1>
         <OnlineStatusBadge online={isOnline} />
+        {lastSyncInfo && <p className="text-[9px] font-semibold mt-0.5" style={{ color: 'var(--text-muted)' }}>📱 {lastSyncInfo}</p>}
       </div>
     </div>
     <div className="flex gap-1.5">
@@ -4469,6 +4486,7 @@ const DeleteRequestsView = memo(({ data, dispatch, saveHistory, addNotification 
   );
 });
 
+// ═══ dataReducer ═══
 function dataReducer(state, action) {
   switch (action.type) {
     case 'SET_DATA': return { ...state, data: action.payload };
@@ -4600,6 +4618,7 @@ const sanitizeForFirestore = (obj) => {
   return obj;
 };
 
+// ═══ App — مع حماية المزامنة بين الأجهزة ═══
 function App() {
   const defMY = useMemo(() => getDefaultMonthYear(), []);
   const [state, dispatch] = useReducer(dataReducer, {
@@ -4641,12 +4660,18 @@ function App() {
   const [authLoading, setAuthLoading] = useState(true);
   const [pinVerified, setPinVerified] = useState(() => sessionStorage.getItem('pin_verified') === 'yes');
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [lastSyncInfo, setLastSyncInfo] = useState('');
   const mainContentRef = useRef(null);
   const saveTimeoutRef = useRef(null);
   const processingTimeoutRef = useRef(null);
   const lastRemoteRef = useRef(null);
   const lastMaterializeRef = useRef('');
   const lastFamilyNotifiedRef = useRef({});
+  // 🆕 حماية المزامنة بين الأجهزة
+  const isRemoteSynced = useRef(false);
+  const hasLocalChanges = useRef(false);
+  const lastRemoteTimestamp = useRef(0);
+  const DEVICE_ID = useRef(`dev-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`);
 
   const { data, activeTab, selectedYear, selectedMonth, transViewMode, catViewType, isFormOpen, formMode, formData, isLocked, isDarkMode, expandedGroup, budgets, editingCard, editingLoan, searchTerm, editingBudgetCategory, budgetAmount, isRecurringModalOpen, recurringFormData, notifications, history, expandedLedgers, expandedCardsSection, statusFilter, confirmDialog, isQuickTransferModalOpen, quickTransferData, viewingCardStatement, viewingReceipt, isPinChangeOpen, isSmsModalOpen, pendingCloseModal, walletVisibility, isProcessing, formErrors, activeCategoryDetail } = state;
   const { transactions = [], loans = [], cards = [], recurringItems = [], accountsData = DEFAULT_ACCOUNTS, monthlyPlans = {}, deleteRequests = [] } = data || {};
@@ -4662,6 +4687,7 @@ function App() {
     return () => unsub();
   }, []);
 
+  // 🆕 onSnapshot — مع تعليم isRemoteSynced
   useEffect(() => {
     if (!isAuthenticated) return;
     const docRef = db.collection("finance_2026").doc("user_ahmed_data");
@@ -4670,6 +4696,15 @@ function App() {
         const raw = doc.data();
         const migrated = migrateData(raw);
         lastRemoteRef.current = JSON.stringify(migrated);
+        // 🆕 تحديث حالة المزامنة
+        isRemoteSynced.current = true;
+        lastRemoteTimestamp.current = safeNumber(raw._updatedAt, 0);
+        if (raw._lastDevice && raw._lastDevice !== DEVICE_ID.current) {
+          setLastSyncInfo(`${new Date(safeNumber(raw._updatedAt, Date.now())).toLocaleTimeString('ar-EG')} • من جهاز آخر`);
+        } else {
+          setLastSyncInfo(`${new Date(safeNumber(raw._updatedAt, Date.now())).toLocaleTimeString('ar-EG')} • نفس الجهاز`);
+        }
+        console.log('📥 استلمنا من Firestore — device:', raw._lastDevice || 'unknown', '| time:', new Date(safeNumber(raw._updatedAt, 0)).toLocaleString('ar-EG'));
         if (raw.budgets && typeof raw.budgets === 'object') dispatch({ type: 'SET_BUDGETS', payload: raw.budgets });
         dispatch({ type: 'SET_DATA', payload: migrated });
 
@@ -4717,20 +4752,73 @@ function App() {
     return () => unsub();
   }, [isAuthenticated]);
 
+  // 🆕 useEffect الحفظ — مع حماية كاملة ضد Race Condition
   useEffect(() => {
-    if (isAuthenticated && data && data.transactions) {
-      clearTimeout(saveTimeoutRef.current);
-      saveTimeoutRef.current = setTimeout(() => {
-        if (lastRemoteRef.current && JSON.stringify(data) === lastRemoteRef.current) return;
-        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch (e) {}
-        const payload = sanitizeForFirestore({ ...data, budgets });
-        db.collection("finance_2026").doc("user_ahmed_data").set(payload, { merge: true }).catch(err => console.error(err));
-      }, 5000);
+    if (!isAuthenticated || !data || !data.transactions) return;
+    
+    // ✅ لا تحفظ قبل ما تستقبل أول قراءة من Firestore
+    if (!isRemoteSynced.current) {
+      console.log('⏸️ في انتظار أول مزامنة من السحابة...');
+      return;
     }
+    
+    // ✅ لا تحفظ لو المستخدم مغيرش حاجة
+    if (!hasLocalChanges.current) return;
+    
+    clearTimeout(saveTimeoutRef.current);
+    saveTimeoutRef.current = setTimeout(async () => {
+      const currentDataStr = JSON.stringify(data);
+      if (currentDataStr === lastRemoteRef.current) {
+        hasLocalChanges.current = false;
+        return;
+      }
+      
+      try { localStorage.setItem(STORAGE_KEY, currentDataStr); } catch (e) {}
+      
+      try {
+        const docRef = db.collection("finance_2026").doc("user_ahmed_data");
+        // 🆕 اقرأ النسخة السحابية الأول للتأكد من عدم وجود تعارض
+        const remoteSnap = await docRef.get();
+        const remoteData = remoteSnap.exists ? remoteSnap.data() : {};
+        const remoteTime = safeNumber(remoteData._updatedAt, 0);
+        
+        // ⚠️ لو السحابة أحدث من آخر قراءة عندنا → جهاز تاني عدّل
+        if (remoteTime > lastRemoteTimestamp.current) {
+          console.warn('⚠️ السحابة أحدث — رفض الحفظ لتفادي التعارض');
+          const migrated = migrateData(remoteData);
+          lastRemoteRef.current = JSON.stringify(migrated);
+          lastRemoteTimestamp.current = remoteTime;
+          hasLocalChanges.current = false;
+          dispatch({ type: 'SET_DATA', payload: migrated });
+          addNotification({ 
+            type: 'warning', 
+            title: 'تم تحديث البيانات', 
+            message: 'جهاز آخر عدّل نفس البيانات — تمت المزامنة تلقائياً',
+            duration: 5000 
+          });
+          return;
+        }
+        
+        // ✅ احفظ مع timestamp و device ID
+        const payload = sanitizeForFirestore({ 
+          ...data, 
+          budgets,
+          _updatedAt: Date.now(),
+          _lastDevice: DEVICE_ID.current
+        });
+        await docRef.set(payload, { merge: true });
+        hasLocalChanges.current = false;
+        lastRemoteTimestamp.current = Date.now();
+        console.log('📤 تم الحفظ من:', DEVICE_ID.current);
+      } catch (err) {
+        console.error('Save error:', err);
+      }
+    }, 2000);
+    
     return () => clearTimeout(saveTimeoutRef.current);
-  }, [data, isAuthenticated, budgets]);
+  }, [data, isAuthenticated, budgets, addNotification]);
 
-  // ✅ FIXED: useEffect with materializedRecurring dependency
+  // Materialize Recurring
   useEffect(() => {
     if (!isAuthenticated || !data?.recurringItems?.length) return;
     const today = getLocalISODate();
@@ -4758,7 +4846,12 @@ function App() {
 
   const removeNotification = useCallback((id) => dispatch({ type: 'REMOVE_NOTIFICATION', payload: id }), []);
   const addNotification = useCallback((notification) => dispatch({ type: 'ADD_NOTIFICATION', payload: notification }), []);
-  const saveHistory = useCallback(() => dispatch({ type: 'ADD_TO_HISTORY', payload: { data: JSON.parse(JSON.stringify(data)), budgets: JSON.parse(JSON.stringify(budgets)) } }), [data, budgets]);
+  
+  // 🆕 saveHistory — مع تعليم hasLocalChanges
+  const saveHistory = useCallback(() => {
+    hasLocalChanges.current = true;
+    dispatch({ type: 'ADD_TO_HISTORY', payload: { data: JSON.parse(JSON.stringify(data)), budgets: JSON.parse(JSON.stringify(budgets)) } });
+  }, [data, budgets]);
 
   const cancelProcessing = useCallback(() => {
     if (processingTimeoutRef.current) { clearTimeout(processingTimeoutRef.current); processingTimeoutRef.current = null; }
@@ -5240,7 +5333,7 @@ function App() {
             </div>
           ) : (
             <div className="max-w-6xl mx-auto space-y-4 animate-fadeIn pb-24">
-              <ProfessionalHeader isDarkMode={isDarkMode} dispatch={dispatch} onOpenSms={() => dispatch({ type: 'SET_SMS_MODAL_OPEN', payload: true })} isOnline={isOnline} deleteRequestsCount={pendingDeleteRequestsCount} onOpenDeleteRequests={() => dispatch({ type: 'SET_ACTIVE_TAB', payload: 'deleteRequests' })} />
+              <ProfessionalHeader isDarkMode={isDarkMode} dispatch={dispatch} onOpenSms={() => dispatch({ type: 'SET_SMS_MODAL_OPEN', payload: true })} isOnline={isOnline} deleteRequestsCount={pendingDeleteRequestsCount} onOpenDeleteRequests={() => dispatch({ type: 'SET_ACTIVE_TAB', payload: 'deleteRequests' })} lastSyncInfo={lastSyncInfo} />
               {renderActiveView()}
             </div>
           )}
@@ -5435,3 +5528,4 @@ if (rootElement) {
 </script>
 </body>
 </html>
+  
