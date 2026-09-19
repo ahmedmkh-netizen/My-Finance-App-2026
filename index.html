@@ -1663,7 +1663,33 @@ const EnhancedStatCard = ({ title, amount, icon: Icon, subtitle, isPrivate, colo
     </div>
   );
 };
-
+{(() => {
+  const salaryItem = (data?.recurringItems || []).find(r => r.category === 'راتب شهري' && r.active !== false && r.type === 'income');
+  if (!salaryItem) return null;
+  const now = new Date();
+  let targetY = now.getFullYear(), targetM = now.getMonth();
+  if (salaryItem.nextMonth) { targetM++; if (targetM > 11) { targetM = 0; targetY++; } }
+  if (salaryItem.day < now.getDate()) { targetM++; if (targetM > 11) { targetM = 0; targetY++; } }
+  const daysLeft = calculateDaysLeft(new Date(targetY, targetM, salaryItem.day).toISOString().split('T')[0]);
+  return (
+    <div className="card p-3" style={{ background: 'var(--brand-soft)', borderColor: 'var(--brand)' }}>
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="flex items-center gap-2">
+          <span className="text-lg">💼</span>
+          <div>
+            <p className="text-xs font-black text-blue-700 dark:text-blue-400">الراتب القادم</p>
+            <p className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
+              {ALL_MONTHS[targetM]} {targetY} — يوم {salaryItem.day}
+              {daysLeft !== null && ` • بعد ${daysLeft} يوم`}
+            </p>
+          </div>
+        </div>
+        <p className="text-lg font-black text-blue-600">{fmt(salaryItem.amount)} ج.م</p>
+      </div>
+    </div>
+  );
+})()}
+  
 // ═══════════════════════════════════════════════════════
 // QuickBalanceOverview
 // ═══════════════════════════════════════════════════════
@@ -3116,15 +3142,22 @@ const MonthlyPlanningView = memo(({ data, monthlyPlans, cards, loans, dispatch, 
     const newFlags = { ...derivedFlags };
     const newSources = { ...derivedSources };
     let successCount = 0;
-    planningMonths.forEach(m => {
-      const derived = deriveMonthlyPlanFromHistory(data, m.year, m.month, 3);
-      if (derived) {
-        newPlans[pk(m)] = { ...(newPlans[pk(m)] || {}), ...derived, _userEdited: false };
-        ['expectedSalary','expectedRent','expectedCashback','expectedEmakWE','expectedZakat','expectedCash','expectedCashExpenses','plannedPayments'].forEach(f => { newFlags[`${pk(m)}-${f}`] = true; });
-        newSources[pk(m)] = derived._meta?.refMonths || '';
-        successCount++;
-      }
-    });
+planningMonths.forEach(m => {
+  const key = pk(m);
+  const existing = base[key] || {};
+  
+  // ✅ استثناء: لو الراتب = 0 موجود في البند المتكرر — نعيد استمداده رغم _userEdited
+  const hasSalaryRecurring = (data.recurringItems || []).some(r => r.category === 'راتب شهري' && r.active !== false && r.type === 'income');
+  const needsSalaryFix = hasSalaryRecurring && safeNumber(existing.expectedSalary) === 0;
+  
+  if (existing._userEdited && !needsSalaryFix) return;
+  
+  const derived = deriveMonthlyPlanFromHistory(data, m.year, m.month, 3);
+  if (derived) {
+    base[key] = { ...existing, ...derived, ...(existing._userEdited ? { _userEdited: true } : {}) };
+    ...
+  }
+});
     setLocalPlans(newPlans);
     setDerivedFlags(newFlags);
     setDerivedSources(newSources);
@@ -4774,8 +4807,13 @@ function App() {
         if (r.active === false) return;
         const d = parseInt(r.day) || 1;
         let tm = cm, ty = cy;
-        if (r.nextMonth) { tm++; if (tm > 11) { tm = 0; ty++; } }
-        if (d < cd) { tm++; if (tm > 11) { tm = 0; ty++; } }
+if (r.nextMonth) {
+  // ✅ للبنود "الشهر التالي" — ننتقل مرة واحدة فقط
+  tm++; if (tm > 11) { tm = 0; ty++; }
+} else if (d < cd) {
+  // للبنود العادية — ننتقل فقط لو اليوم فات
+  tm++; if (tm > 11) { tm = 0; ty++; }
+}
         const targetInputMonth = `${ty}-${String(tm + 1).padStart(2, '0')}`;
         if (r.startMonth && targetInputMonth < r.startMonth) return;
         if (r.endMonth && targetInputMonth > r.endMonth) return;
