@@ -170,6 +170,12 @@ input,textarea,select{font-family:var(--font);outline:none}
 .rec-custom-wrap{margin-bottom:12px;display:none}
 .rec-custom-wrap.show{display:block}
 .rec-info{margin-top:6px;font-size:11px;color:var(--text-3);font-weight:700;text-align:center;padding:8px;background:var(--primary-soft);border-radius:10px}
+  .rec-day-wrap{display:none;margin-bottom:12px;padding:12px;background:var(--card-2);border-radius:14px}
+.rec-day-wrap.show{display:block}
+.rec-day-options{display:grid;grid-template-columns:repeat(6,1fr);gap:6px}
+.rec-day-btn{padding:10px 4px;border-radius:10px;background:var(--card);border:2px solid transparent;font-size:14px;font-weight:900;color:var(--text-2);transition:all .2s}
+.rec-day-btn:active{transform:scale(.9)}
+.rec-day-btn.on{background:linear-gradient(135deg,var(--purple),#7C3AED);color:#FFF;box-shadow:0 4px 12px rgba(139,92,246,.4);transform:scale(1.05)}
 body.dark .rec-info{background:rgba(139,92,246,.15);color:#C4B5FD}
 
 /* SAVE */
@@ -446,8 +452,20 @@ body.dark .nav{background:rgba(61,10,32,.96)}
         <button class="rec-btn" data-rec="bimonthly"><span class="rec-icon">🔂</span><span class="rec-label">كل شهرين</span></button>
         <button class="rec-btn" data-rec="custom_future"><span class="rec-icon">📅</span><span class="rec-label">تاريخ محدد</span></button>
       </div>
-      <div class="rec-custom-wrap" id="recCustomWrap">
+          <div class="rec-custom-wrap" id="recCustomWrap">
         <input type="date" class="date-custom-input" id="recCustomDate">
+      </div>
+      <!-- 🆕 اختيار يوم الشهر -->
+      <div class="rec-day-wrap" id="recDayWrap">
+        <div style="font-size:11px;font-weight:800;color:var(--text-2);margin-bottom:6px">📌 يوم التسجيل في الشهر</div>
+        <div class="rec-day-options" id="recDayOptions">
+          <button class="rec-day-btn" data-day="5">5</button>
+          <button class="rec-day-btn" data-day="6">6</button>
+          <button class="rec-day-btn" data-day="7">7</button>
+          <button class="rec-day-btn" data-day="8">8</button>
+          <button class="rec-day-btn" data-day="9">9</button>
+          <button class="rec-day-btn on" data-day="10">10</button>
+        </div>
       </div>
       <div class="rec-info" id="recInfo" style="display:none"></div>
 
@@ -658,12 +676,23 @@ var adhanEnabled=localStorage.getItem('shop_adhan_enabled')==='yes';
 var lastNotifiedPrayer=localStorage.getItem('shop_last_adhan')||'';
 var currentRecType='once';
 var currentRecDate='';
+  var currentRecDay=10;  // 🆕 يوم الشهر الافتراضي
 
 function isoDate(d){d=d||new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
 function fmt(n){return Number(n||0).toLocaleString('en-US',{maximumFractionDigits:2});}
 function esc(s){if(typeof s!=='string')return '';return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');}
 function yesterdayISO(){var d=new Date();d.setDate(d.getDate()-1);return isoDate(d);}
-function addMonths(isoStr,months){
+/* 🆕 احسبي أول تاريخ مستحق على اليوم المحدد */
+function getNextDueForDay(dayOfMonth){
+  var now=new Date();
+  var targetDay=parseInt(dayOfMonth);
+  var candidate=new Date(now.getFullYear(),now.getMonth(),targetDay,12,0,0);
+  if(candidate<=now){
+    candidate=new Date(now.getFullYear(),now.getMonth()+1,targetDay,12,0,0);
+  }
+  return isoDate(candidate);
+}
+  function addMonths(isoStr,months){
   var d=new Date(isoStr+'T12:00:00');
   var day=d.getDate();
   d.setMonth(d.getMonth()+months);
@@ -742,14 +771,24 @@ function updateHeaderTotal(){var t=isoDate();var total=cachedTx.filter(function(
 
 function updateRecurringInfo(){
   var box=document.getElementById('recInfo');
-  if(currentRecType==='once'){box.style.display='none';return;}
+  var dayBox=document.getElementById('recDayWrap');
+  if(currentRecType==='once'){box.style.display='none';dayBox.classList.remove('show');return;}
   box.style.display='block';
+  // أظهري اختيار اليوم لو التكرار شهري أو كل شهرين
+  if(currentRecType==='monthly'||currentRecType==='bimonthly'){dayBox.classList.add('show');}
+  else{dayBox.classList.remove('show');}
   var txt='';
-  if(currentRecType==='monthly')txt='🔁 هيتم تسجيلها كل شهر تلقائياً. لو مسجلتي النهاردة، هتتكرر '+(customDate||isoDate())+' كل شهر.';
-  else if(currentRecType==='bimonthly')txt='🔂 هيتم تسجيلها كل شهرين تلقائياً.';
+  if(currentRecType==='monthly'){
+    var next=getNextDueForDay(currentRecDay);
+    txt='🔁 هتتكرر تلقائياً في يوم '+currentRecDay+' من كل شهر. المرة الجاية: '+formatDateLabel(next);
+  }
+  else if(currentRecType==='bimonthly'){
+    var next2=getNextDueForDay(currentRecDay);
+    txt='🔂 هتتكرر تلقائياً كل شهرين في يوم '+currentRecDay+'. المرة الجاية: '+formatDateLabel(next2);
+  }
   else if(currentRecType==='custom_future'){
-    if(currentRecDate)txt='📅 هيتم تسجيلها في: '+formatDateLabel(currentRecDate)+'، وكل شهر من نفس اليوم.';
-    else txt='📅 اختاري التاريخ اللي عايزة التسجيل يبدأ منه (وسيتكرر شهرياً).';
+    if(currentRecDate)txt='📅 هتبدأ من: '+formatDateLabel(currentRecDate)+'، وكل شهر في يوم '+currentRecDay+' تكرر نفسها.';
+    else txt='📅 اختاري التاريخ اللي عايزة التسجيل يبدأ منه.';
   }
   box.textContent=txt;
 }
@@ -790,6 +829,47 @@ function bindTxActions(){
 function deleteTx(id){
   var tx=cachedTx.find(function(t){return t.id===id;});
   if(!tx){toast('مش لاقياها','err');return;}
+  var hasRec=!!tx.recurringId;
+  
+  if(hasRec){
+    // 🆕 المعاملة عندها قاعدة تكرار — اسألي
+    var bg=document.createElement('div');bg.className='modal-bg';
+    bg.innerHTML='<div class="modal"><div class="modal-icon danger">🗑️</div>'+
+      '<h3>حذف المشترى</h3>'+
+      '<p style="margin-bottom:14px">'+esc(tx.description)+'<br>'+fmt(tx.amount)+' ج.م</p>'+
+      '<p style="font-size:12px;color:var(--text-3);margin-bottom:16px">🔁 دي معاملة متكررة — إيه اللي تحبي تعمليه؟</p>'+
+      '<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px">'+
+      '<button class="modal-btn cancel" data-a="once" style="padding:14px">🗑️ احذفيها بس (هتترجع الشهر الجاي)</button>'+
+      '<button class="modal-btn danger" data-a="all" style="padding:14px">🚫 احذفيها مع التكرار (مش هتترجع)</button>'+
+      '</div>'+
+      '<button class="modal-btn cancel" data-a="cancel" style="width:100%;padding:12px">إلغاء</button></div>';
+    document.body.appendChild(bg);
+    bg.addEventListener('click',function(e){
+      var a=e.target.dataset?e.target.dataset.a:null;
+      if(a==='cancel'||e.target===bg){bg.remove();return;}
+      if(a==='once'){
+        bg.remove();
+        if(!docRef)return;
+        docRef.update({transactions:firebase.firestore.FieldValue.arrayRemove(tx)})
+          .then(function(){toast('تم حذف المولّدة — التكرار شغال ✅');if(navigator.vibrate)navigator.vibrate([40,40,40]);})
+          .catch(function(e){toast('فشل: '+e.message,'err');});
+      }
+      if(a==='all'){
+        bg.remove();
+        if(!docRef)return;
+        // احذفي من transactions + من shoppingRecurring
+        var rule=recurringRules.find(function(r){return r.id===tx.recurringId;});
+        var p1=docRef.update({transactions:firebase.firestore.FieldValue.arrayRemove(tx)});
+        var p2=rule?docRef.update({shoppingRecurring:firebase.firestore.FieldValue.arrayRemove(rule)}):Promise.resolve();
+        Promise.all([p1,p2])
+          .then(function(){toast('تم حذف المعاملة والتكرار نهائياً ✅');if(navigator.vibrate)navigator.vibrate([40,40,40]);})
+          .catch(function(e){toast('فشل: '+e.message,'err');});
+      }
+    });
+    return;
+  }
+  
+  // معاملة عادية
   modal({title:'حذف المشترى؟',message:tx.description+'\n'+fmt(tx.amount)+' ج.م\n\nهيتم الحذف نهائياً من السجل',icon:'🗑️',danger:true,confirmText:'احذفي',cancelText:'إلغاء',onConfirm:function(){
     if(!docRef)return;
     docRef.update({transactions:firebase.firestore.FieldValue.arrayRemove(tx)}).then(function(){toast('تم الحذف ✅');if(navigator.vibrate)navigator.vibrate([40,40,40]);}).catch(function(e){toast('فشل: '+e.message,'err');});
@@ -863,6 +943,9 @@ function bindEvents(){
   /* Recurring options */
   document.getElementById('recOptions').addEventListener('click',function(e){var b=e.target.closest('.rec-btn');if(!b)return;currentRecType=b.dataset.rec;document.querySelectorAll('.rec-btn').forEach(function(x){x.classList.toggle('on',x===b);});var w=document.getElementById('recCustomWrap');if(currentRecType==='custom_future'){w.classList.add('show');var d=document.getElementById('recCustomDate');if(d&&!d.value){d.value=addMonths(isoDate(),1);currentRecDate=d.value;}}else{w.classList.remove('show');}updateRecurringInfo();if(navigator.vibrate)navigator.vibrate(10);});
   var rc=document.getElementById('recCustomDate');if(rc){rc.addEventListener('change',function(e){currentRecDate=e.target.value;updateRecurringInfo();});}
+    /* 🆕 أحداث أيام الشهر */
+  var dayOpts=document.getElementById('recDayOptions');
+  if(dayOpts){dayOpts.addEventListener('click',function(e){var b=e.target.closest('.rec-day-btn');if(!b)return;currentRecDay=parseInt(b.dataset.day);document.querySelectorAll('.rec-day-btn').forEach(function(x){x.classList.toggle('on',x===b);});updateRecurringInfo();if(navigator.vibrate)navigator.vibrate(10);});}
   var tg=document.getElementById('adhanToggle');if(tg){tg.classList.toggle('on',adhanEnabled);tg.addEventListener('click',function(){adhanEnabled=!adhanEnabled;localStorage.setItem('shop_adhan_enabled',adhanEnabled?'yes':'no');tg.classList.toggle('on',adhanEnabled);toast(adhanEnabled?'تم تشغيل تنبيه الأذان 🔔':'تم إيقاف تنبيه الأذان 🔕');});}
   var cs=document.getElementById('citySelect');if(cs){cs.value=prayerCity;cs.addEventListener('change',function(){prayerCity=cs.value;localStorage.setItem('shop_prayer_city',prayerCity);prayerTimes=null;loadPrayerTimes();toast('تم تغيير المدينة 📍');});}
 }
@@ -894,16 +977,17 @@ function saveTx(){
   var srcLbl=selectedSource==='other'?(customSourceLabel||'مكان آخر'):(selectedSource?(SOURCES_BY_CATEGORY[selectedCategoryKey]||[]).find(function(s){return s.id===selectedSource;})?.label:null);
   var tx={id:'shop-'+Date.now()+'-'+Math.random().toString(36).slice(2,9),type:'expense',kind:'operational',category:tc.category,subCategory:tc.label,amount:amt,quantity:qty,unitPrice:unitPrice||(qty>0?amt/qty:amt),description:buildDescription(selectedItem,qty,note,selectedSource),source:'shopping-app',sourceLabel:srcLbl,method:pm.method,linkedCardId:pm.linkedCardId||undefined,date:tIso,month:MONTHS_AR[tObj.getMonth()],year:tObj.getFullYear(),monthIndex:tObj.getMonth(),subType:'withdrawal',status:'pending',createdAt:Date.now(),receipts:[]};
   /* لو التكرار مش "مرة واحدة"، نضيف قاعدة تكرار */
-  var recRule=null;
+
+    var recRule=null;
   if(currentRecType!=='once'){
-    var startDate=tIso;
     var nextDue;
-    if(currentRecType==='monthly')nextDue=addMonths(tIso,1);
-    else if(currentRecType==='bimonthly')nextDue=addMonths(tIso,2);
-    else if(currentRecType==='custom_future'){
+    if(currentRecType==='custom_future'){
       if(!currentRecDate){toast('اختاري التاريخ','err');return;}
       if(currentRecDate<tIso){toast('التاريخ لازم يكون بعد النهاردة','err');return;}
       nextDue=currentRecDate;
+    }else{
+      // 🆕 استخدمي اليوم المختار (5-10)
+      nextDue=getNextDueForDay(currentRecDay);
     }
     recRule={
       id:'rec-'+Date.now()+'-'+Math.random().toString(36).slice(2,7),
@@ -916,6 +1000,7 @@ function saveTx(){
         sourceLabel:srcLbl
       },
       frequency:currentRecType,
+      preferredDay:currentRecDay,  // 🆕 احفظي اليوم
       nextDue:nextDue,
       active:true,
       createdBy:currentUser.name,
@@ -1019,9 +1104,10 @@ function materializeRecurring(){
     };
     newTxs.push(tx);
     var nextDue;
-    if(r.frequency==='monthly')nextDue=addMonths(r.nextDue,1);
-    else if(r.frequency==='bimonthly')nextDue=addMonths(r.nextDue,2);
-    else nextDue=addMonths(r.nextDue,1);
+    var prefDay=r.preferredDay||10;  // 🆕
+    if(r.frequency==='monthly')nextDue=addMonthsWithDay(r.nextDue,1,prefDay);
+    else if(r.frequency==='bimonthly')nextDue=addMonthsWithDay(r.nextDue,2,prefDay);
+    else nextDue=addMonthsWithDay(r.nextDue,1,prefDay);
     var newR=Object.assign({},r,{nextDue:nextDue,lastRun:today});
     updates.push({old:r,new:newR});
   });
@@ -1112,6 +1198,12 @@ function subscribe(){
       .sort(function(a,b){return(b.createdAt||0)-(a.createdAt||0);});
     recurringRules=(d.shoppingRecurring||[]).sort(function(a,b){return(b.createdAt||0)-(a.createdAt||0);});
     renderAll();
+   function addMonthsWithDay(isoStr,months,targetDay){
+  var d=new Date(isoStr+'T12:00:00');
+  d.setMonth(d.getMonth()+months);
+  d.setDate(parseInt(targetDay));
+  return isoDate(d);
+}
     materializeRecurring();
   },function(e){console.error('Snapshot:',e);});
 }
