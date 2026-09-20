@@ -46,7 +46,6 @@ tailwind.config = {
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <script type="importmap">
@@ -74,6 +73,12 @@ tailwind.config = {
     const link = document.createElement('link'); link.rel = 'manifest'; link.href = manifestUrl; document.head.appendChild(link);
     const appleIcon = document.createElement('link'); appleIcon.rel = 'apple-touch-icon'; appleIcon.href = iconUrl; document.head.appendChild(appleIcon);
     const favicon = document.createElement('link'); favicon.rel = 'icon'; favicon.href = iconUrl; document.head.appendChild(favicon);
+    // PWA Service Worker registration (graceful — requires external /sw.js file if you want offline mode)
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').catch(() => { /* no sw.js present — installability still works on Chrome with manifest */ });
+      });
+    }
   } catch(e) { console.warn('PWA setup:', e); }
 })();
 </script>
@@ -251,6 +256,9 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   <p style="margin-top:20px;font-weight:700;opacity:0.9;">جاري التحميل...</p>
 </div>
 <script type="text/babel" data-type="module">
+/* ═══════════════════════════════════════════════════════════════
+   PART 1 — Imports + Firebase + Constants + Defaults
+   ═══════════════════════════════════════════════════════════════ */
 import React, { useState, useMemo, useEffect, useCallback, useReducer, useRef, memo } from 'react';
 import { createRoot } from 'react-dom/client';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
@@ -267,9 +275,8 @@ import {
 const firebaseConfig = { apiKey: "AIzaSyCEq-Trf1oFsvPF5tlMvqU83ea_J2DLZjs", authDomain: "finance-app-2026-3e318.firebaseapp.com", projectId: "finance-app-2026-3e318", storageBucket: "finance-app-2026-3e318.firebasestorage.app", messagingSenderId: "855414629770", appId: "1:855414629770:web:8bb07198b8245b63781473" };
 if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
-const storage = firebase.storage();
+// Note: firebase.storage() removed — not used in this build.
 
-// ✅ PATCH #10: Firestore Offline Persistence
 db.enablePersistence({ synchronizeTabs: true }).catch((err) => {
   console.warn('Firestore persistence failed:', err.code);
 });
@@ -294,203 +301,14 @@ const CASHBACK_STATUS_LABELS = { expected: 'متوقع', partial: 'جزئي', re
 
 const DAILY_DHIKR = ["سُبْحَانَ اللَّهِ وَبِحَمْدِهِ، سُبْحَانَ اللَّهِ الْعَظِيمِ","لَا حَوْلَ وَلَا قُوَّةَ إِلَّا بِاللَّهِ الْعَلِيِّ الْعَظِيمِ","اللَّهُمَّ اكْفِنِي بِحَلَالِكَ عَنْ حَرَامِكَ، وَأَغْنِنِي بِفَضْلِكَ عَمَّنْ سِوَاكَ","أَسْتَغْفِرُ اللَّهَ الْعَظِيمَ، وَأَتُوبُ إِلَيْهِ","اللَّهُمَّ بَارِكْ لَنَا فِيمَا رَزَقْتَنَا وَقِنَا عَذَابَ النَّارِ","لَا إِلَهَ إِلَّا أَنْتَ سُبْحَانَكَ إِنِّي كُنْتُ مِنَ الظَّالِمِينَ","اللَّهُمَّ بِكَ أَصْبَحْنَا وَبِكَ أَمْسَيْنَا وَبِكَ نَحْيَا وَبِكَ نَمُوتُ","رَضِيتُ بِاللَّهِ رَبًّا وَبِالإِسْلَامِ دِينًا وَبِمُحَمَّدٍ نَبِيًّا","يَا حَيُّ يَا قَيُّومُ بِرَحْمَتِكَ أَسْتَغِيثُ أَصْلِحْ لِي شَأْنِي كُلَّهُ","اللَّهُمَّ إِنِّي أَسْأَلُكَ عِلْمًا نَافِعًا وَرِزقًا طَيِّبًا وَعَمَلًا مُتَقَبَّلًا"];
 
-const escapeHtml = (u) => { if (typeof u !== 'string') return u; return u.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;"); };
-const getSafeId = () => { try { return crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).substr(2,9)}`; } catch { return `${Date.now()}-${Math.random().toString(36).substr(2,9)}`; } };
-const normalizeText = (t) => !t ? "" : t.toString().replace(/[أإآ]/g,'ا').replace(/ى/g,'ي').replace(/ة/g,'ه').replace(/[\u064B-\u065F]/g,'').trim().toLowerCase();
-const getLocalISODate = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-const calculateDaysLeft = (d) => { if (!d) return null; try { const t = new Date(); t.setHours(0,0,0,0); const g = new Date(d); g.setHours(0,0,0,0); return Math.ceil((g-t)/86400000); } catch { return null; } };
-const safeNumber = (v, f = 0) => { const n = Number(v); return isNaN(n) || !isFinite(n) ? f : n; };
-const dayStart = (d) => { const x = new Date(d); x.setHours(0,0,0,0); return x; };
-const endOfToday = () => { const x = new Date(); x.setHours(23,59,59,999); return x; };
-const toEnglishDigits = (s) => { if (s === null || s === undefined) return s; const map = { '٠':'0','١':'1','٢':'2','٣':'3','٤':'4','٥':'5','٦':'6','٧':'7','٨':'8','٩':'9','۰':'0','۱':'1','۲':'2','۳':'3','۴':'4','۵':'5','۶':'6','۷':'7','۸':'8','۹':'9' }; return String(s).replace(/[٠-٩۰-۹]/g, d => map[d]); };
-const parseNumberInput = (v) => { const cleaned = toEnglishDigits(v).replace(/[^\d.\-]/g, ''); const n = Number(cleaned); return isNaN(n) ? 0 : n; };
-const fmt = (n) => safeNumber(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const makeMonthKey = (year, month) => `${year}-${month}`;
-const parseMonthKey = (key) => { if (!key || typeof key !== 'string' || !key.includes('-')) return null; const [y, ...rest] = key.split('-'); const year = Number(y); if (isNaN(year)) return null; return { year, month: rest.join('-') }; };
-
-// Month Format Converters
-const ALL_MONTHS_EARLY = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
-const inputMonthToKey = (v) => {
-  if (!v || !/^\d{4}-\d{2}$/.test(String(v))) return null;
-  const [y, m] = String(v).split('-').map(Number);
-  if (m < 1 || m > 12 || isNaN(y)) return null;
-  return `${y}-${ALL_MONTHS_EARLY[m - 1]}`;
-};
-const keyToInputMonth = (k) => {
-  if (!k || typeof k !== 'string') return '';
-  const idx = k.indexOf('-');
-  if (idx < 0) return '';
-  const y = k.slice(0, idx);
-  const mName = k.slice(idx + 1);
-  const mIdx = ALL_MONTHS_EARLY.indexOf(mName);
-  if (mIdx < 0 || !/^\d{4}$/.test(y)) return '';
-  return `${y}-${String(mIdx + 1).padStart(2, '0')}`;
-};
-
-// SMS Bank Parser
-const parseBankSms = (rawInput) => {
-  const result = { ok: false, bank: '', bankId: null, last4: null, amount: 0, type: 'expense', subType: 'withdrawal', date: getLocalISODate(), method: null, linkedCardId: null, description: '', balance: null, rawText: String(rawInput || ''), notes: [] };
-  if (!rawInput || typeof rawInput !== 'string' || rawInput.trim().length < 5) { result.notes.push('النص قصير جداً'); return result; }
-  const text = toEnglishDigits(rawInput).replace(/\u00A0/g, ' ');
-  if (/\bCIB\b|Commercial International|SWYPE|Titanium|سي آي بي/i.test(text)) { result.bank = 'CIB'; result.bankId = 'cib'; }
-  else if (/\bAAIB\b|Arab African|العربي الأفريقي|العربي الافريقي|الإفريقي الدولي/i.test(text)) { result.bank = 'AAIB'; result.bankId = 'aaib'; }
-  const last4Patterns = [/\b(?:ending|ends)\s*(?:with\s*)?(\d{4})\b/i, /\bcard\s*(?:no\.?|number|#)?\s*[:\-]?\s*(?:\*{2,}|\.{2,}|x{2,})?\s*(\d{4})\b/i, /(?:\*{2,}|\.{2,}|x{2,})\s*(\d{4})\b/i, /رقم\s*(?:\*{2,}|\.{2,})?\s*(\d{4})\b/, /بطاق[ةه]\s*(?:رقم\s*)?(?:\*{2,}|\.{2,})?\s*(\d{4})\b/];
-  for (const p of last4Patterns) { const m = text.match(p); if (m) { result.last4 = m[1]; break; } }
-  const incomeHints = [/\bcredit(?:ed)?\b/i, /\bdeposit(?:ed)?\b/i, /\breceived\b/i, /\bsalary\b/i, /\brefund\b/i, /\breimbursement\b/i, /\bcashback\b/i, /\badded\b/i, /إيداع/, /تم إيداع/, /أضيف/, /تم إضافة/, /راتب/, /استرداد/, /كاش باك/, /وارد/, /دائن/];
-  const expenseHints = [/\bdebit(?:ed)?\b/i, /\bpurchase\b/i, /\bwithdraw(?:al|n)?\b/i, /\bpaid\b/i, /\bpayment\b/i, /\bcharge[d]?\b/i, /\bspent\b/i, /\batm\b/i, /خصم/, /تم خصم/, /سحب/, /شراء/, /دفع/, /مدفوع/, /صادر/, /استخدام/, /مدين/];
-  const isIncome = incomeHints.some(r => r.test(text));
-  const isExpense = expenseHints.some(r => r.test(text));
-  if (isIncome && !isExpense) { result.type = 'income'; result.subType = 'deposit'; }
-  else if (isExpense && !isIncome) { result.type = 'expense'; result.subType = 'withdrawal'; }
-  else if (isIncome && isExpense) { result.notes.push('نوع العملية غير واضح — تم افتراض مصروف'); }
-  else { result.notes.push('لم يتم التعرف على نوع العملية'); }
-  const cur = '(?:EGP|LE|E£|ج\\.?م|جنيه|جم|ق\\.?م|ريال|SAR|USD|AED|درهم|دينار|\\$)';
-  const amtPatterns = [new RegExp(`${cur}\\s*([0-9][0-9,]*\\.?[0-9]*)`, 'i'), new RegExp(`([0-9][0-9,]*\\.?[0-9]*)\\s*${cur}`, 'i'), /(?:amount|for|of|بقيمة|بمبلغ|مبلغ)\s*[:\s]*([0-9][0-9,]*\.?[0-9]*)/i];
-  for (const p of amtPatterns) { const m = text.match(p); if (m) { const n = Number(m[1].replace(/,/g, '')); if (n > 0 && n < 100000000) { result.amount = n; break; } } }
-  if (!result.amount) { const all = text.match(/[0-9][0-9,]*\.?[0-9]*/g) || []; const nums = all.map(s => Number(s.replace(/,/g, ''))).filter(n => n > 0 && n < 100000000); if (nums.length) { result.amount = Math.max(...nums); result.notes.push('تم استخراج المبلغ تلقائياً — راجعه'); } }
-  const balMatch = text.match(/(?:balance|الرصيد|رصيد)[^\d]{0,20}([0-9][0-9,]*\.?[0-9]*)/i);
-  if (balMatch) { const b = Number(balMatch[1].replace(/,/g, '')); if (b > 0 && b !== result.amount) result.balance = b; }
-  const now = new Date();
-  let parsedDate = null;
-  const MONTHS_EN = { jan:1, feb:2, mar:3, apr:4, may:5, jun:6, jul:7, aug:8, sep:9, oct:10, nov:11, dec:12 };
-  const MONTHS_AR = { 'يناير':1,'فبراير':2,'مارس':3,'أبريل':4,'ابريل':4,'مايو':5,'يونيو':6,'يوليو':7,'أغسطس':8,'اغسطس':8,'سبتمبر':9,'أكتوبر':10,'اكتوبر':10,'نوفمبر':11,'ديسمبر':12 };
-  let m = text.match(/\b(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})\b/);
-  if (m) { const d = +m[1], mo = +m[2]; let y = +m[3]; if (y < 100) y += 2000; if (d >= 1 && d <= 31 && mo >= 1 && mo <= 12 && y >= 2020 && y <= 2100) parsedDate = new Date(y, mo - 1, d); }
-  if (!parsedDate) { m = text.match(/\b(\d{4})[\/\-\.](\d{1,2})[\/\-\.](\d{1,2})\b/); if (m) { const y = +m[1], mo = +m[2], d = +m[3]; if (d >= 1 && d <= 31 && mo >= 1 && mo <= 12 && y >= 2020 && y <= 2100) parsedDate = new Date(y, mo - 1, d); } }
-  if (!parsedDate) { m = text.match(/\b(\d{1,2})[\s\-]*([A-Za-z]{3,9})[\s\-]*(\d{2,4})\b/); if (m) { const mo = MONTHS_EN[m[2].toLowerCase().slice(0, 3)]; if (mo) { let y = +m[3]; if (y < 100) y += 2000; parsedDate = new Date(y, mo - 1, +m[1]); } } }
-  if (!parsedDate) { const arNames = Object.keys(MONTHS_AR).join('|'); const re = new RegExp(`(\\d{1,2})\\s*(${arNames})\\s*(\\d{2,4})`); m = text.match(re); if (m) { const mo = MONTHS_AR[m[2]]; let y = +m[3]; if (y < 100) y += 2000; parsedDate = new Date(y, mo - 1, +m[1]); } }
-  if (parsedDate && !isNaN(parsedDate) && parsedDate <= now) result.date = getLocalISODate(parsedDate);
-  else { result.date = getLocalISODate(now); if (parsedDate && !isNaN(parsedDate) && parsedDate > now) result.notes.push('التاريخ في المستقبل — تم استخدام اليوم'); }
-  const merchantPatterns = [/\bat\s+([A-Z][A-Z0-9\s&'\.\-]{2,40}?)(?:\s+on\s|\s+at\s|\s*[\.\,\n]|$)/i, /\b(?:merchant|from|to)\s*[:\-]?\s*([A-Z][A-Z0-9\s&'\.\-]{2,40}?)(?:\s+on\s|\s*[\.\,\n]|$)/i, /لدى\s+([^\.,\n]{2,40}?)(?:\s+يوم|\s+بتاريخ|\s*[\.\,\n]|$)/, /في\s+([^\.,\n]{2,40}?)(?:\s+يوم|\s+بتاريخ|\s*[\.\,\n]|$)/];
-  for (const p of merchantPatterns) { const mm = text.match(p); if (mm && mm[1]) { const desc = mm[1].trim().replace(/\s+/g, ' '); if (desc.length >= 2 && !/^\d+$/.test(desc)) { result.description = desc; break; } } }
-  if (!result.description) { const caps = text.match(/\b[A-Z][A-Z0-9&'\.\-]{2,}(?:\s+[A-Z][A-Z0-9&'\.\-]{2,}){0,4}\b/g) || []; const filtered = caps.filter(w => !/^(CIB|AAIB|EGP|LE|ATM|SMS|OTP|REF|SWYPE|TITANIUM|SIGNATURE|MASTERCARD|VISA|USD|SAR|AED|THE|AND|FOR|OF|ON|AT|YOUR|CARD|WAS|USED)$/i.test(w)); if (filtered.length) result.description = filtered[0].trim(); }
-  if (result.last4 === '1016') { result.method = 'cib_card'; result.linkedCardId = 1; result.bank = 'CIB'; }
-  else if (result.last4 === '0391') { result.method = 'aaib_card'; result.linkedCardId = 2; result.bank = 'AAIB'; }
-  else if (result.last4 === '2017') { result.method = 'cib_swype'; result.linkedCardId = 3; result.bank = 'CIB'; }
-  else if (result.bankId === 'cib') { result.method = 'cib_card'; result.linkedCardId = 1; }
-  else if (result.bankId === 'aaib') { result.method = 'aaib_card'; result.linkedCardId = 2; }
-  if (/\bTelda\b|تيلدا/i.test(text)) { const personMatch = text.match(/(?:to|لـ|إلى)\s*(Shaimaa|Salma|Abdelrahman|شيماء|سلمى|عبد الرحمن)/i); if (personMatch) { const p = personMatch[1].toLowerCase(); if (p === 'shaimaa' || p === 'شيماء') { result.method = 'telda_shaimaa'; result.description = result.description || 'تحويل Telda - شيماء'; } else if (p === 'salma' || p === 'سلمى') { result.method = 'telda_salma'; result.description = result.description || 'تحويل Telda - سلمى'; } else if (p === 'abdelrahman' || p === 'عبد الرحمن') { result.method = 'telda_abdelrahman'; result.description = result.description || 'تحويل Telda - عبد الرحمن'; } } }
-  result.ok = result.amount > 0;
-  if (!result.ok) result.notes.push('لم يتم العثور على مبلغ');
-  if (!result.method) result.notes.push('لم يتم التعرف على البطاقة — اختر يدوياً');
-  if (!result.description) result.description = result.type === 'income' ? 'دخل من SMS' : 'مصروف من SMS';
-  return result;
-};
-
-// Validation
-const VALIDATION = {
-  AMOUNT: { min: 0.01, max: 10000000, label: 'المبلغ' },
-  POSITIVE_INT: { min: 1, max: 31, label: 'الرقم' },
-  TEXT: { min: 1, max: 500, label: 'النص' },
-  LIMIT: { min: 100, max: 10000000, label: 'الحد الائتماني' },
-  INSTALLMENT: { min: 0, max: 10000000, label: 'القسط' }
-};
-const validateAmount = (raw, opts = {}) => {
-  const cfg = { ...VALIDATION.AMOUNT, ...opts };
-  const cleaned = toEnglishDigits(String(raw ?? '')).replace(/[^\d.\-]/g, '');
-  const n = parseFloat(cleaned);
-  if (isNaN(n) || !isFinite(n)) return { valid: false, error: 'اكتب رقم صحيح', value: 0 };
-  if (n < cfg.min) return { valid: false, error: `الحد الأدنى ${fmt(cfg.min)} ج.م`, value: 0 };
-  if (n > cfg.max) return { valid: false, error: `الحد الأقصى ${fmt(cfg.max)} ج.م`, value: 0 };
-  return { valid: true, value: n };
-};
-const validateText = (raw, opts = {}) => {
-  const cfg = { ...VALIDATION.TEXT, ...opts };
-  const s = String(raw || '').trim();
-  if (s.length < cfg.min) return { valid: false, error: `${cfg.label} مطلوب` };
-  if (s.length > cfg.max) return { valid: false, error: `${cfg.label} طويل جداً` };
-  return { valid: true, value: s };
-};
-const validateDate = (raw) => {
-  if (!raw) return { valid: false, error: 'التاريخ مطلوب' };
-  const d = new Date(raw);
-  if (isNaN(d)) return { valid: false, error: 'تاريخ غير صالح' };
-  const year = d.getFullYear();
-  if (year < 2020 || year > 2100) return { valid: false, error: 'السنة خارج النطاق' };
-  return { valid: true, value: d };
-};
-
-// Promise-based Modals
-const _modalResolvers = new Map();
-let _modalIdCounter = 0;
-const showInputModal = (opts) => new Promise((resolve) => {
-  const id = ++_modalIdCounter;
-  _modalResolvers.set(id, resolve);
-  window.dispatchEvent(new CustomEvent('show-input-modal', { detail: { ...opts, _id: id } }));
-});
-const resolveModal = (id, value) => { const resolve = _modalResolvers.get(id); if (resolve) { _modalResolvers.delete(id); resolve(value); } };
-const clearAllModals = () => { _modalResolvers.forEach((resolve) => resolve(null)); _modalResolvers.clear(); };
-
-// PIN
-const hashPin = async (pin) => {
-  try {
-    const encoder = new TextEncoder();
-    const data = encoder.encode('fintracker_v1_' + pin);
-    const hashBuf = await crypto.subtle.digest('SHA-256', data);
-    return Array.from(new Uint8Array(hashBuf)).map(b => b.toString(16).padStart(2, '0')).join('');
-  } catch { return 'plain_' + pin; }
-};
-const getStoredPinHash = () => localStorage.getItem(PIN_HASH_KEY);
-const savePinHash = async (pin) => { localStorage.setItem(PIN_HASH_KEY, await hashPin(pin)); };
-const verifyPin = async (pin) => { const stored = getStoredPinHash(); if (!stored) return pin === DEFAULT_PIN; return (await hashPin(pin)) === stored; };
-
-// Receipts
-const MAX_RECEIPT_SIZE_MB = 5;
-const compressImage = (file, maxWidth = 1280, quality = 0.75) => new Promise((resolve, reject) => {
-  if (!file.type.startsWith('image/')) return reject(new Error('الملف ليس صورة'));
-  if (file.size > MAX_RECEIPT_SIZE_MB * 1024 * 1024) return reject(new Error(`حجم الصورة أكبر من ${MAX_RECEIPT_SIZE_MB}MB`));
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    const img = new Image();
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      let { width, height } = img;
-      if (width > maxWidth) { height = Math.round((height * maxWidth) / width); width = maxWidth; }
-      canvas.width = width; canvas.height = height;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(img, 0, 0, width, height);
-      canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error('فشل الضغط')), 'image/jpeg', quality);
-    };
-    img.onerror = () => reject(new Error('فشل قراءة الصورة'));
-    img.src = e.target.result;
-  };
-  reader.onerror = () => reject(new Error('فشل قراءة الملف'));
-  reader.readAsDataURL(file);
-});
-const uploadReceipt = async (txId, file) => {
-  const blob = await compressImage(file);
-  const formData = new FormData();
-  formData.append('file', blob, `${txId}_${Date.now()}.jpg`);
-  formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
-  formData.append('folder', `receipts/${txId}`);
-  formData.append('public_id', `${Date.now()}_${Math.random().toString(36).slice(2,8)}`);
-  const res = await fetch(CLOUDINARY_UPLOAD_URL, { method: 'POST', body: formData });
-  if (!res.ok) { const errText = await res.text(); console.error('Cloudinary Error:', errText); throw new Error('فشل رفع الصورة'); }
-  const data = await res.json();
-  return { url: data.secure_url, path: data.public_id, name: file.name, size: data.bytes };
-};
-const deleteReceipt = async (path) => {
-  if (!path) return { success: false, reason: 'no_path' };
-  try { try { const orphans = JSON.parse(localStorage.getItem('cloudinary_orphans') || '[]'); orphans.push({ path, deletedAt: new Date().toISOString() }); if (orphans.length > 200) orphans.splice(0, orphans.length - 200); localStorage.setItem('cloudinary_orphans', JSON.stringify(orphans)); } catch {} return { success: true, reason: 'marked_orphan', path }; }
-  catch (e) { return { success: false, reason: 'error', error: e.message }; }
-};
-
 const STORAGE_KEY = 'finance_tracker_V78_SECURE';
 const LEGACY_KEYS = ['finance_tracker_V77_SECURE', 'finance_tracker_V76_SECURE', 'finance_tracker_V75_SECURE', 'finance_tracker_V74_SECURE'];
 const ALL_MONTHS = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
+const ALL_MONTHS_EARLY = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
 const YEARS_CONFIG = { 2026: ['أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'], 2027: ALL_MONTHS, 2028: ALL_MONTHS };
 const YEARS_LIST = [2026, 2027, 2028];
 const getMonthsForYear = (y) => YEARS_CONFIG[y] || ALL_MONTHS;
 const getMonthIndex = (m) => ALL_MONTHS.indexOf(m);
-
-const getDefaultMonthYear = () => {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = ALL_MONTHS[now.getMonth()];
-  if (YEARS_CONFIG[y] && YEARS_CONFIG[y].includes(m)) return { year: y, month: m };
-  const fallbackYear = YEARS_LIST[0];
-  return { year: fallbackYear, month: getMonthsForYear(fallbackYear)[0] };
-};
 
 const HANY_QUICK_ITEMS = ['سجاير','مارلبورو','ميريت','LM','كليوباترا','كليوباترا بوكس','نكست','وينستون','PINE','بال مال','إل إم أزرق','إل إم أحمر','ميريت أصفر','ميريت أزرق','بيبسي','كوكاكولا','سفن أب','ميرندا','عصير','جوافة','مانجو','برتقال','مياه','شاي','نسكافيه','قهوة','ميلو','ريد بُل','حليب معلب','شيبسي','شيتوس','دوريتوس','ليز','تايجر','بسكويت','كراكرز','مولتو','كادبوري','جالاكسي','اندومي','نودلز','بونبون','لبن','زبادي','رايب','جبنة بيضاء','جبنة رومي','جبنة شيدر','بيض','زبدة','قشطة','لبنة','جبنة كيري','عيش','سكر','زيت','أرز','مكرونة','دقيق','ملح','عدس','فول','صلصة','خل','حمص','سكر ناعم','مربي','صابون','شامبو','معجون','فرشاة','مناديل','كلور','ديتول','مسحوق غسيل','سائل أطباق','معطر','شوكولاتة','لبان','مصاصة','كيك','جيلي','ويفر','بسكويت محشي','رصيد مرحل من الشهر السابق'];
 
@@ -617,14 +435,214 @@ const DEFAULT_MONTHLY_PLANS = {
 
 const ACCOUNT_ICONS = { cib_savings: BuildingBank, aaib_savings: PiggyBank, cash: Wallet, fawry: StoreIcon, etisalat: Signal };
 const ACCOUNT_SHORT_NAMES = { cib_savings: 'CIB Savings', aaib_savings: 'AAIB Savings', cash: 'Cash', fawry: 'Fawry', etisalat: 'Etisalat' };
+/* ═══════════════════════════════════════════════════════════════ */
+  /* ═══════════════════════════════════════════════════════════════
+   PART 2 — Utilities + Migrations + Business Logic + Shared UI
+   ═══════════════════════════════════════════════════════════════ */
 
+// ── Safe JSON parse (prevents crash on corrupt localStorage) ──
+const safeParseJson = (raw, fallback) => {
+  if (raw === null || raw === undefined) return fallback;
+  try { const v = JSON.parse(raw); return v === null || v === undefined ? fallback : v; }
+  catch (e) { console.warn('safeParseJson failed:', e); return fallback; }
+};
+
+const escapeHtml = (u) => { if (typeof u !== 'string') return u; return u.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;"); };
+const getSafeId = () => { try { return crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).substr(2,9)}`; } catch { return `${Date.now()}-${Math.random().toString(36).substr(2,9)}`; } };
+const normalizeText = (t) => !t ? "" : t.toString().replace(/[أإآ]/g,'ا').replace(/ى/g,'ي').replace(/ة/g,'ه').replace(/[\u064B-\u065F]/g,'').trim().toLowerCase();
+const getLocalISODate = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+const calculateDaysLeft = (d) => { if (!d) return null; try { const t = new Date(); t.setHours(0,0,0,0); const g = new Date(d); g.setHours(0,0,0,0); return Math.ceil((g-t)/86400000); } catch { return null; } };
+const safeNumber = (v, f = 0) => { const n = Number(v); return isNaN(n) || !isFinite(n) ? f : n; };
+const dayStart = (d) => { const x = new Date(d); x.setHours(0,0,0,0); return x; };
+const endOfToday = () => { const x = new Date(); x.setHours(23,59,59,999); return x; };
+const toEnglishDigits = (s) => { if (s === null || s === undefined) return s; const map = { '٠':'0','١':'1','٢':'2','٣':'3','٤':'4','٥':'5','٦':'6','٧':'7','٨':'8','٩':'9','۰':'0','۱':'1','۲':'2','۳':'3','۴':'4','۵':'5','۶':'6','۷':'7','۸':'8','۹':'9' }; return String(s).replace(/[٠-٩۰-۹]/g, d => map[d]); };
+const parseNumberInput = (v) => { const cleaned = toEnglishDigits(v).replace(/[^\d.\-]/g, ''); const n = Number(cleaned); return isNaN(n) ? 0 : n; };
+const fmt = (n) => safeNumber(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const makeMonthKey = (year, month) => `${year}-${month}`;
+const parseMonthKey = (key) => { if (!key || typeof key !== 'string' || !key.includes('-')) return null; const [y, ...rest] = key.split('-'); const year = Number(y); if (isNaN(year)) return null; return { year, month: rest.join('-') }; };
+
+const inputMonthToKey = (v) => {
+  if (!v || !/^\d{4}-\d{2}$/.test(String(v))) return null;
+  const [y, m] = String(v).split('-').map(Number);
+  if (m < 1 || m > 12 || isNaN(y)) return null;
+  return `${y}-${ALL_MONTHS_EARLY[m - 1]}`;
+};
+const keyToInputMonth = (k) => {
+  if (!k || typeof k !== 'string') return '';
+  const idx = k.indexOf('-');
+  if (idx < 0) return '';
+  const y = k.slice(0, idx);
+  const mName = k.slice(idx + 1);
+  const mIdx = ALL_MONTHS_EARLY.indexOf(mName);
+  if (mIdx < 0 || !/^\d{4}$/.test(y)) return '';
+  return `${y}-${String(mIdx + 1).padStart(2, '0')}`;
+};
+
+// ── SMS Bank Parser ──
+const parseBankSms = (rawInput) => {
+  const result = { ok: false, bank: '', bankId: null, last4: null, amount: 0, type: 'expense', subType: 'withdrawal', date: getLocalISODate(), method: null, linkedCardId: null, description: '', balance: null, rawText: String(rawInput || ''), notes: [] };
+  if (!rawInput || typeof rawInput !== 'string' || rawInput.trim().length < 5) { result.notes.push('النص قصير جداً'); return result; }
+  const text = toEnglishDigits(rawInput).replace(/\u00A0/g, ' ');
+  if (/\bCIB\b|Commercial International|SWYPE|Titanium|سي آي بي/i.test(text)) { result.bank = 'CIB'; result.bankId = 'cib'; }
+  else if (/\bAAIB\b|Arab African|العربي الأفريقي|العربي الافريقي|الإفريقي الدولي/i.test(text)) { result.bank = 'AAIB'; result.bankId = 'aaib'; }
+  const last4Patterns = [/\b(?:ending|ends)\s*(?:with\s*)?(\d{4})\b/i, /\bcard\s*(?:no\.?|number|#)?\s*[:\-]?\s*(?:\*{2,}|\.{2,}|x{2,})?\s*(\d{4})\b/i, /(?:\*{2,}|\.{2,}|x{2,})\s*(\d{4})\b/i, /رقم\s*(?:\*{2,}|\.{2,})?\s*(\d{4})\b/, /بطاق[ةه]\s*(?:رقم\s*)?(?:\*{2,}|\.{2,})?\s*(\d{4})\b/];
+  for (const p of last4Patterns) { const m = text.match(p); if (m) { result.last4 = m[1]; break; } }
+  const incomeHints = [/\bcredit(?:ed)?\b/i, /\bdeposit(?:ed)?\b/i, /\breceived\b/i, /\bsalary\b/i, /\brefund\b/i, /\breimbursement\b/i, /\bcashback\b/i, /\badded\b/i, /إيداع/, /تم إيداع/, /أضيف/, /تم إضافة/, /راتب/, /استرداد/, /كاش باك/, /وارد/, /دائن/];
+  const expenseHints = [/\bdebit(?:ed)?\b/i, /\bpurchase\b/i, /\bwithdraw(?:al|n)?\b/i, /\bpaid\b/i, /\bpayment\b/i, /\bcharge[d]?\b/i, /\bspent\b/i, /\batm\b/i, /خصم/, /تم خصم/, /سحب/, /شراء/, /دفع/, /مدفوع/, /صادر/, /استخدام/, /مدين/];
+  const isIncome = incomeHints.some(r => r.test(text));
+  const isExpense = expenseHints.some(r => r.test(text));
+  if (isIncome && !isExpense) { result.type = 'income'; result.subType = 'deposit'; }
+  else if (isExpense && !isIncome) { result.type = 'expense'; result.subType = 'withdrawal'; }
+  else if (isIncome && isExpense) { result.notes.push('نوع العملية غير واضح — تم افتراض مصروف'); }
+  else { result.notes.push('لم يتم التعرف على نوع العملية'); }
+  const cur = '(?:EGP|LE|E£|ج\\.?م|جنيه|جم|ق\\.?م|ريال|SAR|USD|AED|درهم|دينار|\\$)';
+  const amtPatterns = [new RegExp(`${cur}\\s*([0-9][0-9,]*\\.?[0-9]*)`, 'i'), new RegExp(`([0-9][0-9,]*\\.?[0-9]*)\\s*${cur}`, 'i'), /(?:amount|for|of|بقيمة|بمبلغ|مبلغ)\s*[:\s]*([0-9][0-9,]*\.?[0-9]*)/i];
+  for (const p of amtPatterns) { const m = text.match(p); if (m) { const n = Number(m[1].replace(/,/g, '')); if (n > 0 && n < 100000000) { result.amount = n; break; } } }
+  if (!result.amount) { const all = text.match(/[0-9][0-9,]*\.?[0-9]*/g) || []; const nums = all.map(s => Number(s.replace(/,/g, ''))).filter(n => n > 0 && n < 100000000); if (nums.length) { result.amount = Math.max(...nums); result.notes.push('تم استخراج المبلغ تلقائياً — راجعه'); } }
+  const balMatch = text.match(/(?:balance|الرصيد|رصيد)[^\d]{0,20}([0-9][0-9,]*\.?[0-9]*)/i);
+  if (balMatch) { const b = Number(balMatch[1].replace(/,/g, '')); if (b > 0 && b !== result.amount) result.balance = b; }
+  const now = new Date();
+  let parsedDate = null;
+  const MONTHS_EN = { jan:1, feb:2, mar:3, apr:4, may:5, jun:6, jul:7, aug:8, sep:9, oct:10, nov:11, dec:12 };
+  const MONTHS_AR = { 'يناير':1,'فبراير':2,'مارس':3,'أبريل':4,'ابريل':4,'مايو':5,'يونيو':6,'يوليو':7,'أغسطس':8,'اغسطس':8,'سبتمبر':9,'أكتوبر':10,'اكتوبر':10,'نوفمبر':11,'ديسمبر':12 };
+  let m = text.match(/\b(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})\b/);
+  if (m) { const d = +m[1], mo = +m[2]; let y = +m[3]; if (y < 100) y += 2000; if (d >= 1 && d <= 31 && mo >= 1 && mo <= 12 && y >= 2020 && y <= 2100) parsedDate = new Date(y, mo - 1, d); }
+  if (!parsedDate) { m = text.match(/\b(\d{4})[\/\-\.](\d{1,2})[\/\-\.](\d{1,2})\b/); if (m) { const y = +m[1], mo = +m[2], d = +m[3]; if (d >= 1 && d <= 31 && mo >= 1 && mo <= 12 && y >= 2020 && y <= 2100) parsedDate = new Date(y, mo - 1, d); } }
+  if (!parsedDate) { m = text.match(/\b(\d{1,2})[\s\-]*([A-Za-z]{3,9})[\s\-]*(\d{2,4})\b/); if (m) { const mo = MONTHS_EN[m[2].toLowerCase().slice(0, 3)]; if (mo) { let y = +m[3]; if (y < 100) y += 2000; parsedDate = new Date(y, mo - 1, +m[1]); } } }
+  if (!parsedDate) { const arNames = Object.keys(MONTHS_AR).join('|'); const re = new RegExp(`(\\d{1,2})\\s*(${arNames})\\s*(\\d{2,4})`); m = text.match(re); if (m) { const mo = MONTHS_AR[m[2]]; let y = +m[3]; if (y < 100) y += 2000; parsedDate = new Date(y, mo - 1, +m[1]); } }
+  if (parsedDate && !isNaN(parsedDate) && parsedDate <= now) result.date = getLocalISODate(parsedDate);
+  else { result.date = getLocalISODate(now); if (parsedDate && !isNaN(parsedDate) && parsedDate > now) result.notes.push('التاريخ في المستقبل — تم استخدام اليوم'); }
+  const merchantPatterns = [/\bat\s+([A-Z][A-Z0-9\s&'\.\-]{2,40}?)(?:\s+on\s|\s+at\s|\s*[\.\,\n]|$)/i, /\b(?:merchant|from|to)\s*[:\-]?\s*([A-Z][A-Z0-9\s&'\.\-]{2,40}?)(?:\s+on\s|\s*[\.\,\n]|$)/i, /لدى\s+([^\.,\n]{2,40}?)(?:\s+يوم|\s+بتاريخ|\s*[\.\,\n]|$)/, /في\s+([^\.,\n]{2,40}?)(?:\s+يوم|\s+بتاريخ|\s*[\.\,\n]|$)/];
+  for (const p of merchantPatterns) { const mm = text.match(p); if (mm && mm[1]) { const desc = mm[1].trim().replace(/\s+/g, ' '); if (desc.length >= 2 && !/^\d+$/.test(desc)) { result.description = desc; break; } } }
+  if (!result.description) { const caps = text.match(/\b[A-Z][A-Z0-9&'\.\-]{2,}(?:\s+[A-Z][A-Z0-9&'\.\-]{2,}){0,4}\b/g) || []; const filtered = caps.filter(w => !/^(CIB|AAIB|EGP|LE|ATM|SMS|OTP|REF|SWYPE|TITANIUM|SIGNATURE|MASTERCARD|VISA|USD|SAR|AED|THE|AND|FOR|OF|ON|AT|YOUR|CARD|WAS|USED)$/i.test(w)); if (filtered.length) result.description = filtered[0].trim(); }
+  if (result.last4 === '1016') { result.method = 'cib_card'; result.linkedCardId = 1; result.bank = 'CIB'; }
+  else if (result.last4 === '0391') { result.method = 'aaib_card'; result.linkedCardId = 2; result.bank = 'AAIB'; }
+  else if (result.last4 === '2017') { result.method = 'cib_swype'; result.linkedCardId = 3; result.bank = 'CIB'; }
+  else if (result.bankId === 'cib') { result.method = 'cib_card'; result.linkedCardId = 1; }
+  else if (result.bankId === 'aaib') { result.method = 'aaib_card'; result.linkedCardId = 2; }
+  if (/\bTelda\b|تيلدا/i.test(text)) { const personMatch = text.match(/(?:to|لـ|إلى)\s*(Shaimaa|Salma|Abdelrahman|شيماء|سلمى|عبد الرحمن)/i); if (personMatch) { const p = personMatch[1].toLowerCase(); if (p === 'shaimaa' || p === 'شيماء') { result.method = 'telda_shaimaa'; result.description = result.description || 'تحويل Telda - شيماء'; } else if (p === 'salma' || p === 'سلمى') { result.method = 'telda_salma'; result.description = result.description || 'تحويل Telda - سلمى'; } else if (p === 'abdelrahman' || p === 'عبد الرحمن') { result.method = 'telda_abdelrahman'; result.description = result.description || 'تحويل Telda - عبد الرحمن'; } } }
+  result.ok = result.amount > 0;
+  if (!result.ok) result.notes.push('لم يتم العثور على مبلغ');
+  if (!result.method) result.notes.push('لم يتم التعرف على البطاقة — اختر يدوياً');
+  if (!result.description) result.description = result.type === 'income' ? 'دخل من SMS' : 'مصروف من SMS';
+  return result;
+};
+
+// ── Validation ──
+const VALIDATION = {
+  AMOUNT: { min: 0.01, max: 10000000, label: 'المبلغ' },
+  POSITIVE_INT: { min: 1, max: 31, label: 'الرقم' },
+  TEXT: { min: 1, max: 500, label: 'النص' },
+  LIMIT: { min: 100, max: 10000000, label: 'الحد الائتماني' },
+  INSTALLMENT: { min: 0, max: 10000000, label: 'القسط' }
+};
+const validateAmount = (raw, opts = {}) => {
+  const cfg = { ...VALIDATION.AMOUNT, ...opts };
+  const cleaned = toEnglishDigits(String(raw ?? '')).replace(/[^\d.\-]/g, '');
+  const n = parseFloat(cleaned);
+  if (isNaN(n) || !isFinite(n)) return { valid: false, error: 'اكتب رقم صحيح', value: 0 };
+  if (n < cfg.min) return { valid: false, error: `الحد الأدنى ${fmt(cfg.min)} ج.م`, value: 0 };
+  if (n > cfg.max) return { valid: false, error: `الحد الأقصى ${fmt(cfg.max)} ج.م`, value: 0 };
+  return { valid: true, value: n };
+};
+const validateText = (raw, opts = {}) => {
+  const cfg = { ...VALIDATION.TEXT, ...opts };
+  const s = String(raw || '').trim();
+  if (s.length < cfg.min) return { valid: false, error: `${cfg.label} مطلوب` };
+  if (s.length > cfg.max) return { valid: false, error: `${cfg.label} طويل جداً` };
+  return { valid: true, value: s };
+};
+const validateDate = (raw) => {
+  if (!raw) return { valid: false, error: 'التاريخ مطلوب' };
+  const d = new Date(raw);
+  if (isNaN(d)) return { valid: false, error: 'تاريخ غير صالح' };
+  const year = d.getFullYear();
+  if (year < 2020 || year > 2100) return { valid: false, error: 'السنة خارج النطاق' };
+  return { valid: true, value: d };
+};
+
+// ── Promise-based Modals ──
+const _modalResolvers = new Map();
+let _modalIdCounter = 0;
+const showInputModal = (opts) => new Promise((resolve) => {
+  const id = ++_modalIdCounter;
+  _modalResolvers.set(id, resolve);
+  window.dispatchEvent(new CustomEvent('show-input-modal', { detail: { ...opts, _id: id } }));
+});
+const resolveModal = (id, value) => { const resolve = _modalResolvers.get(id); if (resolve) { _modalResolvers.delete(id); resolve(value); } };
+const clearAllModals = () => { _modalResolvers.forEach((resolve) => resolve(null)); _modalResolvers.clear(); };
+
+// ── PIN ──
+const hashPin = async (pin) => {
+  try {
+    const encoder = new TextEncoder();
+    const data = encoder.encode('fintracker_v1_' + pin);
+    const hashBuf = await crypto.subtle.digest('SHA-256', data);
+    return Array.from(new Uint8Array(hashBuf)).map(b => b.toString(16).padStart(2, '0')).join('');
+  } catch { return 'plain_' + pin; }
+};
+const getStoredPinHash = () => localStorage.getItem(PIN_HASH_KEY);
+const savePinHash = async (pin) => { localStorage.setItem(PIN_HASH_KEY, await hashPin(pin)); };
+const verifyPin = async (pin) => { const stored = getStoredPinHash(); if (!stored) return pin === DEFAULT_PIN; return (await hashPin(pin)) === stored; };
+
+// ── Receipts (Cloudinary) ──
+const MAX_RECEIPT_SIZE_MB = 5;
+const compressImage = (file, maxWidth = 1280, quality = 0.75) => new Promise((resolve, reject) => {
+  if (!file.type.startsWith('image/')) return reject(new Error('الملف ليس صورة'));
+  if (file.size > MAX_RECEIPT_SIZE_MB * 1024 * 1024) return reject(new Error(`حجم الصورة أكبر من ${MAX_RECEIPT_SIZE_MB}MB`));
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      let { width, height } = img;
+      if (width > maxWidth) { height = Math.round((height * maxWidth) / width); width = maxWidth; }
+      canvas.width = width; canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, width, height);
+      canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error('فشل الضغط')), 'image/jpeg', quality);
+    };
+    img.onerror = () => reject(new Error('فشل قراءة الصورة'));
+    img.src = e.target.result;
+  };
+  reader.onerror = () => reject(new Error('فشل قراءة الملف'));
+  reader.readAsDataURL(file);
+});
+const uploadReceipt = async (txId, file) => {
+  const blob = await compressImage(file);
+  const formData = new FormData();
+  formData.append('file', blob, `${txId}_${Date.now()}.jpg`);
+  formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+  formData.append('folder', `receipts/${txId}`);
+  formData.append('public_id', `${Date.now()}_${Math.random().toString(36).slice(2,8)}`);
+  const res = await fetch(CLOUDINARY_UPLOAD_URL, { method: 'POST', body: formData });
+  if (!res.ok) { const errText = await res.text(); console.error('Cloudinary Error:', errText); throw new Error('فشل رفع الصورة'); }
+  const data = await res.json();
+  return { url: data.secure_url, path: data.public_id, name: file.name, size: data.bytes };
+};
+const deleteReceipt = async (path) => {
+  if (!path) return { success: false, reason: 'no_path' };
+  try { try { const orphans = safeParseJson(localStorage.getItem('cloudinary_orphans'), []); orphans.push({ path, deletedAt: new Date().toISOString() }); if (orphans.length > 200) orphans.splice(0, orphans.length - 200); localStorage.setItem('cloudinary_orphans', JSON.stringify(orphans)); } catch {} return { success: true, reason: 'marked_orphan', path }; }
+  catch (e) { return { success: false, reason: 'error', error: e.message }; }
+};
+
+// ── Default month/year ──
+const getDefaultMonthYear = () => {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = ALL_MONTHS[now.getMonth()];
+  if (YEARS_CONFIG[y] && YEARS_CONFIG[y].includes(m)) return { year: y, month: m };
+  const fallbackYear = YEARS_LIST[0];
+  return { year: fallbackYear, month: getMonthsForYear(fallbackYear)[0] };
+};
+
+// ── Kind / helpers ──
 const inferKind = (tx) => {
   if (tx.kind) return tx.kind;
   if (tx.category === 'أخرى' && (tx.description || '').includes('تسوية')) return KIND.ADJUSTMENT;
   if (FINANCIAL_CATEGORIES.has(tx.category)) return KIND.FINANCIAL;
   return KIND.OPERATIONAL;
 };
-
 const isBankFee = (tx) => BANK_FEE_CATEGORIES.has(tx?.category);
 const isBeneficiaryCategory = (cat) => typeof cat === 'string' && cat.startsWith('مصروف شهري - ');
 
@@ -679,8 +697,8 @@ const getCardMethod = (card) => {
   return 'cib_card';
 };
 
-const _cardDebtCache = new WeakMap();
-const _computeCardDebtRaw = (data, card, asOfDate) => {
+// Card debt computation (no WeakMap cache — data identity changes on every SET_DATA anyway)
+const computeCardDebt = (data, card, asOfDate) => {
   if (!card) return 0;
   const method = getCardMethod(card);
   const upper = asOfDate ? new Date(asOfDate) : endOfToday();
@@ -695,16 +713,6 @@ const _computeCardDebtRaw = (data, card, asOfDate) => {
     if (t.type === 'income' && t.method === method && t.subType === 'deposit') { debt -= amt; return; }
   });
   return Math.max(0, debt);
-};
-const computeCardDebt = (data, card, asOfDate) => {
-  if (!card) return 0;
-  if (asOfDate) return _computeCardDebtRaw(data, card, asOfDate);
-  const cache = _cardDebtCache.get(data);
-  if (cache && cache[card.id] !== undefined) return cache[card.id];
-  const result = _computeCardDebtRaw(data, card);
-  if (cache) cache[card.id] = result;
-  else _cardDebtCache.set(data, { [card.id]: result });
-  return result;
 };
 
 const getClosingBalance = (data, key, year, month) => {
@@ -755,6 +763,7 @@ const computeCashbackSummary = (trackers) => {
   return { expected, received, pending: expected - received, list: trackers };
 };
 
+// ── Migrations ──
 const migrateCards = (cards) => {
   if (!Array.isArray(cards)) return DEFAULT_CARDS;
   return cards.map(c => {
@@ -879,15 +888,17 @@ const getInitialData = () => {
   try {
     const cached = localStorage.getItem(STORAGE_KEY) || LEGACY_KEYS.map(k => localStorage.getItem(k)).find(Boolean);
     if (cached) {
-      const migrated = migrateData(JSON.parse(cached));
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated)); } catch(e){}
-      return migrated;
+      const migrated = migrateData(safeParseJson(cached, null));
+      if (migrated) {
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated)); } catch(e){}
+        return migrated;
+      }
     }
-  } catch (e) { console.warn(e); }
+  } catch (e) { console.warn('getInitialData failed:', e); }
   return { engineVersion: CURRENT_ENGINE_VERSION, recurringInitialized: true, transactions: [], loans: DEFAULT_LOANS, cards: DEFAULT_CARDS, accountsData: DEFAULT_ACCOUNTS, monthlyPlans: DEFAULT_MONTHLY_PLANS, recurringItems: DEFAULT_RECURRING, closedMonths: [], monthlySnapshots: {}, materializedRecurring: {}, notifiedItems: {}, custodyEntries: DEFAULT_CUSTODY_ENTRIES, cashbackTrackers: DEFAULT_CASHBACK_TRACKERS };
 };
 
-// Materialize Recurring Items
+// ── Materialize Recurring ──
 const materializeRecurringItems = (data, asOfDateStr) => {
   if (!data?.recurringItems?.length) return null;
   const now = asOfDateStr ? new Date(asOfDateStr) : new Date();
@@ -936,7 +947,7 @@ const materializeRecurringItems = (data, asOfDateStr) => {
   return { ...data, transactions: [...newTxs, ...existing].sort((a, b) => new Date(b.date) - new Date(a.date)), materializedRecurring: materialized };
 };
 
-// ✅ PATCH #6: deriveMonthlyPlanFromHistory V13
+// ── Derive monthly plan from history ──
 const deriveMonthlyPlanFromHistory = (data, targetYear, targetMonth, monthsBack = 3) => {
   const transactions = data?.transactions || [];
   const targetIdx = getMonthIndex(targetMonth);
@@ -987,7 +998,7 @@ const deriveMonthlyPlanFromHistory = (data, targetYear, targetMonth, monthsBack 
   };
 };
 
-// ✅ PATCH #8: useOnlineStatus
+// ── Online status hook ──
 const useOnlineStatus = () => {
   const [online, setOnline] = useState(() => (typeof navigator !== 'undefined' ? navigator.onLine : true));
   useEffect(() => {
@@ -1000,7 +1011,7 @@ const useOnlineStatus = () => {
   return online;
 };
 
-// ErrorBoundary
+// ── ErrorBoundary ──
 class ErrorBoundary extends React.Component {
   constructor(p) { super(p); this.state = { hasError: false, error: null }; }
   static getDerivedStateFromError(error) { return { hasError: true, error }; }
@@ -1021,7 +1032,7 @@ class ErrorBoundary extends React.Component {
   }
 }
 
-// Promise Modal Provider
+// ── PromiseModalProvider ──
 const PromiseModalProvider = ({ children }) => {
   const [stack, setStack] = useState([]);
   const [inputValues, setInputValues] = useState({});
@@ -1084,9 +1095,8 @@ const PromiseModalProvider = ({ children }) => {
     </React.Fragment>
   );
 };
-  // ═══════════════════════════════════════════════════════
-// Modal Component
-// ═══════════════════════════════════════════════════════
+
+// ── Modal ──
 const Modal = memo(({ isOpen, onClose, title, icon, size = 'md', children, footer, className = '' }) => {
   if (!isOpen) return null;
   const sizeClass = { sm: 'max-w-sm', md: 'max-w-md', lg: 'max-w-lg', xl: 'max-w-xl', '2xl': 'max-w-2xl', '3xl': 'max-w-3xl', '5xl': 'max-w-5xl' }[size] || 'max-w-md';
@@ -1101,9 +1111,7 @@ const Modal = memo(({ isOpen, onClose, title, icon, size = 'md', children, foote
   );
 });
 
-// ═══════════════════════════════════════════════════════
-// Bank Logo
-// ═══════════════════════════════════════════════════════
+// ── Bank Logo ──
 const BankLogo = memo(({ type, size = 40, className = "" }) => {
   const [err, setErr] = useState(false);
   const get = () => {
@@ -1130,9 +1138,7 @@ const WALLET_CONFIGS = {
   aaib_savings: { id:'aaib_savings', title:'AAIB Savings Account', subtitle:'Track transactions', icon: PiggyBank, csvName:'AAIB_Savings' }
 };
 
-// ═══════════════════════════════════════════════════════
-// Toast
-// ═══════════════════════════════════════════════════════
+// ── Toast ──
 const Toast = ({ notification, onClose }) => {
   useEffect(() => { const t = setTimeout(onClose, notification.duration || 5000); return () => clearTimeout(t); }, [notification, onClose]);
   const icons = { success: CheckCircle2, error: AlertTriangle, warning: AlertTriangle, info: Bell };
@@ -1154,9 +1160,7 @@ const ToastContainer = ({ notifications, removeNotification }) => {
   return (<div className="toast-container no-print">{notifications.slice(-3).map(n => <Toast key={n.id} notification={n} onClose={() => removeNotification(n.id)} />)}</div>);
 };
 
-// ═══════════════════════════════════════════════════════
-// ✅ PATCH #9: OfflineBanner + OnlineStatusBadge
-// ═══════════════════════════════════════════════════════
+// ── Offline banner + online badge ──
 const OfflineBanner = memo(({ online, lastSync, onRetry }) => {
   if (online) return null;
   return (
@@ -1176,9 +1180,7 @@ const OnlineStatusBadge = memo(({ online }) => (
   </div>
 ));
 
-// ═══════════════════════════════════════════════════════
-// Badges
-// ═══════════════════════════════════════════════════════
+// ── Badges ──
 const SmsBadge = memo(({ tx }) => {
   if (tx?.source !== 'sms') return null;
   return <span className="badge badge-brand">📱 SMS</span>;
@@ -1220,9 +1222,7 @@ const ReceiptIndicator = memo(({ tx, dispatch }) => {
   );
 });
 
-// ═══════════════════════════════════════════════════════
-// Date Grouping
-// ═══════════════════════════════════════════════════════
+// ── Date grouping ──
 const groupTransactionsByDate = (list) => {
   const groups = {};
   list.forEach(t => { const d = t.date || 'unknown'; if (!groups[d]) groups[d] = []; groups[d].push(t); });
@@ -1252,16 +1252,19 @@ const DayGroupHeader = memo(({ label, total, count }) => (
     <div className="day-header-total">{fmt(total)} ج.م</div>
   </div>
 ));
+/* ═══════════════════════════════════════════════════════════════ */
+  /* ═══════════════════════════════════════════════════════════════
+   PART 3 — PendingClose + Ledger + Custody + Cashback + Duplicates
+            + MonthSelector + Dashboard + CategoryDetail + Categories
+            + TransactionsView
+   ═══════════════════════════════════════════════════════════════ */
 
-// ═══════════════════════════════════════════════════════
-// PendingCloseModal
-// ═══════════════════════════════════════════════════════
+// ── PendingCloseModal ──
 const PendingCloseModal = memo(({ data, onClose, onAction }) => {
   const [expanded, setExpanded] = useState(true);
   const pending = data.pending || [];
   const totalIncome = pending.filter(t => t.type === 'income').reduce((s, t) => s + safeNumber(t.amount), 0);
   const totalExpense = pending.filter(t => t.type === 'expense').reduce((s, t) => s + safeNumber(t.amount), 0);
-
   return (
     <div className="modal-backdrop no-print" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="generic-modal max-w-lg">
@@ -1317,9 +1320,7 @@ const PendingCloseModal = memo(({ data, onClose, onAction }) => {
   );
 });
 
-// ═══════════════════════════════════════════════════════
-// GenericLedgerComponent
-// ═══════════════════════════════════════════════════════
+// ── GenericLedgerComponent ──
 const GenericLedgerComponent = memo(({ walletKey, ledgerData, liveBalance, isExpanded, onToggle, theme, onAddDeposit, onAddWithdrawal, walletVisibility, onToggleVisibility }) => {
   const [filter, setFilter] = useState('all');
   const [dateFilter, setDateFilter] = useState('');
@@ -1333,7 +1334,7 @@ const GenericLedgerComponent = memo(({ walletKey, ledgerData, liveBalance, isExp
   const stop = (e, action) => { e.stopPropagation(); e.preventDefault(); if (action) action(); };
   return (
     <div className="card mb-3">
-      <div className="flex justify-between items-center cursor-pointer -m-4.5 p-4.5" onClick={onToggle}>
+      <div className="flex justify-between items-center cursor-pointer -m-[18px] p-[18px]" onClick={onToggle}>
         <div className="flex items-center gap-3 min-w-0 flex-1">
           <div className="p-2.5 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: 'var(--bg-muted)', color: 'var(--text-secondary)' }}><IconComponent size={20} /></div>
           <div className="min-w-0">
@@ -1392,9 +1393,7 @@ const GenericLedgerComponent = memo(({ walletKey, ledgerData, liveBalance, isExp
   );
 });
 
-// ═══════════════════════════════════════════════════════
-// CustodyView
-// ═══════════════════════════════════════════════════════
+// ── CustodyView ──
 const CustodyView = memo(({ data, dispatch, saveHistory, addNotification }) => {
   const [showAdd, setShowAdd] = useState(false);
   const [filterType, setFilterType] = useState('all');
@@ -1544,9 +1543,7 @@ const CustodyView = memo(({ data, dispatch, saveHistory, addNotification }) => {
   );
 });
 
-// ═══════════════════════════════════════════════════════
-// CashbackView
-// ═══════════════════════════════════════════════════════
+// ── CashbackView ──
 const CashbackView = memo(({ data, dispatch, saveHistory, addNotification, cards, selectedYear, selectedMonth }) => {
   const [showAdd, setShowAdd] = useState(false);
   const [newTracker, setNewTracker] = useState({ cardId: cards[0]?.id || 1, month: selectedMonth, year: selectedYear, expectedAmount: '', receivedAmount: '', receivedDate: '', status: CASHBACK_STATUS.EXPECTED, notes: '' });
@@ -1659,9 +1656,7 @@ const CashbackView = memo(({ data, dispatch, saveHistory, addNotification, cards
   );
 });
 
-// ═══════════════════════════════════════════════════════
-// DuplicateDetectionSystem
-// ═══════════════════════════════════════════════════════
+// ── DuplicateDetectionSystem ──
 const DuplicateDetectionSystem = ({ transactions, data, dispatch, addNotification, saveHistory }) => {
   const [threshold, setThreshold] = useState(2);
   const [selectedMonth, setSelectedMonth] = useState('all');
@@ -1721,7 +1716,7 @@ const DuplicateDetectionSystem = ({ transactions, data, dispatch, addNotificatio
         <div className="card text-center p-12"><CheckCircle2 size={40} className="text-emerald-500 mx-auto mb-3" /><h3 className="text-base font-black">ممتاز! لا توجد تكرارات</h3></div>
       ) : duplicates.map(dup => (
         <div key={dup.key} className="card">
-          <div className="flex justify-between items-center cursor-pointer -m-4.5 p-4.5" onClick={() => setExpandedGroups(p => ({ ...p, [dup.key]: !p[dup.key] }))}>
+          <div className="flex justify-between items-center cursor-pointer -m-[18px] p-[18px]" onClick={() => setExpandedGroups(p => ({ ...p, [dup.key]: !p[dup.key] }))}>
             <div className="flex items-center gap-3">
               <div className={`p-2 rounded-lg ${dup.risk === 'high' ? 'bg-red-50 text-red-500 dark:bg-red-950/30' : 'bg-amber-50 text-amber-500 dark:bg-amber-950/30'}`}><Repeat size={16} /></div>
               <div><h4 className="font-black text-sm">{fmt(dup.amount)} ج.م</h4><span className="text-[10px] font-semibold" style={{ color: 'var(--text-muted)' }}>{dup.category} - {dup.count} مرات</span></div>
@@ -1744,9 +1739,7 @@ const DuplicateDetectionSystem = ({ transactions, data, dispatch, addNotificatio
   );
 };
 
-// ═══════════════════════════════════════════════════════
-// ConfirmDialog
-// ═══════════════════════════════════════════════════════
+// ── ConfirmDialog ──
 const ConfirmDialog = ({ confirmDialog, dispatch }) => {
   if (!confirmDialog.isOpen) return null;
   const isDanger = confirmDialog.danger;
@@ -1767,9 +1760,7 @@ const ConfirmDialog = ({ confirmDialog, dispatch }) => {
   );
 };
 
-// ═══════════════════════════════════════════════════════
-// MonthSelector
-// ═══════════════════════════════════════════════════════
+// ── MonthSelector ──
 const MonthSelector = memo(({ selectedYear, selectedMonth, onSelectYear, onSelectMonth, className = "" }) => {
   const months = getMonthsForYear(selectedYear);
   return (
@@ -1790,9 +1781,7 @@ const MonthSelector = memo(({ selectedYear, selectedMonth, onSelectYear, onSelec
   );
 });
 
-// ═══════════════════════════════════════════════════════
-// EnhancedStatCard
-// ═══════════════════════════════════════════════════════
+// ── EnhancedStatCard ──
 const EnhancedStatCard = ({ title, amount, icon: Icon, subtitle, isPrivate, color = 'emerald' }) => {
   const colorMap = { emerald: 'text-emerald-600 dark:text-emerald-400', red: 'text-red-600 dark:text-red-400', blue: 'text-blue-600 dark:text-blue-400', purple: 'text-purple-600 dark:text-purple-400', amber: 'text-amber-600 dark:text-amber-400' };
   const bgMap = { emerald: 'bg-emerald-50 dark:bg-emerald-950/30', red: 'bg-red-50 dark:bg-red-950/30', blue: 'bg-blue-50 dark:bg-blue-950/30', purple: 'bg-purple-50 dark:bg-purple-950/30', amber: 'bg-amber-50 dark:bg-amber-950/30' };
@@ -1810,9 +1799,7 @@ const EnhancedStatCard = ({ title, amount, icon: Icon, subtitle, isPrivate, colo
   );
 };
 
-// ═══════════════════════════════════════════════════════
-// QuickBalanceOverview
-// ═══════════════════════════════════════════════════════
+// ── QuickBalanceOverview ──
 const QuickBalanceOverview = memo(({ balances, walletVisibility, onToggleVisibility }) => {
   const [isVisible, setIsVisible] = useState(true);
   const accounts = ACCOUNT_KEYS.map(k => ({ key: k, shortName: ACCOUNT_SHORT_NAMES[k] || k, balance: safeNumber(balances?.[k]), icon: ACCOUNT_ICONS[k] }));
@@ -1844,9 +1831,7 @@ const QuickBalanceOverview = memo(({ balances, walletVisibility, onToggleVisibil
   );
 });
 
-// ═══════════════════════════════════════════════════════
-// MonthComparisonView
-// ═══════════════════════════════════════════════════════
+// ── MonthComparisonView ──
 const MonthComparisonView = memo(({ transactions, selectedYear, selectedMonth }) => {
   const idx = getMonthIndex(selectedMonth);
   const prevMonth = idx > 0 ? ALL_MONTHS[idx - 1] : 'ديسمبر';
@@ -1896,9 +1881,8 @@ const MonthComparisonView = memo(({ transactions, selectedYear, selectedMonth })
     </div>
   );
 });
-// ═══════════════════════════════════════════════════════
-// DashboardView
-// ═══════════════════════════════════════════════════════
+
+// ── DashboardView ──
 const DashboardView = memo(({ data, financeSnapshot, liveBalances, totalLiquidity, walletVisibility, onToggleVisibility, dispatch, selectedYear, selectedMonth, transactions, cards, updatedLoans, chartData, isDarkMode, handleManualReconciliation, addNotification, onSelectYear, onSelectMonth }) => {
   const totalCardDebt = useMemo(() => cards.reduce((s, c) => s + computeCardDebt(data, c), 0), [cards, data]);
   const totalLoanDebt = useMemo(() => updatedLoans.filter(l => !l.isReceivable).reduce((s, l) => s + l.remaining, 0), [updatedLoans]);
@@ -2046,23 +2030,19 @@ const DashboardView = memo(({ data, financeSnapshot, liveBalances, totalLiquidit
   );
 });
 
-// ═══════════════════════════════════════════════════════
-// ✅ CategoryDetailModal — تفاصيل الفئة + عرض كل المعاملات + PDF + طباعة
-// ═══════════════════════════════════════════════════════
+// ── CategoryDetailModal ──
 const CategoryDetailModal = memo(({ category, transactions, selectedMonth, selectedYear, dispatch, addNotification }) => {
   const [filterType, setFilterType] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [exporting, setExporting] = useState(false);
   const containerRef = useRef(null);
 
-  // كل معاملات الفئة لهذا الشهر
   const categoryTx = useMemo(() => {
     return transactions
       .filter(t => t.category === category && t.month === selectedMonth && (t.year || 2026) === selectedYear)
       .sort((a, b) => new Date(b.date) - new Date(a.date));
   }, [transactions, category, selectedMonth, selectedYear]);
 
-  // فلترة
   const filteredTx = useMemo(() => {
     let arr = categoryTx;
     if (filterType === 'paid') arr = arr.filter(t => t.status === 'paid');
@@ -2074,7 +2054,6 @@ const CategoryDetailModal = memo(({ category, transactions, selectedMonth, selec
     return arr;
   }, [categoryTx, filterType, searchTerm]);
 
-  // إحصائيات
   const stats = useMemo(() => {
     const paid = categoryTx.filter(t => t.status === 'paid');
     const pending = categoryTx.filter(t => t.status !== 'paid');
@@ -2087,15 +2066,12 @@ const CategoryDetailModal = memo(({ category, transactions, selectedMonth, selec
     return { totalPaid, totalPending, total: totalPaid + totalPending, count, paidCount: paid.length, pendingCount: pending.length, average, methods };
   }, [categoryTx]);
 
-  // تجميع حسب اليوم
   const dailyGroups = useMemo(() => groupTransactionsByDate(filteredTx), [filteredTx]);
 
-  // طباعة
   const handlePrint = () => {
     if (!containerRef.current) return;
     const printWindow = window.open('', '_blank', 'width=900,height=700');
     if (!printWindow) { addNotification({ type: 'error', title: 'المتصفح منع الطباعة', message: 'اسمح بالنوافذ المنبثقة' }); return; }
-
     const html = `
       <!DOCTYPE html>
       <html dir="rtl" lang="ar">
@@ -2129,7 +2105,7 @@ const CategoryDetailModal = memo(({ category, transactions, selectedMonth, selec
       </head>
       <body>
         <div class="header">
-          <h1>📊 ${category}</h1>
+          <h1>📊 ${escapeHtml(category)}</h1>
           <p>${selectedMonth} ${selectedYear} • تم التوليد: ${new Date().toLocaleString('ar-EG')}</p>
         </div>
         <div class="stats">
@@ -2150,12 +2126,12 @@ const CategoryDetailModal = memo(({ category, transactions, selectedMonth, selec
           </thead>
           <tbody>
             ${dailyGroups.map(group => `
-              <tr class="day-header-row"><td colspan="5">${group.label} — ${fmt(group.total)} ج.م (${group.items.length})</td></tr>
+              <tr class="day-header-row"><td colspan="5">${escapeHtml(group.label)} — ${fmt(group.total)} ج.م (${group.items.length})</td></tr>
               ${group.items.map(t => `
                 <tr>
-                  <td>${t.date}</td>
-                  <td>${(t.description || t.category || '').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</td>
-                  <td>${PAYMENT_METHODS.find(p => p.id === t.method)?.label || t.method || '—'}</td>
+                  <td>${escapeHtml(t.date)}</td>
+                  <td>${escapeHtml(t.description || t.category || '')}</td>
+                  <td>${escapeHtml(PAYMENT_METHODS.find(p => p.id === t.method)?.label || t.method || '—')}</td>
                   <td class="${t.status === 'paid' ? 'status-paid' : 'status-pending'}">${t.status === 'paid' ? '✅ معتمد' : '⏳ معلق'}</td>
                   <td class="amount-${t.type === 'income' ? 'income' : 'expense'}" style="text-align: left;">${t.type === 'income' ? '+' : '−'}${fmt(t.amount)}</td>
                 </tr>
@@ -2163,7 +2139,7 @@ const CategoryDetailModal = memo(({ category, transactions, selectedMonth, selec
             `).join('')}
           </tbody>
         </table>
-        <div class="footer">💼 المحفظة الذكية — تقرير تفصيلي لفئة ${category} • إجمالي: ${fmt(stats.total)} ج.م</div>
+        <div class="footer">💼 المحفظة الذكية — تقرير تفصيلي لفئة ${escapeHtml(category)} • إجمالي: ${fmt(stats.total)} ج.م</div>
         <script>window.onload = () => { setTimeout(() => { window.print(); }, 300); };<\/script>
       </body>
       </html>
@@ -2172,7 +2148,6 @@ const CategoryDetailModal = memo(({ category, transactions, selectedMonth, selec
     printWindow.document.close();
   };
 
-  // تصدير PDF
   const handleExportPdf = async () => {
     if (!containerRef.current || exporting) return;
     if (categoryTx.length === 0) { addNotification({ type: 'warning', title: 'لا توجد معاملات للتصدير' }); return; }
@@ -2186,7 +2161,7 @@ const CategoryDetailModal = memo(({ category, transactions, selectedMonth, selec
       wrapper.style.cssText = 'background:white;padding:20px;font-family:Cairo,sans-serif;direction:rtl;';
       wrapper.innerHTML = `
         <div style="text-align:center;padding-bottom:12px;border-bottom:3px solid #2563EB;margin-bottom:16px;">
-          <h1 style="font-size:20px;font-weight:900;color:#1E40AF;margin:0 0 4px;">📊 ${category}</h1>
+          <h1 style="font-size:20px;font-weight:900;color:#1E40AF;margin:0 0 4px;">📊 ${escapeHtml(category)}</h1>
           <p style="font-size:12px;color:#6b7280;font-weight:600;margin:0;">${selectedMonth} ${selectedYear} • ${new Date().toLocaleDateString('ar-EG')}</p>
         </div>
       `;
@@ -2229,7 +2204,6 @@ const CategoryDetailModal = memo(({ category, transactions, selectedMonth, selec
         </div>
 
         <div className="generic-modal-body" ref={containerRef}>
-          {/* إحصائيات */}
           <div className="grid grid-cols-4 gap-2 mb-4">
             <div className="p-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 text-center">
               <p className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400">معتمد</p>
@@ -2249,7 +2223,6 @@ const CategoryDetailModal = memo(({ category, transactions, selectedMonth, selec
             </div>
           </div>
 
-          {/* أدوات التحكم */}
           <div className="flex gap-1.5 flex-wrap mb-3" data-pdf-hide="true">
             <div className="relative flex-1 min-w-[140px]">
               <Search className="absolute right-2.5 top-1/2 -translate-y-1/2" size={12} style={{ color: 'var(--text-muted)' }} />
@@ -2269,7 +2242,6 @@ const CategoryDetailModal = memo(({ category, transactions, selectedMonth, selec
             </button>
           </div>
 
-          {/* توزيع طرق الدفع */}
           {Object.keys(stats.methods).length > 0 && (
             <div className="p-2.5 rounded-lg mb-3" style={{ background: 'var(--bg-muted)' }}>
               <p className="text-[10px] font-bold mb-1.5" style={{ color: 'var(--text-secondary)' }}>💳 التوزيع حسب طريقة الدفع:</p>
@@ -2283,7 +2255,6 @@ const CategoryDetailModal = memo(({ category, transactions, selectedMonth, selec
             </div>
           )}
 
-          {/* قائمة المعاملات */}
           {filteredTx.length === 0 ? (
             <div className="text-center py-8">
               <Layers size={32} className="mx-auto mb-2" style={{ color: 'var(--text-muted)' }} />
@@ -2320,7 +2291,6 @@ const CategoryDetailModal = memo(({ category, transactions, selectedMonth, selec
             </div>
           )}
 
-          {/* الإجمالي النهائي */}
           {filteredTx.length > 0 && (
             <div className="mt-3 p-3 rounded-lg bg-gradient-to-br from-blue-600 to-blue-800 text-white flex justify-between items-center">
               <span className="font-black text-sm">الإجمالي (المعروض)</span>
@@ -2339,9 +2309,7 @@ const CategoryDetailModal = memo(({ category, transactions, selectedMonth, selec
   );
 });
 
-// ═══════════════════════════════════════════════════════
-// CategoriesView
-// ═══════════════════════════════════════════════════════
+// ── CategoriesView ──
 const CategoriesView = memo(({ transactions, selectedMonth, selectedYear, catViewType, budgets, dispatch, handleDelete, onSelectYear, onSelectMonth }) => {
   const catTotals = useMemo(() => transactions.filter(t => t.type === catViewType && t.month === selectedMonth && (t.year || 2026) === selectedYear).reduce((acc, t) => { acc[t.category] = (acc[t.category] || 0) + safeNumber(t.amount); return acc; }, {}), [transactions, catViewType, selectedMonth, selectedYear]);
   const catCounts = useMemo(() => transactions.filter(t => t.type === catViewType && t.month === selectedMonth && (t.year || 2026) === selectedYear).reduce((acc, t) => { acc[t.category] = (acc[t.category] || 0) + 1; return acc; }, {}), [transactions, catViewType, selectedMonth, selectedYear]);
@@ -2386,9 +2354,7 @@ const CategoriesView = memo(({ transactions, selectedMonth, selectedYear, catVie
   );
 });
 
-// ═══════════════════════════════════════════════════════
-// TransactionsView
-// ═══════════════════════════════════════════════════════
+// ── TransactionsView ──
 const TransactionsView = memo(({ groupedTransactions, transactions, selectedMonth, selectedYear, transViewMode, statusFilter, searchTerm, expandedGroup, data, monthInsights, dispatch, handleDelete, addNotification, onSelectYear, onSelectMonth, saveHistory, onPrintMonthlyReport }) => {
   const [sourceFilter, setSourceFilter] = useState('all');
   const [showFilters, setShowFilters] = useState(false);
@@ -2396,21 +2362,21 @@ const TransactionsView = memo(({ groupedTransactions, transactions, selectedMont
   const [showSmsOnly, setShowSmsOnly] = useState(false);
   const [showBeneficiariesOnly, setShowBeneficiariesOnly] = useState(false);
 
-  const filterBySource = (list) => { if (sourceFilter === 'all') return list; if (sourceFilter === 'self') return list.filter(t => !isFamilyTx(t)); return list.filter(t => t.createdBy === sourceFilter); };
-  const filterByBankFees = (list) => showBankFeesOnly ? list.filter(t => isBankFee(t)) : list;
-  const filterBySms = (list) => showSmsOnly ? list.filter(t => t.source === 'sms') : list;
-  const filterByBeneficiaries = (list) => showBeneficiariesOnly ? list.filter(t => isBeneficiaryCategory(t.category)) : list;
-  const filterByType = (list) => transViewMode === 'all' ? list : list.filter(t => t.type === transViewMode);
+  const filterBySource = useCallback((list) => { if (sourceFilter === 'all') return list; if (sourceFilter === 'self') return list.filter(t => !isFamilyTx(t)); return list.filter(t => t.createdBy === sourceFilter); }, [sourceFilter]);
+  const filterByBankFees = useCallback((list) => showBankFeesOnly ? list.filter(t => isBankFee(t)) : list, [showBankFeesOnly]);
+  const filterBySms = useCallback((list) => showSmsOnly ? list.filter(t => t.source === 'sms') : list, [showSmsOnly]);
+  const filterByBeneficiaries = useCallback((list) => showBeneficiariesOnly ? list.filter(t => isBeneficiaryCategory(t.category)) : list, [showBeneficiariesOnly]);
+  const filterByType = useCallback((list) => transViewMode === 'all' ? list : list.filter(t => t.type === transViewMode), [transViewMode]);
 
-  const pendingGroups = useMemo(() => groupedTransactions.map(g => ({ ...g, items: filterByBeneficiaries(filterBySms(filterByBankFees(filterBySource(g.items.filter(t => t.status !== 'paid'))))) })).filter(g => g.items.length > 0), [groupedTransactions, sourceFilter, showBankFeesOnly, showSmsOnly, showBeneficiariesOnly]);
-  const paidArchive = useMemo(() => filterByBeneficiaries(filterBySms(filterByBankFees(filterBySource(filterByType(transactions.filter(t => t.month === selectedMonth && (t.year || 2026) === selectedYear && t.status === 'paid')))))).sort((a, b) => new Date(b.date) - new Date(a.date)), [transactions, selectedMonth, selectedYear, transViewMode, sourceFilter, showBankFeesOnly, showSmsOnly, showBeneficiariesOnly]);
+  const pendingGroups = useMemo(() => groupedTransactions.map(g => ({ ...g, items: filterByBeneficiaries(filterBySms(filterByBankFees(filterBySource(g.items.filter(t => t.status !== 'paid'))))) })).filter(g => g.items.length > 0), [groupedTransactions, filterBySource, filterByBankFees, filterBySms, filterByBeneficiaries]);
+  const paidArchive = useMemo(() => filterByBeneficiaries(filterBySms(filterByBankFees(filterBySource(filterByType(transactions.filter(t => t.month === selectedMonth && (t.year || 2026) === selectedYear && t.status === 'paid')))))).sort((a, b) => new Date(b.date) - new Date(a.date)), [transactions, selectedMonth, selectedYear, filterByType, filterBySource, filterByBankFees, filterBySms, filterByBeneficiaries]);
   const totalPending = pendingGroups.reduce((s, g) => s + g.items.length, 0);
   const isClosed = isMonthClosed(data, selectedYear, selectedMonth);
 
   const approveOne = (t) => { if (isMonthClosed(data, t.year || 2026, t.month)) { addNotification({ type: 'error', title: 'محظور' }); return; } dispatch({ type: 'UPDATE_TRANSACTIONS', payload: transactions.map(tr => tr.id === t.id ? { ...tr, status: 'paid' } : tr) }); addNotification({ type: 'success', title: 'تم الاعتماد' }); };
   const approveAll = () => { if (isClosed) { addNotification({ type: 'error', title: 'محظور' }); return; } dispatch({ type: 'SHOW_CONFIRM', danger: false, title: 'اعتماد الكل', message: `سيتم اعتماد ${totalPending} عملية`, onConfirm: () => { saveHistory(); const ids = new Set(pendingGroups.flatMap(g => g.items.map(i => i.id))); dispatch({ type: 'UPDATE_TRANSACTIONS', payload: transactions.map(t => ids.has(t.id) ? { ...t, status: 'paid' } : t) }); addNotification({ type: 'success', title: 'تم الاعتماد' }); }, onCancel: () => dispatch({ type: 'HIDE_CONFIRM' }) }); };
   const reopenOne = (t) => { if (isMonthClosed(data, t.year || 2026, t.month)) { addNotification({ type: 'error', title: 'محظور' }); return; } dispatch({ type: 'UPDATE_TRANSACTIONS', payload: transactions.map(tr => tr.id === t.id ? { ...tr, status: 'pending' } : tr) }); addNotification({ type: 'warning', title: 'إعادة تعليق' }); };
-  const monthTx = transactions.filter(t => t.month === selectedMonth && (t.year || 2026) === selectedYear);
+  const monthTx = useMemo(() => transactions.filter(t => t.month === selectedMonth && (t.year || 2026) === selectedYear), [transactions, selectedMonth, selectedYear]);
   const activeFiltersCount = (sourceFilter !== 'all' ? 1 : 0) + (statusFilter !== 'all' ? 1 : 0) + (showBankFeesOnly ? 1 : 0) + (showSmsOnly ? 1 : 0) + (showBeneficiariesOnly ? 1 : 0);
   const dailyGroups = useMemo(() => groupTransactionsByDate(paidArchive), [paidArchive]);
 
@@ -2580,10 +2546,14 @@ const TransactionsView = memo(({ groupedTransactions, transactions, selectedMont
     </div>
   );
 });
-  // ═══════════════════════════════════════════════════════
-// ✅ HanyShopLedger — سجل مسحوبات محل هاني الكامل
-// (بحث + تجميع + مقارنة + تصدير PDF)
-// ═══════════════════════════════════════════════════════
+/* ═══════════════════════════════════════════════════════════════ */
+  /* ═══════════════════════════════════════════════════════════════
+   PART 4 — HanyShopLedger + LoansView + WalletsAndCardsView
+            + MonthlyPlanningView + PlannerView
+            + LiquidityForecastView + CalendarView
+   ═══════════════════════════════════════════════════════════════ */
+
+// ── HanyShopLedger ──
 const HanyShopLedger = memo(({ loan, prevMonthLoan, addNotification }) => {
   const [expanded, setExpanded] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -2592,13 +2562,11 @@ const HanyShopLedger = memo(({ loan, prevMonthLoan, addNotification }) => {
   const [sortBy, setSortBy] = useState('date'); // 'date' | 'amount' | 'name'
   const containerRef = useRef(null);
 
-  // جمع المسحوبات
   const items = useMemo(() => {
     const raw = Array.isArray(loan.items) ? loan.items : [];
     return raw.slice().sort((a, b) => new Date(b.date) - new Date(a.date));
   }, [loan.items]);
 
-  // فلترة بالبحث
   const filteredItems = useMemo(() => {
     if (!searchTerm.trim()) return items;
     const term = normalizeText(searchTerm);
@@ -2609,7 +2577,6 @@ const HanyShopLedger = memo(({ loan, prevMonthLoan, addNotification }) => {
     );
   }, [items, searchTerm]);
 
-  // ترتيب مخصص
   const sortedItems = useMemo(() => {
     const arr = [...filteredItems];
     if (sortBy === 'amount') return arr.sort((a, b) => safeNumber(b.amount) - safeNumber(a.amount));
@@ -2617,7 +2584,6 @@ const HanyShopLedger = memo(({ loan, prevMonthLoan, addNotification }) => {
     return arr.sort((a, b) => new Date(b.date) - new Date(a.date));
   }, [filteredItems, sortBy]);
 
-  // تجميع حسب الوصف
   const groupedItems = useMemo(() => {
     const map = {};
     filteredItems.forEach(item => {
@@ -2630,7 +2596,6 @@ const HanyShopLedger = memo(({ loan, prevMonthLoan, addNotification }) => {
     return Object.values(map).sort((a, b) => b.total - a.total);
   }, [filteredItems]);
 
-  // مقارنة بالشهر السابق
   const comparison = useMemo(() => {
     if (!prevMonthLoan) return null;
     const cur = safeNumber(loan.totalAmount);
@@ -2640,22 +2605,26 @@ const HanyShopLedger = memo(({ loan, prevMonthLoan, addNotification }) => {
     return { cur, prev, change, direction: change > 0.5 ? 'up' : change < -0.5 ? 'down' : 'same', diff: cur - prev };
   }, [loan.totalAmount, prevMonthLoan]);
 
-  // أعلى 3 أصناف
   const top3 = useMemo(() => groupedItems.slice(0, 3), [groupedItems]);
-
-  // إجمالي المعروض
   const totalFiltered = filteredItems.reduce((s, i) => s + safeNumber(i.amount), 0);
 
-  // تصدير PDF مع فتح كل الأقسام
+  // ✅ PATCH: Force expanded before PDF + restore styles safely
   const handleExportPdf = async () => {
     if (!containerRef.current || exporting) return;
-    if (items.length === 0) {
-      addNotification({ type: 'warning', title: 'لا توجد مسحوبات للتصدير' });
-      return;
-    }
+    if (items.length === 0) { addNotification({ type: 'warning', title: 'لا توجد مسحوبات للتصدير' }); return; }
     setExporting(true);
+
+    // Force expansion (so PDF has all data)
+    const wasExpanded = expanded;
+    if (!wasExpanded) setExpanded(true);
+
+    // Wait for React to render + layout
+    await new Promise(r => setTimeout(r, 350));
+
     try {
       const element = containerRef.current;
+      if (!element) throw new Error('Container not found');
+
       const scrollables = element.querySelectorAll('.scroll-hide, .pdf-expand');
       const savedStyles = [];
       scrollables.forEach((el) => {
@@ -2680,19 +2649,24 @@ const HanyShopLedger = memo(({ loan, prevMonthLoan, addNotification }) => {
 
       savedStyles.forEach(({ el, maxHeight, overflow }) => { el.style.maxHeight = maxHeight; el.style.overflow = overflow; });
       hiddenSaved.forEach(({ el, disp }) => { el.style.display = disp; });
-
       addNotification({ type: 'success', title: 'تم تصدير PDF', message: `${filteredItems.length} معاملة — ${fmt(totalFiltered)} ج.م` });
     } catch (e) {
       console.error('PDF Export Error:', e);
       addNotification({ type: 'error', title: 'فشل التصدير', message: e.message || 'خطأ غير معروف' });
     } finally {
       setExporting(false);
+      // Don't collapse back after export — keeps the user's view stable
     }
   };
 
+  // ✅ PATCH: Auto-expand when user asks for search or view change
+  useEffect(() => {
+    if ((searchTerm.trim() || viewMode === 'grouped') && !expanded) setExpanded(true);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchTerm, viewMode]);
+
   return (
     <div ref={containerRef} className="mt-3 pt-3" style={{ borderTop: '1px dashed var(--border-default)' }}>
-      {/* زر التوسيع */}
       <button
         type="button"
         data-pdf-hide="true"
@@ -2714,7 +2688,6 @@ const HanyShopLedger = memo(({ loan, prevMonthLoan, addNotification }) => {
 
       {expanded && (
         <div className="mt-3 space-y-3 animate-fadeIn">
-          {/* أدوات التحكم */}
           <div className="flex gap-1.5 flex-wrap" data-pdf-hide="true">
             <div className="relative flex-1 min-w-[140px]">
               <Search className="absolute right-2.5 top-1/2 -translate-y-1/2" size={12} style={{ color: 'var(--text-muted)' }} />
@@ -2754,12 +2727,6 @@ const HanyShopLedger = memo(({ loan, prevMonthLoan, addNotification }) => {
             </button>
           </div>
 
-          {/* رأس للـ PDF */}
-          <div className="hidden" style={{ display: 'none' }}>
-            <h3>مسحوبات محل هاني — {loan.month} {loan.year}</h3>
-          </div>
-
-          {/* مقارنة بالشهر السابق */}
           {comparison && (
             <div className="p-2.5 rounded-lg grid grid-cols-3 gap-2 text-center" style={{ background: 'var(--bg-muted)' }}>
               <div>
@@ -2779,7 +2746,6 @@ const HanyShopLedger = memo(({ loan, prevMonthLoan, addNotification }) => {
             </div>
           )}
 
-          {/* أعلى 3 أصناف */}
           {top3.length > 0 && !searchTerm && (
             <div className="p-2.5 rounded-lg" style={{ background: 'rgba(37, 99, 235, 0.06)' }}>
               <p className="text-[10px] font-black text-blue-700 dark:text-blue-400 mb-2">🏆 أعلى 3 أصناف</p>
@@ -2797,7 +2763,6 @@ const HanyShopLedger = memo(({ loan, prevMonthLoan, addNotification }) => {
             </div>
           )}
 
-          {/* السجل */}
           {filteredItems.length === 0 ? (
             <div className="text-center py-6 text-[11px] font-semibold" style={{ color: 'var(--text-muted)' }}>
               {searchTerm ? '🔍 لا توجد نتائج للبحث' : 'لا توجد مسحوبات مسجلة'}
@@ -2840,7 +2805,6 @@ const HanyShopLedger = memo(({ loan, prevMonthLoan, addNotification }) => {
             </div>
           )}
 
-          {/* ملخص */}
           <div className="flex justify-between items-center p-2.5 rounded-lg" style={{ background: 'rgba(220, 38, 38, 0.08)' }}>
             <span className="text-[10px] font-bold text-red-700 dark:text-red-400">
               {searchTerm ? `نتائج البحث (${filteredItems.length} من ${items.length})` : `إجمالي الشهر (${items.length} مسحوبة)`}
@@ -2848,7 +2812,6 @@ const HanyShopLedger = memo(({ loan, prevMonthLoan, addNotification }) => {
             <span className="font-black text-red-600 text-[13px]">{fmt(totalFiltered)}</span>
           </div>
 
-          {/* توقيع للـ PDF */}
           <p className="text-[9px] text-center font-semibold" style={{ color: 'var(--text-muted)' }}>
             تم التوليد بواسطة المحفظة الذكية — {new Date().toLocaleDateString('ar-EG')}
           </p>
@@ -2858,15 +2821,12 @@ const HanyShopLedger = memo(({ loan, prevMonthLoan, addNotification }) => {
   );
 });
 
-// ═══════════════════════════════════════════════════════
-// LoansView — مع HanyShopLedger الكامل
-// ═══════════════════════════════════════════════════════
+// ── LoansView ──
 const LoansView = memo(({ updatedLoans, cards, recurringItems, transactions, dispatch, deleteRecurring, saveHistory, getLocalISODate, addNotification, data, selectedMonth, selectedYear }) => {
   const [showAdd, setShowAdd] = useState(false);
   const [activeTab, setActiveTab] = useState('loans');
   const [newLoan, setNewLoan] = useState({ name: '', totalAmount: '', monthlyInstallment: '', dueDay: 1, description: '', isReceivable: false });
 
-  // ✅ PATCH #3: فتح نموذج تعديل بند متكرر
   const openRecurringEdit = useCallback((item) => {
     dispatch({
       type: 'SET_RECURRING_FORM_DATA',
@@ -2888,7 +2848,6 @@ const LoansView = memo(({ updatedLoans, cards, recurringItems, transactions, dis
     dispatch({ type: 'SET_RECURRING_MODAL_OPEN', payload: true });
   }, [dispatch]);
 
-  // بناء خريطة سجلات هاني شهرياً للمقارنة
   const hanyByMonth = useMemo(() => {
     const map = {};
     updatedLoans.filter(l => l.autoGenerated).forEach(l => {
@@ -3104,7 +3063,6 @@ const LoansView = memo(({ updatedLoans, cards, recurringItems, transactions, dis
                   </div>
                   <div className="w-full rounded-full h-1 overflow-hidden" style={{ background: 'var(--bg-muted)' }}><div className="bg-emerald-500 h-full rounded-full" style={{ width: `${Math.min(100, pct)}%` }}></div></div>
 
-                  {/* ✅ سجل مسحوبات محل هاني */}
                   {loan.autoGenerated && (
                     <HanyShopLedger
                       loan={loan}
@@ -3161,9 +3119,8 @@ const LoansView = memo(({ updatedLoans, cards, recurringItems, transactions, dis
     </div>
   );
 });
-  // ═══════════════════════════════════════════════════════
-// WalletsAndCardsView
-// ═══════════════════════════════════════════════════════
+
+// ── WalletsAndCardsView ──
 const WalletsAndCardsView = memo(({ cards, buildLedger, expandedLedgers, expandedCardsSection, selectedMonth, selectedYear, dispatch, handleDelete, handleAddWalletDeposit, handleAddWalletWithdrawal, walletVisibility, liveBalances, saveHistory, addNotification, data }) => {
   const [activeTab, setActiveTab] = useState('wallets');
   const [showAddCard, setShowAddCard] = useState(false);
@@ -3277,9 +3234,7 @@ const WalletsAndCardsView = memo(({ cards, buildLedger, expandedLedgers, expande
   );
 });
 
-// ═══════════════════════════════════════════════════════
-// MonthlyPlanningView — مع PATCH #7 (Auto-derive + Override)
-// ═══════════════════════════════════════════════════════
+// ── MonthlyPlanningView ──
 const MonthlyPlanningView = memo(({ data, monthlyPlans, cards, loans, dispatch, saveHistory, addNotification }) => {
   const planningMonths = useMemo(() => {
     const now = new Date();
@@ -3289,13 +3244,12 @@ const MonthlyPlanningView = memo(({ data, monthlyPlans, cards, loans, dispatch, 
     return result;
   }, []);
 
-  const pk = (m) => makeMonthKey(m.year, m.month);
+  const pk = useCallback((m) => makeMonthKey(m.year, m.month), []);
   const [localPlans, setLocalPlans] = useState(() => JSON.parse(JSON.stringify(monthlyPlans || {})));
   const [hasChanges, setHasChanges] = useState(false);
   const [derivedFlags, setDerivedFlags] = useState({});
   const [showSources, setShowSources] = useState(false);
 
-  // ✅ PATCH #7: Auto-derive — يحترم التعديلات اليدوية
   useEffect(() => {
     const base = JSON.parse(JSON.stringify(monthlyPlans || {}));
     let derivedCount = 0;
@@ -3383,7 +3337,7 @@ const MonthlyPlanningView = memo(({ data, monthlyPlans, cards, loans, dispatch, 
       r[pk(m)] = { inc, out, net: inc - out };
     });
     return r;
-  }, [localPlans, planningMonths]);
+  }, [localPlans, planningMonths, pk]);
 
   const totalInc = planningMonths.reduce((s, m) => s + (computed[pk(m)]?.inc || 0), 0);
   const totalOut = planningMonths.reduce((s, m) => s + (computed[pk(m)]?.out || 0), 0);
@@ -3522,9 +3476,7 @@ const MonthlyPlanningView = memo(({ data, monthlyPlans, cards, loans, dispatch, 
   );
 });
 
-// ═══════════════════════════════════════════════════════
-// PlannerView — مع المعلقات والبنود المتكررة المستقبلية
-// ═══════════════════════════════════════════════════════
+// ── PlannerView ──
 const PlannerView = memo(({ updatedLoans, cards, selectedMonth, selectedYear, monthlyPlans, totalLiquidityNow, data, transactions = [], recurringItems = [] }) => {
   const projection = useMemo(() => {
     const seq = [];
@@ -3538,13 +3490,11 @@ const PlannerView = memo(({ updatedLoans, cards, selectedMonth, selectedYear, mo
       const planIncome = safeNumber(plan.expectedSalary) + safeNumber(plan.expectedRent) + safeNumber(plan.expectedCashback) + safeNumber(plan.expectedEmakWE) + safeNumber(plan.expectedZakat) + safeNumber(plan.expectedCash);
       const planExpenses = safeNumber(plan.expectedCashExpenses) + safeNumber(plan.plannedPayments);
 
-      // ✅ العمليات المعلقة لهذا الشهر
       const monthTx = transactions.filter(t => t.month === month && (t.year || year) === year);
       const pendingManualIncome = monthTx.filter(t => t.type === 'income' && t.status !== 'paid' && !t.sourceRecurringId && !t.sourceReceivableId).reduce((s, t) => s + safeNumber(t.amount), 0);
       const pendingManualExpense = monthTx.filter(t => t.type === 'expense' && t.status !== 'paid' && !t.sourceRecurringId).reduce((s, t) => s + safeNumber(t.amount), 0);
       const monthPendingCount = monthTx.filter(t => t.status !== 'paid').length;
 
-      // ✅ البنود المتكررة المتوقعة للأشهر المستقبلية
       const isFutureMonth = year > now.getFullYear() || (year === now.getFullYear() && getMonthIndex(month) > now.getMonth());
       let recurringPendingIncome = 0, recurringPendingExpense = 0;
       if (isFutureMonth) {
@@ -3699,9 +3649,7 @@ const PlannerView = memo(({ updatedLoans, cards, selectedMonth, selectedYear, mo
   );
 });
 
-// ═══════════════════════════════════════════════════════
-// LiquidityForecastView
-// ═══════════════════════════════════════════════════════
+// ── LiquidityForecastView ──
 const ForecastRow = ({ label, value, color, prefix }) => (
   <div className="flex justify-between items-center">
     <span className="text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>{label}</span>
@@ -3890,9 +3838,7 @@ const LiquidityForecastView = memo(({ transactions, updatedLoans, recurringItems
   );
 });
 
-// ═══════════════════════════════════════════════════════
-// CalendarView
-// ═══════════════════════════════════════════════════════
+// ── CalendarView ──
 const CalendarView = memo(({ data, getAgendaItems, transactions, dispatch, saveHistory, addNotification }) => {
   const [filterCat, setFilterCat] = useState('all');
   const items = getAgendaItems();
@@ -3974,9 +3920,14 @@ const CalendarView = memo(({ data, getAgendaItems, transactions, dispatch, saveH
     </div>
   );
 });
-  // ═══════════════════════════════════════════════════════
-// PinChangeModal
-// ═══════════════════════════════════════════════════════
+/* ═══════════════════════════════════════════════════════════════ */
+  /* ═══════════════════════════════════════════════════════════════
+   PART 5 — PinChangeModal + SmsParserModal + Google Drive Helpers
+            + SettingsView + ProfessionalTicker + EnhancedSidebar
+            + ProfessionalHeader + LoginScreen + PinLockScreen
+   ═══════════════════════════════════════════════════════════════ */
+
+// ── PinChangeModal ──
 const PinChangeModal = ({ onClose, addNotification }) => {
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
@@ -4005,9 +3956,7 @@ const PinChangeModal = ({ onClose, addNotification }) => {
   );
 };
 
-// ═══════════════════════════════════════════════════════
-// SmsParserModal
-// ═══════════════════════════════════════════════════════
+// ── SmsParserModal ──
 const SmsParserModal = memo(({ isOpen, onClose, dispatch, addNotification, saveHistory, data }) => {
   const [rawText, setRawText] = useState('');
   const [parsed, setParsed] = useState(null);
@@ -4098,9 +4047,9 @@ const SmsParserModal = memo(({ isOpen, onClose, dispatch, addNotification, saveH
   );
 });
 
-// ═══════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
 // Google Drive Helpers
-// ═══════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
 const DRIVE_CLIENT_ID = '190006477168-odmpreq26b618rdn1dsg4k1aag3k056g.apps.googleusercontent.com';
 const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive';
 const DRIVE_FOLDER_NAME = 'Finance Backups';
@@ -4152,7 +4101,7 @@ const getOrCreateBackupFolder = async () => {
     try {
       const checkRes = await fetch(`https://www.googleapis.com/drive/v3/files/${customFolderId}?fields=id,name,mimeType,trashed`, { headers: { Authorization: `Bearer ${token}` } });
       if (checkRes.ok) { const info = await checkRes.json(); if (!info.trashed) return customFolderId; }
-    } catch (e) { }
+    } catch (e) { /* fallback */ }
   }
   const q = encodeURIComponent(`mimeType='application/vnd.google-apps.folder' and name='${DRIVE_FOLDER_NAME}' and trashed=false`);
   const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)&spaces=drive&pageSize=20`, { headers: { Authorization: `Bearer ${token}` } });
@@ -4195,9 +4144,9 @@ const downloadBackupFromDrive = async (fileId) => {
   return await res.json();
 };
 
-// ═══════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
 // SettingsView
-// ═══════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
 const SettingsView = memo(({ data, accountsData, cards, budgets, dispatch, saveHistory, addNotification }) => {
   const [localAccounts, setLocalAccounts] = useState(() => JSON.parse(JSON.stringify(accountsData)));
   const [localCards, setLocalCards] = useState(() => cards.map(c => ({ ...c })));
@@ -4395,9 +4344,7 @@ const SettingsView = memo(({ data, accountsData, cards, budgets, dispatch, saveH
   );
 });
 
-// ═══════════════════════════════════════════════════════
-// ProfessionalTicker
-// ═══════════════════════════════════════════════════════
+// ── ProfessionalTicker ──
 const ProfessionalTicker = memo(({ updatedLoans, cards, liveBalances, walletVisibility, custodyBalance, data }) => {
   const [quote] = useState(() => DAILY_DHIKR[Math.floor(Math.random() * DAILY_DHIKR.length)]);
   const totalDebt = updatedLoans.filter(l => !l.isReceivable).reduce((a, l) => a + l.remaining, 0) + cards.reduce((a, c) => a + computeCardDebt(data, c), 0);
@@ -4424,9 +4371,7 @@ const ProfessionalTicker = memo(({ updatedLoans, cards, liveBalances, walletVisi
   );
 });
 
-// ═══════════════════════════════════════════════════════
-// EnhancedSidebar
-// ═══════════════════════════════════════════════════════
+// ── EnhancedSidebar ──
 const EnhancedSidebar = memo(({ activeTab, dispatch, canUndo, onUndo }) => {
   const groups = [
     { title: 'الرئيسية', items: [{ id: 'dashboard', label: 'لوحة التحكم', icon: LayoutDashboard }, { id: 'transactions', label: 'المعاملات', icon: ArrowUpRight }] },
@@ -4459,9 +4404,7 @@ const EnhancedSidebar = memo(({ activeTab, dispatch, canUndo, onUndo }) => {
   );
 });
 
-// ═══════════════════════════════════════════════════════
-// ProfessionalHeader — مع isOnline badge
-// ═══════════════════════════════════════════════════════
+// ── ProfessionalHeader ──
 const ProfessionalHeader = memo(({ isDarkMode, dispatch, onOpenSms, isOnline }) => (
   <header className="flex justify-between items-center gap-3 mb-4">
     <div className="flex items-center gap-2.5">
@@ -4481,9 +4424,7 @@ const ProfessionalHeader = memo(({ isDarkMode, dispatch, onOpenSms, isOnline }) 
   </header>
 ));
 
-// ═══════════════════════════════════════════════════════
-// LoginScreen + PinLockScreen
-// ═══════════════════════════════════════════════════════
+// ── LoginScreen ──
 const LoginScreen = ({ onLogin }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -4512,22 +4453,42 @@ const LoginScreen = ({ onLogin }) => {
   );
 };
 
+// ── PinLockScreen (with proper cleanup) ──
 const PinLockScreen = ({ onSuccess, onLogout }) => {
   const [pin, setPin] = useState('');
   const [error, setError] = useState(false);
   const [success, setSuccess] = useState(false);
   const [attempts, setAttempts] = useState(0);
   const [lastPressed, setLastPressed] = useState(null);
+  const pressTimerRef = useRef(null);
+  const clearTimerRef = useRef(null);
+  const navTimerRef = useRef(null);
+
+  // Cleanup all pending timers on unmount
+  useEffect(() => {
+    return () => {
+      if (pressTimerRef.current) clearTimeout(pressTimerRef.current);
+      if (clearTimerRef.current) clearTimeout(clearTimerRef.current);
+      if (navTimerRef.current) clearTimeout(navTimerRef.current);
+    };
+  }, []);
+
   const handleDigit = (d) => {
     if (pin.length >= 4 || success) return;
     const next = pin + d;
     setPin(next); setLastPressed(d);
-    setTimeout(() => setLastPressed(null), 150);
+    if (pressTimerRef.current) clearTimeout(pressTimerRef.current);
+    pressTimerRef.current = setTimeout(() => setLastPressed(null), 150);
     if (next.length === 4) {
-      setTimeout(async () => {
+      if (navTimerRef.current) clearTimeout(navTimerRef.current);
+      navTimerRef.current = setTimeout(async () => {
         const ok = await verifyPin(next);
-        if (ok) { setSuccess(true); setTimeout(() => onSuccess(), 500); }
-        else { setError(true); setAttempts(a => a + 1); setTimeout(() => { setPin(''); setError(false); }, 650); }
+        if (ok) { setSuccess(true); if (navTimerRef.current) clearTimeout(navTimerRef.current); navTimerRef.current = setTimeout(() => onSuccess(), 500); }
+        else {
+          setError(true); setAttempts(a => a + 1);
+          if (clearTimerRef.current) clearTimeout(clearTimerRef.current);
+          clearTimerRef.current = setTimeout(() => { setPin(''); setError(false); }, 650);
+        }
       }, 150);
     }
   };
@@ -4556,10 +4517,12 @@ const PinLockScreen = ({ onSuccess, onLogout }) => {
     </div>
   );
 };
+/* ═══════════════════════════════════════════════════════════════ */
+  /* ═══════════════════════════════════════════════════════════════
+   PART 6 — dataReducer + App Component + Render Root
+   ═══════════════════════════════════════════════════════════════ */
 
-// ═══════════════════════════════════════════════════════
-// dataReducer
-// ═══════════════════════════════════════════════════════
+// ── dataReducer (with smart snapshot invalidation) ──
 function dataReducer(state, action) {
   switch (action.type) {
     case 'SET_DATA': return { ...state, data: action.payload };
@@ -4598,12 +4561,46 @@ function dataReducer(state, action) {
     case 'UPDATE_CARDS': return { ...state, data: { ...state.data, cards: action.payload } };
     case 'UPDATE_RECURRING_ITEMS': return { ...state, data: { ...state.data, recurringItems: action.payload } };
     case 'UPDATE_CASHBACK_TRACKERS': return { ...state, data: { ...state.data, cashbackTrackers: action.payload } };
+
+    // ✅ PATCH: Smart invalidation — only clear snapshots affected by the changed account
     case 'UPDATE_ACCOUNTS': {
       const oldA = state.data.accountsData || {};
-      let changed = false;
-      ACCOUNT_KEYS.forEach(k => { if (safeNumber(oldA[k]?.balance) !== safeNumber(action.payload[k]?.balance)) changed = true; });
-      return { ...state, data: { ...state.data, accountsData: action.payload, ...(changed ? { monthlySnapshots: {} } : {}) } };
+      const newA = action.payload || {};
+      // Find the earliest month affected by any account balance/lastUpdated change
+      let earliestAffected = null;
+      ACCOUNT_KEYS.forEach(k => {
+        const oldBal = safeNumber(oldA[k]?.balance);
+        const newBal = safeNumber(newA[k]?.balance);
+        const oldDate = oldA[k]?.lastUpdated;
+        const newDate = newA[k]?.lastUpdated;
+        if (oldBal !== newBal || oldDate !== newDate) {
+          const ref = newDate || oldDate;
+          if (ref) {
+            const d = new Date(ref);
+            if (!isNaN(d)) {
+              const y = d.getFullYear();
+              const mIdx = d.getMonth();
+              const mName = ALL_MONTHS[mIdx];
+              // Pick the earliest affected month among changed accounts
+              if (!earliestAffected) earliestAffected = { year: y, month: mName };
+              else {
+                const curIdx = getMonthIndex(earliestAffected.month);
+                if (y < earliestAffected.year || (y === earliestAffected.year && mIdx < curIdx)) {
+                  earliestAffected = { year: y, month: mName };
+                }
+              }
+            }
+          }
+        }
+      });
+      let newSnapshots = state.data.monthlySnapshots || {};
+      if (earliestAffected) {
+        const { snapshots } = invalidateSnapshotsFrom(newSnapshots, earliestAffected.year, earliestAffected.month);
+        newSnapshots = snapshots;
+      }
+      return { ...state, data: { ...state.data, accountsData: newA, monthlySnapshots: newSnapshots } };
     }
+
     case 'UPDATE_MONTHLY_PLANS': return { ...state, data: { ...state.data, monthlyPlans: action.payload } };
     case 'ADD_TO_HISTORY': { const limited = [...state.history].slice(-19); return { ...state, history: [...limited, action.payload], future: [] }; }
     case 'UNDO': {
@@ -4619,6 +4616,7 @@ function dataReducer(state, action) {
     case 'SET_QUICK_TRANSFER_MODAL_OPEN': return { ...state, isQuickTransferModalOpen: action.payload };
     case 'SET_QUICK_TRANSFER_DATA': return { ...state, quickTransferData: { ...state.quickTransferData, ...action.payload } };
     case 'SET_VIEWING_CARD_STATEMENT': return { ...state, viewingCardStatement: action.payload };
+
     case 'CLOSE_MONTH': {
       const { year, month } = action.payload;
       const monthKey = makeMonthKey(year, month);
@@ -4627,6 +4625,7 @@ function dataReducer(state, action) {
       ACCOUNT_KEYS.forEach(k => { snap[k] = computeBalance(state.data, k, monthEnd); });
       return { ...state, data: { ...state.data, closedMonths: [...(state.data.closedMonths || []), monthKey], monthlySnapshots: { ...(state.data.monthlySnapshots || {}), [monthKey]: snap } } };
     }
+
     case 'CLOSE_MONTH_AFTER_RESOLVE': {
       const { year, month, resolveAction, pendingIds } = action.payload;
       const monthKey = makeMonthKey(year, month);
@@ -4662,6 +4661,7 @@ function dataReducer(state, action) {
         pendingCloseModal: { isOpen: false, pending: [], total: 0, month: '', year: 0 }
       };
     }
+
     case 'OPEN_MONTH': {
       const monthKey = action.payload;
       const parsedKey = parseMonthKey(monthKey);
@@ -4669,15 +4669,16 @@ function dataReducer(state, action) {
       const { snapshots } = invalidateSnapshotsFrom(state.data.monthlySnapshots, parsedKey.year, parsedKey.month);
       return { ...state, data: { ...state.data, closedMonths: (state.data.closedMonths || []).filter(m => m !== monthKey), monthlySnapshots: snapshots } };
     }
+
     case 'TOGGLE_WALLET_VISIBILITY': return { ...state, walletVisibility: { ...state.walletVisibility, [action.payload]: !state.walletVisibility[action.payload] } };
     case 'SET_IS_PROCESSING': return { ...state, isProcessing: action.payload };
     default: return state;
   }
 }
 
-// ═══════════════════════════════════════════════════════
-// App Component — مع كل PATCHES
-// ═══════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
+// App Component
+// ═══════════════════════════════════════════════════════════════
 function App() {
   const defMY = useMemo(() => getDefaultMonthYear(), []);
   const [state, dispatch] = useReducer(dataReducer, {
@@ -4688,7 +4689,7 @@ function App() {
     isFormOpen: false, formMode: 'add',
     formData: { type: 'expense', subType: 'withdrawal', status: 'pending', receipts: [] },
     isLocked: false, isDarkMode: localStorage.getItem('theme') === 'dark',
-    budgets: JSON.parse(localStorage.getItem('budgets') || '{}'),
+    budgets: safeParseJson(localStorage.getItem('budgets'), {}), // ✅ PATCH: safe parse
     editingCard: null, editingLoan: null,
     searchTerm: '', editingBudgetCategory: null, budgetAmount: '',
     isRecurringModalOpen: false,
@@ -4727,10 +4728,18 @@ function App() {
   const { data, activeTab, selectedYear, selectedMonth, transViewMode, catViewType, isFormOpen, formMode, formData, isLocked, isDarkMode, expandedGroup, budgets, editingCard, editingLoan, searchTerm, editingBudgetCategory, budgetAmount, isRecurringModalOpen, recurringFormData, notifications, isAiModalOpen, aiResponse, isAiLoading, history, expandedLedgers, expandedCardsSection, statusFilter, confirmDialog, isQuickTransferModalOpen, quickTransferData, viewingCardStatement, viewingReceipt, isPinChangeOpen, isSmsModalOpen, pendingCloseModal, walletVisibility, isProcessing, formErrors, activeCategoryDetail } = state;
   const { transactions = [], loans = [], cards = [], recurringItems = [], accountsData = DEFAULT_ACCOUNTS, monthlyPlans = {} } = data || {};
 
-  // ✅ PATCH #11: Online monitoring
   const isOnline = useOnlineStatus();
   const prevOnlineRef = useRef(isOnline);
 
+  // ═══════════════════════════════════════════════════════════════
+  // ✅ CRITICAL FIX (TDZ): Callbacks must be defined BEFORE any useEffect
+  //    that references them in their dependency arrays.
+  // ═══════════════════════════════════════════════════════════════
+  const addNotification = useCallback((notification) => dispatch({ type: 'ADD_NOTIFICATION', payload: notification }), []);
+  const removeNotification = useCallback((id) => dispatch({ type: 'REMOVE_NOTIFICATION', payload: id }), []);
+  const saveHistory = useCallback(() => dispatch({ type: 'ADD_TO_HISTORY', payload: { data: JSON.parse(JSON.stringify(data)), budgets: JSON.parse(JSON.stringify(budgets)) } }), [data, budgets]);
+
+  // ── Auth state listener ──
   useEffect(() => {
     const unsub = firebase.auth().onAuthStateChanged((user) => {
       setAuthLoading(false);
@@ -4739,6 +4748,7 @@ function App() {
     return () => unsub();
   }, []);
 
+  // ── Firestore realtime sync ──
   useEffect(() => {
     if (!isAuthenticated) return;
     const docRef = db.collection("finance_2026").doc("user_ahmed_data");
@@ -4754,18 +4764,20 @@ function App() {
     return () => unsub();
   }, [isAuthenticated]);
 
+  // ── Debounced save to Firestore + localStorage ──
   useEffect(() => {
     if (isAuthenticated && data && data.transactions) {
       clearTimeout(saveTimeoutRef.current);
       saveTimeoutRef.current = setTimeout(() => {
         if (lastRemoteRef.current && JSON.stringify(data) === lastRemoteRef.current) return;
-        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch (e) {}
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch (e) { console.warn('LS save failed:', e); }
         db.collection("finance_2026").doc("user_ahmed_data").set({ ...data, budgets }, { merge: true }).catch(err => console.error(err));
       }, 5000);
     }
     return () => clearTimeout(saveTimeoutRef.current);
   }, [data, isAuthenticated, budgets]);
 
+  // ── Materialize recurring items ──
   useEffect(() => {
     if (!isAuthenticated || !data?.recurringItems?.length) return;
     const today = getLocalISODate();
@@ -4780,8 +4792,9 @@ function App() {
         addNotification({ type: 'info', title: 'تم توليد التزامات شهرية', message: `${added} بند متكرر بانتظار الاعتماد`, duration: 6000 });
       }
     }
-  }, [isAuthenticated, data?.recurringItems, data?.transactions?.length]);
+  }, [isAuthenticated, data?.recurringItems, data?.transactions?.length, addNotification]);
 
+  // ── Online / offline notification ──
   useEffect(() => {
     if (prevOnlineRef.current !== isOnline) {
       if (isOnline) {
@@ -4793,16 +4806,16 @@ function App() {
     }
   }, [isOnline, addNotification]);
 
-  const removeNotification = useCallback((id) => dispatch({ type: 'REMOVE_NOTIFICATION', payload: id }), []);
-  const addNotification = useCallback((notification) => dispatch({ type: 'ADD_NOTIFICATION', payload: notification }), []);
-  const saveHistory = useCallback(() => dispatch({ type: 'ADD_TO_HISTORY', payload: { data: JSON.parse(JSON.stringify(data)), budgets: JSON.parse(JSON.stringify(budgets)) } }), [data, budgets]);
-
+  // ── Cancel processing helper ──
   const cancelProcessing = useCallback(() => {
     if (processingTimeoutRef.current) { clearTimeout(processingTimeoutRef.current); processingTimeoutRef.current = null; }
     dispatch({ type: 'SET_IS_PROCESSING', payload: false });
     addNotification({ type: 'info', title: 'تم الإلغاء' });
   }, [addNotification]);
 
+  // ═══════════════════════════════════════════════════════════════
+  // Memoized values
+  // ═══════════════════════════════════════════════════════════════
   const liveBalances = useMemo(() => { const b = {}; ACCOUNT_KEYS.forEach(k => { b[k] = computeBalance(data, k); }); return b; }, [data]);
   const totalLiquidity = useMemo(() => ACCOUNT_KEYS.reduce((s, k) => s + liveBalances[k], 0), [liveBalances]);
   const custodySummary = useMemo(() => computeCustodyBalance(data?.custodyEntries), [data?.custodyEntries]);
@@ -4939,7 +4952,7 @@ function App() {
         const isMonthlyBen = isBeneficiaryCategory(r.category);
         const desc = isIncome ? '💰 دخل شهري متكرر' : isMonthlyBen ? '👨‍👩‍👧 مصروف شهري' : isFee ? '🏦 رسم بنكي شهري' : 'التزام شهري متكرر';
         const icon = isIncome ? TrendingUp : isMonthlyBen ? Users : isFee ? Receipt : Repeat;
-        items.push({ id: `ag-rec-${r.id}`, title: r.title, date: new Date(ty, tm, d).toISOString().split('T')[0], amount: safeNumber(r.amount), type: isIncome ? 'success' : 'warning', icon, desc });
+        items.push({ id: `ag-rec-${r.id}`, date: new Date(ty, tm, d).toISOString().split('T')[0], title: r.title, amount: safeNumber(r.amount), type: isIncome ? 'success' : 'warning', icon, desc });
       });
       return items.sort((a, b) => new Date(a.date) - new Date(b.date));
     } catch (err) { console.error(err); return []; }
@@ -4955,6 +4968,9 @@ function App() {
   const handleAddWalletDeposit = useCallback((k) => openWalletForm(k, 'deposit'), [openWalletForm]);
   const handleAddWalletWithdrawal = useCallback((k) => openWalletForm(k, 'withdrawal'), [openWalletForm]);
 
+  // ═══════════════════════════════════════════════════════════════
+  // Handlers
+  // ═══════════════════════════════════════════════════════════════
   const handleSaveTransaction = useCallback((e) => {
     e.preventDefault();
     if (isProcessing) return;
@@ -5140,15 +5156,22 @@ function App() {
     addNotification({ type: 'success', title: actionText, message: `شهر ${month} ${year}` });
   }, [pendingCloseModal, saveHistory, addNotification]);
 
-  useEffect(() => { localStorage.setItem('budgets', JSON.stringify(budgets)); }, [budgets]);
+  // ── Side effects for persistence ──
+  useEffect(() => { try { localStorage.setItem('budgets', JSON.stringify(budgets)); } catch (e) {} }, [budgets]);
   useEffect(() => { document.documentElement.classList.toggle('dark', isDarkMode); localStorage.setItem('theme', isDarkMode ? 'dark' : 'light'); }, [isDarkMode]);
   useEffect(() => { document.querySelector('meta[name="theme-color"]')?.setAttribute('content', isDarkMode ? '#1A1508' : '#F5EFE0'); }, [isDarkMode]);
   useEffect(() => () => { if (processingTimeoutRef.current) clearTimeout(processingTimeoutRef.current); }, []);
 
-  if (authLoading) return <div className="flex h-screen items-center justify-center" style={{ background: '#1A1508' }}><div className="w-12 h-12 border-3 border-blue-500 border-t-transparent rounded-full animate-spin"></div></div>;
+  // ═══════════════════════════════════════════════════════════════
+  // Early returns
+  // ═══════════════════════════════════════════════════════════════
+  if (authLoading) return <div className="flex h-screen items-center justify-center" style={{ background: '#1A1508' }}><div className="w-12 h-12 border-[3px] border-blue-500 border-t-transparent rounded-full animate-spin"></div></div>;
   if (!isAuthenticated) return <LoginScreen onLogin={() => setIsAuthenticated(true)} />;
   if (!pinVerified) return <PinLockScreen onSuccess={() => { sessionStorage.setItem('pin_verified', 'yes'); setPinVerified(true); }} onLogout={() => { firebase.auth().signOut(); setIsAuthenticated(false); sessionStorage.removeItem('pin_verified'); setPinVerified(false); }} />;
 
+  // ═══════════════════════════════════════════════════════════════
+  // Render active view
+  // ═══════════════════════════════════════════════════════════════
   const renderActiveView = () => {
     switch (activeTab) {
       case 'dashboard': return <DashboardView data={data} financeSnapshot={financeSnapshot} liveBalances={liveBalances} totalLiquidity={totalLiquidity} walletVisibility={walletVisibility} onToggleVisibility={(k) => dispatch({ type: 'TOGGLE_WALLET_VISIBILITY', payload: k })} dispatch={dispatch} selectedYear={selectedYear} selectedMonth={selectedMonth} transactions={transactions} cards={cards} updatedLoans={updatedLoans} chartData={chartData} isDarkMode={isDarkMode} handleManualReconciliation={handleManualReconciliation} addNotification={addNotification} onSelectYear={(y) => dispatch({ type: 'SET_SELECTED_YEAR', payload: y })} onSelectMonth={(m) => dispatch({ type: 'SET_SELECTED_MONTH', payload: m })} />;
@@ -5167,6 +5190,9 @@ function App() {
     }
   };
 
+  // ═══════════════════════════════════════════════════════════════
+  // Main render
+  // ═══════════════════════════════════════════════════════════════
   return (
     <PromiseModalProvider>
       <div className="flex h-screen overflow-hidden font-sans">
@@ -5413,9 +5439,9 @@ function App() {
   );
 }
 
-// ═══════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
 // Render Root
-// ═══════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
 const rootElement = document.getElementById('root');
 if (rootElement) {
   setTimeout(() => { const l = document.getElementById('loading'); if (l) l.style.display = 'none'; }, 1000);
