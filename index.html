@@ -1547,6 +1547,51 @@ const SmsParserModal = memo(({ isOpen, onClose, dispatch, addNotification, saveH
     </Modal>
   );
 });
+
+  // ── BankLogo ──
+const BankLogo = memo(({ type, size = 40, className = "" }) => {
+  const [err, setErr] = useState(false);
+  const get = () => { switch(type) { case 'cib_card': case 'cib_savings': case 'cib_swype': return "https://upload.wikimedia.org/wikipedia/commons/e/e0/Commercial_International_Bank_%28CIB%29_Logo.svg"; case 'aaib_card': case 'aaib_savings': return "https://upload.wikimedia.org/wikipedia/commons/2/22/Arab_African_International_Bank_logo.svg"; case 'fawry': return "https://upload.wikimedia.org/wikipedia/commons/5/59/Fawry_logo.svg"; case 'etisalat': return "https://upload.wikimedia.org/wikipedia/commons/e/e4/Etisalat_logo.svg"; default: return null; } };
+  const src = get();
+  return (
+    <div className={`flex items-center justify-center ${className}`} style={{width: size, height: size}}>
+      {src && !err ? <img src={src} alt={type} className="w-full h-full object-contain drop-shadow-sm" onError={() => setErr(true)} loading="lazy" /> : <span className="text-[11px] font-bold opacity-50">{type.replace('_', ' ')}</span>}
+    </div>
+  );
+});
+
+// ── EnhancedSidebar ──
+const EnhancedSidebar = memo(({ activeTab, dispatch, canUndo, onUndo }) => {
+  const groups = [
+    { title: 'الرئيسية', items: [{ id: 'dashboard', label: 'لوحة التحكم', icon: LayoutDashboard }, { id: 'transactions', label: 'المعاملات', icon: ArrowUpRight }] },
+    { title: 'المتابعة', items: [{ id: 'categories', label: 'الفئات', icon: Layers }, { id: 'loans', label: 'الالتزامات والعهد', icon: Banknote }, { id: 'cards', label: 'المحافظ والكاش باك', icon: CreditCard }] },
+    { title: 'التخطيط', items: [{ id: 'planning', label: 'التخطيط الشهري', icon: Table }, { id: 'planner', label: 'المخطط', icon: Target }, { id: 'forecast', label: 'التوقع', icon: LineChart }, { id: 'comparison', label: 'المقارنة', icon: Activity }] },
+    { title: 'الأدوات', items: [{ id: 'calendar', label: 'الأجندة', icon: CalendarDays }, { id: 'duplicates', label: 'المكررات', icon: Filter }, { id: 'settings', label: 'الإعدادات', icon: Sliders }] }
+  ];
+  return (
+    <aside className="w-60 hidden lg:flex flex-col p-4 z-40 relative no-print" style={{ background: 'var(--bg-card)', borderLeft: '1px solid var(--border-subtle)' }}>
+      <div className="flex items-center gap-2.5 mb-6">
+        <div className="p-2 rounded-lg text-white" style={{ background: 'var(--brand)' }}><Wallet size={18} /></div>
+        <div><h2 className="font-black text-sm">المحفظة الذكية</h2><p className="text-[10px] font-semibold" style={{ color: 'var(--text-muted)' }}>V80</p></div>
+      </div>
+      <nav className="flex-1 scroll-hide overflow-y-auto -mx-1 px-1">
+        {groups.map(g => (
+          <div key={g.title} className="sidebar-group">
+            <p className="sidebar-group-title">{g.title}</p>
+            {g.items.map(item => (
+              <button key={item.id} type="button" onClick={() => dispatch({ type: 'SET_ACTIVE_TAB', payload: item.id })} className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg transition-all font-bold text-xs mb-0.5 ${activeTab === item.id ? 'text-white shadow-sm' : ''}`} style={activeTab === item.id ? { background: 'var(--brand)' } : { color: 'var(--text-secondary)' }}>
+                <item.icon size={15} /><span>{item.label}</span>
+              </button>
+            ))}
+          </div>
+        ))}
+      </nav>
+      <button onClick={onUndo} disabled={!canUndo} className={`w-full py-2 rounded-lg font-bold text-xs flex items-center justify-center gap-1.5 ${canUndo ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400' : ''}`} style={!canUndo ? { background: 'var(--bg-muted)', color: 'var(--text-muted)' } : {}}>
+        <Undo2 size={13} /> تراجع
+      </button>
+    </aside>
+  );
+});
   /* ═══════════════════════════════════════════════════════════════
    PART 4 — Dashboard + Categories + CategoryDetail + Transactions
    ═══════════════════════════════════════════════════════════════ */
