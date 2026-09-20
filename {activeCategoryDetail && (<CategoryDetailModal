@@ -2740,7 +2740,223 @@ const HanyShopLedger = memo(({ loan, prevMonthLoan, addNotification }) => {
     </div>
   );
 });
+// ── CardStatementModal — كشف معاملات البطاقة ──
+const CardStatementModal = memo(({ card, data, transactions, onClose, addNotification }) => {
+  const [filterType, setFilterType] = useState('all');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [sortBy, setSortBy] = useState('date');
+  const [exporting, setExporting] = useState(false);
+  const containerRef = useRef(null);
 
+  // ✅ تحديد المعاملات التي تنتمي للبطاقة (نفس منطق computeCardDebt)
+  const cardMethod = getCardMethod(card);
+  const subCards = Array.isArray(card.subCardLast4) ? card.subCardLast4 : [];
+
+  const cardTx = useMemo(() => {
+    if (!card) return [];
+    return (transactions || []).filter(t => {
+      if (t.status !== 'paid') return false; // كشف البطاقة للمعتمد فقط
+      const hasExplicitCardLink = (t.linkedCardId !== undefined && t.linkedCardId !== null && t.linkedCardId !== '');
+      if (hasExplicitCardLink) return t.linkedCardId === card.id;
+      if (t.cardLast4 && subCards.includes(t.cardLast4)) return true;
+      return t.method === cardMethod;
+    }).sort((a, b) => (parseISODate(b.date) || 0) - (parseISODate(a.date) || 0));
+  }, [transactions, card, cardMethod, subCards]);
+
+  // ✅ تصفية إضافية حسب النوع + البحث
+  const filteredTx = useMemo(() => {
+    let arr = cardTx;
+    if (filterType === 'expense') arr = arr.filter(t => t.type === 'expense');
+    if (filterType === 'income') arr = arr.filter(t => t.type === 'income');
+    if (searchTerm.trim()) {
+      const term = normalizeText(searchTerm);
+      arr = arr.filter(t => normalizeText(t.description).includes(term) || normalizeText(t.category).includes(term));
+    }
+    const sorted = [...arr];
+    if (sortBy === 'amount') return sorted.sort((a, b) => safeNumber(b.amount) - safeNumber(a.amount));
+    return sorted.sort((a, b) => (parseISODate(b.date) || 0) - (parseISODate(a.date) || 0));
+  }, [cardTx, filterType, searchTerm, sortBy]);
+
+  // ✅ الإحصائيات
+  const stats = useMemo(() => {
+    const expenses = cardTx.filter(t => t.type === 'expense').reduce((s, t) => s + safeNumber(t.amount), 0);
+    const incomes = cardTx.filter(t => t.type === 'income').reduce((s, t) => s + safeNumber(t.amount), 0);
+    const monthlyTotals = {};
+    cardTx.forEach(t => {
+      const d = parseISODate(t.date);
+      if (!d) return;
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      if (!monthlyTotals[key]) monthlyTotals[key] = { month: ALL_MONTHS[d.getMonth()], year: d.getFullYear(), expenses: 0, incomes: 0, count: 0 };
+      if (t.type === 'expense') monthlyTotals[key].expenses += safeNumber(t.amount);
+      else monthlyTotals[key].incomes += safeNumber(t.amount);
+      monthlyTotals[key].count++;
+    });
+    const monthly = Object.values(monthlyTotals).sort((a, b) => b.year - a.year || getMonthIndex(b.month) - getMonthIndex(a.month));
+    return { expenses, incomes, total: expenses - incomes, count: cardTx.length, monthly };
+  }, [cardTx]);
+
+  // ✅ تجميع حسب اليوم
+  const dailyGroups = useMemo(() => groupTransactionsByDate(filteredTx), [filteredTx]);
+
+  // ✅ الطباعة
+  const handlePrint = () => {
+    if (!containerRef.current) return;
+    const w = window.open('', '_blank', 'width=900,height=700');
+    if (!w) { addNotification({ type: 'error', title: 'المتصفح منع الطباعة', message: 'اسمح بالنوافذ المنبثقة' }); return; }
+    const html = `<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8"><title>كشف ${card.bank} - ${card.name}</title><link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap" rel="stylesheet"><style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Cairo',sans-serif;padding:24px;color:#1f2937;background:white}.header{text-align:center;padding-bottom:16px;border-bottom:3px solid #2563EB;margin-bottom:20px}.header h1{font-size:22px;font-weight:900;color:#1E40AF;margin-bottom:4px}.header p{font-size:13px;color:#6b7280;font-weight:600}.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px}.stat-box{background:#f3f4f6;padding:12px;border-radius:10px;text-align:center;border:1px solid #e5e7eb}.stat-box .label{font-size:11px;font-weight:700;color:#6b7280;margin-bottom:4px}.stat-box .value{font-size:16px;font-weight:900;color:#1f2937}.stat-box.red .value{color:#dc2626}.stat-box.green .value{color:#059669}table{width:100%;border-collapse:collapse;font-size:12px;margin-top:12px}th{background:#2563EB;color:white;padding:10px 8px;text-align:right;font-weight:700}td{padding:8px;border-bottom:1px solid #e5e7eb}tr:nth-child(even) td{background:#f9fafb}.footer{margin-top:30px;padding-top:12px;border-top:2px dashed #d1d5db;text-align:center;font-size:10px;color:#9ca3af}.day-header-row td{background:#dbeafe!important;font-weight:900;color:#1E40AF;font-size:11px;padding:6px 8px}</style></head><body><div class="header"><h1>💳 ${escapeHtml(card.bank)} - ${escapeHtml(card.name)}</h1><p>•••• ${escapeHtml(card.last4)} • ${new Date().toLocaleString('ar-EG')}</p></div><div class="stats"><div class="stat-box red"><div class="label">إجمالي المشتريات</div><div class="value">${fmt(stats.expenses)} ج.م</div></div><div class="stat-box green"><div class="label">إجمالي السدادات</div><div class="value">${fmt(stats.incomes)} ج.م</div></div><div class="stat-box"><div class="label">عدد العمليات</div><div class="value">${stats.count}</div></div><div class="stat-box red"><div class="label">الصافي</div><div class="value">${fmt(stats.total)} ج.م</div></div></div><table><thead><tr><th>التاريخ</th><th>الوصف</th><th>الفئة</th><th style="text-align:left">المبلغ</th></tr></thead><tbody>${dailyGroups.map(g => `<tr class="day-header-row"><td colspan="4">${escapeHtml(g.label)} — ${fmt(g.total)} ج.م (${g.items.length})</td></tr>${g.items.map(t => `<tr><td>${escapeHtml(t.date)}</td><td>${escapeHtml(t.description || '')}</td><td>${escapeHtml(t.category || '')}</td><td style="text-align:left;font-weight:900;color:${t.type === 'income' ? '#059669' : '#dc2626'}">${t.type === 'income' ? '+' : '−'}${fmt(t.amount)}</td></tr>`).join('')}`).join('')}</tbody></table><div class="footer">💼 المحفظة الذكية — كشف بطاقة ${escapeHtml(card.bank)} ${escapeHtml(card.name)}</div><script>window.onload=()=>setTimeout(()=>window.print(),300);<\/script></body></html>`;
+    w.document.write(html);
+    w.document.close();
+  };
+
+  // ✅ تصدير PDF
+  const handleExportPdf = async () => {
+    if (!containerRef.current || exporting) return;
+    if (cardTx.length === 0) { addNotification({ type: 'warning', title: 'لا توجد معاملات للتصدير' }); return; }
+    setExporting(true);
+    try {
+      const element = containerRef.current.cloneNode(true);
+      element.querySelectorAll('[data-pdf-hide="true"]').forEach(el => el.remove());
+      element.querySelectorAll('.scroll-hide, .pdf-expand').forEach(el => { el.style.maxHeight = 'none'; el.style.overflow = 'visible'; });
+      const wrapper = document.createElement('div');
+      wrapper.style.cssText = 'background:white;padding:20px;font-family:Cairo,sans-serif;direction:rtl;';
+      wrapper.innerHTML = `<div style="text-align:center;padding-bottom:12px;border-bottom:3px solid #2563EB;margin-bottom:16px;"><h1 style="font-size:20px;font-weight:900;color:#1E40AF;margin:0 0 4px;">💳 ${escapeHtml(card.bank)} - ${escapeHtml(card.name)}</h1><p style="font-size:12px;color:#6b7280;font-weight:600;margin:0;">•••• ${escapeHtml(card.last4)} • ${new Date().toLocaleDateString('ar-EG')}</p></div>`;
+      wrapper.appendChild(element);
+      const opt = { margin: [10, 8, 10, 8], filename: `كشف_${card.bank}_${card.name}_${card.last4}.pdf`, image: { type: 'jpeg', quality: 0.95 }, html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff', logging: false }, jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }, pagebreak: { mode: ['avoid-all', 'css', 'legacy'] } };
+      await window.html2pdf().set(opt).from(wrapper).save();
+      addNotification({ type: 'success', title: 'تم تصدير PDF', message: `${filteredTx.length} معاملة` });
+    } catch (e) {
+      console.error('PDF Error:', e);
+      addNotification({ type: 'error', title: 'فشل التصدير', message: e.message });
+    } finally { setExporting(false); }
+  };
+
+  if (!card) return null;
+
+  const liveDebt = computeCardDebt(data, card);
+  const liveAvailable = Math.max(0, safeNumber(card.limit) - liveDebt);
+  const usagePct = safeNumber(card.limit) > 0 ? (liveDebt / safeNumber(card.limit)) * 100 : 0;
+
+  return (
+    <div className="modal-backdrop no-print" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="generic-modal max-w-3xl">
+        <div className="generic-modal-header">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="p-2 rounded-lg flex-shrink-0 bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400"><CreditCard size={18} /></div>
+            <div className="min-w-0">
+              <h3 className="text-base font-black truncate">{card.bank} - {card.name}</h3>
+              <p className="text-[11px] font-semibold" style={{ color: 'var(--text-muted)' }}>•••• {card.last4} • {stats.count} معاملة</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="btn btn-ghost p-1.5"><X size={16} /></button>
+        </div>
+
+        <div className="generic-modal-body" ref={containerRef}>
+          {/* بطاقة ملخصة */}
+          <div className="p-3 rounded-xl mb-3" style={{ background: 'var(--bg-muted)' }}>
+            <div className="grid grid-cols-3 gap-2">
+              <div className="text-center"><p className="text-[10px] font-bold" style={{ color: 'var(--text-muted)' }}>المديونية الحية</p><p className="text-base font-black text-red-600 mt-0.5">{fmt(liveDebt)}</p></div>
+              <div className="text-center"><p className="text-[10px] font-bold" style={{ color: 'var(--text-muted)' }}>المتاح</p><p className="text-base font-black text-emerald-600 mt-0.5">{fmt(liveAvailable)}</p></div>
+              <div className="text-center"><p className="text-[10px] font-bold" style={{ color: 'var(--text-muted)' }}>الحد الكلي</p><p className="text-base font-black text-blue-600 mt-0.5">{fmt(card.limit)}</p></div>
+            </div>
+            <div className="w-full rounded-full h-1.5 overflow-hidden mt-2" style={{ background: 'var(--bg-card)' }}>
+              <div className={`h-full ${usagePct > 70 ? 'bg-red-500' : usagePct > 40 ? 'bg-amber-500' : 'bg-emerald-500'}`} style={{ width: `${Math.min(100, usagePct)}%` }}></div>
+            </div>
+          </div>
+
+          {/* إحصائيات */}
+          <div className="grid grid-cols-3 gap-2 mb-3">
+            <div className="p-2.5 rounded-lg bg-red-50 dark:bg-red-950/30 text-center"><p className="text-[10px] font-bold text-red-700 dark:text-red-400">مشتريات</p><p className="text-sm font-black text-red-600 mt-0.5">{fmt(stats.expenses)}</p></div>
+            <div className="p-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 text-center"><p className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400">سدادات</p><p className="text-sm font-black text-emerald-600 mt-0.5">{fmt(stats.incomes)}</p></div>
+            <div className="p-2.5 rounded-lg bg-blue-50 dark:bg-blue-950/30 text-center"><p className="text-[10px] font-bold text-blue-700 dark:text-blue-400">الصافي</p><p className={`text-sm font-black mt-0.5 ${stats.total >= 0 ? 'text-blue-600' : 'text-emerald-600'}`}>{fmt(Math.abs(stats.total))}</p></div>
+          </div>
+
+          {/* الفلاتر */}
+          <div className="flex gap-1.5 flex-wrap mb-3" data-pdf-hide="true">
+            <div className="relative flex-1 min-w-[140px]">
+              <Search className="absolute right-2.5 top-1/2 -translate-y-1/2" size={12} style={{ color: 'var(--text-muted)' }} />
+              <input type="text" placeholder="ابحث..." className="input-field pr-8 text-[11px] py-2" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+            </div>
+            <div className="flex p-0.5 rounded-lg" style={{ background: 'var(--bg-muted)' }}>
+              <button type="button" onClick={() => setFilterType('all')} className={`px-2.5 py-1.5 rounded-md text-[10px] font-bold ${filterType === 'all' ? 'shadow-sm' : ''}`} style={filterType === 'all' ? { background: 'var(--bg-card)', color: 'var(--brand)' } : { color: 'var(--text-muted)' }}>الكل ({cardTx.length})</button>
+              <button type="button" onClick={() => setFilterType('expense')} className={`px-2.5 py-1.5 rounded-md text-[10px] font-bold ${filterType === 'expense' ? 'shadow-sm' : ''}`} style={filterType === 'expense' ? { background: 'var(--bg-card)', color: 'var(--danger)' } : { color: 'var(--text-muted)' }}>مشتريات</button>
+              <button type="button" onClick={() => setFilterType('income')} className={`px-2.5 py-1.5 rounded-md text-[10px] font-bold ${filterType === 'income' ? 'shadow-sm' : ''}`} style={filterType === 'income' ? { background: 'var(--bg-card)', color: 'var(--success)' } : { color: 'var(--text-muted)' }}>سدادات</button>
+            </div>
+            <select className="input-field text-[10px] py-2 px-1.5 w-auto min-w-[90px]" value={sortBy} onChange={e => setSortBy(e.target.value)}>
+              <option value="date">📅 التاريخ</option>
+              <option value="amount">💰 المبلغ</option>
+            </select>
+            <button type="button" onClick={handlePrint} disabled={filteredTx.length === 0} className="btn btn-secondary text-[10px] py-2 px-2.5"><Printer size={11} /><span className="hidden sm:inline">طباعة</span></button>
+            <button type="button" onClick={handleExportPdf} disabled={exporting || filteredTx.length === 0} className="btn btn-primary text-[10px] py-2 px-2.5">{exporting ? <RefreshCcw size={11} className="animate-spin" /> : <Download size={11} />}<span className="hidden sm:inline">PDF</span></button>
+          </div>
+
+          {/* الملخص الشهري */}
+          {stats.monthly.length > 0 && (
+            <details className="mb-3 rounded-lg" style={{ background: 'var(--bg-muted)' }}>
+              <summary className="p-2.5 cursor-pointer text-[10px] font-black" style={{ color: 'var(--text-secondary)' }}>📊 الملخص الشهري ({stats.monthly.length} شهر)</summary>
+              <div className="px-2.5 pb-2.5 space-y-1">
+                {stats.monthly.slice(0, 6).map((m, i) => (
+                  <div key={i} className="flex justify-between items-center text-[10px] p-1.5 rounded" style={{ background: 'var(--bg-card)' }}>
+                    <span className="font-bold">{m.month} {m.year} <span style={{ color: 'var(--text-muted)' }}>({m.count})</span></span>
+                    <div className="flex gap-2">
+                      <span className="text-red-600 font-bold">-{fmt(m.expenses)}</span>
+                      {m.incomes > 0 && <span className="text-emerald-600 font-bold">+{fmt(m.incomes)}</span>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </details>
+          )}
+
+          {/* القائمة */}
+          {filteredTx.length === 0 ? (
+            <div className="text-center py-8">
+              <CreditCard size={32} className="mx-auto mb-2" style={{ color: 'var(--text-muted)' }} />
+              <p className="font-semibold text-xs" style={{ color: 'var(--text-muted)' }}>{cardTx.length === 0 ? 'لا توجد معاملات مسجلة على هذه البطاقة بعد' : 'لا توجد نتائج مطابقة'}</p>
+              {cardTx.length === 0 && <p className="text-[10px] mt-1" style={{ color: 'var(--text-muted)' }}>أضف معاملة واختر طريقة الدفع: {PAYMENT_METHODS.find(p => p.id === cardMethod)?.label}</p>}
+            </div>
+          ) : (
+            <div className="space-y-2 max-h-[45vh] overflow-y-auto scroll-hide pdf-expand">
+              {dailyGroups.map(group => (
+                <div key={group.date}>
+                  <DayGroupHeader label={group.label} total={group.total} count={group.items.length} />
+                  <div className="space-y-1.5">
+                    {group.items.map(t => (
+                      <div key={t.id} className="flex justify-between items-center gap-2 p-2.5 rounded-lg" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)' }}>
+                        <div className="min-w-0 flex-1">
+                          <p className="font-bold text-xs truncate">
+                            {t.description || t.category} <SmsBadge tx={t} /> <TeldaBadge tx={t} /> <RecurringBadge tx={t} />
+                          </p>
+                          <p className="text-[10px] font-semibold mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                            {t.category}
+                            {t.cardLast4 && <span className="font-mono"> • ••••{t.cardLast4}</span>}
+                            {t.linkedLoanId && <span className="text-amber-600"> • مرتبط بقرض</span>}
+                          </p>
+                        </div>
+                        <span className={`font-black text-xs flex-shrink-0 ${t.type === 'income' ? 'text-emerald-600' : 'text-red-600'}`}>{t.type === 'income' ? '+' : '−'}{fmt(t.amount)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {filteredTx.length > 0 && (
+            <div className="mt-3 p-3 rounded-lg bg-gradient-to-br from-blue-600 to-blue-800 text-white flex justify-between items-center">
+              <span className="font-black text-sm">الإجمالي (المعروض)</span>
+              <span className="text-xl font-black">{fmt(filteredTx.reduce((s, t) => s + (t.type === 'income' ? -safeNumber(t.amount) : safeNumber(t.amount)), 0))} ج.م</span>
+            </div>
+          )}
+        </div>
+
+        <div className="generic-modal-footer" data-pdf-hide="true">
+          <button onClick={onClose} className="btn btn-secondary flex-1 text-sm">إغلاق</button>
+        </div>
+      </div>
+    </div>
+  );
+});
+  
 const LoansView = memo(({ updatedLoans, cards, recurringItems, transactions, dispatch, deleteRecurring, saveHistory, getLocalISODate, addNotification, data, selectedMonth, selectedYear }) => {
   const [showAdd, setShowAdd] = useState(false);
   const [activeTab, setActiveTab] = useState('loans');
@@ -4780,7 +4996,15 @@ function App() {
         {isPinChangeOpen && (<PinChangeModal onClose={() => dispatch({ type: 'SET_PIN_CHANGE_OPEN', payload: false })} addNotification={addNotification} />)}
         {isSmsModalOpen && (<SmsParserModal isOpen={true} onClose={() => dispatch({ type: 'SET_SMS_MODAL_OPEN', payload: false })} dispatch={dispatch} addNotification={addNotification} saveHistory={saveHistory} data={data} />)}
         {activeCategoryDetail && (<CategoryDetailModal category={activeCategoryDetail} transactions={transactions} selectedMonth={selectedMonth} selectedYear={selectedYear} dispatch={dispatch} addNotification={addNotification} />)}
-
+{viewingCardStatement && (
+  <CardStatementModal
+    card={viewingCardStatement}
+    data={data}
+    transactions={transactions}
+    onClose={() => dispatch({ type: 'SET_VIEWING_CARD_STATEMENT', payload: null })}
+    addNotification={addNotification}
+  />
+)}
         {!isLocked && (
           <div className="bottom-nav-container no-print">
             <div className="scrollable-nav scroll-hide">
