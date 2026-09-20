@@ -323,7 +323,7 @@ const DEFAULT_MONTHLY_PLANS = {
 
 const ACCOUNT_ICONS = { cib_savings: BuildingBank, aaib_savings: PiggyBank, cash: Wallet, fawry: StoreIcon, etisalat: Signal };
 const ACCOUNT_SHORT_NAMES = { cib_savings: 'CIB Savings', aaib_savings: 'AAIB Savings', cash: 'Cash', fawry: 'Fawry', etisalat: 'Etisalat' };
-  /* ═══════════════════════════════════════════════════════════════
+    /* ═══════════════════════════════════════════════════════════════
    PART 2 — Utilities + Date Parsing + Validation + Modals + SMS
    ═══════════════════════════════════════════════════════════════ */
 
@@ -783,14 +783,14 @@ const getInitialData = () => {
   return { engineVersion: CURRENT_ENGINE_VERSION, recurringInitialized: true, transactions: [], loans: DEFAULT_LOANS, cards: DEFAULT_CARDS, accountsData: DEFAULT_ACCOUNTS, monthlyPlans: DEFAULT_MONTHLY_PLANS, recurringItems: DEFAULT_RECURRING, closedMonths: [], monthlySnapshots: {}, materializedRecurring: {}, notifiedItems: {}, custodyEntries: DEFAULT_CUSTODY_ENTRIES, cashbackTrackers: DEFAULT_CASHBACK_TRACKERS };
 };
 
-const materializeRecurringItems = (data, asOfDateStr) => {
+const materializeRecurringItems = (data, asOfDateStr, deletedIds = null) => {
   if (!data?.recurringItems?.length) return null;
   const now = asOfDateStr ? new Date(asOfDateStr) : new Date();
   const nowYear = now.getFullYear();
   const nowMonth = ALL_MONTHS[now.getMonth()];
   const nowMonthKey = makeMonthKey(nowYear, nowMonth);
   const nowInputMonth = `${nowYear}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  const existing = data.transactions || [];
+  const existing = (data.transactions || []).filter(t => !(deletedIds && deletedIds.has(t.id)));
   const materialized = { ...(data.materializedRecurring || {}) };
   const newTxs = [];
   const loanPaidMap = {};
@@ -819,8 +819,10 @@ const materializeRecurringItems = (data, asOfDateStr) => {
     else if (linkedCardId) { const card = (data.cards || []).find(c => c.id === linkedCardId); if (card) method = getCardMethod(card); }
     const isFee = BANK_FEE_CATEGORIES.has(r.category);
     const kind = r.kind || (isFee ? KIND.FINANCIAL : KIND.OPERATIONAL);
+    const newId = `rec-${r.id}-${nowMonthKey}-${getSafeId()}`;
+    if (deletedIds && deletedIds.has(newId)) return;
     newTxs.push({
-      id: `rec-${r.id}-${nowMonthKey}-${getSafeId()}`,
+      id: newId,
       type: r.type, subType: r.type === 'income' ? 'deposit' : 'withdrawal', kind,
       category: r.category, amount: safeNumber(r.amount), description: r.title || 'بند متكرر',
       method, date: getLocalISODate(targetDate), month: nowMonth, year: nowYear, monthIndex: now.getMonth(),
@@ -876,7 +878,7 @@ const useOnlineStatus = () => {
   return online;
 };
 
-// Google Drive helpers
+// Google Drive helpers — تبقى كما هي
 const DRIVE_CLIENT_ID = '190006477168-odmpreq26b618rdn1dsg4k1aag3k056g.apps.googleusercontent.com';
 const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive';
 const DRIVE_FOLDER_NAME = 'Finance Backups';
@@ -970,7 +972,7 @@ const downloadBackupFromDrive = async (fileId) => {
   if (!res.ok) throw new Error('فشل التنزيل');
   return await res.json();
 };
-  /* ═══════════════════════════════════════════════════════════════
+    /* ═══════════════════════════════════════════════════════════════
    PART 3 — Shared UI (ErrorBoundary, Modals, Badges, Ticker, Sidebar, Header)
    ═══════════════════════════════════════════════════════════════ */
 
@@ -1548,7 +1550,7 @@ const SmsParserModal = memo(({ isOpen, onClose, dispatch, addNotification, saveH
   );
 });
 
-  // ── BankLogo ──
+// ── BankLogo ──
 const BankLogo = memo(({ type, size = 40, className = "" }) => {
   const [err, setErr] = useState(false);
   const get = () => { switch(type) { case 'cib_card': case 'cib_savings': case 'cib_swype': return "https://upload.wikimedia.org/wikipedia/commons/e/e0/Commercial_International_Bank_%28CIB%29_Logo.svg"; case 'aaib_card': case 'aaib_savings': return "https://upload.wikimedia.org/wikipedia/commons/2/22/Arab_African_International_Bank_logo.svg"; case 'fawry': return "https://upload.wikimedia.org/wikipedia/commons/5/59/Fawry_logo.svg"; case 'etisalat': return "https://upload.wikimedia.org/wikipedia/commons/e/e4/Etisalat_logo.svg"; default: return null; } };
@@ -1592,7 +1594,7 @@ const EnhancedSidebar = memo(({ activeTab, dispatch, canUndo, onUndo }) => {
     </aside>
   );
 });
-  /* ═══════════════════════════════════════════════════════════════
+    /* ═══════════════════════════════════════════════════════════════
    PART 4 — Dashboard + Categories + CategoryDetail + Transactions
    ═══════════════════════════════════════════════════════════════ */
 
@@ -2030,8 +2032,8 @@ const CategoriesView = memo(({ transactions, selectedMonth, selectedYear, catVie
   );
 });
 
-// ✅ TransactionsView — النسخة الوحيدة (مع selectMode)
-const TransactionsView = memo(({ groupedTransactions, transactions, selectedMonth, selectedYear, transViewMode, statusFilter, searchTerm, expandedGroup, data, monthInsights, dispatch, handleDelete, addNotification, onSelectYear, onSelectMonth, saveHistory, onPrintMonthlyReport }) => {
+// ✅ TransactionsView — النسخة المُصلحة (تستخدم onBulkDelete من App)
+const TransactionsView = memo(({ groupedTransactions, transactions, selectedMonth, selectedYear, transViewMode, statusFilter, searchTerm, expandedGroup, data, monthInsights, dispatch, handleDelete, addNotification, onSelectYear, onSelectMonth, saveHistory, onPrintMonthlyReport, onBulkDelete }) => {
   const [sourceFilter, setSourceFilter] = useState('all');
   const [showFilters, setShowFilters] = useState(false);
   const [showBankFeesOnly, setShowBankFeesOnly] = useState(false);
@@ -2069,6 +2071,7 @@ const TransactionsView = memo(({ groupedTransactions, transactions, selectedMont
     setSelectedIds(new Set());
   }, []);
 
+  // ✅ handleBulkDelete المُصلح — يستخدم onBulkDelete من App
   const handleBulkDelete = useCallback(() => {
     const ids = [...selectedIds];
     if (ids.length === 0) { addNotification({ type: 'info', title: 'لم تحدد أي معاملة' }); return; }
@@ -2096,23 +2099,14 @@ const TransactionsView = memo(({ groupedTransactions, transactions, selectedMont
       danger: true,
       title: `حذف ${allowed.length} معاملة`,
       message,
-
-            onConfirm: () => {
-        saveHistory();
-        const allowedIds = new Set(allowed.map(t => t.id));
-        // ✅ سجل الـ ids المحذوفة
-        allowedIds.forEach(id => deletedIdsRef.current.add(id));
-        const newTx = transactions.filter(t => !allowedIds.has(t.id));
-        const newData = { ...data, transactions: newTx };
-        // ✅ تحديث فوري + حفظ فوري
-        dispatch({ type: 'SET_DATA', payload: newData });
-        forceCloudSave(newData);
-        addNotification({ type: 'success', title: `تم حذف ${allowed.length} معاملة` });
+      onConfirm: () => {
+        // ✅ استخدم الدالة من App — تحفظ فوراً وتحدّث deletedIdsRef
+        if (onBulkDelete) onBulkDelete(allowed.map(t => t.id));
         exitSelectMode();
       },
       onCancel: () => dispatch({ type: 'HIDE_CONFIRM' })
     });
-  }, [selectedIds, transactions, data, saveHistory, addNotification, dispatch, exitSelectMode]);
+  }, [selectedIds, transactions, data, addNotification, dispatch, exitSelectMode, onBulkDelete]);
 
   const approveOne = (t) => { if (isMonthClosed(data, t.year || 2026, t.month)) { addNotification({ type: 'error', title: 'محظور' }); return; } dispatch({ type: 'UPDATE_TRANSACTIONS', payload: transactions.map(tr => tr.id === t.id ? { ...tr, status: 'paid' } : tr) }); addNotification({ type: 'success', title: 'تم الاعتماد' }); };
   const approveAll = () => { if (isClosed) { addNotification({ type: 'error', title: 'محظور' }); return; } dispatch({ type: 'SHOW_CONFIRM', danger: false, title: 'اعتماد الكل', message: `سيتم اعتماد ${totalPending} عملية`, onConfirm: () => { saveHistory(); const ids = new Set(pendingGroups.flatMap(g => g.items.map(i => i.id))); dispatch({ type: 'UPDATE_TRANSACTIONS', payload: transactions.map(t => ids.has(t.id) ? { ...t, status: 'paid' } : t) }); addNotification({ type: 'success', title: 'تم الاعتماد' }); }, onCancel: () => dispatch({ type: 'HIDE_CONFIRM' }) }); };
@@ -4469,7 +4463,7 @@ function dataReducer(state, action) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// App Component
+// App Component — مع كل التعديلات (forceCloudSave, deletedIdsRef, isSavingRef)
 // ═══════════════════════════════════════════════════════════════
 function App() {
   const defMY = useMemo(() => getDefaultMonthYear(), []);
@@ -4526,7 +4520,7 @@ function App() {
   const removeNotification = useCallback((id) => dispatch({ type: 'REMOVE_NOTIFICATION', payload: id }), []);
   const saveHistory = useCallback(() => dispatch({ type: 'ADD_TO_HISTORY', payload: { data: JSON.parse(JSON.stringify(data)), budgets: JSON.parse(JSON.stringify(budgets)) } }), [data, budgets]);
 
-    // ✅ حفظ فوري بدون debounce — يُستخدم بعد الحذف
+  // ✅ حفظ فوري بدون debounce — يُستخدم بعد الحذف
   const forceCloudSave = useCallback((newData) => {
     if (!isAuthenticated) return;
     isSavingRef.current = true;
@@ -4541,7 +4535,7 @@ function App() {
       .catch(err => console.error('Force save failed:', err))
       .finally(() => { isSavingRef.current = false; });
   }, [isAuthenticated, budgets]);
-  
+
   useEffect(() => {
     const unsub = firebase.auth().onAuthStateChanged((user) => {
       setAuthLoading(false);
@@ -4550,14 +4544,20 @@ function App() {
     return () => unsub();
   }, []);
 
+  // ✅ onSnapshot مُصلح — يتجاهل أثناء الحفظ
   useEffect(() => {
     if (!isAuthenticated) return;
     const docRef = db.collection("finance_2026").doc("user_ahmed_data");
     const unsub = docRef.onSnapshot((doc) => {
       if (doc.exists) {
+        // ✅ لو فيه عملية حفظ جارية — تجاهل الـ snapshot
+        if (isSavingRef.current) { console.log('⏳ Ignoring snapshot — save in progress'); return; }
         const raw = doc.data();
         const migrated = migrateData(raw);
-        lastRemoteRef.current = JSON.stringify(migrated);
+        // ✅ لو snapshot نفس الحالة — تجاهل
+        const incoming = JSON.stringify(migrated);
+        if (lastRemoteRef.current === incoming) return;
+        lastRemoteRef.current = incoming;
         if (raw.budgets && typeof raw.budgets === 'object') dispatch({ type: 'SET_BUDGETS', payload: raw.budgets });
         dispatch({ type: 'SET_DATA', payload: migrated });
       }
@@ -4569,6 +4569,7 @@ function App() {
     if (isAuthenticated && data && data.transactions) {
       clearTimeout(saveTimeoutRef.current);
       saveTimeoutRef.current = setTimeout(() => {
+        if (isSavingRef.current) return; // ✅ لا تحفظ أثناء force save
         if (lastRemoteRef.current && JSON.stringify(data) === lastRemoteRef.current) return;
         try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch (e) { console.warn('LS save failed:', e); }
         db.collection("finance_2026").doc("user_ahmed_data").set({ ...data, budgets }, { merge: true }).catch(err => console.error(err));
@@ -4577,6 +4578,7 @@ function App() {
     return () => clearTimeout(saveTimeoutRef.current);
   }, [data, isAuthenticated, budgets]);
 
+  // ✅ materialize useEffect مُصلح — يفلتر المحذوفات
   useEffect(() => {
     if (!isAuthenticated || !data?.recurringItems?.length) return;
     const today = getLocalISODate();
@@ -4585,8 +4587,13 @@ function App() {
     const sig = `${today}_${data.recurringItems.length}_${activeCount}_${loansSig}`;
     if (lastMaterializeRef.current === sig) return;
     lastMaterializeRef.current = sig;
-    const updated = materializeRecurringItems(data, today);
+    let updated = materializeRecurringItems(data, today, deletedIdsRef.current);
     if (updated) {
+      // ✅ فلترة transactions المحذوفة
+      const filteredTx = updated.transactions.filter(t => !deletedIdsRef.current.has(t.id));
+      if (filteredTx.length !== updated.transactions.length) {
+        updated = { ...updated, transactions: filteredTx };
+      }
       const added = updated.transactions.length - (data.transactions?.length || 0);
       dispatch({ type: 'SET_DATA', payload: updated });
       if (added > 0) addNotification({ type: 'info', title: 'تم توليد التزامات شهرية', message: `${added} بند متكرر بانتظار الاعتماد`, duration: 6000 });
@@ -4805,6 +4812,7 @@ function App() {
     }, 300);
   }, [formData, formMode, transactions, data, saveHistory, addNotification, isProcessing, cards]);
 
+  // ✅ handleDelete مُصلح — يستخدم forceCloudSave + deletedIdsRef
   const handleDelete = useCallback((id) => {
     const target = transactions.find(t => t.id === id);
     if (target && isMonthClosed(data, target.year || 2026, target.month)) { addNotification({ type: 'error', title: 'محظور' }); return; }
@@ -4820,7 +4828,20 @@ function App() {
       addNotification({ type: 'success', title: 'تم الحذف نهائياً' });
     }, onCancel: () => dispatch({ type: 'HIDE_CONFIRM' }) });
   }, [transactions, data, saveHistory, addNotification, forceCloudSave]);
-  
+
+  // ✅ handleBulkDeleteInApp جديد — يُمرر إلى TransactionsView
+  const handleBulkDeleteInApp = useCallback((ids) => {
+    if (!Array.isArray(ids) || ids.length === 0) return;
+    saveHistory();
+    const idsSet = new Set(ids);
+    // ✅ سجل الـ ids المحذوفة لمنع materialize من إعادتها
+    ids.forEach(id => deletedIdsRef.current.add(id));
+    const newTx = transactions.filter(t => !idsSet.has(t.id));
+    const newData = { ...data, transactions: newTx };
+    dispatch({ type: 'SET_DATA', payload: newData });
+    forceCloudSave(newData);
+    addNotification({ type: 'success', title: `تم حذف ${ids.length} معاملة` });
+  }, [transactions, data, saveHistory, addNotification, forceCloudSave]);
 
   const handleQuickTransfer = useCallback((e) => {
     e.preventDefault();
@@ -4993,7 +5014,8 @@ function App() {
   const renderActiveView = () => {
     switch (activeTab) {
       case 'dashboard': return <DashboardView data={data} financeSnapshot={financeSnapshot} liveBalances={liveBalances} totalLiquidity={totalLiquidity} walletVisibility={walletVisibility} onToggleVisibility={(k) => dispatch({ type: 'TOGGLE_WALLET_VISIBILITY', payload: k })} dispatch={dispatch} selectedYear={selectedYear} selectedMonth={selectedMonth} transactions={transactions} cards={cards} updatedLoans={updatedLoans} chartData={chartData} isDarkMode={isDarkMode} handleManualReconciliation={handleManualReconciliation} addNotification={addNotification} onSelectYear={(y) => dispatch({ type: 'SET_SELECTED_YEAR', payload: y })} onSelectMonth={(m) => dispatch({ type: 'SET_SELECTED_MONTH', payload: m })} />;
-      case 'transactions': return <TransactionsView groupedTransactions={groupedTransactions} transactions={transactions} selectedMonth={selectedMonth} selectedYear={selectedYear} transViewMode={transViewMode} statusFilter={statusFilter} searchTerm={searchTerm} expandedGroup={expandedGroup} data={data} monthInsights={monthInsights} dispatch={dispatch} handleDelete={handleDelete} addNotification={addNotification} onSelectYear={(y) => dispatch({ type: 'SET_SELECTED_YEAR', payload: y })} onSelectMonth={(m) => dispatch({ type: 'SET_SELECTED_MONTH', payload: m })} saveHistory={saveHistory} onPrintMonthlyReport={() => {}} />;
+      // ✅ TransactionsView مُصلح — يمرر onBulkDelete
+      case 'transactions': return <TransactionsView groupedTransactions={groupedTransactions} transactions={transactions} selectedMonth={selectedMonth} selectedYear={selectedYear} transViewMode={transViewMode} statusFilter={statusFilter} searchTerm={searchTerm} expandedGroup={expandedGroup} data={data} monthInsights={monthInsights} dispatch={dispatch} handleDelete={handleDelete} addNotification={addNotification} onSelectYear={(y) => dispatch({ type: 'SET_SELECTED_YEAR', payload: y })} onSelectMonth={(m) => dispatch({ type: 'SET_SELECTED_MONTH', payload: m })} saveHistory={saveHistory} onPrintMonthlyReport={() => {}} onBulkDelete={handleBulkDeleteInApp} />;
       case 'categories': return <CategoriesView transactions={transactions} selectedMonth={selectedMonth} selectedYear={selectedYear} catViewType={catViewType} budgets={budgets} dispatch={dispatch} handleDelete={handleDelete} onSelectYear={(y) => dispatch({ type: 'SET_SELECTED_YEAR', payload: y })} onSelectMonth={(m) => dispatch({ type: 'SET_SELECTED_MONTH', payload: m })} />;
       case 'loans': return <LoansView updatedLoans={updatedLoans} cards={cards} recurringItems={recurringItems} transactions={transactions} dispatch={dispatch} deleteRecurring={deleteRecurring} saveHistory={saveHistory} getLocalISODate={getLocalISODate} addNotification={addNotification} data={data} selectedMonth={selectedMonth} selectedYear={selectedYear} />;
       case 'cards': return <WalletsAndCardsView cards={cards} buildLedger={buildLedger} expandedLedgers={expandedLedgers} expandedCardsSection={expandedCardsSection} selectedMonth={selectedMonth} selectedYear={selectedYear} dispatch={dispatch} handleDelete={handleDelete} handleAddWalletDeposit={handleAddWalletDeposit} handleAddWalletWithdrawal={handleAddWalletWithdrawal} walletVisibility={walletVisibility} liveBalances={liveBalances} saveHistory={saveHistory} addNotification={addNotification} data={data} />;
