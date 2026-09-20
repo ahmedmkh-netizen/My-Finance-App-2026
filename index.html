@@ -2096,10 +2096,17 @@ const TransactionsView = memo(({ groupedTransactions, transactions, selectedMont
       danger: true,
       title: `حذف ${allowed.length} معاملة`,
       message,
-      onConfirm: () => {
+
+            onConfirm: () => {
         saveHistory();
         const allowedIds = new Set(allowed.map(t => t.id));
-        dispatch({ type: 'UPDATE_TRANSACTIONS', payload: transactions.filter(t => !allowedIds.has(t.id)) });
+        // ✅ سجل الـ ids المحذوفة
+        allowedIds.forEach(id => deletedIdsRef.current.add(id));
+        const newTx = transactions.filter(t => !allowedIds.has(t.id));
+        const newData = { ...data, transactions: newTx };
+        // ✅ تحديث فوري + حفظ فوري
+        dispatch({ type: 'SET_DATA', payload: newData });
+        forceCloudSave(newData);
         addNotification({ type: 'success', title: `تم حذف ${allowed.length} معاملة` });
         exitSelectMode();
       },
@@ -4506,6 +4513,8 @@ function App() {
   const saveLockRef = useRef(false);
   const lastRemoteRef = useRef(null);
   const lastMaterializeRef = useRef('');
+  const isSavingRef = useRef(false);           // ✅ جديد
+  const deletedIdsRef = useRef(new Set());     // ✅ جديد — لتتبع المحذوفات
 
   const { data, activeTab, selectedYear, selectedMonth, transViewMode, catViewType, isFormOpen, formMode, formData, isLocked, isDarkMode, expandedGroup, budgets, editingCard, editingLoan, searchTerm, editingBudgetCategory, budgetAmount, isRecurringModalOpen, recurringFormData, notifications, history, expandedLedgers, expandedCardsSection, statusFilter, confirmDialog, isQuickTransferModalOpen, quickTransferData, viewingCardStatement, viewingReceipt, isPinChangeOpen, isSmsModalOpen, pendingCloseModal, walletVisibility, isProcessing, formErrors, activeCategoryDetail } = state;
   const { transactions = [], loans = [], cards = [], recurringItems = [], accountsData = DEFAULT_ACCOUNTS, monthlyPlans = {} } = data || {};
@@ -4517,6 +4526,22 @@ function App() {
   const removeNotification = useCallback((id) => dispatch({ type: 'REMOVE_NOTIFICATION', payload: id }), []);
   const saveHistory = useCallback(() => dispatch({ type: 'ADD_TO_HISTORY', payload: { data: JSON.parse(JSON.stringify(data)), budgets: JSON.parse(JSON.stringify(budgets)) } }), [data, budgets]);
 
+    // ✅ حفظ فوري بدون debounce — يُستخدم بعد الحذف
+  const forceCloudSave = useCallback((newData) => {
+    if (!isAuthenticated) return;
+    isSavingRef.current = true;
+    const payload = { ...newData, budgets };
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(newData)); } catch (e) {}
+    db.collection("finance_2026").doc("user_ahmed_data").set(payload, { merge: true })
+      .then(() => {
+        // ✅ حدّث lastRemoteRef حتى لا يُستبدل الحذف بـ snapshot قديم
+        lastRemoteRef.current = JSON.stringify(newData);
+        console.log('✅ Force saved after delete');
+      })
+      .catch(err => console.error('Force save failed:', err))
+      .finally(() => { isSavingRef.current = false; });
+  }, [isAuthenticated, budgets]);
+  
   useEffect(() => {
     const unsub = firebase.auth().onAuthStateChanged((user) => {
       setAuthLoading(false);
@@ -4783,8 +4808,19 @@ function App() {
   const handleDelete = useCallback((id) => {
     const target = transactions.find(t => t.id === id);
     if (target && isMonthClosed(data, target.year || 2026, target.month)) { addNotification({ type: 'error', title: 'محظور' }); return; }
-    dispatch({ type: 'SHOW_CONFIRM', danger: true, title: 'تأكيد الحذف', message: 'هل أنت متأكد؟', onConfirm: () => { saveHistory(); dispatch({ type: 'UPDATE_TRANSACTIONS', payload: transactions.filter(t => t.id !== id) }); addNotification({ type: 'success', title: 'تم الحذف' }); }, onCancel: () => dispatch({ type: 'HIDE_CONFIRM' }) });
-  }, [transactions, data, saveHistory, addNotification]);
+    dispatch({ type: 'SHOW_CONFIRM', danger: true, title: 'تأكيد الحذف', message: 'هل أنت متأكد؟', onConfirm: () => {
+      saveHistory();
+      // ✅ سجل الـ id في deletedIdsRef لمنع الـ materialize من إعادة إنشائه
+      deletedIdsRef.current.add(id);
+      const newTx = transactions.filter(t => t.id !== id);
+      const newData = { ...data, transactions: newTx };
+      // ✅ تحديث فوري + حفظ فوري
+      dispatch({ type: 'SET_DATA', payload: newData });
+      forceCloudSave(newData);
+      addNotification({ type: 'success', title: 'تم الحذف نهائياً' });
+    }, onCancel: () => dispatch({ type: 'HIDE_CONFIRM' }) });
+  }, [transactions, data, saveHistory, addNotification, forceCloudSave]);
+  
 
   const handleQuickTransfer = useCallback((e) => {
     e.preventDefault();
