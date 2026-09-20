@@ -4507,8 +4507,15 @@ const materializeShoppingRecurring = async () => {
         subType: 'withdrawal', status: 'pending',
         recurringId: r.id, createdAt: Date.now(), receipts: []
       });
-      const next = r.frequency === 'bimonthly' ? addMonths(r.nextDue, 2) : addMonths(r.nextDue, 1);
-      updates.push({ old: r, new: { ...r, nextDue: next, lastRun: today } });
+      const prefDay = r.preferredDay || 10;
+      const addMonthsWithDay = (isoStr, m, day) => {
+        const dt = new Date(isoStr + 'T12:00:00');
+        dt.setMonth(dt.getMonth() + m);
+        dt.setDate(parseInt(day));
+        return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
+      };
+      const next = addMonthsWithDay(r.nextDue, r.frequency === 'bimonthly' ? 2 : 1, prefDay);
+            updates.push({ old: r, new: { ...r, nextDue: next, lastRun: today } });
     });
     
     // اكتب المعاملات الجديدة
