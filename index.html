@@ -4465,7 +4465,69 @@ function dataReducer(state, action) {
 // ═══════════════════════════════════════════════════════════════
 // App Component — مع كل التعديلات (forceCloudSave, deletedIdsRef, isSavingRef)
 // ═══════════════════════════════════════════════════════════════
-function App() {
+/* ═══════════════ Materialize Shopping Recurring (من تطبيق التسوق) ═══════════════ */
+const materializeShoppingRecurring = async () => {
+  try {
+    const docRef = db.collection('finance_2026').doc('user_ahmed_data');
+    const snap = await docRef.get();
+    if (!snap.exists) return;
+    const d = snap.data() || {};
+    const rules = d.shoppingRecurring || [];
+    if (!rules.length) return;
+    
+    const today = new Date().toISOString().slice(0, 10);
+    const MONTHS = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
+    
+    const addMonths = (isoStr, m) => {
+      const dt = new Date(isoStr + 'T12:00:00');
+      const day = dt.getDate();
+      dt.setMonth(dt.getMonth() + m);
+      if (dt.getDate() < day) dt.setDate(0);
+      return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
+    };
+    
+    const due = rules.filter(r => r.active && r.nextDue && r.nextDue <= today);
+    if (!due.length) return;
+    
+    const newTxs = [];
+    const updates = [];
+    
+    due.forEach(r => {
+      const t = r.template;
+      const tObj = new Date(r.nextDue + 'T12:00:00');
+      newTxs.push({
+        id: 'rec-tx-' + r.id + '-' + Date.now() + '-' + Math.random().toString(36).slice(2,6),
+        type: 'expense', kind: 'operational',
+        category: t.category, subCategory: t.subCategory,
+        amount: t.amount, quantity: t.quantity, unitPrice: t.unitPrice,
+        description: t.description,
+        source: 'shopping-app', sourceLabel: t.sourceLabel,
+        method: t.method, linkedCardId: t.linkedCardId || undefined,
+        date: r.nextDue, month: MONTHS[tObj.getMonth()], year: tObj.getFullYear(), monthIndex: tObj.getMonth(),
+        subType: 'withdrawal', status: 'pending',
+        recurringId: r.id, createdAt: Date.now(), receipts: []
+      });
+      const next = r.frequency === 'bimonthly' ? addMonths(r.nextDue, 2) : addMonths(r.nextDue, 1);
+      updates.push({ old: r, new: { ...r, nextDue: next, lastRun: today } });
+    });
+    
+    // اكتب المعاملات الجديدة
+    await docRef.set({ transactions: firebase.firestore.FieldValue.arrayUnion(...newTxs) }, { merge: true });
+    
+    // حدّث القواعد
+    for (const u of updates) {
+      await docRef.update({ shoppingRecurring: firebase.firestore.FieldValue.arrayRemove(u.old) });
+      await docRef.set({ shoppingRecurring: firebase.firestore.FieldValue.arrayUnion(u.new) }, { merge: true });
+    }
+    
+    console.log('✅ Materialized', newTxs.length, 'recurring shopping items');
+  } catch (e) {
+    console.warn('Shopping recurring:', e);
+  }
+};
+
+/* ═══════════════ Materialize في useEffect ═══════════════ */
+  function App() {
   const defMY = useMemo(() => getDefaultMonthYear(), []);
   const [state, dispatch] = useReducer(dataReducer, {
     data: getInitialData(),
@@ -4545,7 +4607,16 @@ function App() {
   }, []);
 
   // ✅ onSnapshot مُصلح — يتجاهل أثناء الحفظ
+   // ✅ فحص المتكررات من تطبيق التسوق
   useEffect(() => {
+    if (!isAuthenticated) return;
+    materializeShoppingRecurring();
+    // افحص كل ساعة عشان تضمن التوليد التلقائي
+    const interval = setInterval(materializeShoppingRecurring, 60 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [isAuthenticated]);
+
+    useEffect(() => {
     if (!isAuthenticated) return;
     const docRef = db.collection("finance_2026").doc("user_ahmed_data");
     const unsub = docRef.onSnapshot((doc) => {
