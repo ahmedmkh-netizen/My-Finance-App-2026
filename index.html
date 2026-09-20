@@ -2123,6 +2123,11 @@ const TransactionsView = memo(({ groupedTransactions, transactions, selectedMont
   const [showBankFeesOnly, setShowBankFeesOnly] = useState(false);
   const [showSmsOnly, setShowSmsOnly] = useState(false);
   const [showBeneficiariesOnly, setShowBeneficiariesOnly] = useState(false);
+
+  // ✅ جديد — وضع التحديد المتعدد
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState(new Set());
+
   const filterBySource = useCallback((list) => { if (sourceFilter === 'all') return list; if (sourceFilter === 'self') return list.filter(t => !isFamilyTx(t)); return list.filter(t => t.createdBy === sourceFilter); }, [sourceFilter]);
   const filterByBankFees = useCallback((list) => showBankFeesOnly ? list.filter(t => isBankFee(t)) : list, [showBankFeesOnly]);
   const filterBySms = useCallback((list) => showSmsOnly ? list.filter(t => t.source === 'sms') : list, [showSmsOnly]);
@@ -2132,12 +2137,73 @@ const TransactionsView = memo(({ groupedTransactions, transactions, selectedMont
   const paidArchive = useMemo(() => filterByBeneficiaries(filterBySms(filterByBankFees(filterBySource(filterByType(transactions.filter(t => t.month === selectedMonth && (t.year || 2026) === selectedYear && t.status === 'paid')))))).sort((a, b) => (parseISODate(b.date) || 0) - (parseISODate(a.date) || 0)), [transactions, selectedMonth, selectedYear, filterByType, filterBySource, filterByBankFees, filterBySms, filterByBeneficiaries]);
   const totalPending = pendingGroups.reduce((s, g) => s + g.items.length, 0);
   const isClosed = isMonthClosed(data, selectedYear, selectedMonth);
+
+  // ✅ دوال التحديد المتعدد
+  const toggleSelect = useCallback((id) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const toggleSelectAll = useCallback(() => {
+    const allIds = [...pendingGroups.flatMap(g => g.items.map(i => i.id)), ...paidArchive.map(t => t.id)];
+    setSelectedIds(prev => prev.size === allIds.length ? new Set() : new Set(allIds));
+  }, [pendingGroups, paidArchive]);
+
+  const exitSelectMode = useCallback(() => {
+    setSelectMode(false);
+    setSelectedIds(new Set());
+  }, []);
+
+  const handleBulkDelete = useCallback(() => {
+    const ids = [...selectedIds];
+    if (ids.length === 0) { addNotification({ type: 'info', title: 'لم تحدد أي معاملة' }); return; }
+
+    // ✅ فحص الأشهر المغلقة
+    const blocked = [];
+    const allowed = [];
+    ids.forEach(id => {
+      const t = transactions.find(x => x.id === id);
+      if (!t) return;
+      if (isMonthClosed(data, t.year || 2026, t.month)) blocked.push(t);
+      else allowed.push(t);
+    });
+
+    if (allowed.length === 0) {
+      addNotification({ type: 'error', title: 'محظور', message: 'كل المعاملات المحددة في شهور مغلقة' });
+      return;
+    }
+
+    const message = blocked.length > 0
+      ? `سيتم حذف ${allowed.length} معاملة.\n⚠️ سيتم تجاهل ${blocked.length} معاملة في شهور مغلقة.`
+      : `سيتم حذف ${allowed.length} معاملة نهائياً.`;
+
+    dispatch({
+      type: 'SHOW_CONFIRM',
+      danger: true,
+      title: `حذف ${allowed.length} معاملة`,
+      message,
+      onConfirm: () => {
+        saveHistory();
+        const allowedIds = new Set(allowed.map(t => t.id));
+        dispatch({ type: 'UPDATE_TRANSACTIONS', payload: transactions.filter(t => !allowedIds.has(t.id)) });
+        addNotification({ type: 'success', title: `تم حذف ${allowed.length} معاملة` });
+        exitSelectMode();
+      },
+      onCancel: () => dispatch({ type: 'HIDE_CONFIRM' })
+    });
+  }, [selectedIds, transactions, data, saveHistory, addNotification, dispatch, exitSelectMode]);
+
   const approveOne = (t) => { if (isMonthClosed(data, t.year || 2026, t.month)) { addNotification({ type: 'error', title: 'محظور' }); return; } dispatch({ type: 'UPDATE_TRANSACTIONS', payload: transactions.map(tr => tr.id === t.id ? { ...tr, status: 'paid' } : tr) }); addNotification({ type: 'success', title: 'تم الاعتماد' }); };
   const approveAll = () => { if (isClosed) { addNotification({ type: 'error', title: 'محظور' }); return; } dispatch({ type: 'SHOW_CONFIRM', danger: false, title: 'اعتماد الكل', message: `سيتم اعتماد ${totalPending} عملية`, onConfirm: () => { saveHistory(); const ids = new Set(pendingGroups.flatMap(g => g.items.map(i => i.id))); dispatch({ type: 'UPDATE_TRANSACTIONS', payload: transactions.map(t => ids.has(t.id) ? { ...t, status: 'paid' } : t) }); addNotification({ type: 'success', title: 'تم الاعتماد' }); }, onCancel: () => dispatch({ type: 'HIDE_CONFIRM' }) }); };
   const reopenOne = (t) => { if (isMonthClosed(data, t.year || 2026, t.month)) { addNotification({ type: 'error', title: 'محظور' }); return; } dispatch({ type: 'UPDATE_TRANSACTIONS', payload: transactions.map(tr => tr.id === t.id ? { ...tr, status: 'pending' } : tr) }); addNotification({ type: 'warning', title: 'إعادة تعليق' }); };
   const monthTx = useMemo(() => transactions.filter(t => t.month === selectedMonth && (t.year || 2026) === selectedYear), [transactions, selectedMonth, selectedYear]);
   const activeFiltersCount = (sourceFilter !== 'all' ? 1 : 0) + (statusFilter !== 'all' ? 1 : 0) + (showBankFeesOnly ? 1 : 0) + (showSmsOnly ? 1 : 0) + (showBeneficiariesOnly ? 1 : 0);
   const dailyGroups = useMemo(() => groupTransactionsByDate(paidArchive), [paidArchive]);
+
   return (
     <div className="space-y-4 animate-fadeIn">
       <div className="card">
@@ -2146,12 +2212,36 @@ const TransactionsView = memo(({ groupedTransactions, transactions, selectedMont
             <h2 className="text-lg font-black">{transViewMode === 'expense' ? 'المصروفات' : transViewMode === 'income' ? 'الإيرادات' : 'كل المعاملات'}</h2>
             <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-muted)' }}>{selectedMonth} {selectedYear} • {monthTx.length} معاملة</p>
           </div>
-          <div className="flex gap-1.5">
+          <div className="flex gap-1.5 flex-wrap">
             <button type="button" onClick={() => dispatch({ type: 'SET_TRANS_VIEW_MODE', payload: 'all' })} className={`btn ${transViewMode === 'all' ? 'btn-primary' : 'btn-secondary'} text-[11px] px-2.5 py-1.5`}>الكل</button>
             <button type="button" onClick={() => dispatch({ type: 'SET_TRANS_VIEW_MODE', payload: 'expense' })} className={`btn ${transViewMode === 'expense' ? 'btn-primary' : 'btn-secondary'} text-[11px] px-2.5 py-1.5`}>مصروفات</button>
             <button type="button" onClick={() => dispatch({ type: 'SET_TRANS_VIEW_MODE', payload: 'income' })} className={`btn ${transViewMode === 'income' ? 'btn-primary' : 'btn-secondary'} text-[11px] px-2.5 py-1.5`}>إيرادات</button>
           </div>
         </div>
+
+        {/* ✅ جديد — شريط وضع التحديد */}
+        {selectMode ? (
+          <div className="p-3 rounded-lg mb-3 flex flex-wrap items-center gap-2" style={{ background: 'var(--brand-soft)', border: '1px solid var(--brand)' }}>
+            <div className="flex-1 min-w-[180px]">
+              <p className="text-xs font-black text-blue-700 dark:text-blue-300">🔘 وضع التحديد المتعدد</p>
+              <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>تم تحديد <strong>{selectedIds.size}</strong> معاملة</p>
+            </div>
+            <button onClick={toggleSelectAll} className="btn btn-secondary text-[11px] py-1.5 px-2.5">
+              {selectedIds.size === (pendingGroups.flatMap(g => g.items).length + paidArchive.length) ? 'إلغاء الكل' : 'تحديد الكل'}
+            </button>
+            <button onClick={handleBulkDelete} disabled={selectedIds.size === 0} className={`btn ${selectedIds.size === 0 ? 'btn-secondary' : 'btn-primary'} text-[11px] py-1.5 px-2.5`}>
+              <Trash2 size={12} /> حذف المحدد ({selectedIds.size})
+            </button>
+            <button onClick={exitSelectMode} className="btn btn-ghost text-[11px] py-1.5 px-2.5">خروج</button>
+          </div>
+        ) : (
+          <div className="flex gap-1.5 mb-3">
+            <button onClick={() => setSelectMode(true)} className="btn btn-secondary text-[11px] py-1.5 px-2.5">
+              <CheckCircle2 size={12} /> تحديد متعدد
+            </button>
+          </div>
+        )}
+
         <div className="grid grid-cols-3 gap-2">
           <div className="p-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/30"><p className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400">محصل</p><p className="text-sm font-black text-emerald-600 mt-0.5">{fmt(monthInsights.inc)}</p></div>
           <div className="p-2.5 rounded-lg bg-red-50 dark:bg-red-950/30"><p className="text-[10px] font-bold text-red-700 dark:text-red-400">مدفوع</p><p className="text-sm font-black text-red-600 mt-0.5">{fmt(monthInsights.exp)}</p></div>
@@ -2228,7 +2318,10 @@ const TransactionsView = memo(({ groupedTransactions, transactions, selectedMont
                   {isExpanded && (
                     <div className="divide-y" style={{ borderTop: '1px solid var(--border-subtle)', borderColor: 'var(--border-subtle)' }}>
                       {g.items.map(t => (
-                        <div key={t.id} className="p-3 flex justify-between items-center gap-2">
+                        <div key={t.id} className={`p-3 flex justify-between items-center gap-2 ${selectedIds.has(t.id) ? 'bg-blue-50 dark:bg-blue-950/20' : ''}`}>
+                          {selectMode && (
+                            <input type="checkbox" checked={selectedIds.has(t.id)} onChange={() => toggleSelect(t.id)} className="w-4 h-4 accent-blue-600 flex-shrink-0" />
+                          )}
                           <button aria-label="اعتماد" onClick={() => approveOne(t)} className="flex flex-col items-center px-1.5 py-1 rounded-lg hover:bg-[color:var(--bg-muted)] active:scale-90 flex-shrink-0"><Clock className="text-amber-500" size={16} /></button>
                           <div className="flex-1 min-w-0">
                             <p className="font-bold text-xs truncate">{t.description || 'بدون وصف'}{' '}<FamilyBadge tx={t} /> <SmsBadge tx={t} /> <TeldaBadge tx={t} /> <RecurringBadge tx={t} /> <CarryoverBadge tx={t} /> <ReceiptIndicator tx={t} dispatch={dispatch} /></p>
@@ -2236,8 +2329,12 @@ const TransactionsView = memo(({ groupedTransactions, transactions, selectedMont
                           </div>
                           <div className="flex items-center gap-1 flex-shrink-0">
                             <span className="font-black text-xs">{fmt(t.amount)}</span>
-                            <button type="button" aria-label="تعديل" onClick={() => { dispatch({ type: 'SET_FORM_MODE', payload: 'edit' }); dispatch({ type: 'SET_FORM_DATA', payload: t }); dispatch({ type: 'SET_FORM_OPEN', payload: true }); }} className="btn btn-ghost p-1"><Edit size={12} /></button>
-                            <button type="button" aria-label="حذف" onClick={() => handleDelete(t.id)} className="btn btn-ghost p-1 text-red-500"><Trash2 size={12} /></button>
+                            {!selectMode && (
+                              <React.Fragment>
+                                <button type="button" aria-label="تعديل" onClick={() => { dispatch({ type: 'SET_FORM_MODE', payload: 'edit' }); dispatch({ type: 'SET_FORM_DATA', payload: t }); dispatch({ type: 'SET_FORM_OPEN', payload: true }); }} className="btn btn-ghost p-1"><Edit size={12} /></button>
+                                <button type="button" aria-label="حذف" onClick={() => handleDelete(t.id)} className="btn btn-ghost p-1 text-red-500"><Trash2 size={12} /></button>
+                              </React.Fragment>
+                            )}
                           </div>
                         </div>
                       ))}
@@ -2263,14 +2360,282 @@ const TransactionsView = memo(({ groupedTransactions, transactions, selectedMont
                 <DayGroupHeader label={group.label} total={group.total} count={group.items.length} />
                 <div className="space-y-2">
                   {group.items.map(t => (
-                    <div key={t.id} className="card py-2.5 flex justify-between items-center gap-2">
+                    <div key={t.id} className={`card py-2.5 flex justify-between items-center gap-2 ${selectedIds.has(t.id) ? 'ring-2 ring-blue-500' : ''}`}>
+                      {selectMode && (
+                        <input type="checkbox" checked={selectedIds.has(t.id)} onChange={() => toggleSelect(t.id)} className="w-4 h-4 accent-blue-600 flex-shrink-0" />
+                      )}
                       <div className="min-w-0 flex-1">
                         <p className="font-bold text-xs truncate">{t.type === 'income' ? '💰' : '💸'} {t.description || t.category}{' '}<FamilyBadge tx={t} /> <SmsBadge tx={t} /> <TeldaBadge tx={t} /> <RecurringBadge tx={t} /> <CarryoverBadge tx={t} /> <ReceiptIndicator tx={t} dispatch={dispatch} /></p>
                         <p className="text-[10px] font-semibold" style={{ color: 'var(--text-muted)' }}>{PAYMENT_METHODS.find(p => p.id === t.method)?.label || ''} • {new Date(t.createdAt || Date.now()).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}</p>
                       </div>
                       <div className="flex items-center gap-1 flex-shrink-0">
                         <span className="font-black text-xs">{fmt(t.amount)}</span>
-                        <button aria-label="إعادة تعليق" onClick={() => reopenOne(t)} className="btn btn-ghost p-1 text-amber-500"><Undo2 size={12} /></button>
+                        {!selectMode && <button aria-label="إعادة تعليق" onClick={() => reopenOne(t)} className="btn btn-ghost p-1 text-amber-500"><Undo2 size={12} /></button>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </details>
+      )}
+    </div>
+  );
+});const TransactionsView = memo(({ groupedTransactions, transactions, selectedMonth, selectedYear, transViewMode, statusFilter, searchTerm, expandedGroup, data, monthInsights, dispatch, handleDelete, addNotification, onSelectYear, onSelectMonth, saveHistory, onPrintMonthlyReport }) => {
+  const [sourceFilter, setSourceFilter] = useState('all');
+  const [showFilters, setShowFilters] = useState(false);
+  const [showBankFeesOnly, setShowBankFeesOnly] = useState(false);
+  const [showSmsOnly, setShowSmsOnly] = useState(false);
+  const [showBeneficiariesOnly, setShowBeneficiariesOnly] = useState(false);
+
+  // ✅ جديد — وضع التحديد المتعدد
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState(new Set());
+
+  const filterBySource = useCallback((list) => { if (sourceFilter === 'all') return list; if (sourceFilter === 'self') return list.filter(t => !isFamilyTx(t)); return list.filter(t => t.createdBy === sourceFilter); }, [sourceFilter]);
+  const filterByBankFees = useCallback((list) => showBankFeesOnly ? list.filter(t => isBankFee(t)) : list, [showBankFeesOnly]);
+  const filterBySms = useCallback((list) => showSmsOnly ? list.filter(t => t.source === 'sms') : list, [showSmsOnly]);
+  const filterByBeneficiaries = useCallback((list) => showBeneficiariesOnly ? list.filter(t => isBeneficiaryCategorySafe(t.category)) : list, [showBeneficiariesOnly]);
+  const filterByType = useCallback((list) => transViewMode === 'all' ? list : list.filter(t => t.type === transViewMode), [transViewMode]);
+  const pendingGroups = useMemo(() => groupedTransactions.map(g => ({ ...g, items: filterByBeneficiaries(filterBySms(filterByBankFees(filterBySource(g.items.filter(t => t.status !== 'paid'))))) })).filter(g => g.items.length > 0), [groupedTransactions, filterBySource, filterByBankFees, filterBySms, filterByBeneficiaries]);
+  const paidArchive = useMemo(() => filterByBeneficiaries(filterBySms(filterByBankFees(filterBySource(filterByType(transactions.filter(t => t.month === selectedMonth && (t.year || 2026) === selectedYear && t.status === 'paid')))))).sort((a, b) => (parseISODate(b.date) || 0) - (parseISODate(a.date) || 0)), [transactions, selectedMonth, selectedYear, filterByType, filterBySource, filterByBankFees, filterBySms, filterByBeneficiaries]);
+  const totalPending = pendingGroups.reduce((s, g) => s + g.items.length, 0);
+  const isClosed = isMonthClosed(data, selectedYear, selectedMonth);
+
+  // ✅ دوال التحديد المتعدد
+  const toggleSelect = useCallback((id) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const toggleSelectAll = useCallback(() => {
+    const allIds = [...pendingGroups.flatMap(g => g.items.map(i => i.id)), ...paidArchive.map(t => t.id)];
+    setSelectedIds(prev => prev.size === allIds.length ? new Set() : new Set(allIds));
+  }, [pendingGroups, paidArchive]);
+
+  const exitSelectMode = useCallback(() => {
+    setSelectMode(false);
+    setSelectedIds(new Set());
+  }, []);
+
+  const handleBulkDelete = useCallback(() => {
+    const ids = [...selectedIds];
+    if (ids.length === 0) { addNotification({ type: 'info', title: 'لم تحدد أي معاملة' }); return; }
+
+    // ✅ فحص الأشهر المغلقة
+    const blocked = [];
+    const allowed = [];
+    ids.forEach(id => {
+      const t = transactions.find(x => x.id === id);
+      if (!t) return;
+      if (isMonthClosed(data, t.year || 2026, t.month)) blocked.push(t);
+      else allowed.push(t);
+    });
+
+    if (allowed.length === 0) {
+      addNotification({ type: 'error', title: 'محظور', message: 'كل المعاملات المحددة في شهور مغلقة' });
+      return;
+    }
+
+    const message = blocked.length > 0
+      ? `سيتم حذف ${allowed.length} معاملة.\n⚠️ سيتم تجاهل ${blocked.length} معاملة في شهور مغلقة.`
+      : `سيتم حذف ${allowed.length} معاملة نهائياً.`;
+
+    dispatch({
+      type: 'SHOW_CONFIRM',
+      danger: true,
+      title: `حذف ${allowed.length} معاملة`,
+      message,
+      onConfirm: () => {
+        saveHistory();
+        const allowedIds = new Set(allowed.map(t => t.id));
+        dispatch({ type: 'UPDATE_TRANSACTIONS', payload: transactions.filter(t => !allowedIds.has(t.id)) });
+        addNotification({ type: 'success', title: `تم حذف ${allowed.length} معاملة` });
+        exitSelectMode();
+      },
+      onCancel: () => dispatch({ type: 'HIDE_CONFIRM' })
+    });
+  }, [selectedIds, transactions, data, saveHistory, addNotification, dispatch, exitSelectMode]);
+
+  const approveOne = (t) => { if (isMonthClosed(data, t.year || 2026, t.month)) { addNotification({ type: 'error', title: 'محظور' }); return; } dispatch({ type: 'UPDATE_TRANSACTIONS', payload: transactions.map(tr => tr.id === t.id ? { ...tr, status: 'paid' } : tr) }); addNotification({ type: 'success', title: 'تم الاعتماد' }); };
+  const approveAll = () => { if (isClosed) { addNotification({ type: 'error', title: 'محظور' }); return; } dispatch({ type: 'SHOW_CONFIRM', danger: false, title: 'اعتماد الكل', message: `سيتم اعتماد ${totalPending} عملية`, onConfirm: () => { saveHistory(); const ids = new Set(pendingGroups.flatMap(g => g.items.map(i => i.id))); dispatch({ type: 'UPDATE_TRANSACTIONS', payload: transactions.map(t => ids.has(t.id) ? { ...t, status: 'paid' } : t) }); addNotification({ type: 'success', title: 'تم الاعتماد' }); }, onCancel: () => dispatch({ type: 'HIDE_CONFIRM' }) }); };
+  const reopenOne = (t) => { if (isMonthClosed(data, t.year || 2026, t.month)) { addNotification({ type: 'error', title: 'محظور' }); return; } dispatch({ type: 'UPDATE_TRANSACTIONS', payload: transactions.map(tr => tr.id === t.id ? { ...tr, status: 'pending' } : tr) }); addNotification({ type: 'warning', title: 'إعادة تعليق' }); };
+  const monthTx = useMemo(() => transactions.filter(t => t.month === selectedMonth && (t.year || 2026) === selectedYear), [transactions, selectedMonth, selectedYear]);
+  const activeFiltersCount = (sourceFilter !== 'all' ? 1 : 0) + (statusFilter !== 'all' ? 1 : 0) + (showBankFeesOnly ? 1 : 0) + (showSmsOnly ? 1 : 0) + (showBeneficiariesOnly ? 1 : 0);
+  const dailyGroups = useMemo(() => groupTransactionsByDate(paidArchive), [paidArchive]);
+
+  return (
+    <div className="space-y-4 animate-fadeIn">
+      <div className="card">
+        <div className="flex justify-between items-center flex-wrap gap-2 mb-3">
+          <div>
+            <h2 className="text-lg font-black">{transViewMode === 'expense' ? 'المصروفات' : transViewMode === 'income' ? 'الإيرادات' : 'كل المعاملات'}</h2>
+            <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-muted)' }}>{selectedMonth} {selectedYear} • {monthTx.length} معاملة</p>
+          </div>
+          <div className="flex gap-1.5 flex-wrap">
+            <button type="button" onClick={() => dispatch({ type: 'SET_TRANS_VIEW_MODE', payload: 'all' })} className={`btn ${transViewMode === 'all' ? 'btn-primary' : 'btn-secondary'} text-[11px] px-2.5 py-1.5`}>الكل</button>
+            <button type="button" onClick={() => dispatch({ type: 'SET_TRANS_VIEW_MODE', payload: 'expense' })} className={`btn ${transViewMode === 'expense' ? 'btn-primary' : 'btn-secondary'} text-[11px] px-2.5 py-1.5`}>مصروفات</button>
+            <button type="button" onClick={() => dispatch({ type: 'SET_TRANS_VIEW_MODE', payload: 'income' })} className={`btn ${transViewMode === 'income' ? 'btn-primary' : 'btn-secondary'} text-[11px] px-2.5 py-1.5`}>إيرادات</button>
+          </div>
+        </div>
+
+        {/* ✅ جديد — شريط وضع التحديد */}
+        {selectMode ? (
+          <div className="p-3 rounded-lg mb-3 flex flex-wrap items-center gap-2" style={{ background: 'var(--brand-soft)', border: '1px solid var(--brand)' }}>
+            <div className="flex-1 min-w-[180px]">
+              <p className="text-xs font-black text-blue-700 dark:text-blue-300">🔘 وضع التحديد المتعدد</p>
+              <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>تم تحديد <strong>{selectedIds.size}</strong> معاملة</p>
+            </div>
+            <button onClick={toggleSelectAll} className="btn btn-secondary text-[11px] py-1.5 px-2.5">
+              {selectedIds.size === (pendingGroups.flatMap(g => g.items).length + paidArchive.length) ? 'إلغاء الكل' : 'تحديد الكل'}
+            </button>
+            <button onClick={handleBulkDelete} disabled={selectedIds.size === 0} className={`btn ${selectedIds.size === 0 ? 'btn-secondary' : 'btn-primary'} text-[11px] py-1.5 px-2.5`}>
+              <Trash2 size={12} /> حذف المحدد ({selectedIds.size})
+            </button>
+            <button onClick={exitSelectMode} className="btn btn-ghost text-[11px] py-1.5 px-2.5">خروج</button>
+          </div>
+        ) : (
+          <div className="flex gap-1.5 mb-3">
+            <button onClick={() => setSelectMode(true)} className="btn btn-secondary text-[11px] py-1.5 px-2.5">
+              <CheckCircle2 size={12} /> تحديد متعدد
+            </button>
+          </div>
+        )}
+
+        <div className="grid grid-cols-3 gap-2">
+          <div className="p-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/30"><p className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400">محصل</p><p className="text-sm font-black text-emerald-600 mt-0.5">{fmt(monthInsights.inc)}</p></div>
+          <div className="p-2.5 rounded-lg bg-red-50 dark:bg-red-950/30"><p className="text-[10px] font-bold text-red-700 dark:text-red-400">مدفوع</p><p className="text-sm font-black text-red-600 mt-0.5">{fmt(monthInsights.exp)}</p></div>
+          <div className="p-2.5 rounded-lg bg-blue-50 dark:bg-blue-950/30"><p className="text-[10px] font-bold text-blue-700 dark:text-blue-400">الصافي</p><p className={`text-sm font-black mt-0.5 ${monthInsights.net >= 0 ? 'text-blue-600' : 'text-red-600'}`}>{fmt(monthInsights.net)}</p></div>
+        </div>
+        <div className="flex gap-1.5 mt-3 flex-wrap">
+          <button onClick={() => setShowBankFeesOnly(v => !v)} className={`btn text-[11px] px-2.5 py-1.5 ${showBankFeesOnly ? 'btn-primary' : 'btn-secondary'}`}><Receipt size={12} /> رسوم بنكية</button>
+          <button onClick={() => setShowSmsOnly(v => !v)} className={`btn text-[11px] px-2.5 py-1.5 ${showSmsOnly ? 'btn-primary' : 'btn-secondary'}`}><MessageSquare size={12} /> SMS</button>
+          <button onClick={() => setShowBeneficiariesOnly(v => !v)} className={`btn text-[11px] px-2.5 py-1.5 ${showBeneficiariesOnly ? 'btn-primary' : 'btn-secondary'}`}>👨‍👩‍👧 مصاريف شهرية</button>
+          {isClosed ? (
+            <React.Fragment>
+              <div className="badge badge-success px-2 py-1 text-[10px]"><ShieldCheck size={10} /> مغلق</div>
+              <button onClick={() => dispatch({ type: 'SHOW_CONFIRM', danger: false, title: 'إعادة فتح', message: 'سيتم إلغاء القفل.', onConfirm: () => { saveHistory(); dispatch({ type: 'OPEN_MONTH', payload: makeMonthKey(selectedYear, selectedMonth) }); addNotification({ type: 'success', title: 'تم إعادة الفتح' }); }, onCancel: () => dispatch({ type: 'HIDE_CONFIRM' }) })} className="btn btn-secondary text-[11px] px-2.5 py-1.5"><Unlock size={12} /> فتح</button>
+            </React.Fragment>
+          ) : (
+            <button onClick={() => {
+              const pending = monthTx.filter(t => t.status !== 'paid');
+              if (pending.length > 0) { dispatch({ type: 'SET_PENDING_CLOSE_MODAL', payload: { isOpen: true, pending, total: pending.reduce((s, t) => s + safeNumber(t.amount), 0), month: selectedMonth, year: selectedYear } }); }
+              else { dispatch({ type: 'SHOW_CONFIRM', danger: false, title: 'إقفال الشهر', message: 'سيتم تثبيت الأرصدة.', onConfirm: () => { saveHistory(); dispatch({ type: 'CLOSE_MONTH', payload: { year: selectedYear, month: selectedMonth } }); addNotification({ type: 'success', title: 'تم الإقفال' }); }, onCancel: () => dispatch({ type: 'HIDE_CONFIRM' }) }); }
+            }} className="btn btn-secondary text-[11px] px-2.5 py-1.5"><Lock size={12} /> إقفال</button>
+          )}
+        </div>
+      </div>
+      <MonthSelector selectedYear={selectedYear} selectedMonth={selectedMonth} onSelectYear={onSelectYear} onSelectMonth={onSelectMonth} />
+      <div className="card py-3">
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute right-3 top-1/2 -translate-y-1/2" size={14} style={{ color: 'var(--text-muted)' }} />
+            <input type="text" placeholder="ابحث..." className="input-field pr-9 text-sm py-2.5" value={searchTerm} onChange={(e) => dispatch({ type: 'SET_SEARCH_TERM', payload: e.target.value })} />
+          </div>
+          <button onClick={() => setShowFilters(!showFilters)} className={`btn ${showFilters ? 'btn-primary' : 'btn-secondary'} px-3 py-2.5 relative`}>
+            <Filter size={14} />
+            {activeFiltersCount > 0 && <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-red-500 text-white text-[9px] rounded-full flex items-center justify-center font-black">{activeFiltersCount}</span>}
+          </button>
+        </div>
+        {showFilters && (
+          <div className="mt-3 pt-3 space-y-3 animate-fadeIn" style={{ borderTop: '1px solid var(--border-subtle)' }}>
+            <div className="flex gap-2 flex-wrap">
+              {[['all', 'الكل'], ['self', '👤 أنا'], ['ans', 'أنس'], ['abdelrahman', 'عبد الرحمن'], ['salma', 'سلمى'], ['om_abdo', 'أم عبده']].map(([id, label]) => (
+                <button key={id} type="button" onClick={() => setSourceFilter(id)} className={`badge px-2.5 py-1 cursor-pointer text-[10px] ${sourceFilter === id ? 'badge-brand' : 'badge-neutral'}`}>{label}</button>
+              ))}
+            </div>
+            <div className="flex gap-2 flex-wrap">
+              {[['all', 'الكل'], ['pending', '⏳ معلق'], ['paid', '✅ مدفوع']].map(([id, label]) => (
+                <button key={id} type="button" onClick={() => dispatch({ type: 'SET_STATUS_FILTER', payload: id })} className={`badge px-2.5 py-1 cursor-pointer text-[10px] ${statusFilter === id ? 'badge-brand' : 'badge-neutral'}`}>{label}</button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+      <section>
+        <div className="flex justify-between items-center mb-2 flex-wrap gap-2">
+          <h3 className="font-black flex items-center gap-2 text-sm"><Clock className="text-amber-500" size={14} /> الالتزامات {totalPending > 0 && <span className="badge badge-warning text-[10px]">{totalPending}</span>}</h3>
+          {totalPending > 0 && <button onClick={approveAll} className="btn btn-primary text-[11px] px-2.5 py-1.5"><CheckCircle2 size={12} /> اعتماد الكل</button>}
+        </div>
+        {pendingGroups.length === 0 ? (
+          <div className="card text-center p-6"><CheckCircle2 size={24} className="text-emerald-500 mx-auto mb-2" /><p className="font-semibold text-xs" style={{ color: 'var(--text-secondary)' }}>لا توجد التزامات</p></div>
+        ) : (
+          <div className="space-y-2">
+            {pendingGroups.map(g => {
+              const isExpanded = expandedGroup === g.category;
+              return (
+                <div key={g.category} className="card p-0 overflow-hidden">
+                  <div className="flex justify-between items-center p-3 cursor-pointer" onClick={() => dispatch({ type: 'SET_EXPANDED_GROUP', payload: isExpanded ? null : g.category })}>
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <span className="p-1.5 rounded-lg flex-shrink-0" style={{ backgroundColor: `${CATEGORY_COLORS[g.category]}20`, color: CATEGORY_COLORS[g.category] }}><Layers size={14} /></span>
+                      <div className="min-w-0"><h4 className="font-bold text-xs truncate">{g.category}</h4><p className="text-[10px] font-semibold" style={{ color: 'var(--text-muted)' }}>{g.items.length} عملية</p></div>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <span className="font-black text-sm">{fmt(g.items.reduce((s, i) => s + safeNumber(i.amount), 0))}</span>
+                      <ChevronDown size={14} className={`transition-transform ${isExpanded ? 'rotate-180' : ''}`} style={{ color: 'var(--text-muted)' }} />
+                    </div>
+                  </div>
+                  {isExpanded && (
+                    <div className="divide-y" style={{ borderTop: '1px solid var(--border-subtle)', borderColor: 'var(--border-subtle)' }}>
+                      {g.items.map(t => (
+                        <div key={t.id} className={`p-3 flex justify-between items-center gap-2 ${selectedIds.has(t.id) ? 'bg-blue-50 dark:bg-blue-950/20' : ''}`}>
+                          {selectMode && (
+                            <input type="checkbox" checked={selectedIds.has(t.id)} onChange={() => toggleSelect(t.id)} className="w-4 h-4 accent-blue-600 flex-shrink-0" />
+                          )}
+                          <button aria-label="اعتماد" onClick={() => approveOne(t)} className="flex flex-col items-center px-1.5 py-1 rounded-lg hover:bg-[color:var(--bg-muted)] active:scale-90 flex-shrink-0"><Clock className="text-amber-500" size={16} /></button>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-bold text-xs truncate">{t.description || 'بدون وصف'}{' '}<FamilyBadge tx={t} /> <SmsBadge tx={t} /> <TeldaBadge tx={t} /> <RecurringBadge tx={t} /> <CarryoverBadge tx={t} /> <ReceiptIndicator tx={t} dispatch={dispatch} /></p>
+                            <p className="text-[10px] font-semibold mt-0.5" style={{ color: 'var(--text-muted)' }}>{t.date} • {PAYMENT_METHODS.find(p => p.id === t.method)?.label}</p>
+                          </div>
+                          <div className="flex items-center gap-1 flex-shrink-0">
+                            <span className="font-black text-xs">{fmt(t.amount)}</span>
+                            {!selectMode && (
+                              <React.Fragment>
+                                <button type="button" aria-label="تعديل" onClick={() => { dispatch({ type: 'SET_FORM_MODE', payload: 'edit' }); dispatch({ type: 'SET_FORM_DATA', payload: t }); dispatch({ type: 'SET_FORM_OPEN', payload: true }); }} className="btn btn-ghost p-1"><Edit size={12} /></button>
+                                <button type="button" aria-label="حذف" onClick={() => handleDelete(t.id)} className="btn btn-ghost p-1 text-red-500"><Trash2 size={12} /></button>
+                              </React.Fragment>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
+      {dailyGroups.length > 0 && (
+        <details className="group" open>
+          <summary className="cursor-pointer list-none">
+            <div className="card py-3 flex items-center justify-between">
+              <h3 className="font-bold text-xs flex items-center gap-2 text-emerald-600"><CheckCircle2 size={14} /> سجل المدفوعات ({paidArchive.length})</h3>
+              <ChevronDown className="transition-transform group-open:rotate-180" size={14} style={{ color: 'var(--text-muted)' }} />
+            </div>
+          </summary>
+          <div className="mt-2">
+            {dailyGroups.map(group => (
+              <div key={group.date}>
+                <DayGroupHeader label={group.label} total={group.total} count={group.items.length} />
+                <div className="space-y-2">
+                  {group.items.map(t => (
+                    <div key={t.id} className={`card py-2.5 flex justify-between items-center gap-2 ${selectedIds.has(t.id) ? 'ring-2 ring-blue-500' : ''}`}>
+                      {selectMode && (
+                        <input type="checkbox" checked={selectedIds.has(t.id)} onChange={() => toggleSelect(t.id)} className="w-4 h-4 accent-blue-600 flex-shrink-0" />
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <p className="font-bold text-xs truncate">{t.type === 'income' ? '💰' : '💸'} {t.description || t.category}{' '}<FamilyBadge tx={t} /> <SmsBadge tx={t} /> <TeldaBadge tx={t} /> <RecurringBadge tx={t} /> <CarryoverBadge tx={t} /> <ReceiptIndicator tx={t} dispatch={dispatch} /></p>
+                        <p className="text-[10px] font-semibold" style={{ color: 'var(--text-muted)' }}>{PAYMENT_METHODS.find(p => p.id === t.method)?.label || ''} • {new Date(t.createdAt || Date.now()).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}</p>
+                      </div>
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        <span className="font-black text-xs">{fmt(t.amount)}</span>
+                        {!selectMode && <button aria-label="إعادة تعليق" onClick={() => reopenOne(t)} className="btn btn-ghost p-1 text-amber-500"><Undo2 size={12} /></button>}
                       </div>
                     </div>
                   ))}
@@ -2283,6 +2648,7 @@ const TransactionsView = memo(({ groupedTransactions, transactions, selectedMont
     </div>
   );
 });
+  
   /* ═══════════════════════════════════════════════════════════════
    PART 5 — Loans + Custody + Cashback + Hany + Cards + Duplicates
    ═══════════════════════════════════════════════════════════════ */
