@@ -2142,7 +2142,7 @@ const CategoryDetailModal = memo(({ category, transactions, selectedMonth, selec
                     {group.items.map(t => (
                       <div key={t.id} className="flex justify-between items-center gap-2 p-2.5 rounded-lg" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)' }}>
                         <div className="min-w-0 flex-1">
-                          <p className="font-bold text-xs truncate">{t.description || t.category} <FamilyBadge tx={t} /> <SmsBadge tx={t} /> <TeldaBadge tx={t} /> <RecurringBadge tx={t} /> <CarryoverBadge tx={t} /></p>
+                          <p className="font-bold text-xs truncate">{t.description || t.category} <FamilyBadge tx={t} /> <SmsBadge tx={t} /> <TeldaBadge tx={t} /> <TransferBadge tx={t} /> <RecurringBadge tx={t} /> <CarryoverBadge tx={t} /></p>
                           <p className="text-[10px] font-semibold mt-0.5" style={{ color: 'var(--text-muted)' }}>{PAYMENT_METHODS.find(p => p.id === t.method)?.label || t.method || '—'}{t.status === 'paid' ? <span className="text-emerald-600 mr-2">✅ معتمد</span> : <span className="text-amber-600 mr-2">⏳ معلق</span>}</p>
                         </div>
                         <span className={`font-black text-xs flex-shrink-0 ${t.type === 'income' ? 'text-emerald-600' : 'text-red-600'}`}>{t.type === 'income' ? '+' : '−'}{fmt(t.amount)}</span>
@@ -2384,7 +2384,7 @@ const TransactionsView = memo(({ groupedTransactions, transactions, selectedMont
                           )}
                           <button aria-label="اعتماد" onClick={() => approveOne(t)} className="flex flex-col items-center px-1.5 py-1 rounded-lg hover:bg-[color:var(--bg-muted)] active:scale-90 flex-shrink-0"><Clock className="text-amber-500" size={16} /></button>
                           <div className="flex-1 min-w-0">
-                            <p className="font-bold text-xs truncate">{t.description || 'بدون وصف'}{' '}<FamilyBadge tx={t} /> <SmsBadge tx={t} /> <TeldaBadge tx={t} /> <RecurringBadge tx={t} /> <CarryoverBadge tx={t} /> <ReceiptIndicator tx={t} dispatch={dispatch} /></p>
+                            <p className="font-bold text-xs truncate">{t.description || 'بدون وصف'}{' '}<FamilyBadge tx={t} /> <SmsBadge tx={t} /> <TeldaBadge tx={t} /> <TransferBadge tx={t} /> <RecurringBadge tx={t} /> <CarryoverBadge tx={t} /> <ReceiptIndicator tx={t} dispatch={dispatch} /></p>
                             <p className="text-[10px] font-semibold mt-0.5" style={{ color: 'var(--text-muted)' }}>{t.date} • {PAYMENT_METHODS.find(p => p.id === t.method)?.label}</p>
                           </div>
                           <div className="flex items-center gap-1 flex-shrink-0">
@@ -2425,7 +2425,7 @@ const TransactionsView = memo(({ groupedTransactions, transactions, selectedMont
                         <input type="checkbox" checked={selectedIds.has(t.id)} onChange={() => toggleSelect(t.id)} className="w-4 h-4 accent-blue-600 flex-shrink-0" />
                       )}
                       <div className="min-w-0 flex-1">
-                        <p className="font-bold text-xs truncate">{t.type === 'income' ? '💰' : '💸'} {t.description || t.category}{' '}<FamilyBadge tx={t} /> <SmsBadge tx={t} /> <TeldaBadge tx={t} /> <RecurringBadge tx={t} /> <CarryoverBadge tx={t} /> <ReceiptIndicator tx={t} dispatch={dispatch} /></p>
+                        <p className="font-bold text-xs truncate">{t.type === 'income' ? '💰' : '💸'} {t.description || t.category}{' '}<FamilyBadge tx={t} /> <SmsBadge tx={t} /> <TeldaBadge tx={t} /> <TransferBadge tx={t} /> <RecurringBadge tx={t} /> <CarryoverBadge tx={t} /> <ReceiptIndicator tx={t} dispatch={dispatch} /></p>
                         <p className="text-[10px] font-semibold" style={{ color: 'var(--text-muted)' }}>{PAYMENT_METHODS.find(p => p.id === t.method)?.label || ''} • {new Date(t.createdAt || Date.now()).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}</p>
                       </div>
                       <div className="flex items-center gap-1 flex-shrink-0">
@@ -5341,57 +5341,228 @@ quickTransferData: {
       addNotification({ type: 'error', title: 'محظور', message: 'الشهر مغلق' });
       return;
     }
-    dispatch({ type: 'SHOW_CONFIRM', danger: true, title: 'تأكيد الحذف', message: 'سيتم نقلها للأرشيف مع إمكانية الاسترجاع', onConfirm: () => {
-      saveHistory();
-      deletedIdsRef.current.add(id);
-      const tombstone = {
-        ...target,
-        deletedAt: new Date().toISOString(),
-        deletedBy: isFamilyTx(target) ? (target.createdBy || 'family') : 'self',
-        originalStatus: target.status || 'pending',
-        reason
-      };
-      const newArchive = [...(data.deletedTxArchive || []), tombstone].slice(-500);
-      const newTx = transactions.filter(t => t.id !== id);
-      const persistedDeleted = Array.from(new Set([...(data.deletedTxIds || []), id])).slice(-500);
-      const newMaterialized = { ...(data.materializedRecurring || {}) };
-      if (target.sourceRecurringId && target.year && target.month) {
-        newMaterialized[`${target.sourceRecurringId}_${makeMonthKey(target.year, target.month)}`] = 'deleted';
+    
+    // ✅ كشف التحويل: لو ده جزء من تحويل، احذف كل الأجزاء المرتبطة
+    const isTransfer = !!target.linkedTransferId;
+    const linkedIds = isTransfer 
+      ? transactions.filter(t => t.linkedTransferId === target.linkedTransferId).map(t => t.id)
+      : [id];
+    const linkedCount = linkedIds.length;
+    
+    // ✅ فحص الشهور المغلقة لكل القيود المرتبطة
+    if (isTransfer) {
+      const blockedLink = linkedIds
+        .map(lid => transactions.find(x => x.id === lid))
+        .find(t => t && isMonthClosed(data, t.year || 2026, t.month));
+      if (blockedLink) {
+        addNotification({ type: 'error', title: 'محظور', message: `قيد مرافق في شهر ${blockedLink.month} ${blockedLink.year} مغلق` });
+        return;
       }
-      const newData = { ...data, transactions: newTx, deletedTxArchive: newArchive, deletedTxIds: persistedDeleted, materializedRecurring: newMaterialized };
-      dispatch({ type: 'SET_DATA', payload: newData });
-      forceCloudSave(newData);
-      addNotification({ type: 'success', title: 'تم الحذف — متاح للاسترجاع من سجل المحذوفات', duration: 5000 });
-    }, onCancel: () => dispatch({ type: 'HIDE_CONFIRM' }) });
+    }
+    
+    dispatch({ 
+      type: 'SHOW_CONFIRM', 
+      danger: true, 
+      title: isTransfer ? `حذف التحويل (${linkedCount} قيود)` : 'تأكيد الحذف', 
+      message: isTransfer 
+        ? `هذا التحويل يتكون من ${linkedCount} قيود مترابطة.\nسيتم حذفها كلها معاً ونقلها للأرشيف.`
+        : 'سيتم نقلها للأرشيف مع إمكانية الاسترجاع', 
+      onConfirm: () => {
+        saveHistory();
+        const tombstones = [];
+        linkedIds.forEach(lid => {
+          const t = transactions.find(x => x.id === lid);
+          if (!t) return;
+          deletedIdsRef.current.add(lid);
+          tombstones.push({
+            ...t,
+            deletedAt: new Date().toISOString(),
+            deletedBy: isFamilyTx(t) ? (t.createdBy || 'family') : 'self',
+            originalStatus: t.status || 'pending',
+            reason
+          });
+        });
+        
+        const newArchive = [...(data.deletedTxArchive || []), ...tombstones].slice(-500);
+        const linkedSet = new Set(linkedIds);
+        const newTx = transactions.filter(t => !linkedSet.has(t.id));
+        const persistedDeleted = Array.from(new Set([...(data.deletedTxIds || []), ...linkedIds])).slice(-500);
+        const newMaterialized = { ...(data.materializedRecurring || {}) };
+        tombstones.forEach(t => {
+          if (t.sourceRecurringId && t.year && t.month) {
+            newMaterialized[`${t.sourceRecurringId}_${makeMonthKey(t.year, t.month)}`] = 'deleted';
+          }
+        });
+        const newData = { ...data, transactions: newTx, deletedTxArchive: newArchive, deletedTxIds: persistedDeleted, materializedRecurring: newMaterialized };
+        dispatch({ type: 'SET_DATA', payload: newData });
+        forceCloudSave(newData);
+        addNotification({ type: 'success', title: `تم حذف ${linkedCount} قيد`, duration: 5000 });
+      }, 
+      onCancel: () => dispatch({ type: 'HIDE_CONFIRM' }) 
+    });
   }, [transactions, data, saveHistory, addNotification, forceCloudSave]);
+  
 
   // ✅ handleBulkDeleteInApp مع tombstones
-  const handleBulkDeleteInApp = useCallback((ids) => {
+
     if (!Array.isArray(ids) || ids.length === 0) return;
     saveHistory();
-    const idsSet = new Set(ids);
-    const tombstones = ids.map(id => {
+    
+    // ✅ توسيع القائمة: أضف كل أجزاء التحويلات المرتبطة
+    const expandedSet = new Set(ids);
+    ids.forEach(id => {
+      const t = transactions.find(x => x.id === id);
+      if (t?.linkedTransferId) {
+        transactions
+          .filter(x => x.linkedTransferId === t.linkedTransferId)
+          .forEach(x => expandedSet.add(x.id));
+      }
+    });
+    const finalIds = Array.from(expandedSet);
+    const idsSet = new Set(finalIds);
+    
+    const tombstones = finalIds.map(id => {
       const t = transactions.find(x => x.id === id);
       if (!t) return null;
       deletedIdsRef.current.add(id);
-      return { ...t, deletedAt: new Date().toISOString(), deletedBy: isFamilyTx(t) ? (t.createdBy || 'family') : 'self', originalStatus: t.status || 'pending', reason: 'bulk_delete' };
+      return { 
+        ...t, 
+        deletedAt: new Date().toISOString(), 
+        deletedBy: isFamilyTx(t) ? (t.createdBy || 'family') : 'self', 
+        originalStatus: t.status || 'pending', 
+        reason: 'bulk_delete' 
+      };
     }).filter(Boolean);
+    
     const newArchive = [...(data.deletedTxArchive || []), ...tombstones].slice(-500);
     const newTx = transactions.filter(t => !idsSet.has(t.id));
-    const persistedDeleted = Array.from(new Set([...(data.deletedTxIds || []), ...ids])).slice(-500);
+    const persistedDeleted = Array.from(new Set([...(data.deletedTxIds || []), ...finalIds])).slice(-500);
     const newMaterialized = { ...(data.materializedRecurring || {}) };
-    tombstones.forEach(t => { if (t.sourceRecurringId && t.year && t.month) newMaterialized[`${t.sourceRecurringId}_${makeMonthKey(t.year, t.month)}`] = 'deleted'; });
+    tombstones.forEach(t => { 
+      if (t.sourceRecurringId && t.year && t.month) 
+        newMaterialized[`${t.sourceRecurringId}_${makeMonthKey(t.year, t.month)}`] = 'deleted'; 
+    });
+    
     const newData = { ...data, transactions: newTx, deletedTxArchive: newArchive, deletedTxIds: persistedDeleted, materializedRecurring: newMaterialized };
     dispatch({ type: 'SET_DATA', payload: newData });
     forceCloudSave(newData);
-    addNotification({ type: 'success', title: `تم حذف ${ids.length} معاملة — متاحة للاسترجاع` });
+    addNotification({ 
+      type: 'success', 
+      title: `تم حذف ${finalIds.length} قيد${finalIds.length > ids.length ? ` (شمل ${finalIds.length - ids.length} قيد تحويل مرتبط)` : ''}` 
+    });
   }, [transactions, data, saveHistory, addNotification, forceCloudSave]);
+  
 
   // ✅ handleQuickTransfer — إزالة فرع fees الوهمي
-  const handleQuickTransfer = useCallback((e) => {
+
+    const handleQuickTransfer = useCallback((e) => {
     e.preventDefault();
     if (isProcessing || saveLockRef.current) return;
     saveLockRef.current = true;
+    
+    const transferMode = quickTransferData.transferMode || 'monthly';
+    
+    // ═══════════════ فرع التحويل الداخلي (جديد) ═══════════════
+    if (transferMode === 'internal') {
+      const amount = parseNumberInput(quickTransferData.amount);
+      const fees = parseNumberInput(quickTransferData.internalFees || 0);
+      const from = quickTransferData.internalFrom || 'cib_savings';
+      const to = quickTransferData.internalTo || 'fawry';
+      const dateStr = quickTransferData.date || getLocalISODate();
+      const d = parseISODate(dateStr);
+      
+      if (!d) { saveLockRef.current = false; addNotification({ type: 'error', title: 'تاريخ غير صحيح' }); return; }
+      const txYear = d.getFullYear(), txMonth = ALL_MONTHS[d.getMonth()];
+      if (isMonthClosed(data, txYear, txMonth)) { saveLockRef.current = false; addNotification({ type: 'error', title: 'محظور', message: `شهر ${txMonth} مغلق` }); return; }
+      if (from === to) { saveLockRef.current = false; addNotification({ type: 'error', title: 'اختر حسابين مختلفين' }); return; }
+      if (amount <= 0) { saveLockRef.current = false; addNotification({ type: 'error', title: 'اكتب المبلغ (من 1 جنيه)' }); return; }
+      if (fees < 0) { saveLockRef.current = false; addNotification({ type: 'error', title: 'الرسوم لا تكون سالبة' }); return; }
+      
+      dispatch({ type: 'SET_IS_PROCESSING', payload: true });
+      processingTimeoutRef.current = setTimeout(() => {
+        try {
+          saveHistory();
+          const transferId = getSafeId();
+          const date = getLocalISODate(d);
+          const fromLabel = PAYMENT_METHODS.find(p => p.id === from)?.label || from;
+          const toLabel = PAYMENT_METHODS.find(p => p.id === to)?.label || to;
+          const description = (quickTransferData.internalDescription || '').trim() || `تحويل من ${fromLabel} إلى ${toLabel}`;
+          
+          const txs = [
+            // القيد 1: مصروف من الحساب المصدر
+            {
+              id: getSafeId(),
+              type: 'expense', kind: KIND.FINANCIAL,
+              category: 'تحويلات',
+              amount,
+              description: `${description} (خروج)`,
+              method: from,
+              date, month: txMonth, year: txYear, monthIndex: d.getMonth(),
+              subType: 'withdrawal', status: 'paid',
+              linkedTransferId: transferId,
+              transferDirection: 'out',
+              receipts: []
+            },
+            // القيد 2: دخل على الحساب الوجهة
+            {
+              id: getSafeId(),
+              type: 'income', kind: KIND.FINANCIAL,
+              category: 'تحويلات واردة',
+              amount,
+              description: `${description} (دخول)`,
+              method: to,
+              date, month: txMonth, year: txYear, monthIndex: d.getMonth(),
+              subType: 'deposit', status: 'paid',
+              linkedTransferId: transferId,
+              transferDirection: 'in',
+              receipts: []
+            }
+          ];
+          
+          // القيد 3: رسوم (اختياري)
+          if (fees > 0) {
+            txs.push({
+              id: getSafeId(),
+              type: 'expense', kind: KIND.FINANCIAL,
+              category: 'رسوم تحويلات',
+              amount: fees,
+              description: `رسوم تحويل — ${description}`,
+              method: from,
+              date, month: txMonth, year: txYear, monthIndex: d.getMonth(),
+              subType: 'withdrawal', status: 'paid',
+              linkedTransferId: transferId,
+              transferDirection: 'fee',
+              receipts: []
+            });
+          }
+          
+          const allTxs = [...txs, ...transactions].sort((a, b) => (parseISODate(b.date) || 0) - (parseISODate(a.date) || 0));
+          dispatch({ type: 'UPDATE_TRANSACTIONS', payload: allTxs });
+          dispatch({ type: 'SET_QUICK_TRANSFER_MODAL_OPEN', payload: false });
+          dispatch({ type: 'SET_QUICK_TRANSFER_DATA', payload: { 
+            transferMode: 'monthly',
+            from: 'cash', to: 'fawry', amount: '', transferType: 'monthly', date: getLocalISODate(), beneficiaryId: null, forceCash: false,
+            internalFrom: 'cib_savings', internalTo: 'fawry', internalFees: '', internalDescription: ''
+          } });
+          
+          addNotification({ 
+            type: 'success', 
+            title: 'تم التحويل بنجاح', 
+            message: `${fmt(amount)} ج.م من ${fromLabel} إلى ${toLabel}${fees > 0 ? ` + رسوم ${fmt(fees)} ج.م` : ''}`, 
+            duration: 6000 
+          });
+        } catch (err) {
+          console.error('Internal transfer error:', err);
+          addNotification({ type: 'error', title: 'فشل التحويل', message: err.message });
+        }
+        saveLockRef.current = false;
+        dispatch({ type: 'SET_IS_PROCESSING', payload: false });
+        processingTimeoutRef.current = null;
+      }, 600);
+      return;
+    }
+    
+    // ═══════════════ فرع المصروف الشهري (الأصلي) ═══════════════
     const transferType = quickTransferData.transferType || 'monthly';
     const amount = parseNumberInput(quickTransferData.amount);
     const dateStr = quickTransferData.date || getLocalISODate();
@@ -5424,13 +5595,18 @@ quickTransferData: {
       }
       dispatch({ type: 'UPDATE_TRANSACTIONS', payload: [...txs, ...transactions].sort((a, b) => (parseISODate(b.date) || 0) - (parseISODate(a.date) || 0)) });
       dispatch({ type: 'SET_QUICK_TRANSFER_MODAL_OPEN', payload: false });
-      dispatch({ type: 'SET_QUICK_TRANSFER_DATA', payload: { from: 'cash', to: 'fawry', amount: '', transferType: 'monthly', date: getLocalISODate(), beneficiaryId: null, forceCash: false } });
+      dispatch({ type: 'SET_QUICK_TRANSFER_DATA', payload: { 
+        transferMode: 'monthly',
+        from: 'cash', to: 'fawry', amount: '', transferType: 'monthly', date: getLocalISODate(), beneficiaryId: null, forceCash: false,
+        internalFrom: 'cib_savings', internalTo: 'fawry', internalFees: '', internalDescription: ''
+      } });
       addNotification({ type: 'success', title: 'تم التسجيل' });
       saveLockRef.current = false;
       dispatch({ type: 'SET_IS_PROCESSING', payload: false });
       processingTimeoutRef.current = null;
     }, 600);
   }, [quickTransferData, data, transactions, saveHistory, addNotification, isProcessing]);
+  
 
   const handleUpdateLoan = useCallback((e) => {
     e.preventDefault();
@@ -5796,29 +5972,84 @@ quickTransferData: {
           </div>
         )}
 
-        {isQuickTransferModalOpen && (
-          <div className="modal-backdrop no-print">
-            <div className="w-full max-w-md rounded-2xl shadow-2xl animate-slideInBottom" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)' }}>
-              <div className="p-4 flex justify-between items-center" style={{ borderBottom: '1px solid var(--border-subtle)' }}><h3 className="text-sm font-black flex items-center gap-2"><ArrowRight size={16} className="text-blue-500" /> تحويل / مصروف شهري</h3><button type="button" onClick={() => dispatch({ type: 'SET_QUICK_TRANSFER_MODAL_OPEN', payload: false })} className="btn btn-ghost p-1.5"><X size={16} /></button></div>
-              <form onSubmit={handleQuickTransfer} className="p-4 space-y-3">
-                <div>
-                  <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>المستفيد *</label>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    {BENEFICIARIES.map(ben => (
-                      <button key={ben.id} type="button" onClick={() => dispatch({ type: 'SET_QUICK_TRANSFER_DATA', payload: { beneficiaryId: ben.id, amount: String(ben.defaultAmount) } })} className={`p-2.5 rounded-lg text-[11px] font-bold transition-all border-2 ${quickTransferData.beneficiaryId === ben.id ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400' : 'border-[color:var(--border-default)]'}`}>
-                        <div className="flex flex-col items-center gap-0.5"><span>{ben.label}</span><span className="text-[9px] opacity-70">{fmt(ben.defaultAmount)} ج.م</span></div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div><label className="text-[11px] font-bold block mb-1" style={{ color: 'var(--text-muted)' }}>من حساب (سيُخصم منه فعلاً)</label><select className="input-field text-sm py-2.5" value={quickTransferData.from} onChange={e => dispatch({ type: 'SET_QUICK_TRANSFER_DATA', payload: { from: e.target.value } })}>{PAYMENT_METHODS.filter(m => m.group === 'account').map(m => <option key={m.id} value={m.id}>{m.label}</option>)}</select></div>
-                <div><label className="text-[11px] font-bold block mb-1" style={{ color: 'var(--text-muted)' }}>المبلغ</label><input type="text" inputMode="decimal" className="input-field text-base font-black text-blue-600 text-center py-2.5" value={quickTransferData.amount} onChange={e => dispatch({ type: 'SET_QUICK_TRANSFER_DATA', payload: { amount: e.target.value } })} placeholder="0.00" /></div>
-                <div><label className="text-[11px] font-bold block mb-1" style={{ color: 'var(--text-muted)' }}>التاريخ</label><input type="date" className="input-field text-sm font-bold py-2.5" value={quickTransferData.date || getLocalISODate()} onChange={e => dispatch({ type: 'SET_QUICK_TRANSFER_DATA', payload: { date: e.target.value } })} /></div>
-                <button type="submit" className="btn btn-primary w-full py-2.5 text-sm" disabled={isProcessing}>{isProcessing ? 'جاري التنفيذ...' : 'تسجيل المصروف الشهري'}</button>
-              </form>
+{isQuickTransferModalOpen && (
+  <div className="modal-backdrop no-print">
+    <div className="w-full max-w-md rounded-2xl shadow-2xl animate-slideInBottom" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)' }}>
+      <div className="p-4 flex justify-between items-center" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+        <h3 className="text-sm font-black flex items-center gap-2"><ArrowRight size={16} className="text-blue-500" /> التحويلات</h3>
+        <button type="button" onClick={() => { dispatch({ type: 'SET_QUICK_TRANSFER_MODAL_OPEN', payload: false }); dispatch({ type: 'SET_QUICK_TRANSFER_DATA', payload: { transferMode: 'monthly' } }); }} className="btn btn-ghost p-1.5"><X size={16} /></button>
+      </div>
+      
+      <div className="p-2" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+        <div className="sub-tab-switcher">
+          <button type="button" onClick={() => dispatch({ type: 'SET_QUICK_TRANSFER_DATA', payload: { transferMode: 'monthly' } })} className={`sub-tab-btn ${quickTransferData.transferMode !== 'internal' ? 'active' : ''}`}>👨‍👩‍👧 مصروف شهري</button>
+          <button type="button" onClick={() => dispatch({ type: 'SET_QUICK_TRANSFER_DATA', payload: { transferMode: 'internal' } })} className={`sub-tab-btn ${quickTransferData.transferMode === 'internal' ? 'active' : ''}`}>🔁 بين حساباتي</button>
+        </div>
+      </div>
+      
+      <form onSubmit={handleQuickTransfer} className="p-4 space-y-3">
+        {quickTransferData.transferMode === 'internal' ? (
+          <React.Fragment>
+            <div className="p-2.5 rounded-lg" style={{ background: 'var(--brand-soft)', border: '1px solid var(--brand)' }}>
+              <p className="text-[10px] font-bold text-blue-700 dark:text-blue-300">💡 يسجّل عمليتين تلقائياً: خروج من المصدر + دخول للوجهة (الصافي = 0)</p>
             </div>
-          </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-[11px] font-bold block mb-1" style={{ color: 'var(--text-muted)' }}>من حساب</label>
+                <select className="input-field text-sm py-2.5" value={quickTransferData.internalFrom || 'cib_savings'} onChange={e => dispatch({ type: 'SET_QUICK_TRANSFER_DATA', payload: { internalFrom: e.target.value } })}>
+                  {PAYMENT_METHODS.filter(m => m.group === 'account').map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-[11px] font-bold block mb-1" style={{ color: 'var(--text-muted)' }}>إلى حساب</label>
+                <select className="input-field text-sm py-2.5" value={quickTransferData.internalTo || 'fawry'} onChange={e => dispatch({ type: 'SET_QUICK_TRANSFER_DATA', payload: { internalTo: e.target.value } })}>
+                  {PAYMENT_METHODS.filter(m => m.group === 'account').map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+                </select>
+              </div>
+            </div>
+            <div>
+              <label className="text-[11px] font-bold block mb-1" style={{ color: 'var(--text-muted)' }}>المبلغ * (من 1 جنيه)</label>
+              <input type="text" inputMode="decimal" className="input-field text-base font-black text-blue-600 text-center py-2.5" value={quickTransferData.amount || ''} onChange={e => dispatch({ type: 'SET_QUICK_TRANSFER_DATA', payload: { amount: e.target.value } })} placeholder="0.00" />
+            </div>
+            <div>
+              <label className="text-[11px] font-bold block mb-1" style={{ color: 'var(--text-muted)' }}>رسوم التحويل (اختياري — لو فيه)</label>
+              <input type="text" inputMode="decimal" className="input-field text-sm py-2.5" value={quickTransferData.internalFees || ''} onChange={e => dispatch({ type: 'SET_QUICK_TRANSFER_DATA', payload: { internalFees: e.target.value } })} placeholder="0.00" />
+              <p className="text-[9px] mt-1" style={{ color: 'var(--text-muted)' }}>تُخصم من نفس الحساب المصدر كقيد منفصل</p>
+            </div>
+            <div>
+              <label className="text-[11px] font-bold block mb-1" style={{ color: 'var(--text-muted)' }}>التاريخ</label>
+              <input type="date" className="input-field text-sm font-bold py-2.5" value={quickTransferData.date || getLocalISODate()} onChange={e => dispatch({ type: 'SET_QUICK_TRANSFER_DATA', payload: { date: e.target.value } })} />
+            </div>
+            <div>
+              <label className="text-[11px] font-bold block mb-1" style={{ color: 'var(--text-muted)' }}>ملاحظة (اختياري)</label>
+              <input type="text" className="input-field text-sm py-2.5" value={quickTransferData.internalDescription || ''} onChange={e => dispatch({ type: 'SET_QUICK_TRANSFER_DATA', payload: { internalDescription: e.target.value } })} placeholder="مثلاً: تحويل لدفع فاتورة..." />
+            </div>
+            <button type="submit" className="btn btn-primary w-full py-2.5 text-sm" disabled={isProcessing}>
+              {isProcessing ? 'جاري التنفيذ...' : '🔁 تسجيل التحويل'}
+            </button>
+          </React.Fragment>
+        ) : (
+          <React.Fragment>
+            <div>
+              <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>المستفيد *</label>
+              <div className="grid grid-cols-2 gap-1.5">
+                {BENEFICIARIES.map(ben => (
+                  <button key={ben.id} type="button" onClick={() => dispatch({ type: 'SET_QUICK_TRANSFER_DATA', payload: { beneficiaryId: ben.id, amount: String(ben.defaultAmount) } })} className={`p-2.5 rounded-lg text-[11px] font-bold transition-all border-2 ${quickTransferData.beneficiaryId === ben.id ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400' : 'border-[color:var(--border-default)]'}`}>
+                    <div className="flex flex-col items-center gap-0.5"><span>{ben.label}</span><span className="text-[9px] opacity-70">{fmt(ben.defaultAmount)} ج.م</span></div>
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div><label className="text-[11px] font-bold block mb-1" style={{ color: 'var(--text-muted)' }}>من حساب (سيُخصم منه فعلاً)</label><select className="input-field text-sm py-2.5" value={quickTransferData.from} onChange={e => dispatch({ type: 'SET_QUICK_TRANSFER_DATA', payload: { from: e.target.value } })}>{PAYMENT_METHODS.filter(m => m.group === 'account').map(m => <option key={m.id} value={m.id}>{m.label}</option>)}</select></div>
+            <div><label className="text-[11px] font-bold block mb-1" style={{ color: 'var(--text-muted)' }}>المبلغ</label><input type="text" inputMode="decimal" className="input-field text-base font-black text-blue-600 text-center py-2.5" value={quickTransferData.amount} onChange={e => dispatch({ type: 'SET_QUICK_TRANSFER_DATA', payload: { amount: e.target.value } })} placeholder="0.00" /></div>
+            <div><label className="text-[11px] font-bold block mb-1" style={{ color: 'var(--text-muted)' }}>التاريخ</label><input type="date" className="input-field text-sm font-bold py-2.5" value={quickTransferData.date || getLocalISODate()} onChange={e => dispatch({ type: 'SET_QUICK_TRANSFER_DATA', payload: { date: e.target.value } })} /></div>
+            <button type="submit" className="btn btn-primary w-full py-2.5 text-sm" disabled={isProcessing}>{isProcessing ? 'جاري التنفيذ...' : 'تسجيل المصروف الشهري'}</button>
+          </React.Fragment>
         )}
+      </form>
+    </div>
+  </div>
+)}
 
         {isRecurringModalOpen && (
           <div className="modal-backdrop no-print">
