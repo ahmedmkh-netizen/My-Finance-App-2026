@@ -1245,6 +1245,20 @@ const DayGroupHeader = memo(({ label, total, count }) => (
 const ConfirmDialog = ({ confirmDialog, dispatch }) => {
   if (!confirmDialog.isOpen) return null;
   const isDanger = confirmDialog.danger;
+
+  // ✅ إغلاق الحوار أولاً، ثم تنفيذ الكولباك في ميكروتاسك منفصل
+  // يضمن اختفاء الحوار دائماً حتى لو الكولباك رمى خطأ
+  const handleCancel = () => {
+    const cb = confirmDialog.onCancel;
+    dispatch({ type: 'HIDE_CONFIRM' });
+    if (cb) setTimeout(() => { try { cb(); } catch (e) { console.error('ConfirmDialog onCancel error:', e); } }, 0);
+  };
+  const handleConfirm = () => {
+    const cb = confirmDialog.onConfirm;
+    dispatch({ type: 'HIDE_CONFIRM' });
+    if (cb) setTimeout(() => { try { cb(); } catch (e) { console.error('ConfirmDialog onConfirm error:', e); } }, 0);
+  };
+
   return (
     <div className="modal-backdrop z-[5000]">
       <div className="generic-modal max-w-sm">
@@ -1254,15 +1268,14 @@ const ConfirmDialog = ({ confirmDialog, dispatch }) => {
           <p className="text-sm font-medium mb-2 leading-relaxed whitespace-pre-line" style={{ color: 'var(--text-secondary)' }}>{confirmDialog.message}</p>
         </div>
         <div className="generic-modal-footer">
-          <button autoFocus onClick={() => { confirmDialog.onCancel?.(); dispatch({ type: 'HIDE_CONFIRM' }); }} className="btn btn-secondary flex-1 text-sm">إلغاء</button>
-          <button onClick={() => { confirmDialog.onConfirm?.(); dispatch({ type: 'HIDE_CONFIRM' }); }} className="btn flex-1 text-sm" style={{ background: isDanger ? 'var(--danger)' : 'var(--brand)', color: 'white' }}>تأكيد</button>
+          <button type="button" autoFocus onClick={handleCancel} className="btn btn-secondary flex-1 text-sm">إلغاء</button>
+          <button type="button" onClick={handleConfirm} className="btn flex-1 text-sm" style={{ background: isDanger ? 'var(--danger)' : 'var(--brand)', color: 'white' }}>تأكيد</button>
         </div>
       </div>
     </div>
   );
 };
-
-const MonthSelector = memo(({ selectedYear, selectedMonth, onSelectYear, onSelectMonth, className = "" }) => {
+  const MonthSelector = memo(({ selectedYear, selectedMonth, onSelectYear, onSelectMonth, className = "" }) => {
   const months = getMonthsForYear(selectedYear);
   return (
     <div className={`card py-3 ${className}`}>
