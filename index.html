@@ -3589,39 +3589,68 @@ const WalletsAndCardsView = memo(({ cards, buildLedger, expandedLedgers, expande
     </div>
   );
 });
-const DuplicateDetectionSystem = ({ transactions, data, dispatch, addNotification, saveHistory, onBulkDelete })
-    const [threshold, setThreshold] = useState(2);
+
+  const DuplicateDetectionSystem = ({ transactions, data, dispatch, addNotification, saveHistory, onBulkDelete }) => {
+  const [threshold, setThreshold] = useState(2);
   const [selectedMonth, setSelectedMonth] = useState('all');
   const [expandedGroups, setExpandedGroups] = useState({});
+
   const duplicates = useMemo(() => {
     const map = {};
-    const filtered = selectedMonth === 'all' ? transactions : transactions.filter(t => { const parsed = parseMonthKey(selectedMonth); if (!parsed) return t.month === selectedMonth; return t.month === parsed.month && (t.year || 2026) === parsed.year; });
-    filtered.forEach(t => { const key = `${safeNumber(t.amount)}_${t.method}_${t.category}_${(t.date||'').slice(0,10)}`; if (!map[key]) map[key] = []; map[key].push(t); });
-    return Object.entries(map).filter(([_, items]) => items.length >= threshold).map(([key, items]) => ({ key, amount: items[0].amount, count: items.length, items, category: items[0].category, risk: items.length >= 5 ? 'high' : items.length >= 3 ? 'medium' : 'low' }));
+    const filtered = selectedMonth === 'all' ? transactions : transactions.filter(t => {
+      const parsed = parseMonthKey(selectedMonth);
+      if (!parsed) return t.month === selectedMonth;
+      return t.month === parsed.month && (t.year || 2026) === parsed.year;
+    });
+    filtered.forEach(t => {
+      const key = `${safeNumber(t.amount)}_${t.method}_${t.category}_${(t.date||'').slice(0,10)}`;
+      if (!map[key]) map[key] = [];
+      map[key].push(t);
+    });
+    return Object.entries(map).filter(([_, items]) => items.length >= threshold).map(([key, items]) => ({
+      key, amount: items[0].amount, count: items.length, items, category: items[0].category,
+      risk: items.length >= 5 ? 'high' : items.length >= 3 ? 'medium' : 'low'
+    }));
   }, [transactions, threshold, selectedMonth]);
- 
+
   const doDelete = (ids) => {
-  if (!onBulkDelete) {
-    addNotification({ type: 'error', title: 'خطأ: handler الحذف مفقود' });
-    return;
-  }
-  if (!Array.isArray(ids) || ids.length === 0) return;
-  dispatch({
-    type: 'SHOW_CONFIRM',
-    danger: true,
-    title: 'تأكيد الحذف',
-    message: `سيتم نقل ${ids.length} عملية للأرشيف مع إمكانية الاسترجاع من صفحة المحذوفات.`,
-    onConfirm: () => onBulkDelete(ids),
-    onCancel: () => dispatch({ type: 'HIDE_CONFIRM' })
-  });
-};
+    if (!onBulkDelete) {
+      addNotification({ type: 'error', title: 'خطأ: handler الحذف مفقود' });
+      return;
+    }
+    if (!Array.isArray(ids) || ids.length === 0) return;
+    dispatch({
+      type: 'SHOW_CONFIRM',
+      danger: true,
+      title: 'تأكيد الحذف',
+      message: `سيتم نقل ${ids.length} عملية للأرشيف مع إمكانية الاسترجاع من صفحة المحذوفات.`,
+      onConfirm: () => onBulkDelete(ids),
+      onCancel: () => dispatch({ type: 'HIDE_CONFIRM' })
+    });
+  };
+
   const handleDeleteAll = () => {
     let idsToDelete = [];
-    duplicates.forEach(d => { d.items.slice(1).forEach(item => { if (!isMonthClosed(data, item.year || 2026, item.month)) idsToDelete.push(item.id); }); });
-    if (idsToDelete.length === 0) { addNotification({ type: 'info', title: 'لا يوجد' }); return; }
+    duplicates.forEach(d => {
+      d.items.slice(1).forEach(item => {
+        if (!isMonthClosed(data, item.year || 2026, item.month)) idsToDelete.push(item.id);
+      });
+    });
+    if (idsToDelete.length === 0) {
+      addNotification({ type: 'info', title: 'لا يوجد' });
+      return;
+    }
     doDelete(idsToDelete);
   };
-  const deleteSingle = (item) => { if (isMonthClosed(data, item.year || 2026, item.month)) { addNotification({ type: 'error', title: 'محظور', message: 'الشهر مغلق' }); return; } doDelete([item.id]); };
+
+  const deleteSingle = (item) => {
+    if (isMonthClosed(data, item.year || 2026, item.month)) {
+      addNotification({ type: 'error', title: 'محظور', message: 'الشهر مغلق' });
+      return;
+    }
+    doDelete([item.id]);
+  };
+
   return (
     <div className="space-y-4 animate-fadeIn pb-20">
       <div className="card">
