@@ -841,15 +841,15 @@ const getInitialData = () => {
 // ═══════════════════════════════════════════════════════════════
 // materializeRecurringItems — ID حتمي + علم 'deleted'
 // ═══════════════════════════════════════════════════════════════
-const materializeRecurringItems = (data, asOfDateStr, deletedIds = null) => {
-  if (!data?.recurringItems?.length) return null;
+const materializeRecurringItems = (data, asOfDateStr) => {
+    if (!data?.recurringItems?.length) return null;
   const now = asOfDateStr ? new Date(asOfDateStr) : new Date();
   const nowYear = now.getFullYear();
   const nowMonth = ALL_MONTHS[now.getMonth()];
   const nowMonthKey = makeMonthKey(nowYear, nowMonth);
   const nowInputMonth = `${nowYear}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  const permanentDeleted = new Set([...(data.deletedTxIds || []), ...(deletedIds ? Array.from(deletedIds) : [])]);
-  const existing = (data.transactions || []).filter(t => !(permanentDeleted.has(t.id)));
+const permanentDeleted = new Set(data.deletedTxIds || []);
+    const existing = (data.transactions || []).filter(t => !(permanentDeleted.has(t.id)));
   const materialized = { ...(data.materializedRecurring || {}) };
   const newTxs = [];
   const loanPaidMap = {};
@@ -2478,10 +2478,12 @@ const CustodyView = memo(({ data, dispatch, saveHistory, addNotification }) => {
       newTxs.push({ ...baseTx, id: getSafeId(), type: 'income', kind: KIND.FINANCIAL, category: 'تحويلات واردة', amount, description: `تحويل عهدة لحسابي: ${newEntry.description}`, method: newEntry.method, subType: 'deposit', linkedCustodyId: entry.id });
     else if (newEntry.type === CUSTODY_TYPE.SPEND_CASH)
       newTxs.push({ ...baseTx, id: getSafeId(), type: 'expense', kind: KIND.OPERATIONAL, category: newEntry.relatedCategory || 'مصروفات عهدة', amount, description: `صرف عهدة كاش: ${newEntry.description}`, method: newEntry.method, subType: 'withdrawal', linkedCustodyId: entry.id });
-    else if (newEntry.type === CUSTODY_TYPE.SPEND_CARD)
+        else if (newEntry.type === CUSTODY_TYPE.SPEND_CARD)
       newTxs.push({ ...baseTx, id: getSafeId(), type: 'expense', kind: KIND.OPERATIONAL, category: newEntry.relatedCategory || 'فواتير عهدة', amount, description: `صرف عهدة من بطاقة: ${newEntry.description}`, method: newEntry.method, subType: 'withdrawal', linkedCustodyId: entry.id });
+    else if (newEntry.type === CUSTODY_TYPE.SETTLE)
+      newTxs.push({ ...baseTx, id: getSafeId(), type: 'expense', kind: KIND.FINANCIAL, category: 'تحويلات', amount, description: `تسوية نهائية للعهدة: ${newEntry.description}`, method: newEntry.method, subType: 'withdrawal', linkedCustodyId: entry.id });
     const newData = { ...data, custodyEntries: newEntries, transactions: [...newTxs, ...(data.transactions || [])].sort((a, b) => (parseISODate(b.date) || 0) - (parseISODate(a.date) || 0)) };
-    dispatch({ type: 'SET_DATA', payload: newData });
+        dispatch({ type: 'SET_DATA', payload: newData });
     setShowAdd(false);
     setNewEntry({ type: CUSTODY_TYPE.RECEIVE, amount: '', date: getLocalISODate(), description: '', method: 'cib_savings', relatedCategory: 'عهدة شركة إيماك' });
     addNotification({ type: 'success', title: 'تم التسجيل', message: `${CUSTODY_TYPE_LABELS[newEntry.type]} — ${fmt(amount)} ج.م` });
@@ -3587,8 +3589,8 @@ const WalletsAndCardsView = memo(({ cards, buildLedger, expandedLedgers, expande
     </div>
   );
 });
-const DuplicateDetectionSystem = ({ transactions, data, dispatch, addNotification, saveHistory }) => {
-  const [threshold, setThreshold] = useState(2);
+const DuplicateDetectionSystem = ({ transactions, data, dispatch, addNotification, saveHistory, onBulkDelete })
+    const [threshold, setThreshold] = useState(2);
   const [selectedMonth, setSelectedMonth] = useState('all');
   const [expandedGroups, setExpandedGroups] = useState({});
   const duplicates = useMemo(() => {
@@ -3597,9 +3599,22 @@ const DuplicateDetectionSystem = ({ transactions, data, dispatch, addNotificatio
     filtered.forEach(t => { const key = `${safeNumber(t.amount)}_${t.method}_${t.category}_${(t.date||'').slice(0,10)}`; if (!map[key]) map[key] = []; map[key].push(t); });
     return Object.entries(map).filter(([_, items]) => items.length >= threshold).map(([key, items]) => ({ key, amount: items[0].amount, count: items.length, items, category: items[0].category, risk: items.length >= 5 ? 'high' : items.length >= 3 ? 'medium' : 'low' }));
   }, [transactions, threshold, selectedMonth]);
+ 
   const doDelete = (ids) => {
-    dispatch({ type: 'SHOW_CONFIRM', danger: true, title: 'تأكيد الحذف', message: `سيتم نقل ${ids.length} عملية للأرشيف.`, onConfirm: () => { saveHistory(); dispatch({ type: 'UPDATE_TRANSACTIONS', payload: transactions.filter(t => !ids.includes(t.id)) }); addNotification({ type: 'success', title: 'تم التنظيف' }); }, onCancel: () => dispatch({ type: 'HIDE_CONFIRM' }) });
-  };
+  if (!onBulkDelete) {
+    addNotification({ type: 'error', title: 'خطأ: handler الحذف مفقود' });
+    return;
+  }
+  if (!Array.isArray(ids) || ids.length === 0) return;
+  dispatch({
+    type: 'SHOW_CONFIRM',
+    danger: true,
+    title: 'تأكيد الحذف',
+    message: `سيتم نقل ${ids.length} عملية للأرشيف مع إمكانية الاسترجاع من صفحة المحذوفات.`,
+    onConfirm: () => onBulkDelete(ids),
+    onCancel: () => dispatch({ type: 'HIDE_CONFIRM' })
+  });
+};
   const handleDeleteAll = () => {
     let idsToDelete = [];
     duplicates.forEach(d => { d.items.slice(1).forEach(item => { if (!isMonthClosed(data, item.year || 2026, item.month)) idsToDelete.push(item.id); }); });
@@ -5019,8 +5034,8 @@ quickTransferData: {
   const lastRemoteRef = useRef(null);
   const lastMaterializeRef = useRef('');
   const isSavingRef = useRef(false);
-  const deletedIdsRef = useRef(new Set());
-
+// ✅ deletedIdsRef اتشال — كان بيسبب مشكلة في الاسترجاع
+  
   const { data, activeTab, selectedYear, selectedMonth, transViewMode, catViewType, isFormOpen, formMode, formData, isDarkMode, expandedGroup, budgets, editingCard, editingLoan, searchTerm, editingBudgetCategory, budgetAmount, isRecurringModalOpen, recurringFormData, notifications, history, expandedLedgers, expandedCardsSection, statusFilter, confirmDialog, isQuickTransferModalOpen, quickTransferData, viewingCardStatement, viewingReceipt, isPinChangeOpen, isSmsModalOpen, pendingCloseModal, walletVisibility, isProcessing, formErrors, activeCategoryDetail } = state;
   const { transactions = [], loans = [], cards = [], recurringItems = [], accountsData = DEFAULT_ACCOUNTS, monthlyPlans = {} } = data || {};
 
@@ -5105,10 +5120,10 @@ quickTransferData: {
     const sig = `${today}_${data.recurringItems.length}_${activeCount}_${loansSig}`;
     if (lastMaterializeRef.current === sig) return;
     lastMaterializeRef.current = sig;
-    let updated = materializeRecurringItems(data, today, deletedIdsRef.current);
-    if (updated) {
-      const permanentDeleted = new Set([...(data.deletedTxIds || []), ...Array.from(deletedIdsRef.current)]);
-      const filteredTx = updated.transactions.filter(t => !permanentDeleted.has(t.id));
+let updated = materializeRecurringItems(data, today);
+        if (updated) {
+const permanentDeleted = new Set(data.deletedTxIds || []);
+                const filteredTx = updated.transactions.filter(t => !permanentDeleted.has(t.id));
       if (filteredTx.length !== updated.transactions.length) {
         updated = { ...updated, transactions: filteredTx };
       }
@@ -5373,7 +5388,6 @@ quickTransferData: {
         linkedIds.forEach(lid => {
           const t = transactions.find(x => x.id === lid);
           if (!t) return;
-          deletedIdsRef.current.add(lid);
           tombstones.push({
             ...t,
             deletedAt: new Date().toISOString(),
@@ -5422,7 +5436,6 @@ quickTransferData: {
     const tombstones = finalIds.map(id => {
       const t = transactions.find(x => x.id === id);
       if (!t) return null;
-      deletedIdsRef.current.add(id);
       return { 
         ...t, 
         deletedAt: new Date().toISOString(), 
@@ -5736,8 +5749,8 @@ quickTransferData: {
       case 'forecast': return <LiquidityForecastView transactions={transactions} updatedLoans={updatedLoans} recurringItems={recurringItems} liveBalances={liveBalances} selectedYear={selectedYear} selectedMonth={selectedMonth} monthlyPlans={monthlyPlans} />;
       case 'comparison': return <MonthComparisonView transactions={transactions} selectedYear={selectedYear} selectedMonth={selectedMonth} />;
       case 'calendar': return <CalendarView data={data} getAgendaItems={getAgendaItems} transactions={transactions} dispatch={dispatch} saveHistory={saveHistory} addNotification={addNotification} />;
-      case 'duplicates': return <DuplicateDetectionSystem transactions={transactions} data={data} dispatch={dispatch} addNotification={addNotification} saveHistory={saveHistory} />;
-      case 'deleted': return <DeletedArchiveView data={data} dispatch={dispatch} saveHistory={saveHistory} addNotification={addNotification} transactions={transactions} />;
+case 'duplicates': return <DuplicateDetectionSystem transactions={transactions} data={data} dispatch={dispatch} addNotification={addNotification} saveHistory={saveHistory} onBulkDelete={handleBulkDeleteInApp} />;
+            case 'deleted': return <DeletedArchiveView data={data} dispatch={dispatch} saveHistory={saveHistory} addNotification={addNotification} transactions={transactions} />;
       case 'settings': return <SettingsView data={data} accountsData={accountsData} cards={cards} budgets={budgets} dispatch={dispatch} saveHistory={saveHistory} addNotification={addNotification} />;
       default: return null;
     }
