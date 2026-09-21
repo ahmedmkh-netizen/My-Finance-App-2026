@@ -190,6 +190,22 @@ const PROJECT_START_YEAR = 2026;
 const PROJECT_START_MONTH = 'أغسطس';
 const PROJECT_START_MONTH_KEY = `${PROJECT_START_YEAR}-${PROJECT_START_MONTH}`;
 
+// ✅ تاريخ آخر دفعة قروض (3 أبريل 2027)
+const LOANS_FINAL_SETTLEMENT_YEAR = 2027;
+const LOANS_FINAL_SETTLEMENT_MONTH = 'أبريل';
+const LOANS_FINAL_SETTLEMENT_YM = LOANS_FINAL_SETTLEMENT_YEAR * 12 + getMonthIndex(LOANS_FINAL_SETTLEMENT_MONTH);
+
+// ✅ هل القرض نشط في هذا الشهر؟
+const isLoanActiveInMonth = (loan, year, month) => {
+  if (!loan) return false;
+  if (safeNumber(loan.monthlyInstallment) <= 0) return false;
+  if (loan.remaining !== undefined && loan.remaining <= 0) return false;
+  const targetYM = year * 12 + getMonthIndex(month);
+  return targetYM <= LOANS_FINAL_SETTLEMENT_YM;
+};
+
+// ✅ مُفعَّل: قائمة الأصناف السريعة لمحل هاني — تُستخدم في نموذج المعاملة
+
 // ✅ مُفعَّل: قائمة الأصناف السريعة لمحل هاني — تُستخدم في نموذج المعاملة
 const HANY_QUICK_ITEMS = ['سجاير','مارلبورو','ميريت','LM','كليوباترا','كليوباترا بوكس','نكست','وينستون','PINE','بال مال','إل إم أزرق','إل إم أحمر','ميريت أصفر','ميريت أزرق','بيبسي','كوكاكولا','سفن أب','ميرندا','عصير','جوافة','مانجو','برتقال','مياه','شاي','نسكافيه','قهوة','ميلو','ريد بُل','حليب معلب','شيبسي','شيتوس','دوريتوس','ليز','تايج','بسكويت','كراكرز','مولتو','كادبوري','جالاكسي','اندومي','نودلز','بونبون','لبن','زبادي','رايب','جبنة بيضاء','جبنة رومي','جبنة شيدر','بيض','زبدة','قشطة','لبنة','جبنة كيري','عيش','سكر','زيت','أرز','مكرونة','دقيق','ملح','عدس','فول','صلصة','خل','حمص','سكر ناعم','مربي','صابون','شامبو','معجون','فرشاة','مناديل','كلور','ديتول','مسحوق غسيل','سائل أطباق','معطر','شوكولاتة','لبان','مصاصة','كيك','جيلي','ويفر','بسكويت محشي','رصيد مرحل من الشهر السابق'];
 
@@ -847,8 +863,11 @@ const materializeRecurringItems = (data, asOfDateStr, deletedIds = null) => {
     if (r.endMonth && nowInputMonth > r.endMonth) return;
     const day = safeNumber(r.day, 1);
     if (day < 1 || day > 31) return;
-    const targetDate = new Date(nowYear, now.getMonth(), day);
-    if (targetDate > now) return;
+    // ✅ clamp لآخر يوم في الشهر (يحل مشكلة 31 فبراير)
+    const maxDayInMonth = new Date(nowYear, now.getMonth() + 1, 0).getDate();
+    const safeDay = Math.min(day, maxDayInMonth);
+    const targetDate = new Date(nowYear, now.getMonth(), safeDay);
+    if (targetDate > now) return;    
     const matKey = `${r.id}_${nowMonthKey}`;
     if (materialized[matKey] === 'deleted') return; // ✅ محذوف سابقاً
     if (materialized[matKey]) return;
@@ -872,8 +891,10 @@ const materializeRecurringItems = (data, asOfDateStr, deletedIds = null) => {
       id: newId,
       type: r.type, subType: r.type === 'income' ? 'deposit' : 'withdrawal', kind,
       category: r.category, amount: safeNumber(r.amount), description: r.title || 'بند متكرر',
-      method, date: getLocalISODate(targetDate), month: nowMonth, year: nowYear, monthIndex: now.getMonth(),
+
+            method, date: getLocalISODate(targetDate), month: ALL_MONTHS[targetDate.getMonth()], year: targetDate.getFullYear(), monthIndex: targetDate.getMonth(),
       status: 'pending', sourceRecurringId: r.id, linkedCardId: linkedCardId || undefined,
+      
       sourceReceivableId: receivableLinkedId || undefined,
       transferChannel: r.transferChannel || undefined,
       receipts: [], createdAt: new Date().toISOString()
@@ -1604,6 +1625,19 @@ const ReceiptViewer = memo(({ viewingReceipt, dispatch, transactions, saveHistor
   const receipts = tx?.receipts || [];
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef(null);
+
+  // ✅ إعادة تعيين الفهرس عند تغيير المعاملة
+  useEffect(() => {
+    setIndex(viewingReceipt.index || 0);
+  }, [tx?.id]);
+
+  // ✅ حماية: لو الفهرس أكبر من طول المصفوفة
+  useEffect(() => {
+    if (receipts.length > 0 && index >= receipts.length) {
+      setIndex(receipts.length - 1);
+    }
+  }, [receipts.length, index]);
+  
 
   const close = () => dispatch({ type: 'SET_VIEWING_RECEIPT', payload: null });
 
@@ -3136,9 +3170,13 @@ const LoansView = memo(({ updatedLoans, cards, recurringItems, transactions, dis
       }
       saveHistory();
       const loanMonthIdx = getMonthIndex(loan.month);
-      const payDay = Math.min(safeNumber(loan.dueDay, 1) || 1, 28);
-      const paymentDate = `${loan.year}-${String(loanMonthIdx + 1).padStart(2, '0')}-${String(payDay).padStart(2, '0')}`;
+      // ✅ يوم السداد الفعلي (اليوم الحالي)، مقيّد بآخر يوم في شهر القرض
+      const nowDate = new Date();
+      const maxDayInLoanMonth = new Date(loan.year, loanMonthIdx + 1, 0).getDate();
+      const actualPayDay = Math.min(nowDate.getDate(), maxDayInLoanMonth);
+      const paymentDate = `${loan.year}-${String(loanMonthIdx + 1).padStart(2, '0')}-${String(actualPayDay).padStart(2, '0')}`;
       const newTxs = [];
+      
       newTxs.push({
         id: 'hany-pay-' + getSafeId(),
         type: 'expense', kind: 'financial',
@@ -3154,7 +3192,11 @@ const LoansView = memo(({ updatedLoans, cards, recurringItems, transactions, dis
         createdAt: new Date().toISOString()
       });
       if (willCarry) {
-        const nextMonthDate = `${nextY}-${String(nextMIdx + 1).padStart(2, '0')}-01`;
+        // ✅ يوم السداد الفعلي للقيد المرحّل أيضًا
+        const nextMonthMaxDay = new Date(nextY, nextMIdx + 1, 0).getDate();
+        const nextActualDay = Math.min(nowDate.getDate(), nextMonthMaxDay);
+        const nextMonthDate = `${nextY}-${String(nextMIdx + 1).padStart(2, '0')}-${String(nextActualDay).padStart(2, '0')}`;
+      
         newTxs.push({
           id: 'hany-carry-' + getSafeId(),
           type: 'expense', kind: 'operational',
@@ -4255,14 +4297,9 @@ const LiquidityForecastView = memo(({ transactions, updatedLoans, recurringItems
     return { y, m, liveTotal, paidIncome, paidExpense, pendingIncome, pendingExpense, pendingCount: pending.length, expectedEnd: liveTotal + pendingIncome - pendingExpense, completedPct };
   }, [transactions, liveBalances, selectedYear, selectedMonth]);
 
-  const projection = useMemo(() => {
+    const projection = useMemo(() => {
     const result = [];
     let balance = currentSnapshot.expectedEnd;
-    const activeLoans = updatedLoans.filter(l => !l.isReceivable && !l.autoGenerated && safeNumber(l.monthlyInstallment) > 0 && l.remaining > 0);
-    const loansTotal = activeLoans.reduce((s, l) => s + safeNumber(l.monthlyInstallment), 0);
-    const recurringExpenses = recurringItems.filter(r => r.type === 'expense' && r.active !== false);
-    const recurringTotal = recurringExpenses.reduce((s, r) => s + safeNumber(r.amount), 0);
-    const committedTotal = loansTotal + recurringTotal;
     let y = selectedYear, mi = getMonthIndex(selectedMonth);
     for (let i = 1; i <= 3; i++) {
       mi++; if (mi > 11) { mi = 0; y++; }
@@ -4276,6 +4313,18 @@ const LiquidityForecastView = memo(({ transactions, updatedLoans, recurringItems
       const monthTx = transactions.filter(t => t.month === month && (t.year || y) === y);
       const pendingManualIncome = monthTx.filter(t => t.type === 'income' && t.status !== 'paid' && !t.autoGenerated && !t.sourceReceivableId).reduce((s, t) => s + safeNumber(t.amount), 0);
       const pendingManualExpense = monthTx.filter(t => t.type === 'expense' && t.status !== 'paid' && !t.sourceRecurringId).reduce((s, t) => s + safeNumber(t.amount), 0);
+      // ✅ احسب التزامات الشهر ده فقط (قروض + متكررة)
+      const activeLoansForMonth = updatedLoans.filter(l => !l.isReceivable && !l.autoGenerated && isLoanActiveInMonth(l, y, month));
+      const loansTotal = activeLoansForMonth.reduce((s, l) => s + safeNumber(l.monthlyInstallment), 0);
+      const targetInputMonth = `${y}-${String(getMonthIndex(month) + 1).padStart(2, '0')}`;
+      const recurringExpensesForMonth = recurringItems.filter(r => {
+        if (r.type !== 'expense' || r.active === false) return false;
+        if (r.startMonth && targetInputMonth < r.startMonth) return false;
+        if (r.endMonth && targetInputMonth > r.endMonth) return false;
+        return true;
+      });
+      const recurringTotal = recurringExpensesForMonth.reduce((s, r) => s + safeNumber(r.amount), 0);
+      const committedTotal = loansTotal + recurringTotal;
       const income = (hasPlan ? planIncome : historical.avgIncome) + pendingManualIncome;
       const expenses = hasPlan ? (planCashExpenses + planPayments + pendingManualExpense) : (historical.grandTotal + committedTotal + pendingManualExpense);
       const closing = balance + income - expenses;
@@ -4284,7 +4333,7 @@ const LiquidityForecastView = memo(({ transactions, updatedLoans, recurringItems
     }
     return result;
   }, [selectedYear, selectedMonth, currentSnapshot, monthlyPlans, transactions, updatedLoans, recurringItems, historical]);
-
+  
   const confidence = useMemo(() => {
     const planCount = projection.filter(p => p.hasPlan).length;
     const historyCount = historical.monthsWithData;
@@ -5171,8 +5220,12 @@ function App() {
           const d = parseInt(l.dueDay) || 1;
           let tm = cm, ty = cy;
           if (d < cd) { tm++; if (tm > 11) { tm = 0; ty++; } }
-          items.push({ id: `ag-loan-${l.id}`, title: `قسط ${l.name}`, date: getLocalISODate(new Date(ty, tm, d)), amount: safeNumber(l.monthlyInstallment), type: 'danger', icon: Banknote, desc: l.description });
+          // ✅ لا تُظهر القسط بعد آخر دفعة (أبريل 2027)
+          if (isLoanActiveInMonth(l, ty, ALL_MONTHS[tm])) {
+            items.push({ id: `ag-loan-${l.id}`, title: `قسط ${l.name}`, date: getLocalISODate(new Date(ty, tm, d)), amount: safeNumber(l.monthlyInstallment), type: 'danger', icon: Banknote, desc: l.description });
+          }
         }
+      
         if (l.isReceivable && !l.paused && l.remaining > 0 && safeNumber(l.monthlyInstallment) > 0) {
           const d = parseInt(l.dueDay) || 1;
           let tm = cm, ty = cy;
