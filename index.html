@@ -1190,7 +1190,14 @@ const SmsBadge = memo(({ tx }) => {
 const TeldaBadge = memo(({ tx }) => { if (!EXTERNAL_TRANSFER_METHOD_IDS.includes(tx?.method) && !tx?.transferChannel) return null; return <span className="badge badge-brand">💳 Telda</span>; });
 const RecurringBadge = memo(({ tx }) => { if (!tx?.sourceRecurringId) return null; return <span className="badge badge-warning" title="مولّد تلقائياً من بند متكرر">🔁 تلقائي</span>; });
 const CarryoverBadge = memo(({ tx }) => { if (tx?.source !== 'carryover') return null; return <span className="badge badge-warning" title={tx.carryoverFrom ? `مرحّل من ${tx.carryoverFrom}` : ''}>📅 مرحّل</span>; });
-
+const TransferBadge = memo(({ tx }) => {
+  if (!tx?.linkedTransferId) return null;
+  const dir = tx.transferDirection;
+  if (dir === 'out') return <span className="badge badge-brand" title="تحويل خارج من هذا الحساب">🔁↗ خروج</span>;
+  if (dir === 'in') return <span className="badge badge-success" title="تحويل وارد لهذا الحساب">🔁↘ دخول</span>;
+  if (dir === 'fee') return <span className="badge badge-warning" title="رسوم تحويل">💸 رسوم</span>;
+  return <span className="badge badge-brand">🔁 تحويل</span>;
+});
 const FAMILY_MEMBERS = {
   ans: { name: 'أنس', bg: 'bg-blue-50 dark:bg-blue-950/40', text: 'text-blue-700 dark:text-blue-300', border: 'border-blue-200 dark:border-blue-900' },
   abdelrahman: { name: 'عبد الرحمن', bg: 'bg-emerald-50 dark:bg-emerald-950/40', text: 'text-emerald-700 dark:text-emerald-300', border: 'border-emerald-200 dark:border-emerald-900' },
@@ -4987,7 +4994,11 @@ function App() {
     expandedCardsSection: false, statusFilter: 'all',
     confirmDialog: { isOpen: false, title: '', message: '', onConfirm: null, onCancel: null, danger: false },
     isQuickTransferModalOpen: false,
-    quickTransferData: { from: 'cash', to: 'fawry', amount: '', transferType: 'monthly', date: getLocalISODate(), beneficiaryId: null, forceCash: false },
+quickTransferData: { 
+  transferMode: 'monthly',
+  from: 'cash', to: 'fawry', amount: '', transferType: 'monthly', date: getLocalISODate(), beneficiaryId: null, forceCash: false,
+  internalFrom: 'cib_savings', internalTo: 'fawry', internalFees: '', internalDescription: ''
+},
     viewingCardStatement: null,
     viewingReceipt: null,
     isPinChangeOpen: false,
