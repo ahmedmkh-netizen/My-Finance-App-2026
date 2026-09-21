@@ -323,7 +323,7 @@ const DEFAULT_MONTHLY_PLANS = {
 
 const ACCOUNT_ICONS = { cib_savings: BuildingBank, aaib_savings: PiggyBank, cash: Wallet, fawry: StoreIcon, etisalat: Signal };
 const ACCOUNT_SHORT_NAMES = { cib_savings: 'CIB Savings', aaib_savings: 'AAIB Savings', cash: 'Cash', fawry: 'Fawry', etisalat: 'Etisalat' };
-    /* ═══════════════════════════════════════════════════════════════
+      /* ═══════════════════════════════════════════════════════════════
    PART 2 — Utilities + Date Parsing + Validation + Modals + SMS
    ═══════════════════════════════════════════════════════════════ */
 
@@ -758,6 +758,11 @@ const migrateData = (parsed) => {
     return m ? { ...r, method: m } : { ...r, method: 'cash' };
   });
 
+  // ✅ علم دائم لتسويات محل هاني
+  const settledHanyMonths = Array.isArray(parsed.settledHanyMonths) ? parsed.settledHanyMonths : [];
+  // ✅ سجل دائم للمعاملات المحذوفة (لمنع materialize من إعادتها)
+  const deletedTxIds = Array.isArray(parsed.deletedTxIds) ? parsed.deletedTxIds.slice(-500) : [];
+
   const { openingBalance2026: _drop, ...rest } = parsed;
   return {
     ...rest, engineVersion: CURRENT_ENGINE_VERSION, recurringInitialized: true,
@@ -768,7 +773,9 @@ const migrateData = (parsed) => {
     materializedRecurring: parsed.materializedRecurring && typeof parsed.materializedRecurring === 'object' ? parsed.materializedRecurring : {},
     notifiedItems: parsed.notifiedItems && typeof parsed.notifiedItems === 'object' ? parsed.notifiedItems : {},
     custodyEntries: Array.isArray(parsed.custodyEntries) ? parsed.custodyEntries : DEFAULT_CUSTODY_ENTRIES,
-    cashbackTrackers: Array.isArray(parsed.cashbackTrackers) ? parsed.cashbackTrackers : DEFAULT_CASHBACK_TRACKERS
+    cashbackTrackers: Array.isArray(parsed.cashbackTrackers) ? parsed.cashbackTrackers : DEFAULT_CASHBACK_TRACKERS,
+    settledHanyMonths,
+    deletedTxIds
   };
 };
 
@@ -780,7 +787,7 @@ const getInitialData = () => {
       if (migrated) { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated)); } catch(e){} return migrated; }
     }
   } catch (e) { console.warn('getInitialData failed:', e); }
-  return { engineVersion: CURRENT_ENGINE_VERSION, recurringInitialized: true, transactions: [], loans: DEFAULT_LOANS, cards: DEFAULT_CARDS, accountsData: DEFAULT_ACCOUNTS, monthlyPlans: DEFAULT_MONTHLY_PLANS, recurringItems: DEFAULT_RECURRING, closedMonths: [], monthlySnapshots: {}, materializedRecurring: {}, notifiedItems: {}, custodyEntries: DEFAULT_CUSTODY_ENTRIES, cashbackTrackers: DEFAULT_CASHBACK_TRACKERS };
+  return { engineVersion: CURRENT_ENGINE_VERSION, recurringInitialized: true, transactions: [], loans: DEFAULT_LOANS, cards: DEFAULT_CARDS, accountsData: DEFAULT_ACCOUNTS, monthlyPlans: DEFAULT_MONTHLY_PLANS, recurringItems: DEFAULT_RECURRING, closedMonths: [], monthlySnapshots: {}, materializedRecurring: {}, notifiedItems: {}, custodyEntries: DEFAULT_CUSTODY_ENTRIES, cashbackTrackers: DEFAULT_CASHBACK_TRACKERS, settledHanyMonths: [], deletedTxIds: [] };
 };
 
 const materializeRecurringItems = (data, asOfDateStr, deletedIds = null) => {
@@ -790,7 +797,9 @@ const materializeRecurringItems = (data, asOfDateStr, deletedIds = null) => {
   const nowMonth = ALL_MONTHS[now.getMonth()];
   const nowMonthKey = makeMonthKey(nowYear, nowMonth);
   const nowInputMonth = `${nowYear}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  const existing = (data.transactions || []).filter(t => !(deletedIds && deletedIds.has(t.id)));
+  // ✅ ادمج deletedIdsRef مع deletedTxIds الدائم
+  const permanentDeleted = new Set([...(data.deletedTxIds || []), ...(deletedIds ? Array.from(deletedIds) : [])]);
+  const existing = (data.transactions || []).filter(t => !(permanentDeleted.has(t.id)));
   const materialized = { ...(data.materializedRecurring || {}) };
   const newTxs = [];
   const loanPaidMap = {};
@@ -820,7 +829,7 @@ const materializeRecurringItems = (data, asOfDateStr, deletedIds = null) => {
     const isFee = BANK_FEE_CATEGORIES.has(r.category);
     const kind = r.kind || (isFee ? KIND.FINANCIAL : KIND.OPERATIONAL);
     const newId = `rec-${r.id}-${nowMonthKey}-${getSafeId()}`;
-    if (deletedIds && deletedIds.has(newId)) return;
+    if (permanentDeleted.has(newId)) return;
     newTxs.push({
       id: newId,
       type: r.type, subType: r.type === 'income' ? 'deposit' : 'withdrawal', kind,
@@ -878,7 +887,7 @@ const useOnlineStatus = () => {
   return online;
 };
 
-// Google Drive helpers — تبقى كما هي
+// Google Drive helpers
 const DRIVE_CLIENT_ID = '190006477168-odmpreq26b618rdn1dsg4k1aag3k056g.apps.googleusercontent.com';
 const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive';
 const DRIVE_FOLDER_NAME = 'Finance Backups';
@@ -972,7 +981,7 @@ const downloadBackupFromDrive = async (fileId) => {
   if (!res.ok) throw new Error('فشل التنزيل');
   return await res.json();
 };
-    /* ═══════════════════════════════════════════════════════════════
+      /* ═══════════════════════════════════════════════════════════════
    PART 3 — Shared UI (ErrorBoundary, Modals, Badges, Ticker, Sidebar, Header)
    ═══════════════════════════════════════════════════════════════ */
 
@@ -1550,7 +1559,6 @@ const SmsParserModal = memo(({ isOpen, onClose, dispatch, addNotification, saveH
   );
 });
 
-// ── BankLogo ──
 const BankLogo = memo(({ type, size = 40, className = "" }) => {
   const [err, setErr] = useState(false);
   const get = () => { switch(type) { case 'cib_card': case 'cib_savings': case 'cib_swype': return "https://upload.wikimedia.org/wikipedia/commons/e/e0/Commercial_International_Bank_%28CIB%29_Logo.svg"; case 'aaib_card': case 'aaib_savings': return "https://upload.wikimedia.org/wikipedia/commons/2/22/Arab_African_International_Bank_logo.svg"; case 'fawry': return "https://upload.wikimedia.org/wikipedia/commons/5/59/Fawry_logo.svg"; case 'etisalat': return "https://upload.wikimedia.org/wikipedia/commons/e/e4/Etisalat_logo.svg"; default: return null; } };
@@ -1562,7 +1570,6 @@ const BankLogo = memo(({ type, size = 40, className = "" }) => {
   );
 });
 
-// ── EnhancedSidebar ──
 const EnhancedSidebar = memo(({ activeTab, dispatch, canUndo, onUndo }) => {
   const groups = [
     { title: 'الرئيسية', items: [{ id: 'dashboard', label: 'لوحة التحكم', icon: LayoutDashboard }, { id: 'transactions', label: 'المعاملات', icon: ArrowUpRight }] },
@@ -1594,7 +1601,7 @@ const EnhancedSidebar = memo(({ activeTab, dispatch, canUndo, onUndo }) => {
     </aside>
   );
 });
-    /* ═══════════════════════════════════════════════════════════════
+      /* ═══════════════════════════════════════════════════════════════
    PART 4 — Dashboard + Categories + CategoryDetail + Transactions
    ═══════════════════════════════════════════════════════════════ */
 
@@ -2032,7 +2039,6 @@ const CategoriesView = memo(({ transactions, selectedMonth, selectedYear, catVie
   );
 });
 
-// ✅ TransactionsView — النسخة المُصلحة (تستخدم onBulkDelete من App)
 const TransactionsView = memo(({ groupedTransactions, transactions, selectedMonth, selectedYear, transViewMode, statusFilter, searchTerm, expandedGroup, data, monthInsights, dispatch, handleDelete, addNotification, onSelectYear, onSelectMonth, saveHistory, onPrintMonthlyReport, onBulkDelete }) => {
   const [sourceFilter, setSourceFilter] = useState('all');
   const [showFilters, setShowFilters] = useState(false);
@@ -2100,7 +2106,6 @@ const TransactionsView = memo(({ groupedTransactions, transactions, selectedMont
       title: `حذف ${allowed.length} معاملة`,
       message,
       onConfirm: () => {
-        // ✅ استخدم الدالة من App — تحفظ فوراً وتحدّث deletedIdsRef
         if (onBulkDelete) onBulkDelete(allowed.map(t => t.id));
         exitSelectMode();
       },
@@ -2293,7 +2298,7 @@ const TransactionsView = memo(({ groupedTransactions, transactions, selectedMont
     </div>
   );
 });
-    /* ═══════════════════════════════════════════════════════════════
+      /* ═══════════════════════════════════════════════════════════════
    PART 5 — Loans + Custody + Cashback + Hany + Cards + Duplicates
    ═══════════════════════════════════════════════════════════════ */
 
@@ -2305,6 +2310,7 @@ const CustodyView = memo(({ data, dispatch, saveHistory, addNotification }) => {
   const summary = useMemo(() => computeCustodyBalance(custodyEntries), [custodyEntries]);
   const filtered = useMemo(() => { const sorted = [...custodyEntries].sort((a, b) => (parseISODate(b.date) || 0) - (parseISODate(a.date) || 0)); if (filterType === 'all') return sorted; return sorted.filter(e => e.type === filterType); }, [custodyEntries, filterType]);
 
+  // ✅ إصلاح: فحص الشهر المغلق قبل إنشاء أي قيد
   const addEntry = () => {
     const check = validateAmount(newEntry.amount, { min: 0.01, max: 10000000, label: 'المبلغ' });
     if (!check.valid) { addNotification({ type: 'error', title: 'خطأ', message: check.error }); return; }
@@ -2312,18 +2318,32 @@ const CustodyView = memo(({ data, dispatch, saveHistory, addNotification }) => {
     if (!descCheck.valid) { addNotification({ type: 'error', title: 'خطأ', message: descCheck.error }); return; }
     const dateCheck = validateDate(newEntry.date);
     if (!dateCheck.valid) { addNotification({ type: 'error', title: 'خطأ', message: dateCheck.error }); return; }
+
+    const d = dateCheck.value;
+    const txYear = d.getFullYear(), txMonth = ALL_MONTHS[d.getMonth()];
+
+    // ✅ فحص الشهر المغلق
+    if (isMonthClosed(data, txYear, txMonth)) {
+      addNotification({ type: 'error', title: 'شهر مغلق', message: `شهر ${txMonth} ${txYear} مغلق — لا يمكن تسجيل حركة عهدة فيه`, duration: 6000 });
+      return;
+    }
+
     saveHistory();
     const amount = check.value;
     const entry = { ...newEntry, description: descCheck.value, id: getSafeId(), amount, status: newEntry.type === CUSTODY_TYPE.SETTLE ? 'settled' : 'open' };
     const newEntries = [entry, ...custodyEntries];
     const newTxs = [];
-    const d = dateCheck.value;
-    const txYear = d.getFullYear(), txMonth = ALL_MONTHS[d.getMonth()];
     const baseTx = { date: newEntry.date, month: txMonth, year: txYear, monthIndex: d.getMonth(), status: 'paid' };
-    if (newEntry.type === CUSTODY_TYPE.RECEIVE) newTxs.push({ ...baseTx, id: getSafeId(), type: 'income', kind: KIND.OPERATIONAL, category: newEntry.relatedCategory || 'عهدة شركة إيماك', amount, description: `استلام عهدة: ${newEntry.description}`, method: newEntry.method, subType: 'deposit', linkedCustodyId: entry.id });
-    else if (newEntry.type === CUSTODY_TYPE.TRANSFER) newTxs.push({ ...baseTx, id: getSafeId(), type: 'income', kind: KIND.FINANCIAL, category: 'تحويلات واردة', amount, description: `تحويل عهدة لحسابي: ${newEntry.description}`, method: newEntry.method, subType: 'deposit', linkedCustodyId: entry.id });
-    else if (newEntry.type === CUSTODY_TYPE.SPEND_CASH) newTxs.push({ ...baseTx, id: getSafeId(), type: 'expense', kind: KIND.OPERATIONAL, category: newEntry.relatedCategory || 'مصروفات عهدة', amount, description: `صرف عهدة كاش: ${newEntry.description}`, method: newEntry.method, subType: 'withdrawal', linkedCustodyId: entry.id });
-    else if (newEntry.type === CUSTODY_TYPE.SPEND_CARD) newTxs.push({ ...baseTx, id: getSafeId(), type: 'expense', kind: KIND.OPERATIONAL, category: newEntry.relatedCategory || 'فواتير عهدة', amount, description: `صرف عهدة من بطاقة: ${newEntry.description}`, method: newEntry.method, subType: 'withdrawal', linkedCustodyId: entry.id });
+
+    if (newEntry.type === CUSTODY_TYPE.RECEIVE)
+      newTxs.push({ ...baseTx, id: getSafeId(), type: 'income', kind: KIND.OPERATIONAL, category: newEntry.relatedCategory || 'عهدة شركة إيماك', amount, description: `استلام عهدة: ${newEntry.description}`, method: newEntry.method, subType: 'deposit', linkedCustodyId: entry.id });
+    else if (newEntry.type === CUSTODY_TYPE.TRANSFER)
+      newTxs.push({ ...baseTx, id: getSafeId(), type: 'income', kind: KIND.FINANCIAL, category: 'تحويلات واردة', amount, description: `تحويل عهدة لحسابي: ${newEntry.description}`, method: newEntry.method, subType: 'deposit', linkedCustodyId: entry.id });
+    else if (newEntry.type === CUSTODY_TYPE.SPEND_CASH)
+      newTxs.push({ ...baseTx, id: getSafeId(), type: 'expense', kind: KIND.OPERATIONAL, category: newEntry.relatedCategory || 'مصروفات عهدة', amount, description: `صرف عهدة كاش: ${newEntry.description}`, method: newEntry.method, subType: 'withdrawal', linkedCustodyId: entry.id });
+    else if (newEntry.type === CUSTODY_TYPE.SPEND_CARD)
+      newTxs.push({ ...baseTx, id: getSafeId(), type: 'expense', kind: KIND.OPERATIONAL, category: newEntry.relatedCategory || 'فواتير عهدة', amount, description: `صرف عهدة من بطاقة: ${newEntry.description}`, method: newEntry.method, subType: 'withdrawal', linkedCustodyId: entry.id });
+
     const newData = { ...data, custodyEntries: newEntries, transactions: [...newTxs, ...(data.transactions || [])].sort((a, b) => (parseISODate(b.date) || 0) - (parseISODate(a.date) || 0)) };
     dispatch({ type: 'SET_DATA', payload: newData });
     setShowAdd(false);
@@ -2469,20 +2489,42 @@ const CashbackView = memo(({ data, dispatch, saveHistory, addNotification, cards
     addNotification({ type: 'success', title: 'تم الحفظ' });
   };
 
+  // ✅ إصلاح: فحص الشهر المغلق قبل أي عملية استلام كاش باك
   const markReceived = async (tracker) => {
+    const now = new Date();
+    const txYear = now.getFullYear(), txMonth = ALL_MONTHS[now.getMonth()];
+
+    // ✅ فحص الشهر المغلق
+    if (isMonthClosed(data, txYear, txMonth)) {
+      addNotification({ type: 'error', title: 'شهر مغلق', message: `شهر ${txMonth} ${txYear} مغلق — لا يمكن استلام الكاش باك الآن`, duration: 6000 });
+      return;
+    }
+
     const card = cards.find(c => c.id === tracker.cardId);
     const cardMethod = card ? getCardMethod(card) : null;
-    const choice = await showInputModal({ title: 'أين استلمت الكاش باك؟', icon: '🎁', message: `البطاقة: ${card?.bank} - ${card?.name}\n\n1 = على البطاقة (خصم من المديونية)\n2 = نقدي (إضافة للكاش)\n\nاكتب الرقم:`, inputValue: '1', numeric: true, confirmText: 'تأكيد' });
+    const choice = await showInputModal({
+      title: 'أين استلمت الكاش باك؟', icon: '🎁',
+      message: `البطاقة: ${card?.bank} - ${card?.name}\n\n1 = على البطاقة (خصم من المديونية)\n2 = نقدي (إضافة للكاش)\n\nاكتب الرقم:`,
+      inputValue: '1', numeric: true, confirmText: 'تأكيد'
+    });
     if (choice === null) return;
     const choiceNum = parseInt(choice, 10);
     if (choiceNum !== 1 && choiceNum !== 2) { addNotification({ type: 'error', title: 'اختر 1 أو 2' }); return; }
+
     const useCard = choiceNum === 1;
     const method = useCard && cardMethod ? cardMethod : 'cash';
     saveHistory();
     const updated = trackers.map(t => t.id === tracker.id ? { ...t, receivedAmount: t.expectedAmount, receivedDate: getLocalISODate(), status: CASHBACK_STATUS.RECEIVED } : t);
     dispatch({ type: 'UPDATE_CASHBACK_TRACKERS', payload: updated });
-    const d = new Date();
-    const newTx = { id: getSafeId(), type: 'income', kind: KIND.OPERATIONAL, category: 'استرداد كاش باك', amount: safeNumber(tracker.expectedAmount), description: `كاش باك - ${card?.name || ''} (${useCard ? 'على البطاقة' : 'نقدي'})`, method, date: getLocalISODate(d), month: ALL_MONTHS[d.getMonth()], year: d.getFullYear(), monthIndex: d.getMonth(), subType: 'deposit', status: 'paid', linkedCardId: useCard && card ? card.id : undefined };
+
+    const newTx = {
+      id: getSafeId(), type: 'income', kind: KIND.OPERATIONAL,
+      category: 'استرداد كاش باك', amount: safeNumber(tracker.expectedAmount),
+      description: `كاش باك - ${card?.name || ''} (${useCard ? 'على البطاقة' : 'نقدي'})`,
+      method, date: getLocalISODate(now), month: txMonth, year: txYear, monthIndex: now.getMonth(),
+      subType: 'deposit', status: 'paid',
+      linkedCardId: useCard && card ? card.id : undefined
+    };
     dispatch({ type: 'UPDATE_TRANSACTIONS', payload: [newTx, ...(data.transactions || [])].sort((a, b) => (parseISODate(b.date) || 0) - (parseISODate(a.date) || 0)) });
     addNotification({ type: 'success', title: 'تم استلام الكاش باك', message: `${fmt(tracker.expectedAmount)} ج.م — ${useCard ? 'على البطاقة' : 'نقدي'}` });
   };
@@ -2750,7 +2792,6 @@ const HanyShopLedger = memo(({ loan, prevMonthLoan, addNotification }) => {
   );
 });
 
-// ── CardStatementModal ──
 const CardStatementModal = memo(({ card, data, transactions, onClose, addNotification }) => {
   const [filterType, setFilterType] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
@@ -2960,6 +3001,8 @@ const LoansView = memo(({ updatedLoans, cards, recurringItems, transactions, dis
   const [showAdd, setShowAdd] = useState(false);
   const [activeTab, setActiveTab] = useState('loans');
   const [newLoan, setNewLoan] = useState({ name: '', totalAmount: '', monthlyInstallment: '', dueDay: 1, description: '', isReceivable: false });
+  // ✅ قفل ضد الضغط المزدوج على settleHany
+  const settlingRef = useRef(false);
 
   const openRecurringEdit = useCallback((item) => {
     dispatch({ type: 'SET_RECURRING_FORM_DATA', payload: { id: item.id, title: item.title, amount: String(item.amount), day: item.day, category: item.category, type: item.type, startMonth: item.startMonth || '', endMonth: item.endMonth || '', active: item.active !== false, kind: item.kind || null, linkedLoanSystemId: item.linkedLoanSystemId || null, linkedCardId: item.linkedCardId || null, method: item.method || 'cash', transferChannel: item.transferChannel || null } });
@@ -2978,44 +3021,111 @@ const LoansView = memo(({ updatedLoans, cards, recurringItems, transactions, dis
     return { month: ALL_MONTHS[idx - 1], year };
   }, []);
 
+  // ✅ settleHany مُصلح بالكامل — كل الإصلاحات المطلوبة
   const settleHany = async (loan) => {
-    const months = ALL_MONTHS;
-    const total = safeNumber(loan.totalAmount);
-    const paidAlready = safeNumber(loan.totalPaid);
-    const remaining = Math.max(0, total - paidAlready);
-    if (remaining <= 0.005) { addNotification({ type: 'info', title: 'مسدد بالكامل' }); return; }
-    const monthLabel = `${loan.month} ${loan.year}`;
-    const alreadyCarried = transactions.some(t => t.source === 'carryover' && t.carryoverFrom === monthLabel);
-    if (alreadyCarried) { addNotification({ type: 'info', title: 'تمت التسوية مسبقاً' }); return; }
-    const input = await showInputModal({ title: 'تسوية مسحوبات محل هاني', icon: '💰', message: `الإجمالي: ${fmt(total)}\nمدفوع: ${fmt(paidAlready)}\nالمتبقي: ${fmt(remaining)}\n\nالمبلغ المدفوع الآن:`, inputValue: String(remaining), numeric: true, confirmText: 'تسوية' });
-    if (input === null) return;
-    const paidNow = parseNumberInput(input);
-    if (paidNow <= 0) { addNotification({ type: 'error', title: 'مبلغ غير صحيح' }); return; }
-    if (paidNow > remaining + 0.005) { addNotification({ type: 'error', title: `الحد الأقصى ${fmt(remaining)}` }); return; }
-    const newRemaining = remaining - paidNow;
-    const willCarry = newRemaining > 0.005;
-    let nextMIdx = 0, nextY = loan.year, nextMonthName = '';
-    if (willCarry) {
-      const monthIdx = months.indexOf(loan.month);
-      nextMIdx = monthIdx + 1; nextY = loan.year;
-      if (nextMIdx > 11) { nextMIdx = 0; nextY++; }
-      nextMonthName = months[nextMIdx];
+    // ✅ قفل ضد الضغط المزدوج
+    if (settlingRef.current) { addNotification({ type: 'info', title: 'العملية جارية...' }); return; }
+    settlingRef.current = true;
+
+    try {
+      const total = safeNumber(loan.totalAmount);
+      const paidAlready = safeNumber(loan.totalPaid);
+      const remaining = Math.max(0, total - paidAlready);
+
+      if (remaining <= 0.005) { addNotification({ type: 'info', title: 'مسدد بالكامل' }); return; }
+
+      const monthLabel = `${loan.month} ${loan.year}`;
+      const monthKey = makeMonthKey(loan.year, loan.month);
+
+      // ✅ فحص الشهر المغلق لشهر القرض نفسه (لا يمكن الكتابة فيه)
+      if (isMonthClosed(data, loan.year, loan.month)) {
+        addNotification({ type: 'error', title: 'شهر المسحوبات مغلق', message: `شهر ${loan.month} ${loan.year} مغلق — لا يمكن تسويته`, duration: 7000 });
+        return;
+      }
+
+      // ✅ فحص دائم عبر settledHanyMonths بدل مسح المعاملات الهش
+      const alreadySettled = Array.isArray(data.settledHanyMonths) && data.settledHanyMonths.includes(monthKey);
+      if (alreadySettled) { addNotification({ type: 'info', title: 'تمت التسوية مسبقاً' }); return; }
+
+      const input = await showInputModal({
+        title: 'تسوية مسحوبات محل هاني', icon: '💰',
+        message: `الإجمالي: ${fmt(total)}\nمدفوع: ${fmt(paidAlready)}\nالمتبقي: ${fmt(remaining)}\n\nالمبلغ المدفوع الآن:`,
+        inputValue: String(remaining), numeric: true, confirmText: 'تسوية'
+      });
+      if (input === null) return;
+
+      const paidNow = parseNumberInput(input);
+      if (paidNow <= 0) { addNotification({ type: 'error', title: 'مبلغ غير صحيح' }); return; }
+      if (paidNow > remaining + 0.005) { addNotification({ type: 'error', title: `الحد الأقصى ${fmt(remaining)}` }); return; }
+
+      const newRemaining = remaining - paidNow;
+      const willCarry = newRemaining > 0.005;
+
+      let nextMIdx = 0, nextY = loan.year, nextMonthName = '';
+      if (willCarry) {
+        const monthIdx = getMonthIndex(loan.month);
+        nextMIdx = monthIdx + 1; nextY = loan.year;
+        if (nextMIdx > 11) { nextMIdx = 0; nextY++; }
+        nextMonthName = ALL_MONTHS[nextMIdx];
+        const nextMonthKey = makeMonthKey(nextY, nextMonthName);
+        if ((data.closedMonths || []).includes(nextMonthKey)) {
+          addNotification({ type: 'error', title: 'لا يمكن الترحيل', message: `شهر ${nextMonthName} ${nextY} مغلق.`, duration: 7000 });
+          return;
+        }
+      }
+
+      saveHistory();
+
+      // ✅ قيد السداد يُسجَّل في شهر/سنة القرض نفسه (لا تاريخ اليوم)
+      const loanMonthIdx = getMonthIndex(loan.month);
+      const paymentDate = `${loan.year}-${String(loanMonthIdx + 1).padStart(2, '0')}-01`;
+
+      const newTxs = [];
+      newTxs.push({
+        id: 'hany-pay-' + getSafeId(),
+        type: 'expense', kind: 'financial',
+        category: 'الالتزامات البنكية والتمويلية',
+        amount: paidNow,
+        description: `سداد مسحوبات هاني — ${loan.month} ${loan.year}`,
+        method: 'cash',
+        date: paymentDate,
+        month: loan.month, year: loan.year, monthIndex: loanMonthIdx,
+        subType: 'withdrawal', status: 'paid',
+        linkedLoanId: loan.id,
+        settledHanyMonth: monthKey
+      });
+
+      if (willCarry) {
+        const nextMonthDate = `${nextY}-${String(nextMIdx + 1).padStart(2, '0')}-01`;
+        newTxs.push({
+          id: 'hany-carry-' + getSafeId(),
+          type: 'expense', kind: 'operational',
+          category: 'مسحوبات محل هاني', subCategory: 'رصيد مرحل',
+          amount: newRemaining,
+          description: `رصيد مرحل من ${loan.month} ${loan.year}`,
+          method: 'cash',
+          date: nextMonthDate,
+          month: nextMonthName, year: nextY, monthIndex: nextMIdx,
+          subType: 'withdrawal', status: 'pending',
+          source: 'carryover', carriedFromSource: 'hany-auto', carryoverFrom: monthLabel
+        });
+      }
+
+      // ✅ سجّل التسوية في العلم الدائم
+      const newSettled = Array.isArray(data.settledHanyMonths) ? [...data.settledHanyMonths, monthKey] : [monthKey];
+
+      dispatch({
+        type: 'SET_DATA',
+        payload: {
+          ...data,
+          settledHanyMonths: newSettled,
+          transactions: [...newTxs, ...transactions].sort((a, b) => (parseISODate(b.date) || 0) - (parseISODate(a.date) || 0))
+        }
+      });
+      addNotification({ type: 'success', title: 'تمت التسوية', duration: 7000 });
+    } finally {
+      settlingRef.current = false;
     }
-    if (willCarry) {
-      const nextMonthKey = makeMonthKey(nextY, nextMonthName);
-      if ((data.closedMonths || []).includes(nextMonthKey)) { addNotification({ type: 'error', title: 'لا يمكن الترحيل', message: `شهر ${nextMonthName} ${nextY} مغلق.`, duration: 7000 }); return; }
-    }
-    saveHistory();
-    const now = new Date();
-    const today = getLocalISODate(now);
-    const newTxs = [];
-    newTxs.push({ id: 'hany-pay-' + Date.now(), type: 'expense', kind: 'financial', category: 'الالتزامات البنكية والتمويلية', amount: paidNow, description: 'سداد مسحوبات هاني', method: 'cash', date: today, month: months[now.getMonth()], year: now.getFullYear(), monthIndex: now.getMonth(), subType: 'withdrawal', status: 'paid', linkedLoanId: loan.id });
-    if (willCarry) {
-      const nextMonthDate = `${nextY}-${String(nextMIdx + 1).padStart(2, '0')}-01`;
-      newTxs.push({ id: 'hany-carry-' + Date.now(), type: 'expense', kind: 'operational', category: 'مسحوبات محل هاني', subCategory: 'رصيد مرحل', amount: newRemaining, description: `رصيد مرحل من ${loan.month} ${loan.year}`, method: 'cash', date: nextMonthDate, month: nextMonthName, year: nextY, monthIndex: nextMIdx, subType: 'withdrawal', status: 'pending', source: 'carryover', carriedFromSource: 'hany-auto', carryoverFrom: monthLabel });
-    }
-    dispatch({ type: 'UPDATE_TRANSACTIONS', payload: [...newTxs, ...transactions].sort((a, b) => (parseISODate(b.date) || 0) - (parseISODate(a.date) || 0)) });
-    addNotification({ type: 'success', title: 'تمت التسوية', duration: 7000 });
   };
 
   const totalLoans = useMemo(() => updatedLoans.filter(l => !l.isReceivable).reduce((s, l) => s + l.remaining, 0), [updatedLoans]);
@@ -3164,7 +3274,9 @@ const LoansView = memo(({ updatedLoans, cards, recurringItems, transactions, dis
             {payables.map(loan => {
               const isPaid = loan.remaining <= 0;
               const pct = loan.totalAmount > 0 ? (loan.totalPaid / loan.totalAmount) * 100 : 0;
-              const hasCarryover = loan.autoGenerated && transactions.some(t => t.source === 'carryover' && t.carryoverFrom === `${loan.month} ${loan.year}`);
+              // ✅ فحص التسوية عبر العلم الدائم بدل مسح المعاملات
+              const monthKeyForLoan = makeMonthKey(loan.year, loan.month);
+              const hasCarryover = loan.autoGenerated && Array.isArray(data.settledHanyMonths) && data.settledHanyMonths.includes(monthKeyForLoan);
               const prevM = loan.autoGenerated ? getPrevMonth(loan.month, loan.year) : null;
               const prevMonthLoan = prevM ? hanyByMonth[`${prevM.year}-${prevM.month}`] : null;
               return (
@@ -3485,7 +3597,7 @@ const MonthComparisonView = memo(({ transactions, selectedYear, selectedMonth })
     </div>
   );
 });
-    /* ═══════════════════════════════════════════════════════════════
+      /* ═══════════════════════════════════════════════════════════════
    PART 6 — Planning + Forecast + Calendar + Settings
             + dataReducer + App + Render Root
    ═══════════════════════════════════════════════════════════════ */
@@ -4205,7 +4317,7 @@ const SettingsView = memo(({ data, accountsData, cards, budgets, dispatch, saveH
       saveHistory();
       const zeroed = {};
       ACCOUNT_KEYS.forEach(k => { zeroed[k] = { ...(accountsData[k] || {}), balance: 0, lastUpdated: getLocalISODate() }; });
-      dispatch({ type: 'SET_DATA', payload: { ...data, transactions: [], closedMonths: [], monthlySnapshots: {}, accountsData: zeroed, cards: (data.cards || []).map(c => ({ ...c, openingDebt: 0, availableBalance: safeNumber(c.limit) })), materializedRecurring: {}, notifiedItems: {}, custodyEntries: [], cashbackTrackers: [] } });
+      dispatch({ type: 'SET_DATA', payload: { ...data, transactions: [], closedMonths: [], monthlySnapshots: {}, accountsData: zeroed, cards: (data.cards || []).map(c => ({ ...c, openingDebt: 0, availableBalance: safeNumber(c.limit) })), materializedRecurring: {}, notifiedItems: {}, custodyEntries: [], cashbackTrackers: [], settledHanyMonths: [], deletedTxIds: [] } });
       addNotification({ type: 'success', title: 'تم التصفير' });
       dispatch({ type: 'HIDE_CONFIRM' });
     }, onCancel: () => dispatch({ type: 'HIDE_CONFIRM' }) });
@@ -4432,6 +4544,10 @@ function dataReducer(state, action) {
         const nextMonthIdx = getMonthIndex(nextMonth);
         const maxDay = new Date(nextYear, nextMonthIdx + 1, 0).getDate();
         const ids = new Set(pendingIds);
+        // ✅ إصلاح: تجاهل المعلقات لو الشهر التالي مغلق
+        const nextMonthKey = makeMonthKey(nextYear, nextMonth);
+        const nextClosed = (state.data.closedMonths || []).includes(nextMonthKey);
+        if (nextClosed) return { ...state, pendingCloseModal: { isOpen: false, pending: [], total: 0, month: '', year: 0 } };
         newTxs = newTxs.map(t => {
           if (!ids.has(t.id)) return t;
           const oldD = parseISODate(t.date);
@@ -4463,9 +4579,8 @@ function dataReducer(state, action) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// App Component — مع كل التعديلات (forceCloudSave, deletedIdsRef, isSavingRef)
+// materializeShoppingRecurring — من تطبيق التسوق
 // ═══════════════════════════════════════════════════════════════
-/* ═══════════════ Materialize Shopping Recurring (من تطبيق التسوق) ═══════════════ */
 const materializeShoppingRecurring = async () => {
   try {
     const docRef = db.collection('finance_2026').doc('user_ahmed_data');
@@ -4474,24 +4589,16 @@ const materializeShoppingRecurring = async () => {
     const d = snap.data() || {};
     const rules = d.shoppingRecurring || [];
     if (!rules.length) return;
-    
+
     const today = new Date().toISOString().slice(0, 10);
     const MONTHS = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
-    
-    const addMonths = (isoStr, m) => {
-      const dt = new Date(isoStr + 'T12:00:00');
-      const day = dt.getDate();
-      dt.setMonth(dt.getMonth() + m);
-      if (dt.getDate() < day) dt.setDate(0);
-      return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
-    };
-    
+
     const due = rules.filter(r => r.active && r.nextDue && r.nextDue <= today);
     if (!due.length) return;
-    
+
     const newTxs = [];
     const updates = [];
-    
+
     due.forEach(r => {
       const t = r.template;
       const tObj = new Date(r.nextDue + 'T12:00:00');
@@ -4515,26 +4622,26 @@ const materializeShoppingRecurring = async () => {
         return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
       };
       const next = addMonthsWithDay(r.nextDue, r.frequency === 'bimonthly' ? 2 : 1, prefDay);
-            updates.push({ old: r, new: { ...r, nextDue: next, lastRun: today } });
+      updates.push({ old: r, new: { ...r, nextDue: next, lastRun: today } });
     });
-    
-    // اكتب المعاملات الجديدة
-    await docRef.set({ transactions: firebase.firestore.FieldValue.arrayUnion(...newTxs) }, { merge: true });
-    
-    // حدّث القواعد
+
+    if (newTxs.length > 0) {
+      await docRef.set({ transactions: firebase.firestore.FieldValue.arrayUnion(...newTxs) }, { merge: true });
+    }
     for (const u of updates) {
       await docRef.update({ shoppingRecurring: firebase.firestore.FieldValue.arrayRemove(u.old) });
       await docRef.set({ shoppingRecurring: firebase.firestore.FieldValue.arrayUnion(u.new) }, { merge: true });
     }
-    
     console.log('✅ Materialized', newTxs.length, 'recurring shopping items');
   } catch (e) {
     console.warn('Shopping recurring:', e);
   }
 };
 
-/* ═══════════════ Materialize في useEffect ═══════════════ */
-  function App() {
+// ═══════════════════════════════════════════════════════════════
+// App Component
+// ═══════════════════════════════════════════════════════════════
+function App() {
   const defMY = useMemo(() => getDefaultMonthYear(), []);
   const [state, dispatch] = useReducer(dataReducer, {
     data: getInitialData(),
@@ -4576,8 +4683,8 @@ const materializeShoppingRecurring = async () => {
   const saveLockRef = useRef(false);
   const lastRemoteRef = useRef(null);
   const lastMaterializeRef = useRef('');
-  const isSavingRef = useRef(false);           // ✅ جديد
-  const deletedIdsRef = useRef(new Set());     // ✅ جديد — لتتبع المحذوفات
+  const isSavingRef = useRef(false);
+  const deletedIdsRef = useRef(new Set());
 
   const { data, activeTab, selectedYear, selectedMonth, transViewMode, catViewType, isFormOpen, formMode, formData, isLocked, isDarkMode, expandedGroup, budgets, editingCard, editingLoan, searchTerm, editingBudgetCategory, budgetAmount, isRecurringModalOpen, recurringFormData, notifications, history, expandedLedgers, expandedCardsSection, statusFilter, confirmDialog, isQuickTransferModalOpen, quickTransferData, viewingCardStatement, viewingReceipt, isPinChangeOpen, isSmsModalOpen, pendingCloseModal, walletVisibility, isProcessing, formErrors, activeCategoryDetail } = state;
   const { transactions = [], loans = [], cards = [], recurringItems = [], accountsData = DEFAULT_ACCOUNTS, monthlyPlans = {} } = data || {};
@@ -4589,20 +4696,20 @@ const materializeShoppingRecurring = async () => {
   const removeNotification = useCallback((id) => dispatch({ type: 'REMOVE_NOTIFICATION', payload: id }), []);
   const saveHistory = useCallback(() => dispatch({ type: 'ADD_TO_HISTORY', payload: { data: JSON.parse(JSON.stringify(data)), budgets: JSON.parse(JSON.stringify(budgets)) } }), [data, budgets]);
 
-  // ✅ حفظ فوري بدون debounce — يُستخدم بعد الحذف
+  // ✅ forceCloudSave — مع مؤقّت أمان ضد offline
   const forceCloudSave = useCallback((newData) => {
     if (!isAuthenticated) return;
     isSavingRef.current = true;
     const payload = { ...newData, budgets };
+    const payloadStr = JSON.stringify(newData);
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(newData)); } catch (e) {}
+
+    const safetyTimer = setTimeout(() => { isSavingRef.current = false; }, 10000);
+
     db.collection("finance_2026").doc("user_ahmed_data").set(payload, { merge: true })
-      .then(() => {
-        // ✅ حدّث lastRemoteRef حتى لا يُستبدل الحذف بـ snapshot قديم
-        lastRemoteRef.current = JSON.stringify(newData);
-        console.log('✅ Force saved after delete');
-      })
+      .then(() => { lastRemoteRef.current = payloadStr; console.log('✅ Force saved after delete'); })
       .catch(err => console.error('Force save failed:', err))
-      .finally(() => { isSavingRef.current = false; });
+      .finally(() => { clearTimeout(safetyTimer); isSavingRef.current = false; });
   }, [isAuthenticated, budgets]);
 
   useEffect(() => {
@@ -4613,26 +4720,22 @@ const materializeShoppingRecurring = async () => {
     return () => unsub();
   }, []);
 
-  // ✅ onSnapshot مُصلح — يتجاهل أثناء الحفظ
-   // ✅ فحص المتكررات من تطبيق التسوق
   useEffect(() => {
     if (!isAuthenticated) return;
     materializeShoppingRecurring();
-    // افحص كل ساعة عشان تضمن التوليد التلقائي
     const interval = setInterval(materializeShoppingRecurring, 60 * 60 * 1000);
     return () => clearInterval(interval);
   }, [isAuthenticated]);
 
-    useEffect(() => {
+  // ✅ onSnapshot — يتجاهل أثناء أي حفظ (auto أو force)
+  useEffect(() => {
     if (!isAuthenticated) return;
     const docRef = db.collection("finance_2026").doc("user_ahmed_data");
     const unsub = docRef.onSnapshot((doc) => {
       if (doc.exists) {
-        // ✅ لو فيه عملية حفظ جارية — تجاهل الـ snapshot
         if (isSavingRef.current) { console.log('⏳ Ignoring snapshot — save in progress'); return; }
         const raw = doc.data();
         const migrated = migrateData(raw);
-        // ✅ لو snapshot نفس الحالة — تجاهل
         const incoming = JSON.stringify(migrated);
         if (lastRemoteRef.current === incoming) return;
         lastRemoteRef.current = incoming;
@@ -4643,20 +4746,31 @@ const materializeShoppingRecurring = async () => {
     return () => unsub();
   }, [isAuthenticated]);
 
+  // ✅ Auto-save المُصلح — isSavingRef + lastRemoteRef + safety timer
   useEffect(() => {
-    if (isAuthenticated && data && data.transactions) {
-      clearTimeout(saveTimeoutRef.current);
-      saveTimeoutRef.current = setTimeout(() => {
-        if (isSavingRef.current) return; // ✅ لا تحفظ أثناء force save
-        if (lastRemoteRef.current && JSON.stringify(data) === lastRemoteRef.current) return;
-        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch (e) { console.warn('LS save failed:', e); }
-        db.collection("finance_2026").doc("user_ahmed_data").set({ ...data, budgets }, { merge: true }).catch(err => console.error(err));
-      }, 5000);
-    }
+    if (!isAuthenticated || !data?.transactions) return;
+    clearTimeout(saveTimeoutRef.current);
+    saveTimeoutRef.current = setTimeout(() => {
+      if (isSavingRef.current) return;
+      const payloadStr = JSON.stringify(data);
+      if (lastRemoteRef.current && payloadStr === lastRemoteRef.current) return;
+
+      isSavingRef.current = true;
+      const payload = { ...data, budgets };
+      const safetyTimer = setTimeout(() => { isSavingRef.current = false; }, 8000);
+
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }
+      catch (e) { console.warn('LS save failed:', e); }
+
+      db.collection("finance_2026").doc("user_ahmed_data").set(payload, { merge: true })
+        .then(() => { lastRemoteRef.current = payloadStr; })
+        .catch(err => console.error('Auto-save failed:', err))
+        .finally(() => { clearTimeout(safetyTimer); isSavingRef.current = false; });
+    }, 5000);
     return () => clearTimeout(saveTimeoutRef.current);
   }, [data, isAuthenticated, budgets]);
 
-  // ✅ materialize useEffect مُصلح — يفلتر المحذوفات
+  // ✅ Materialize — يستخدم deletedTxIds الدائم + deletedIdsRef
   useEffect(() => {
     if (!isAuthenticated || !data?.recurringItems?.length) return;
     const today = getLocalISODate();
@@ -4667,8 +4781,8 @@ const materializeShoppingRecurring = async () => {
     lastMaterializeRef.current = sig;
     let updated = materializeRecurringItems(data, today, deletedIdsRef.current);
     if (updated) {
-      // ✅ فلترة transactions المحذوفة
-      const filteredTx = updated.transactions.filter(t => !deletedIdsRef.current.has(t.id));
+      const permanentDeleted = new Set([...(data.deletedTxIds || []), ...Array.from(deletedIdsRef.current)]);
+      const filteredTx = updated.transactions.filter(t => !permanentDeleted.has(t.id));
       if (filteredTx.length !== updated.transactions.length) {
         updated = { ...updated, transactions: filteredTx };
       }
@@ -4890,32 +5004,31 @@ const materializeShoppingRecurring = async () => {
     }, 300);
   }, [formData, formMode, transactions, data, saveHistory, addNotification, isProcessing, cards]);
 
-  // ✅ handleDelete مُصلح — يستخدم forceCloudSave + deletedIdsRef
+  // ✅ handleDelete — يضيف إلى deletedTxIds الدائم
   const handleDelete = useCallback((id) => {
     const target = transactions.find(t => t.id === id);
     if (target && isMonthClosed(data, target.year || 2026, target.month)) { addNotification({ type: 'error', title: 'محظور' }); return; }
     dispatch({ type: 'SHOW_CONFIRM', danger: true, title: 'تأكيد الحذف', message: 'هل أنت متأكد؟', onConfirm: () => {
       saveHistory();
-      // ✅ سجل الـ id في deletedIdsRef لمنع الـ materialize من إعادة إنشائه
       deletedIdsRef.current.add(id);
       const newTx = transactions.filter(t => t.id !== id);
-      const newData = { ...data, transactions: newTx };
-      // ✅ تحديث فوري + حفظ فوري
+      const persistedDeleted = Array.from(new Set([...(data.deletedTxIds || []), id])).slice(-500);
+      const newData = { ...data, transactions: newTx, deletedTxIds: persistedDeleted };
       dispatch({ type: 'SET_DATA', payload: newData });
       forceCloudSave(newData);
       addNotification({ type: 'success', title: 'تم الحذف نهائياً' });
     }, onCancel: () => dispatch({ type: 'HIDE_CONFIRM' }) });
   }, [transactions, data, saveHistory, addNotification, forceCloudSave]);
 
-  // ✅ handleBulkDeleteInApp جديد — يُمرر إلى TransactionsView
+  // ✅ handleBulkDeleteInApp — نفس المنطق للحذف المتعدد
   const handleBulkDeleteInApp = useCallback((ids) => {
     if (!Array.isArray(ids) || ids.length === 0) return;
     saveHistory();
     const idsSet = new Set(ids);
-    // ✅ سجل الـ ids المحذوفة لمنع materialize من إعادتها
     ids.forEach(id => deletedIdsRef.current.add(id));
     const newTx = transactions.filter(t => !idsSet.has(t.id));
-    const newData = { ...data, transactions: newTx };
+    const persistedDeleted = Array.from(new Set([...(data.deletedTxIds || []), ...ids])).slice(-500);
+    const newData = { ...data, transactions: newTx, deletedTxIds: persistedDeleted };
     dispatch({ type: 'SET_DATA', payload: newData });
     forceCloudSave(newData);
     addNotification({ type: 'success', title: `تم حذف ${ids.length} معاملة` });
@@ -5092,7 +5205,6 @@ const materializeShoppingRecurring = async () => {
   const renderActiveView = () => {
     switch (activeTab) {
       case 'dashboard': return <DashboardView data={data} financeSnapshot={financeSnapshot} liveBalances={liveBalances} totalLiquidity={totalLiquidity} walletVisibility={walletVisibility} onToggleVisibility={(k) => dispatch({ type: 'TOGGLE_WALLET_VISIBILITY', payload: k })} dispatch={dispatch} selectedYear={selectedYear} selectedMonth={selectedMonth} transactions={transactions} cards={cards} updatedLoans={updatedLoans} chartData={chartData} isDarkMode={isDarkMode} handleManualReconciliation={handleManualReconciliation} addNotification={addNotification} onSelectYear={(y) => dispatch({ type: 'SET_SELECTED_YEAR', payload: y })} onSelectMonth={(m) => dispatch({ type: 'SET_SELECTED_MONTH', payload: m })} />;
-      // ✅ TransactionsView مُصلح — يمرر onBulkDelete
       case 'transactions': return <TransactionsView groupedTransactions={groupedTransactions} transactions={transactions} selectedMonth={selectedMonth} selectedYear={selectedYear} transViewMode={transViewMode} statusFilter={statusFilter} searchTerm={searchTerm} expandedGroup={expandedGroup} data={data} monthInsights={monthInsights} dispatch={dispatch} handleDelete={handleDelete} addNotification={addNotification} onSelectYear={(y) => dispatch({ type: 'SET_SELECTED_YEAR', payload: y })} onSelectMonth={(m) => dispatch({ type: 'SET_SELECTED_MONTH', payload: m })} saveHistory={saveHistory} onPrintMonthlyReport={() => {}} onBulkDelete={handleBulkDeleteInApp} />;
       case 'categories': return <CategoriesView transactions={transactions} selectedMonth={selectedMonth} selectedYear={selectedYear} catViewType={catViewType} budgets={budgets} dispatch={dispatch} handleDelete={handleDelete} onSelectYear={(y) => dispatch({ type: 'SET_SELECTED_YEAR', payload: y })} onSelectMonth={(m) => dispatch({ type: 'SET_SELECTED_MONTH', payload: m })} />;
       case 'loans': return <LoansView updatedLoans={updatedLoans} cards={cards} recurringItems={recurringItems} transactions={transactions} dispatch={dispatch} deleteRecurring={deleteRecurring} saveHistory={saveHistory} getLocalISODate={getLocalISODate} addNotification={addNotification} data={data} selectedMonth={selectedMonth} selectedYear={selectedYear} />;
