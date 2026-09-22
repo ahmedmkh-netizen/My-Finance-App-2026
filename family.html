@@ -623,9 +623,12 @@ var undoTimeout = null;
 var deferredPrompt = null;
 var unsubscribe = null;
 
-/* ✅ متغيرات جديدة لمزامنة Cloud-First */
+/* ✅ متغيرات مزامنة Cloud-First */
 var hasReceivedInitialSnapshot = false;
 var initialSnapshotTimeout = null;
+
+/* ✅ حماية من فتح أكثر من مودال حذف */
+var deleteModalOpen = false;
 
 var selectedDateMode = 'today';
 var customDate = '';
@@ -1132,9 +1135,7 @@ function renderFeed() {
       actionBtn +
       '</div>';
   }).join('');
-  box.querySelectorAll('[data-d]').forEach(function(btn) {
-    btn.addEventListener('click', function() { doDelete(btn.dataset.d); });
-  });
+  /* ✅ اتشال المستمع المكرر من هنا — الاعتماد على delegation في bindEvents */
 }
 
 function updateBudgetDesc() {
@@ -1228,6 +1229,7 @@ function bindEvents() {
   document.getElementById('exportBtn').addEventListener('click', exportData);
   document.getElementById('setBudgetBtn').addEventListener('click', setBudgetModal);
   document.getElementById('testTelegramBtn').addEventListener('click', testTelegram);
+  /* ✅ delegation واحد فقط لزر الحذف في feed */
   document.getElementById('feed').addEventListener('click', function(e) {
     var btn = e.target.closest('[data-d]');
     if (!btn) return;
@@ -1268,13 +1270,12 @@ function switchTab(t) {
 function saveTx() {
   if (!selectedItem) { toast('اختار الحاجة الأول', 'err'); return; }
   if (!docRef) { toast('التطبيق مش متصل', 'err'); return; }
-  
-  // ✅ لا تحفظ قبل استقبال أول نسخة
+
   if (!hasReceivedInitialSnapshot) {
     toast('⏳ في انتظار المزامنة... جرب تاني بعد ثانيتين', 'warn');
     return;
   }
-  
+
   var amount = parseFloat(document.getElementById('amount').value);
   if (!amount || amount <= 0) { toast('اكتب المبلغ', 'err'); return; }
 
@@ -1360,12 +1361,14 @@ function hasPendingDeleteRequest(txId) {
 }
 
 function doDelete(id) {
-  // ✅ لا تحذف قبل استقبال أول نسخة
+  /* ✅ حماية: لو مودال حذف مفتوح بالفعل، متفتحش تاني */
+  if (deleteModalOpen) return;
+
   if (!hasReceivedInitialSnapshot) {
     toast('⏳ في انتظار المزامنة... جرب تاني بعد ثانيتين', 'warn');
     return;
   }
-  
+
   var tx = null;
   cachedTx.forEach(function(t) { if (t.id === id) tx = t; });
   if (!tx) { toast('مش لاقيها', 'err'); return; }
@@ -1379,6 +1382,9 @@ function doDelete(id) {
     toast('الطلب مبعوت بالفعل — هستنى موافقة أحمد ⏳', 'warn');
     return;
   }
+
+  /* ✅ اقفل الباب دلوقتي */
+  deleteModalOpen = true;
 
   var bg = document.createElement('div');
   bg.className = 'modal-bg';
@@ -1402,6 +1408,11 @@ function doDelete(id) {
   var reasonInput = bg.querySelector('#delReasonInput');
   setTimeout(function() { reasonInput.focus(); }, 100);
 
+  function closeModal() {
+    deleteModalOpen = false;
+    if (bg && bg.parentNode) bg.remove();
+  }
+
   reasonInput.addEventListener('keydown', function(e) {
     if (e.key === 'Enter' && reasonInput.value.trim().length >= 3) {
       bg.querySelector('[data-a="ok"]').click();
@@ -1411,7 +1422,7 @@ function doDelete(id) {
   bg.addEventListener('click', function(e) {
     var a = e.target.dataset ? e.target.dataset.a : null;
     if (a === 'cancel' || e.target === bg) {
-      bg.remove();
+      closeModal();
     } else if (a === 'ok') {
       var reason = reasonInput.value.trim();
       if (!reason || reason.length < 3) {
@@ -1419,19 +1430,18 @@ function doDelete(id) {
         reasonInput.focus();
         return;
       }
-      bg.remove();
+      closeModal();
       submitDeleteRequest(tx, reason);
     }
   });
 }
 
 function submitDeleteRequest(tx, reason) {
-  // ✅ لا ترسل طلب قبل استقبال أول نسخة
   if (!hasReceivedInitialSnapshot) {
     toast('⏳ في انتظار المزامنة... جرب تاني بعد ثانيتين', 'warn');
     return;
   }
-  
+
   var request = {
     id: 'delreq-' + Date.now() + '-' + Math.random().toString(36).slice(2, 9),
     txId: tx.id,
@@ -1758,11 +1768,9 @@ function startVoice() {
   try { rec.start(); } catch(e) { close(); toast('مش عارف أشغل المايك', 'err'); }
 }
 
-/* ✅ subscribe محدّث مع Timeout + isFirst */
 function subscribe() {
   if (unsubscribe) unsubscribe();
 
-  // ✅ Timeout احتياطي: لو Firestore اتأخر أكتر من 8 ثواني
   initialSnapshotTimeout = setTimeout(function() {
     if (!hasReceivedInitialSnapshot) {
       console.warn('⚠️ Firestore اتأخر — السماح بالكتابة');
