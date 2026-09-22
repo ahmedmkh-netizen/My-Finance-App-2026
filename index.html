@@ -187,7 +187,7 @@ db.enablePersistence({ synchronizeTabs: true }).catch((err) => { console.warn('F
    ✅ V81 — مسار Firestore كـ constant (Fix #1: يمنع الـ typos)
    ═══════════════════════════════════════════════════════════════ */
 const FIREBASE_DOC_PATH = { collection: 'finance_2026', doc: 'user_ahmed_data' };
-
+const LAST_SYNC_LS_KEY = 'v81_last_sync_ts';
 /* ═══════════════════════════════════════════════════════════════
    CLOUDINARY (صور الفواتير)
    ═══════════════════════════════════════════════════════════════ */
@@ -2026,6 +2026,20 @@ const OnlineStatusBadge = memo(({ online }) => (
 
 /* ─────────────── Sync Status Indicator ✅ V81 (جديد) ─────────────── */
 const SyncStatusIndicator = memo(({ status, isSaving }) => {
+  const [secondsAgo, setSecondsAgo] = useState(null);
+
+  // 🔄 كل 3 ثوانٍ: اقرأ وقت آخر مزامنة واحسب كم ثانية مضت
+  useEffect(() => {
+    const update = () => {
+      const ts = Number(localStorage.getItem('v81_last_sync_ts') || 0);
+      if (!ts) { setSecondsAgo(null); return; }
+      setSecondsAgo(Math.round((Date.now() - ts) / 1000));
+    };
+    update();
+    const iv = setInterval(update, 3000);
+    return () => clearInterval(iv);
+  }, [isSaving]); // ← يعاد التحديث بعد كل عملية حفظ
+
   const config = {
     ready: { label: '☁️ متزامن', cls: 'ready' },
     pending: { label: '⏳ مزامنة...', cls: 'pending' },
@@ -2033,9 +2047,19 @@ const SyncStatusIndicator = memo(({ status, isSaving }) => {
     saving: { label: '⬆️ جاري الحفظ', cls: 'saving' }
   };
   const c = config[isSaving ? 'saving' : status] || config.pending;
+
+  // ⏱️ صياغة النص: "قبل X ثانية" أو "قبل X دقيقة"
+  let timeText = '';
+  if (secondsAgo !== null) {
+    if (secondsAgo < 5) timeText = ' • الآن';
+    else if (secondsAgo < 60) timeText = ` • قبل ${secondsAgo}ث`;
+    else if (secondsAgo < 3600) timeText = ` • قبل ${Math.floor(secondsAgo / 60)}د`;
+    else timeText = ` • قبل ${Math.floor(secondsAgo / 3600)}س`;
+  }
+
   return (
     <div className={`sync-indicator ${c.cls} no-print`}>
-      {c.label}
+      {c.label}{timeText}
     </div>
   );
 });
@@ -7523,6 +7547,7 @@ function App() {
         
         await docRef.set({ ...finalData, budgets: finalData.budgets || budgetsRef.current }, { merge: true });
         lastRemoteRef.current = payloadStr;
+        try { localStorage.setItem(LAST_SYNC_LS_KEY, String(Date.now())); } catch(e) {}
       } catch (err) {
         console.error('Queue save failed:', err);
         throw err;
@@ -7672,7 +7697,7 @@ function App() {
         clearTimeout(safetyTimer);
         isSavingRef.current = false;
       });
-    }, 5000);
+    }, 2000);
     return () => clearTimeout(saveTimeoutRef.current);
   }, [data, isAuthenticated, cloudSyncStatus, queueCloudSave]);
   
