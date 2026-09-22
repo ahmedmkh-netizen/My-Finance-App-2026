@@ -2031,6 +2031,9 @@ const SyncStatusIndicator = memo(({ status, isSaving }) => {
   // 🔄 كل 3 ثوانٍ: اقرأ وقت آخر مزامنة واحسب كم ثانية مضت
   useEffect(() => {
     const update = () => {
+  // 🔄 كل 3 ثوانٍ: اقرأ وقت آخر مزامنة واحسب كم ثانية مضت
+  useEffect(() => {
+    const update = () => {
       const ts = Number(localStorage.getItem('v81_last_sync_ts') || 0);
       if (!ts) { setSecondsAgo(null); return; }
       setSecondsAgo(Math.round((Date.now() - ts) / 1000));
@@ -2038,8 +2041,7 @@ const SyncStatusIndicator = memo(({ status, isSaving }) => {
     update();
     const iv = setInterval(update, 3000);
     return () => clearInterval(iv);
-  }, [isSaving]); // ← يعاد التحديث بعد كل عملية حفظ
-
+  }, []);
   const config = {
     ready: { label: '☁️ متزامن', cls: 'ready' },
     pending: { label: '⏳ مزامنة...', cls: 'pending' },
@@ -7042,7 +7044,6 @@ const SettingsView = memo(({ data, accountsData, cards, budgets, dispatch, saveH
             </button>
           </div>
           {driveStatus && <p className="text-[10px] font-semibold whitespace-pre-line" style={{ color: 'var(--text-muted)' }}>{driveStatus}</p>}
-                    {driveStatus && <p className="text-[10px] font-semibold whitespace-pre-line" style={{ color: 'var(--text-muted)' }}>{driveStatus}</p>}
           {(() => {
             const ts = Number(localStorage.getItem('v81_last_sync_ts') || 0);
             if (!ts) return null;
@@ -7481,6 +7482,7 @@ function App() {
   
   // ✅ Fix #2: Queue for cloud saves
   const saveQueueRef = useRef(Promise.resolve());
+  const cloudSaveRetriesRef = useRef(0);
   
   const { 
     data, activeTab, selectedYear, selectedMonth, transViewMode, catViewType, 
@@ -7559,6 +7561,7 @@ function App() {
         await docRef.set({ ...finalData, budgets: finalData.budgets || budgetsRef.current }, { merge: true });
         lastRemoteRef.current = payloadStr;
         try { localStorage.setItem(LAST_SYNC_LS_KEY, String(Date.now())); } catch(e) {}
+        cloudSaveRetriesRef.current = 0;
       } catch (err) {
         console.error('Queue save failed:', err);
         throw err;
@@ -7567,18 +7570,17 @@ function App() {
       }
 }).catch(async (err) => {
   console.error('❌ Queue save failed, will retry:', err);
-  // ✅ إعادة محاولة بعد 3 ثوان (حد أقصى 3 مرات)
-  const retries = (saveQueueRef.current._retries || 0) + 1;
+  const retries = cloudSaveRetriesRef.current + 1;
   if (retries <= 3) {
+    cloudSaveRetriesRef.current = retries;
+    console.log(`🔄 Retry #${retries} بعد 3 ثوانٍ...`);
     await new Promise(r => setTimeout(r, 3000));
     saveQueueRef.current = Promise.resolve();
-    saveQueueRef.current._retries = retries;
-    console.log(`🔄 Retry #${retries}...`);
     return queueCloudSave(newData, options);
   }
   console.error('❌ فشل بعد 3 محاولات — سيُحفظ محلياً فقط');
+  cloudSaveRetriesRef.current = 0;
   saveQueueRef.current = Promise.resolve();
-  saveQueueRef.current._retries = 0;
   setIsSaving(false);
 });
     
