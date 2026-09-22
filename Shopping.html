@@ -1008,7 +1008,7 @@ function bindTxActions(){
 }
 
 function deleteTx(id){
-    if(!hasReceivedInitialSnapshot){
+  if(!hasReceivedInitialSnapshot){
     toast('⏳ في انتظار المزامنة...','warn');
     return;
   }
@@ -1037,6 +1037,10 @@ function deleteTx(id){
 }
 
 function editTx(id){
+  if(!hasReceivedInitialSnapshot){
+    toast('⏳ في انتظار المزامنة...','warn');
+    return;
+  }
   var tx=cachedTx.find(function(t){return t.id===id;});
   if(!tx){toast('مش لاقياها','err');return;}
   var bg=document.createElement('div');bg.className='modal-bg';
@@ -1146,7 +1150,7 @@ function switchTab(t){currentTab=t;document.querySelectorAll('.nav-btn').forEach
 
 function saveTx(){
   if(!docRef){toast('التطبيق مش متصل','err');return;}
-  
+
   // ✅ لا تحفظ قبل استقبال أول نسخة
   if(!hasReceivedInitialSnapshot){
     toast('⏳ في انتظار المزامنة... جربي تاني بعد ثانيتين','warn');
@@ -1303,6 +1307,10 @@ function renderRecurring(){
 }
 
 function deleteRecurring(id){
+  if(!hasReceivedInitialSnapshot){
+    toast('⏳ في انتظار المزامنة...','warn');
+    return;
+  }
   var r=recurringRules.find(function(x){return x.id===id;});
   if(!r)return;
   modal({title:'حذف التكرار؟',message:'"'+r.template.itemName+'"\n\nهيتوقف التسجيل التلقائي وهتُحذف كل المعاملات المستقبلية',icon:'🗑️',danger:true,confirmText:'احذفي',onConfirm:function(){
@@ -1410,7 +1418,7 @@ function startVoice(){
 
 function subscribe(){
   if(unsubscribe)unsubscribe();
-  
+
   // ✅ Timeout احتياطي: لو Firestore اتأخر أكتر من 8 ثواني
   initialSnapshotTimeout=setTimeout(function(){
     if(!hasReceivedInitialSnapshot){
@@ -1418,7 +1426,7 @@ function subscribe(){
       hasReceivedInitialSnapshot=true;
     }
   },8000);
-  
+
   unsubscribe=docRef.onSnapshot(function(doc){
     var isFirst=!hasReceivedInitialSnapshot;
     if(isFirst){
@@ -1426,7 +1434,7 @@ function subscribe(){
       if(initialSnapshotTimeout)clearTimeout(initialSnapshotTimeout);
       console.log('☁️ استقبلنا أول نسخة من Firestore');
     }
-    
+
     if(!doc.exists){
       cachedTx=[];
       recurringRules=[];
