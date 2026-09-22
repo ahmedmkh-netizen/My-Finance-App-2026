@@ -6450,17 +6450,26 @@ const DeletedArchiveView = memo(({ data, dispatch, saveHistory, addNotification,
     });
   };
 
-  const permanentlyDelete = (id) => {
+const permanentlyDelete = (id) => {
     dispatch({ 
       type: 'SHOW_CONFIRM', 
       danger: true, 
       title: 'حذف نهائي', 
-      message: 'لن يمكن استرجاعها بعد ذلك', 
+      message: 'سيُحذف نهائياً من المعاملات والأرشيف ولن يمكن استرجاعه', 
       onConfirm: () => {
         saveHistory();
         const newArchive = (data.deletedTxArchive || []).filter(a => a.id !== id);
-        const newDeletedIds = (data.deletedTxIds || []).filter(did => did !== id);
-        dispatch({ type: 'SET_DATA', payload: { ...data, deletedTxArchive: newArchive, deletedTxIds: newDeletedIds } });
+        const newTx = (data.transactions || []).filter(t => t.id !== id);
+        const newDeletedIds = Array.from(new Set([...(data.deletedTxIds || []), id])).slice(-500);
+        dispatch({ 
+          type: 'SET_DATA', 
+          payload: { 
+            ...data, 
+            transactions: newTx,
+            deletedTxArchive: newArchive, 
+            deletedTxIds: newDeletedIds
+          } 
+        });
         addNotification({ type: 'success', title: 'تم الحذف نهائياً' });
       }, 
       onCancel: () => dispatch({ type: 'HIDE_CONFIRM' }) 
@@ -7559,7 +7568,8 @@ function App() {
             if (t?.id && !permanentDeleted.has(t.id)) mergedMap.set(t.id, t); 
           });
           
-          finalData.transactions = Array.from(mergedMap.values());
+          finalData.transactions = Array.from(mergedMap.values())
+            .filter(t => !t?.id || !(finalData.deletedTxIds || []).includes(t.id));
           finalData.deletedTxIds = Array.from(permanentDeleted).slice(-500);
           
           if (remote.budgets && typeof remote.budgets === 'object') {
@@ -7889,6 +7899,7 @@ function App() {
 
   /* ✅ Fix #4: updatedLoans بأداء O(N) */
   const updatedLoans = useMemo(() => {
+    const permanentlyDeleted = new Set(data?.deletedTxIds || []);
     const map = transactions.reduce((acc, t) => { 
       if (t.linkedLoanId && t.status === 'paid') 
         acc[t.linkedLoanId] = (acc[t.linkedLoanId] || 0) + safeNumber(t.amount); 
@@ -7904,6 +7915,7 @@ function App() {
     const txByKey = new Map();
     transactions.forEach(t => {
       if (t.type !== 'expense' || !t.category) return;
+      if (permanentlyDeleted.has(t.id)) return;
       const key = `${t.category}|${t.year || 2026}|${t.month}`;
       if (!txByKey.has(key)) txByKey.set(key, []);
       txByKey.get(key).push(t);
@@ -7982,9 +7994,8 @@ function App() {
     });
     
     return [...sortedAuto, ...receivables, ...regular];
-  }, [transactions, loans]);
-
-  const monthInsights = useMemo(() => {
+}, [transactions, loans, data?.deletedTxIds]);
+    const monthInsights = useMemo(() => {
     const m = transactions.filter(t => 
       t.month === selectedMonth && (t.year || 2026) === selectedYear
     );
@@ -8308,8 +8319,9 @@ function App() {
         
         const newArchive = [...(latestData.deletedTxArchive || []), ...tombstones].slice(-500);
         const linkedSet = new Set(linkedIds);
+                const persistedDeleted = Array.from(new Set([...(latestData.deletedTxIds || []), ...linkedIds])).slice(-500);
         const newTx = latestTx.filter(t => !linkedSet.has(t.id));
-        const persistedDeleted = Array.from(new Set([...(latestData.deletedTxIds || []), ...linkedIds])).slice(-500);
+        const finalTx = newTx.filter(t => !persistedDeleted.includes(t.id));
         const newMaterialized = { ...(latestData.materializedRecurring || {}) };
         tombstones.forEach(t => {
           if (t.sourceRecurringId && t.year && t.month) {
@@ -8319,7 +8331,7 @@ function App() {
         
         const newData = { 
           ...latestData, 
-          transactions: newTx, 
+          transactions: finalTx,
           deletedTxArchive: newArchive, 
           deletedTxIds: persistedDeleted, 
           materializedRecurring: newMaterialized 
