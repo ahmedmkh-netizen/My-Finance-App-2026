@@ -7544,12 +7544,23 @@ function App() {
           const remoteTx = Array.isArray(remote.transactions) ? remote.transactions : [];
           const localTx = Array.isArray(newData.transactions) ? newData.transactions : [];
           
-          // ✅ دمج عميق بناءً على ID
+          // ✅ Fix: تجاهل المعاملات المحذوفة نهائياً (deletedTxIds)
+          const permanentDeleted = new Set([
+            ...(newData.deletedTxIds || []),
+            ...(remote.deletedTxIds || [])
+          ]);
+          
+          // ✅ دمج عميق بناءً على ID (مع استبعاد المحذوفات)
           const mergedMap = new Map();
-          remoteTx.forEach(t => { if (t?.id) mergedMap.set(t.id, t); });
-          localTx.forEach(t => { if (t?.id) mergedMap.set(t.id, t); });
+          remoteTx.forEach(t => { 
+            if (t?.id && !permanentDeleted.has(t.id)) mergedMap.set(t.id, t); 
+          });
+          localTx.forEach(t => { 
+            if (t?.id && !permanentDeleted.has(t.id)) mergedMap.set(t.id, t); 
+          });
           
           finalData.transactions = Array.from(mergedMap.values());
+          finalData.deletedTxIds = Array.from(permanentDeleted).slice(-500);
           
           if (remote.budgets && typeof remote.budgets === 'object') {
             finalData.budgets = { ...remote.budgets, ...budgetsRef.current };
@@ -7661,11 +7672,25 @@ function App() {
           setTimeout(() => queueCloudSave(migrated, { silent: true }), 500);
         }
         
+        // ✅ Fix: فلترة المعاملات المحذوفة من البيانات الواردة
+        const permanentDeleted = new Set([
+          ...(migrated.deletedTxIds || []),
+          ...(currentTxRef.current.filter(t => t?._deleted).map(t => t.id)) // safety
+        ]);
+        
+        // استبعد أي معاملة في deletedTxIds من الـ remote
+        const filteredRemoteTx = (migrated.transactions || []).filter(t => 
+          !t?.id || !permanentDeleted.has(t.id)
+        );
+        migrated.transactions = filteredRemoteTx;
+        
         // ✅ دمج ذكي مع البيانات المحلية
         const localTx = currentTxRef.current;
         const remoteTx = migrated.transactions || [];
         const remoteIds = new Set(remoteTx.map(t => t.id));
-        const localOnly = localTx.filter(t => !remoteIds.has(t.id));
+        const localOnly = localTx.filter(t => 
+          !remoteIds.has(t.id) && (!t?.id || !permanentDeleted.has(t.id))
+        );
         
         if (localOnly.length > 0 && !isFirst) {
           console.warn(`⚠️ ${localOnly.length} معاملة محلية مش في Firestore — هتتحفظ`);
