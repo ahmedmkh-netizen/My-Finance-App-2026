@@ -7042,6 +7042,17 @@ const SettingsView = memo(({ data, accountsData, cards, budgets, dispatch, saveH
             </button>
           </div>
           {driveStatus && <p className="text-[10px] font-semibold whitespace-pre-line" style={{ color: 'var(--text-muted)' }}>{driveStatus}</p>}
+                    {driveStatus && <p className="text-[10px] font-semibold whitespace-pre-line" style={{ color: 'var(--text-muted)' }}>{driveStatus}</p>}
+          {(() => {
+            const ts = Number(localStorage.getItem('v81_last_sync_ts') || 0);
+            if (!ts) return null;
+            const d = new Date(ts);
+            return (
+              <p className="text-[10px] font-semibold" style={{ color: 'var(--text-muted)' }}>
+                🕐 آخر مزامنة Firestore: {d.toLocaleString('ar-EG')}
+              </p>
+            );
+          })()}
         </div>
       </details>
 
@@ -7554,11 +7565,22 @@ function App() {
       } finally {
         if (!silent) setTimeout(() => setIsSaving(false), 800);
       }
-    }).catch(err => {
-      console.error('Queue error, resetting:', err);
-      saveQueueRef.current = Promise.resolve();
-      setIsSaving(false);
-    });
+}).catch(async (err) => {
+  console.error('❌ Queue save failed, will retry:', err);
+  // ✅ إعادة محاولة بعد 3 ثوان (حد أقصى 3 مرات)
+  const retries = (saveQueueRef.current._retries || 0) + 1;
+  if (retries <= 3) {
+    await new Promise(r => setTimeout(r, 3000));
+    saveQueueRef.current = Promise.resolve();
+    saveQueueRef.current._retries = retries;
+    console.log(`🔄 Retry #${retries}...`);
+    return queueCloudSave(newData, options);
+  }
+  console.error('❌ فشل بعد 3 محاولات — سيُحفظ محلياً فقط');
+  saveQueueRef.current = Promise.resolve();
+  saveQueueRef.current._retries = 0;
+  setIsSaving(false);
+});
     
     return saveQueueRef.current;
   }, [isAuthenticated]);
