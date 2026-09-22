@@ -6371,6 +6371,9 @@ const DuplicateDetectionSystem = ({ transactions, data, dispatch, addNotificatio
 /* ─────────────── Deleted Archive View ─────────────── */
 const DeletedArchiveView = memo(({ data, dispatch, saveHistory, addNotification, transactions }) => {
   const archive = data?.deletedTxArchive || [];
+    const pendingRequests = useMemo(() => {
+    return (data?.deleteRequests || []).filter(r => r && r.status === 'pending' && r.txSnapshot);
+  }, [data?.deleteRequests]);
   const [tab, setTab] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [monthFilter, setMonthFilter] = useState('all');
@@ -6401,7 +6404,55 @@ const DeletedArchiveView = memo(({ data, dispatch, saveHistory, addNotification,
     const legacyCount = archive.filter(a => a._legacy).length;
     return { familyCount, mineCount, total, count: archive.length, legacyCount };
   }, [archive]);
+  const approveDeleteRequest = (req) => {
+    const tx = req.txSnapshot;
+    if (!tx) return;
+    saveHistory();
+    
+    const newArchive = [...(data.deletedTxArchive || []), {
+      ...tx,
+      deletedAt: new Date().toISOString(),
+      deletedBy: req.requestedBy || 'family',
+      originalStatus: tx.status || 'pending',
+      reason: 'موافقة على طلب مسح من فاميلي'
+    }].slice(-500);
+    
+    const newTx = (data.transactions || []).filter(t => t.id !== tx.id);
+    const newDeletedIds = Array.from(new Set([...(data.deletedTxIds || []), tx.id])).slice(-500);
+    const updatedRequests = (data.deleteRequests || []).map(r => 
+      r.id === req.id ? { ...r, status: 'approved', approvedAt: Date.now() } : r
+    );
+    
+    const newMaterialized = { ...(data.materializedRecurring || {}) };
+    if (tx.sourceRecurringId && tx.year && tx.month) {
+      newMaterialized[`${tx.sourceRecurringId}_${makeMonthKey(tx.year, tx.month)}`] = 'deleted';
+    }
+    
+    dispatch({ 
+      type: 'SET_DATA', 
+      payload: { 
+        ...data, 
+        transactions: newTx, 
+        deletedTxArchive: newArchive, 
+        deletedTxIds: newDeletedIds,
+        deleteRequests: updatedRequests,
+        materializedRecurring: newMaterialized
+      } 
+    });
+    addNotification({ type: 'success', title: 'تمت الموافقة والحذف', message: `تم نقل "${tx.description || tx.category}" للأرشيف` });
+  };
 
+  const rejectDeleteRequest = (req) => {
+    const updatedRequests = (data.deleteRequests || []).map(r => 
+      r.id === req.id ? { ...r, status: 'rejected', rejectedAt: Date.now() } : r
+    );
+    dispatch({ 
+      type: 'SET_DATA', 
+      payload: { ...data, deleteRequests: updatedRequests } 
+    });
+    addNotification({ type: 'info', title: 'تم الرفض — المعاملة هتفضل موجودة' });
+  };
+  
   const restoreOne = (tombstone) => {
     if (tombstone._legacy) { 
       addNotification({ type: 'error', title: 'لا يمكن استرجاع هذه (بيانات ناقصة)' }); 
@@ -6492,6 +6543,60 @@ const permanentlyDelete = (id) => {
   };
 
   return (
+        {pendingRequests.length > 0 && (
+        <div className="card" style={{ borderColor: 'var(--warning)' }}>
+          <div className="flex items-center gap-3 mb-3">
+            <div className="p-2 rounded-lg bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400">
+              <Clock size={16} />
+            </div>
+            <div>
+              <h3 className="font-black text-sm">📥 طلبات مسح من تطبيق العيلة</h3>
+              <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                {pendingRequests.length} طلب بانتظار مراجعتك
+              </p>
+            </div>
+          </div>
+          <div className="space-y-2">
+            {pendingRequests.map(req => {
+              const tx = req.txSnapshot;
+              return (
+                <div key={req.id} className="p-3 rounded-lg" style={{ background: 'var(--bg-muted)' }}>
+                  <div className="flex justify-between items-start gap-2 mb-2 flex-wrap">
+                    <div className="min-w-0 flex-1">
+                      <p className="font-bold text-xs truncate">
+                        💸 {tx.description || tx.category || 'بدون وصف'}
+                      </p>
+                      <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                        {tx.amount} ج.م • {tx.date}
+                        {tx.method && ` • ${PAYMENT_METHODS.find(p => p.id === tx.method)?.label || tx.method}`}
+                      </p>
+                      <p className="text-[10px] mt-1 text-amber-700 dark:text-amber-400">
+                        👤 من: <strong>{req.requestedByName || 'فاميلي'}</strong>
+                        {req.reason && ` • 📝 ${req.reason}`}
+                      </p>
+                    </div>
+                    <span className="font-black text-sm text-red-600 flex-shrink-0">{fmt(tx.amount)}</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={() => approveDeleteRequest(req)} 
+                      className="btn btn-primary text-[11px] flex-1 py-1.5"
+                    >
+                      <CheckCircle2 size={12} /> موافقة وحذف
+                    </button>
+                    <button 
+                      onClick={() => rejectDeleteRequest(req)} 
+                      className="btn btn-secondary text-[11px] flex-1 py-1.5 text-red-600"
+                    >
+                      <X size={12} /> رفض
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     <div className="space-y-4 animate-fadeIn pb-24">
       <div className="card">
         <div className="flex items-center justify-between flex-wrap gap-3">
