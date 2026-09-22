@@ -655,6 +655,8 @@ var recentItems=[];
 var isDark=localStorage.getItem('shop_theme')==='dark';
 var deferredPrompt=null;
 var unsubscribe=null;
+var hasReceivedInitialSnapshot=false;
+var initialSnapshotTimeout=null;
 var userTemplate=null;
 var amazonItems=[];
 var docRef=null;
@@ -1006,6 +1008,10 @@ function bindTxActions(){
 }
 
 function deleteTx(id){
+    if(!hasReceivedInitialSnapshot){
+    toast('⏳ في انتظار المزامنة...','warn');
+    return;
+  }
   var tx=cachedTx.find(function(t){return t.id===id;});
   if(!tx){toast('مش لاقياها','err');return;}
   if(tx.recurringId){
@@ -1140,6 +1146,12 @@ function switchTab(t){currentTab=t;document.querySelectorAll('.nav-btn').forEach
 
 function saveTx(){
   if(!docRef){toast('التطبيق مش متصل','err');return;}
+  
+  // ✅ لا تحفظ قبل استقبال أول نسخة
+  if(!hasReceivedInitialSnapshot){
+    toast('⏳ في انتظار المزامنة... جربي تاني بعد ثانيتين','warn');
+    return;
+  }
   if(selectedCategoryKey==='amazon'){
     var va=amazonItems.filter(function(i){return i.name.trim()&&i.price>0&&i.qty>0;});
     if(!va.length){toast('ضيفي منتج واحد','err');return;}
@@ -1398,8 +1410,29 @@ function startVoice(){
 
 function subscribe(){
   if(unsubscribe)unsubscribe();
+  
+  // ✅ Timeout احتياطي: لو Firestore اتأخر أكتر من 8 ثواني
+  initialSnapshotTimeout=setTimeout(function(){
+    if(!hasReceivedInitialSnapshot){
+      console.warn('⚠️ Firestore اتأخر');
+      hasReceivedInitialSnapshot=true;
+    }
+  },8000);
+  
   unsubscribe=docRef.onSnapshot(function(doc){
-    if(!doc.exists){cachedTx=[];recurringRules=[];renderAll();return;}
+    var isFirst=!hasReceivedInitialSnapshot;
+    if(isFirst){
+      hasReceivedInitialSnapshot=true;
+      if(initialSnapshotTimeout)clearTimeout(initialSnapshotTimeout);
+      console.log('☁️ استقبلنا أول نسخة من Firestore');
+    }
+    
+    if(!doc.exists){
+      cachedTx=[];
+      recurringRules=[];
+      renderAll();
+      return;
+    }
     var d=doc.data()||{};
     cachedTx=(d.transactions||[]).filter(function(t){return t.source==='shopping-app';}).sort(function(a,b){return(b.createdAt||0)-(a.createdAt||0);});
     recurringRules=(d.shoppingRecurring||[]).sort(function(a,b){return(b.createdAt||0)-(a.createdAt||0);});
