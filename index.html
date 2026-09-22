@@ -5057,12 +5057,15 @@ quickTransferData: {
   const [authLoading, setAuthLoading] = useState(true);
   const [pinVerified, setPinVerified] = useState(() => sessionStorage.getItem('pin_verified') === 'yes');
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [cloudSyncStatus, setCloudSyncStatus] = useState('pending');
   const saveTimeoutRef = useRef(null);
   const processingTimeoutRef = useRef(null);
   const saveLockRef = useRef(false);
   const lastRemoteRef = useRef(null);
   const lastMaterializeRef = useRef('');
   const isSavingRef = useRef(false);
+  const hasReceivedInitialSnapshot = useRef(false);
+  const initialSnapshotTimeoutRef = useRef(null);
 // ✅ deletedIdsRef اتشال — كان بيسبب مشكلة في الاسترجاع
   
   const { data, activeTab, selectedYear, selectedMonth, transViewMode, catViewType, isFormOpen, formMode, formData, isDarkMode, expandedGroup, budgets, editingCard, editingLoan, searchTerm, editingBudgetCategory, budgetAmount, isRecurringModalOpen, recurringFormData, notifications, history, expandedLedgers, expandedCardsSection, statusFilter, confirmDialog, isQuickTransferModalOpen, quickTransferData, viewingCardStatement, viewingReceipt, isPinChangeOpen, isSmsModalOpen, pendingCloseModal, walletVisibility, isProcessing, formErrors, activeCategoryDetail } = state;
@@ -5075,8 +5078,15 @@ quickTransferData: {
   const removeNotification = useCallback((id) => dispatch({ type: 'REMOVE_NOTIFICATION', payload: id }), []);
   const saveHistory = useCallback(() => dispatch({ type: 'ADD_TO_HISTORY', payload: { data: JSON.parse(JSON.stringify(data)), budgets: JSON.parse(JSON.stringify(budgets)) } }), [data, budgets]);
 
-  const forceCloudSave = useCallback((newData) => {
+const forceCloudSave = useCallback((newData) => {
     if (!isAuthenticated) return;
+    
+    // ✅ لا تحفظ قبل ما تستقبل النسخة الأولى
+    if (!hasReceivedInitialSnapshot.current) {
+      console.warn('⚠️ تخطي الحفظ — في انتظار Firestore');
+      return;
+    }
+    
     isSavingRef.current = true;
     const payload = { ...newData, budgets };
     const payloadStr = JSON.stringify(newData);
@@ -5102,27 +5112,80 @@ quickTransferData: {
     const interval = setInterval(materializeShoppingRecurring, 60 * 60 * 1000);
     return () => clearInterval(interval);
   }, [isAuthenticated]);
-
-  useEffect(() => {
+useEffect(() => {
     if (!isAuthenticated) return;
     const docRef = db.collection("finance_2026").doc("user_ahmed_data");
+    
+    initialSnapshotTimeoutRef.current = setTimeout(() => {
+      if (!hasReceivedInitialSnapshot.current) {
+        console.warn('⚠️ Firestore اتأخر — استخدام localStorage');
+        hasReceivedInitialSnapshot.current = true;
+        setCloudSyncStatus('offline');
+      }
+    }, 8000);
+
     const unsub = docRef.onSnapshot((doc) => {
+      const isFirst = !hasReceivedInitialSnapshot.current;
+      if (isFirst) {
+        hasReceivedInitialSnapshot.current = true;
+        if (initialSnapshotTimeoutRef.current) {
+          clearTimeout(initialSnapshotTimeoutRef.current);
+          initialSnapshotTimeoutRef.current = null;
+        }
+        setCloudSyncStatus('ready');
+      }
       if (doc.exists) {
-        if (isSavingRef.current) return;
         const raw = doc.data();
         const migrated = migrateData(raw);
+        
+        // ✅ دمج ذكي للـ transactions (مش استبدال)
+        const localTx = data?.transactions || [];
+        const remoteTx = migrated.transactions || [];
+        const remoteIds = new Set(remoteTx.map(t => t.id));
+        const localOnly = localTx.filter(t => !remoteIds.has(t.id));
+        
+        if (localOnly.length > 0 && !isFirst) {
+          console.warn(`⚠️ ${localOnly.length} معاملة محلية مش في Firestore — هتتحفظ`);
+          migrated.transactions = [...remoteTx, ...localOnly];
+        }
+        
         const incoming = JSON.stringify(migrated);
-        if (lastRemoteRef.current === incoming) return;
+        if (lastRemoteRef.current === incoming && !isFirst) return;
         lastRemoteRef.current = incoming;
         if (raw.budgets && typeof raw.budgets === 'object') dispatch({ type: 'SET_BUDGETS', payload: raw.budgets });
         dispatch({ type: 'SET_DATA', payload: migrated });
+        console.log('☁️ تم استقبال البيانات من Firestore');
+      } else if (isFirst) {
+        console.log('📤 Firestore فاضي — أول استخدام');
+      }
+    }, (error) => {
+      console.error('❌ Firestore error:', error);
+      if (!hasReceivedInitialSnapshot.current) {
+        hasReceivedInitialSnapshot.current = true;
+        setCloudSyncStatus('offline');
       }
     });
-    return () => unsub();
-  }, [isAuthenticated]);
 
-  useEffect(() => {
+    return () => {
+      unsub();
+      if (initialSnapshotTimeoutRef.current) clearTimeout(initialSnapshotTimeoutRef.current);
+    };
+  }, [isAuthenticated, data?.transactions?.length]);
+
+ useEffect(() => {
     if (!isAuthenticated || !data?.transactions) return;
+    
+    // ✅ لا تحفظ قبل ما تستقبل النسخة الأولى
+    if (!hasReceivedInitialSnapshot.current) {
+      return;
+    }
+    
+    // ✅ لو offline، احفظ محلياً فقط
+    if (cloudSyncStatus === 'offline') {
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch (e) {}
+      return;
+    }
+    
     clearTimeout(saveTimeoutRef.current);
     saveTimeoutRef.current = setTimeout(() => {
       if (isSavingRef.current) return;
@@ -5763,6 +5826,16 @@ const permanentDeleted = new Set(data.deletedTxIds || []);
   useEffect(() => () => { if (processingTimeoutRef.current) clearTimeout(processingTimeoutRef.current); saveLockRef.current = false; }, []);
 
   if (authLoading) return <div className="flex h-screen items-center justify-center" style={{ background: '#1A1508' }}><div className="w-12 h-12 border-[3px] border-blue-500 border-t-transparent rounded-full animate-spin"></div></div>;
+  // ✅ شاشة انتظار Firestore قبل عرض البيانات
+if (isAuthenticated && cloudSyncStatus === 'pending') {
+  return (
+    <div className="flex h-screen flex-col items-center justify-center" style={{ background: '#1A1508' }}>
+      <div className="w-12 h-12 border-[3px] border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+      <p className="text-white font-bold text-sm mb-1">جاري مزامنة البيانات...</p>
+      <p className="text-xs" style={{ color: '#8A8270' }}>بنستقبل آخر نسخة من السحابة</p>
+    </div>
+  );
+}
   if (!isAuthenticated) return <LoginScreen onLogin={() => setIsAuthenticated(true)} />;
   if (!pinVerified) return <PinLockScreen onSuccess={() => { sessionStorage.setItem('pin_verified', 'yes'); setPinVerified(true); }} onLogout={() => { firebase.auth().signOut(); setIsAuthenticated(false); sessionStorage.removeItem('pin_verified'); setPinVerified(false); }} />;
 
