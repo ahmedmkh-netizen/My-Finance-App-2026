@@ -43,7 +43,6 @@
   --shadow-sm: 0 2px 6px rgba(0,0,0,0.35);
   --shadow: 0 4px 16px rgba(0,0,0,0.45);
   --shadow-lg: 0 20px 44px rgba(0,0,0,0.55);
-  --glow-gold: 0 8px 28px rgba(212,168,87,0.28);
   --r-xs: 8px; --r-sm: 12px; --r: 16px; --r-lg: 20px; --r-xl: 28px;
   --font: 'Cairo', system-ui, -apple-system, sans-serif;
   --font-arabic: 'Amiri', serif;
@@ -302,8 +301,9 @@ body.light .nav { background: rgba(255,255,255,0.85); box-shadow: 0 20px 44px rg
 @keyframes slide { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 
 /* PERIODS */
-.periods { display: flex; gap: 3px; padding: 5px; background: var(--surface-2); border-radius: var(--r); margin-bottom: 16px; }
-.period { flex: 1; padding: 10px 8px; border-radius: calc(var(--r) - 4px); color: var(--text-3); font-size: 12.5px; font-weight: 600; transition: all 0.2s; letter-spacing: -0.005em; }
+.periods { display: flex; gap: 3px; padding: 5px; background: var(--surface-2); border-radius: var(--r); margin-bottom: 16px; overflow-x: auto; }
+.periods::-webkit-scrollbar { display: none; }
+.period { flex: 1 0 auto; padding: 10px 14px; border-radius: calc(var(--r) - 4px); color: var(--text-3); font-size: 12.5px; font-weight: 600; transition: all 0.2s; letter-spacing: -0.005em; white-space: nowrap; min-width: 64px; }
 .period.on { background: var(--surface); color: var(--gold-2); box-shadow: 0 2px 8px rgba(0,0,0,0.2), inset 0 0 0 1px var(--gold-ring); font-weight: 700; }
 body.light .period.on { box-shadow: 0 2px 8px rgba(31,26,20,0.06), inset 0 0 0 1px var(--gold-ring); }
 
@@ -541,6 +541,7 @@ body.light .period.on { box-shadow: 0 2px 8px rgba(31,26,20,0.06), inset 0 0 0 1
       <div class="card-title">الفترة</div>
       <div class="periods" id="periods">
         <button class="period on" data-p="today">النهاردة</button>
+        <button class="period" data-p="yesterday">امبارح</button>
         <button class="period" data-p="week">الأسبوع</button>
         <button class="period" data-p="month">الشهر</button>
         <button class="period" data-p="all">الكل</button>
@@ -636,7 +637,7 @@ body.light .period.on { box-shadow: 0 2px 8px rgba(31,26,20,0.06), inset 0 0 0 1
 <script>
 'use strict';
 
-/* ═══════════════ SVG ICONS — Refined monoline ═══════════════ */
+/* ═══════════════ SVG ICONS ═══════════════ */
 var ICONS = {
   home:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5L12 3l9 6.5V20a1.5 1.5 0 0 1-1.5 1.5h-4.5V14h-6v7.5H4.5A1.5 1.5 0 0 1 3 20z"/><circle cx="12" cy="14" r="1" fill="currentColor" stroke="none"/></svg>',
   list:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6h12M9 12h12M9 18h12"/><circle cx="4" cy="6" r="1.3" fill="currentColor" stroke="none"/><circle cx="4" cy="12" r="1.3" fill="currentColor" stroke="none"/><circle cx="4" cy="18" r="1.3" fill="currentColor" stroke="none"/></svg>',
@@ -695,25 +696,69 @@ function isoDateCairo(d) {
   return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
 }
 function isoDate(d) { return isoDateCairo(d); }
+
+/* ✅ FIX: getTxDate — بقت تقرا Firestore Timestamp بكل صيغه */
 function getTxDate(t) {
   if (!t) return null;
   var raw = t.date;
+
+  // 1) Firestore Timestamp object
+  if (raw && typeof raw === 'object') {
+    try {
+      if (typeof raw.toDate === 'function') {
+        var d1 = raw.toDate();
+        if (!isNaN(d1.getTime())) return isoDateCairo(d1);
+      }
+      if (typeof raw.seconds === 'number') {
+        var d2 = new Date(raw.seconds * 1000);
+        if (!isNaN(d2.getTime())) return isoDateCairo(d2);
+      }
+      if (typeof raw._seconds === 'number') {
+        var d3 = new Date(raw._seconds * 1000);
+        if (!isNaN(d3.getTime())) return isoDateCairo(d3);
+      }
+      if (typeof raw.valueOf === 'function') {
+        var v = raw.valueOf();
+        if (typeof v === 'number' && !isNaN(v)) {
+          var d4 = new Date(v);
+          if (!isNaN(d4.getTime())) return isoDateCairo(d4);
+        }
+      }
+    } catch(e) {}
+  }
+
+  // 2) String
   if (typeof raw === 'string' && raw) {
-    var m = raw.match(/^(\d{4}-\d{2}-\d{2})/);
-    if (m) return m[1];
+    var m = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (m) return m[1] + '-' + m[2] + '-' + m[3];
     var parsed = new Date(raw);
     if (!isNaN(parsed.getTime())) return isoDateCairo(parsed);
   }
-  if (typeof raw === 'number') {
+
+  // 3) Number (ms timestamp)
+  if (typeof raw === 'number' && !isNaN(raw)) {
     var dt = new Date(raw);
     if (!isNaN(dt.getTime())) return isoDateCairo(dt);
   }
+
+  // 4) Fallback: createdAt (مع دعم Timestamp object)
   if (t.createdAt) {
-    var dt2 = new Date(t.createdAt);
-    if (!isNaN(dt2.getTime())) return isoDateCairo(dt2);
+    var c = t.createdAt;
+    var dtc = null;
+    if (c && typeof c === 'object') {
+      try {
+        if (typeof c.toDate === 'function') dtc = c.toDate();
+        else if (typeof c.seconds === 'number') dtc = new Date(c.seconds * 1000);
+        else if (typeof c._seconds === 'number') dtc = new Date(c._seconds * 1000);
+      } catch(e) {}
+    } else {
+      dtc = new Date(c);
+    }
+    if (dtc && !isNaN(dtc.getTime())) return isoDateCairo(dtc);
   }
   return null;
 }
+
 var CANCELLED_STATUSES = ['cancelled','canceled','deleted','rejected','void','voided','archived','refunded','reversed','declined','removed','inactive','cancel','delete','reject','trash'];
 function isActiveTx(t) {
   if (!t) return false;
@@ -1507,9 +1552,13 @@ function cleanHandledRequests() {
   }).catch(function() {});
 }
 
+/* ✅ FIX: filterByPeriod — بيدعم "امبارح" دلوقتي */
 function filterByPeriod(list, period) {
   var today = isoDate();
+  var yesterday = yesterdayISO();
+
   if (period === 'today') return list.filter(function(t) { return t._isoDate === today; });
+  if (period === 'yesterday') return list.filter(function(t) { return t._isoDate === yesterday; });
   if (period === 'week') {
     var d = new Date(); d.setDate(d.getDate() - 6); d.setHours(0,0,0,0);
     return list.filter(function(t) {
@@ -1517,7 +1566,10 @@ function filterByPeriod(list, period) {
       return new Date(t._isoDate + 'T00:00:00') >= d;
     });
   }
-  if (period === 'month') { var m = today.slice(0, 7); return list.filter(function(t) { return t._isoDate && t._isoDate.indexOf(m) === 0; }); }
+  if (period === 'month') {
+    var m = today.slice(0, 7);
+    return list.filter(function(t) { return t._isoDate && t._isoDate.indexOf(m) === 0; });
+  }
   return list;
 }
 
@@ -1527,7 +1579,8 @@ function renderHistory() {
   var box = document.getElementById('histList');
   var totalBox = document.getElementById('histTotal');
   if (!list.length) {
-    box.innerHTML = '<div class="empty"><span class="empty-emoji">' + icon('list', 40) + '</span>لا توجد عمليات في هذه الفترة</div>';
+    var emptyMsg = currentPeriod === 'yesterday' ? 'لا توجد عمليات مسجّلة امبارح' : 'لا توجد عمليات في هذه الفترة';
+    box.innerHTML = '<div class="empty"><span class="empty-emoji">' + icon('list', 40) + '</span>' + emptyMsg + '</div>';
     totalBox.style.display = 'none';
     return;
   }
