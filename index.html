@@ -5066,6 +5066,7 @@ quickTransferData: {
   const isSavingRef = useRef(false);
   const hasReceivedInitialSnapshot = useRef(false);
   const initialSnapshotTimeoutRef = useRef(null);
+  const currentTxRef = useRef([]);
 // ✅ deletedIdsRef اتشال — كان بيسبب مشكلة في الاسترجاع
   
   const { data, activeTab, selectedYear, selectedMonth, transViewMode, catViewType, isFormOpen, formMode, formData, isDarkMode, expandedGroup, budgets, editingCard, editingLoan, searchTerm, editingBudgetCategory, budgetAmount, isRecurringModalOpen, recurringFormData, notifications, history, expandedLedgers, expandedCardsSection, statusFilter, confirmDialog, isQuickTransferModalOpen, quickTransferData, viewingCardStatement, viewingReceipt, isPinChangeOpen, isSmsModalOpen, pendingCloseModal, walletVisibility, isProcessing, formErrors, activeCategoryDetail } = state;
@@ -5081,22 +5082,53 @@ quickTransferData: {
 const forceCloudSave = useCallback((newData) => {
     if (!isAuthenticated) return;
     
-    // ✅ لا تحفظ قبل ما تستقبل النسخة الأولى
     if (!hasReceivedInitialSnapshot.current) {
       console.warn('⚠️ تخطي الحفظ — في انتظار Firestore');
       return;
     }
     
     isSavingRef.current = true;
-    const payload = { ...newData, budgets };
     const payloadStr = JSON.stringify(newData);
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(newData)); } catch (e) {}
     const safetyTimer = setTimeout(() => { isSavingRef.current = false; }, 10000);
-    db.collection("finance_2026").doc("user_ahmed_data").set(payload, { merge: true })
-      .then(() => { lastRemoteRef.current = payloadStr; })
-      .catch(err => console.error('Force save failed:', err))
-      .finally(() => { clearTimeout(safetyTimer); isSavingRef.current = false; });
+    const docRef = db.collection("finance_2026").doc("user_ahmed_data");
+    
+    // ✅ اقرأ أحدث نسخة، ادمج، ثم اكتب
+    docRef.get().then((doc) => {
+      let finalData = { ...newData };
+      if (doc.exists) {
+        const remote = doc.data() || {};
+        // ✅ دمج arrays (احتفظ بأي معاملات جديدة من السيرفر)
+        const remoteTx = Array.isArray(remote.transactions) ? remote.transactions : [];
+        const localTx = Array.isArray(newData.transactions) ? newData.transactions : [];
+        const remoteIds = new Set(remoteTx.map(t => t.id));
+        const localIds = new Set(localTx.map(t => t.id));
+        const localOnly = localTx.filter(t => !remoteIds.has(t.id));
+        const remoteOnly = remoteTx.filter(t => !localIds.has(t.id));
+        
+        if (localOnly.length > 0 || remoteOnly.length > 0) {
+          console.log(`☁️ دمج: +${localOnly.length} محلي فقط، +${remoteOnly.length} سحابي فقط`);
+          // احذف المحلي فقط من نسختنا، أضف السحابي فقط من عندهم
+          const merged = [...remoteTx, ...localOnly];
+          // فلتر: احتفظ بأي معاملة موجودة في نسختنا المحلية
+          const mergedFiltered = merged.filter(t => {
+            // احتفظ لو المعاملة موجودة عندنا (يعني محلية) أو سحابية فقط
+            return !localIds.has(t.id) || localTx.some(lt => lt.id === t.id);
+          });
+          finalData.transactions = mergedFiltered;
+        }
+        // ✅ budgets كذلك
+        if (remote.budgets && typeof remote.budgets === 'object') {
+          finalData.budgets = { ...remote.budgets, ...budgets };
+        }
+      }
+      return docRef.set({ ...finalData, budgets: finalData.budgets || budgets }, { merge: true });
+    })
+    .then(() => { lastRemoteRef.current = payloadStr; })
+    .catch(err => console.error('Force save failed:', err))
+    .finally(() => { clearTimeout(safetyTimer); isSavingRef.current = false; });
   }, [isAuthenticated, budgets]);
+  
 
   useEffect(() => {
     const unsub = firebase.auth().onAuthStateChanged((user) => {
@@ -5112,7 +5144,11 @@ const forceCloudSave = useCallback((newData) => {
     const interval = setInterval(materializeShoppingRecurring, 60 * 60 * 1000);
     return () => clearInterval(interval);
   }, [isAuthenticated]);
+// ✅ صندوق سري - بيتحدث تلقائياً
 useEffect(() => {
+  currentTxRef.current = data?.transactions || [];
+}, [data?.transactions]);
+  useEffect(() => {
     if (!isAuthenticated) return;
     const docRef = db.collection("finance_2026").doc("user_ahmed_data");
     
@@ -5139,7 +5175,7 @@ useEffect(() => {
         const migrated = migrateData(raw);
         
         // ✅ دمج ذكي للـ transactions (مش استبدال)
-        const localTx = data?.transactions || [];
+        const localTx = currentTxRef.current;
         const remoteTx = migrated.transactions || [];
         const remoteIds = new Set(remoteTx.map(t => t.id));
         const localOnly = localTx.filter(t => !remoteIds.has(t.id));
@@ -5170,17 +5206,15 @@ useEffect(() => {
       unsub();
       if (initialSnapshotTimeoutRef.current) clearTimeout(initialSnapshotTimeoutRef.current);
     };
-  }, [isAuthenticated, data?.transactions?.length]);
-
+}, [isAuthenticated]);
+  
  useEffect(() => {
     if (!isAuthenticated || !data?.transactions) return;
     
-    // ✅ لا تحفظ قبل ما تستقبل النسخة الأولى
     if (!hasReceivedInitialSnapshot.current) {
       return;
     }
     
-    // ✅ لو offline، احفظ محلياً فقط
     if (cloudSyncStatus === 'offline') {
       try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch (e) {}
       return;
@@ -5192,18 +5226,38 @@ useEffect(() => {
       const payloadStr = JSON.stringify(data);
       if (lastRemoteRef.current && payloadStr === lastRemoteRef.current) return;
       isSavingRef.current = true;
-      const payload = { ...data, budgets };
       const safetyTimer = setTimeout(() => { isSavingRef.current = false; }, 8000);
       try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }
       catch (e) { console.warn('LS save failed:', e); }
-      db.collection("finance_2026").doc("user_ahmed_data").set(payload, { merge: true })
-        .then(() => { lastRemoteRef.current = payloadStr; })
-        .catch(err => console.error('Auto-save failed:', err))
-        .finally(() => { clearTimeout(safetyTimer); isSavingRef.current = false; });
+      const docRef = db.collection("finance_2026").doc("user_ahmed_data");
+      
+      // ✅ اقرأ + دمج + اكتب
+      docRef.get().then((doc) => {
+        let finalData = { ...data };
+        if (doc.exists) {
+          const remote = doc.data() || {};
+          const remoteTx = Array.isArray(remote.transactions) ? remote.transactions : [];
+          const localTx = Array.isArray(data.transactions) ? data.transactions : [];
+          const remoteIds = new Set(remoteTx.map(t => t.id));
+          const localOnly = localTx.filter(t => !remoteIds.has(t.id));
+          
+          if (localOnly.length > 0) {
+            console.log(`☁️ دمج: إضافة ${localOnly.length} معاملة محلية`);
+            finalData.transactions = [...remoteTx, ...localOnly];
+          } else if (remoteTx.length > localTx.length) {
+            // السيرفر عنده معاملات أكتر (من الفاميلي/الشوبينج) - خدهم
+            finalData.transactions = remoteTx;
+          }
+        }
+        return docRef.set({ ...finalData, budgets }, { merge: true });
+      })
+      .then(() => { lastRemoteRef.current = payloadStr; })
+      .catch(err => console.error('Auto-save failed:', err))
+      .finally(() => { clearTimeout(safetyTimer); isSavingRef.current = false; });
     }, 5000);
     return () => clearTimeout(saveTimeoutRef.current);
-  }, [data, isAuthenticated, budgets]);
-
+  }, [data, isAuthenticated, budgets, cloudSyncStatus]);
+  
   useEffect(() => {
     if (!isAuthenticated || !data?.recurringItems?.length) return;
     const today = getLocalISODate();
