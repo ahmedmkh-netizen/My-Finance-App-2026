@@ -223,6 +223,24 @@ body.light .card::before { background: linear-gradient(90deg, transparent, rgba(
 .voice-btn.rec { background: var(--danger); color: #FFF; animation: recPulse 1.2s infinite; }
 @keyframes recPulse { 0%,100% { box-shadow: 0 0 0 0 rgba(240,119,119,0.4); } 50% { box-shadow: 0 0 0 12px rgba(240,119,119,0); } }
 
+/* SEARCH MODE HINT */
+.search-mode-hint {
+  font-size: 10.5px;
+  color: var(--gold);
+  background: var(--gold-soft);
+  border: 1px solid var(--gold-ring);
+  padding: 5px 10px;
+  border-radius: 8px;
+  margin-bottom: 10px;
+  display: none;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.search-mode-hint.show { display: flex; }
+.search-mode-hint .ico svg { width: 11px; height: 11px; }
+
 /* CATEGORIES */
 .cats { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 10px; margin-bottom: 11px; }
 .cats::-webkit-scrollbar { display: none; }
@@ -268,6 +286,21 @@ body.light .item { background: linear-gradient(180deg, var(--surface-2) 0%, rgba
 .item.on .item-name { font-weight: 700; }
 .item .item-price { font-size: 9.5px; font-weight: 600; color: var(--text-4); font-variant-numeric: tabular-nums; letter-spacing: 0.02em; }
 .item.on .item-price { color: var(--gold); }
+.item .item-cat {
+  font-size: 8px;
+  font-weight: 700;
+  color: var(--gold);
+  background: var(--gold-soft);
+  border: 0.5px solid var(--gold-ring);
+  padding: 1px 5px;
+  border-radius: 999px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  letter-spacing: 0.02em;
+  margin-top: 1px;
+}
 .item .star { position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; padding: 3px; display: flex; align-items: center; justify-content: center; color: var(--text-4); background: none; transition: all 0.15s; border-radius: 5px; }
 .item .star svg { width: 10px; height: 10px; }
 .item .star.on { color: var(--gold); filter: drop-shadow(0 0 4px var(--gold-ring)); }
@@ -294,6 +327,27 @@ body.light .item { background: linear-gradient(180deg, var(--surface-2) 0%, rgba
 .auto-badge { position: absolute; top: 8px; right: 10px; background: var(--warning); color: #08080B; font-size: 9.5px; font-weight: 700; padding: 3px 8px; border-radius: 999px; display: none; align-items: center; gap: 4px; letter-spacing: 0.02em; box-shadow: 0 4px 12px rgba(245,184,87,0.3); }
 .auto-badge.show { display: inline-flex; }
 .auto-badge .ico svg { width: 9px; height: 9px; }
+/* ✅ NEW: Clear button */
+.amount-clear {
+  position: absolute;
+  top: 8px;
+  left: 10px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--surface-3);
+  color: var(--text-3);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+  border: 1px solid var(--border-2);
+  z-index: 2;
+}
+.amount-clear svg { width: 12px; height: 12px; }
+.amount-box.has-value .amount-clear { display: flex; }
+.amount-clear:hover { background: var(--danger-soft); color: var(--danger); border-color: rgba(240,119,119,0.3); }
+.amount-clear:active { transform: scale(0.9); }
 
 /* QUICK */
 .quick { display: grid; grid-template-columns: repeat(auto-fill, minmax(52px, 1fr)); gap: 5px; margin-bottom: 14px; }
@@ -555,8 +609,13 @@ body.light .period.on { box-shadow: 0 2px 8px rgba(31,26,20,0.06), inset 0 0 0 1
       <div class="card-title"><span data-ico="box" style="width:14px;height:14px"></span> هنشتري إيه؟</div>
       <div class="search-box">
         <span class="search-icon" data-ico="search"></span>
-        <input type="text" class="search-input" id="searchInput" placeholder="ابحث أو قول بصوتك" autocomplete="off">
+        <input type="text" class="search-input" id="searchInput" placeholder="ابحث في كل الفئات أو قول بصوتك" autocomplete="off">
         <button class="voice-btn" id="voiceBtn" title="إدخال صوتي" data-ico="mic"></button>
+      </div>
+      <!-- ✅ NEW: Search mode hint -->
+      <div class="search-mode-hint" id="searchModeHint">
+        <span data-ico="search" style="width:11px;height:11px"></span>
+        <span>نتائج البحث من كل الفئات</span>
       </div>
       <div id="favWrap" style="display:none">
         <div class="card-title" style="font-size:10.5px;margin-bottom:9px;color:var(--text-3);letter-spacing:1px;text-transform:uppercase">
@@ -572,6 +631,10 @@ body.light .period.on { box-shadow: 0 2px 8px rgba(31,26,20,0.06), inset 0 0 0 1
       <div class="card-title"><span data-ico="wallet" style="width:14px;height:14px"></span> بكام وفي إمتى؟</div>
       <div class="amount-box" id="amountBox">
         <div class="auto-badge" id="autoBadge"><span data-ico="star" style="width:9px;height:9px"></span> سعر تلقائي</div>
+        <!-- ✅ NEW: Clear button -->
+        <button class="amount-clear" id="amountClear" type="button" title="مسح المبلغ" aria-label="مسح">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
         <input type="text" inputmode="decimal" class="amount-num" id="amount" placeholder="0">
         <span class="amount-cur">ج.م</span>
       </div>
@@ -895,6 +958,7 @@ function applyAutoPrice(itemName, force) {
     amountBox.classList.remove('auto-filled');
     autoBadge.classList.remove('show');
   }
+  updateAmountClearBtn();
 }
 function clearAutoPrice() {
   amountAutoFilled = false;
@@ -902,6 +966,15 @@ function clearAutoPrice() {
   var autoBadge = document.getElementById('autoBadge');
   if (amountBox) amountBox.classList.remove('auto-filled');
   if (autoBadge) autoBadge.classList.remove('show');
+}
+
+/* ✅ NEW: Show/hide clear button based on value */
+function updateAmountClearBtn() {
+  var amountInput = document.getElementById('amount');
+  var amountBox = document.getElementById('amountBox');
+  if (!amountInput || !amountBox) return;
+  if (amountInput.value.trim() !== '') amountBox.classList.add('has-value');
+  else amountBox.classList.remove('has-value');
 }
 
 /* ═══════════════ إعدادات ═══════════════ */
@@ -920,6 +993,7 @@ var USERS = {
 var FIREBASE_PROJECT = 'finance-app-2026-3e318';
 var CATEGORY_NAME = 'مسحوبات محل هاني';
 var AUTO_LOCK_MS = 4 * 60 * 1000;
+var DUPLICATE_WINDOW_MS = 5000; /* ✅ NEW: نافذة منع التكرار (5 ثواني) */
 
 var AZKAR = [
   { text: 'سُبْحَانَ اللَّهِ وَبِحَمْدِهِ، سُبْحَانَ اللَّهِ الْعَظِيمِ', icon: '📿' },
@@ -934,7 +1008,6 @@ var AZKAR = [
   { text: 'اللَّهُمَّ صَلِّ عَلَى نَبِيِّنَا مُحَمَّدٍ', icon: '☾' }
 ];
 
-/* ═══════════════ الفئات (تم إضافة عبد الرحمن) ═══════════════ */
 var CATEGORIES = {
   smokes:    { label: 'سجاير',      items: ['سجاير','مارلبورو','ميريت','LM','كليوباترا','كليوباترا بوكس','نكست','وينستون','PINE','إل إم أزرق','إل إم أحمر','ميريت أصفر','ميريت أزرق'] },
   drinks:    { label: 'مشروبات',    items: ['بيبسي','بيبسي كانز','كوكاكولا','سفن أب','ميرندا','عصير','جوافة','مانجو','برتقال','مياه','ريد بُل','شويبس','فيروز','توت','ليمون بالنعناع'] },
@@ -950,7 +1023,6 @@ var CATEGORIES = {
   special:   { label: 'طلبات خاصة', items: ['أنس','أم عبده','سلمى','عبد الرحمن'] }
 };
 
-/* ═══════════════ الأسعار ═══════════════ */
 var ITEM_PRICES = {
   'سجاير': 75, 'مارلبورو': 75, 'ميريت': 80, 'LM': 65,
   'كليوباترا': 40, 'كليوباترا بوكس': 45, 'نكست': 65,
@@ -1018,8 +1090,10 @@ var selectedDateMode = 'today';
 var customDate = '';
 var amountAutoFilled = false;
 var isFirstLoad = true;
+/* ✅ NEW: تتبع آخر عملية محفوظة لمنع التكرار */
+var lastSaveInfo = { item: '', amount: 0, time: 0 };
+var isSaving = false; /* منع الضغط المتكرر على الزر */
 
-/* ✅ sendTelegram — HTML parse mode */
 function sendTelegram(text) {
   if (!TELEGRAM_ENABLED) return;
   fetch('https://api.telegram.org/bot' + TELEGRAM_TOKEN + '/sendMessage', {
@@ -1282,6 +1356,9 @@ function init() {
       renderItems();
       renderFavs();
       updateDateQuickButtons();
+      /* ✅ NEW: ضبط max attribute لتاريخ اليوم */
+      var ci = document.getElementById('customDateInput');
+      if (ci) ci.max = isoDate();
       resetLock();
       setupOffline();
       setupInstall();
@@ -1303,6 +1380,8 @@ function init() {
     renderItems();
     renderFavs();
     updateDateQuickButtons();
+    var ci = document.getElementById('customDateInput');
+    if (ci) ci.max = isoDate();
     document.getElementById('headerTotal').textContent = 'لا يوجد اتصال';
     document.getElementById('heroValue').classList.remove('loading');
     document.getElementById('heroToday').textContent = '—';
@@ -1331,23 +1410,57 @@ function renderCats() {
   }).join('');
 }
 
+/* ✅ NEW: زر البند مع دعم عرض اسم الفئة في وضع البحث */
+function renderItemBtn(item, catKey, catLabel) {
+  var isFav = favorites.indexOf(item) >= 0;
+  var price = getItemPrice(item);
+  var priceHtml = price !== null ? '<span class="item-price">' + price + ' ج.م</span>' : '';
+  var catHtml = catLabel ? '<span class="item-cat">' + esc(catLabel) + '</span>' : '';
+  var starIco = isFav ? icon('star', 10) : icon('starLine', 10);
+  return '<button class="item ' + (item === selectedItem ? 'on' : '') + '" data-i="' + esc(item) + '" data-c="' + esc(catKey || selectedCategory) + '">' +
+    '<span class="star ' + (isFav ? 'on' : '') + '" data-f="' + esc(item) + '">' + starIco + '</span>' +
+    '<span class="item-name">' + esc(item) + '</span>' + priceHtml + catHtml + '</button>';
+}
+
+/* ✅ UPDATED: البحث يعمل عبر كل الفئات */
 function renderItems(filter) {
-  filter = filter || '';
-  var cat = CATEGORIES[selectedCategory];
-  var items = filter ? cat.items.filter(function(i) { return i.indexOf(filter) >= 0; }) : cat.items;
+  filter = (filter || '').trim();
   var box = document.getElementById('items');
+  var hint = document.getElementById('searchModeHint');
+
+  if (filter) {
+    /* وضع البحث: ابحث في كل الفئات */
+    if (hint) hint.classList.add('show');
+    var results = [];
+    var seen = {};
+    Object.keys(CATEGORIES).forEach(function(catKey) {
+      CATEGORIES[catKey].items.forEach(function(item) {
+        if (item.indexOf(filter) >= 0 && !seen[item]) {
+          seen[item] = true;
+          results.push({ item: item, cat: catKey, label: CATEGORIES[catKey].label });
+        }
+      });
+    });
+    if (!results.length) {
+      box.innerHTML = '<div class="empty" style="grid-column:1/-1"><span class="empty-emoji">' + icon('search', 36) + '</span>لا توجد نتائج لـ "' + esc(filter) + '"</div>';
+      return;
+    }
+    box.innerHTML = results.map(function(r) {
+      return renderItemBtn(r.item, r.cat, r.label);
+    }).join('');
+    return;
+  }
+
+  /* وضع عادي: الفئة المختارة فقط */
+  if (hint) hint.classList.remove('show');
+  var cat = CATEGORIES[selectedCategory];
+  var items = cat.items;
   if (!items.length) {
     box.innerHTML = '<div class="empty" style="grid-column:1/-1"><span class="empty-emoji">' + icon('search', 36) + '</span>لا توجد نتائج</div>';
     return;
   }
   box.innerHTML = items.map(function(item) {
-    var isFav = favorites.indexOf(item) >= 0;
-    var price = getItemPrice(item);
-    var priceHtml = price !== null ? '<span class="item-price">' + price + ' ج.م</span>' : '';
-    var starIco = isFav ? icon('star', 10) : icon('starLine', 10);
-    return '<button class="item ' + (item === selectedItem ? 'on' : '') + '" data-i="' + esc(item) + '">' +
-      '<span class="star ' + (isFav ? 'on' : '') + '" data-f="' + esc(item) + '">' + starIco + '</span>' +
-      '<span class="item-name">' + esc(item) + '</span>' + priceHtml + '</button>';
+    return renderItemBtn(item, selectedCategory, null);
   }).join('');
 }
 
@@ -1369,7 +1482,11 @@ function updateDateQuickButtons() {
   if (selectedDateMode === 'custom') {
     wrapper.classList.add('show');
     var inp = document.getElementById('customDateInput');
-    if (inp && !inp.value) { inp.value = customDate || yesterdayISO(); customDate = inp.value; }
+    if (inp) {
+      /* ✅ NEW: تأكد أن max دائماً اليوم */
+      inp.max = isoDate();
+      if (!inp.value) { inp.value = customDate || yesterdayISO(); customDate = inp.value; }
+    }
   } else wrapper.classList.remove('show');
   var yBtn = document.querySelector('[data-dm="yesterday"] .db-date');
   if (yBtn) { try { var d = new Date(yesterdayISO() + 'T12:00:00'); yBtn.textContent = d.toLocaleDateString('ar-EG', { day: 'numeric', month: 'short' }); } catch(e) {} }
@@ -1450,12 +1567,19 @@ function bindEvents() {
     var btn = e.target.closest('.cat'); if (!btn) return;
     selectedCategory = btn.dataset.c;
     document.getElementById('searchInput').value = '';
+    var hint = document.getElementById('searchModeHint');
+    if (hint) hint.classList.remove('show');
     renderCats(); renderItems();
   });
   document.getElementById('items').addEventListener('click', function(e) {
     var star = e.target.closest('.star'); if (star) { e.stopPropagation(); toggleFav(star.dataset.f); return; }
     var btn = e.target.closest('.item'); if (!btn) return;
     selectedItem = btn.dataset.i;
+    /* ✅ NEW: لو اختار من نتيجة بحث، انتقل لفئة الصنف */
+    if (btn.dataset.c && CATEGORIES[btn.dataset.c]) {
+      selectedCategory = btn.dataset.c;
+      renderCats();
+    }
     renderItems(document.getElementById('searchInput').value);
     applyAutoPrice(selectedItem, true);
     document.getElementById('amount').focus();
@@ -1465,6 +1589,9 @@ function bindEvents() {
     var btn = e.target.closest('.fav-chip'); if (!btn) return;
     selectedItem = btn.dataset.i;
     Object.keys(CATEGORIES).forEach(function(k) { if (CATEGORIES[k].items.indexOf(selectedItem) >= 0) selectedCategory = k; });
+    document.getElementById('searchInput').value = '';
+    var hint = document.getElementById('searchModeHint');
+    if (hint) hint.classList.remove('show');
     renderCats(); renderItems();
     applyAutoPrice(selectedItem, true);
     document.getElementById('amount').focus();
@@ -1476,13 +1603,27 @@ function bindEvents() {
     var btn = e.target.closest('.quick-btn'); if (!btn) return;
     document.getElementById('amount').value = btn.dataset.v;
     clearAutoPrice();
+    updateAmountClearBtn();
     if (navigator.vibrate) navigator.vibrate(10);
   });
   document.getElementById('amount').addEventListener('input', function(e) {
     e.target.value = e.target.value.replace(/[^\d.]/g, '');
     if (amountAutoFilled) clearAutoPrice();
+    updateAmountClearBtn();
   });
   document.getElementById('amount').addEventListener('keydown', function(e) { if (e.key === 'Enter') saveTx(); });
+
+  /* ✅ NEW: زر مسح المبلغ */
+  document.getElementById('amountClear').addEventListener('click', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    document.getElementById('amount').value = '';
+    clearAutoPrice();
+    updateAmountClearBtn();
+    document.getElementById('amount').focus();
+    if (navigator.vibrate) navigator.vibrate(10);
+  });
+
   document.getElementById('saveBtn').addEventListener('click', saveTx);
   document.getElementById('nav').addEventListener('click', function(e) {
     var btn = e.target.closest('.nav-btn'); if (!btn) return;
@@ -1518,10 +1659,23 @@ function bindEvents() {
     });
   });
   var customInput = document.getElementById('customDateInput');
-  if (customInput) customInput.addEventListener('change', function(e) {
-    customDate = e.target.value;
-    if (!customDate) { selectedDateMode = 'today'; updateDateQuickButtons(); }
-  });
+  if (customInput) {
+    /* ✅ NEW: منع التواريخ المستقبلية */
+    customInput.max = isoDate();
+    customInput.addEventListener('change', function(e) {
+      customDate = e.target.value;
+      /* ✅ NEW: تحقق إضافي */
+      if (customDate && customDate > isoDate()) {
+        toast('التاريخ المستقبلي غير مسموح', 'err');
+        customDate = '';
+        e.target.value = '';
+        selectedDateMode = 'today';
+        updateDateQuickButtons();
+        return;
+      }
+      if (!customDate) { selectedDateMode = 'today'; updateDateQuickButtons(); }
+    });
+  }
 }
 
 function switchTab(t) {
@@ -1536,6 +1690,8 @@ function switchTab(t) {
 function saveTx() {
   if (!selectedItem) { toast('اختر صنفاً أولاً', 'err'); return; }
   if (!isAuthReady || !docRef) { toast('التطبيق غير متصل — تحقق من الإنترنت', 'err'); return; }
+  if (isSaving) { return; } /* ✅ منع ضغط مزدوج */
+
   var amount = parseFloat(document.getElementById('amount').value);
   if (!amount || amount <= 0) { toast('أدخل المبلغ', 'err'); return; }
   var note = document.getElementById('note').value.trim();
@@ -1543,6 +1699,18 @@ function saveTx() {
 
   if (txDateISO > isoDate()) { toast('تاريخ مستقبلي غير مسموح', 'err'); return; }
 
+  /* ✅ NEW: منع التكرار خلال 5 ثواني */
+  var now = Date.now();
+  if (lastSaveInfo.item === selectedItem &&
+      Number(lastSaveInfo.amount) === Number(amount) &&
+      (now - lastSaveInfo.time) < DUPLICATE_WINDOW_MS) {
+    var remaining = Math.ceil((DUPLICATE_WINDOW_MS - (now - lastSaveInfo.time)) / 1000);
+    toast('نفس العملية تم تسجيلها للتو — انتظر ' + remaining + ' ثانية', 'warn');
+    if (navigator.vibrate) navigator.vibrate([30, 30, 30]);
+    return;
+  }
+
+  isSaving = true;
   var txDateObj = new Date(txDateISO + 'T12:00:00');
   var tx = {
     id: 'fam-' + Date.now() + '-' + Math.random().toString(36).slice(2,9),
@@ -1570,10 +1738,19 @@ function saveTx() {
                   (note ? '📝 ملاحظة: ' + note + '\n' : '') +
                   '🕐 ' + new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
       sendTelegram(tgMsg);
+
+      /* ✅ سجّل آخر عملية لمنع التكرار */
+      lastSaveInfo = { item: itemName, amount: Number(amount), time: Date.now() };
+
       document.getElementById('amount').value = '';
       document.getElementById('note').value = '';
       selectedItem = '';
       clearAutoPrice();
+      updateAmountClearBtn();
+      /* ✅ امسح البحث والـ hint بعد الحفظ */
+      document.getElementById('searchInput').value = '';
+      var hint = document.getElementById('searchModeHint');
+      if (hint) hint.classList.remove('show');
       if (selectedDateMode !== 'today') { selectedDateMode = 'today'; updateDateQuickButtons(); }
       renderItems();
       toast('تم الحفظ — ' + itemName + ' · ' + fmt(amount) + ' ج.م' + dateInfo);
@@ -1585,7 +1762,11 @@ function saveTx() {
       }
     })
     .catch(function(e) { toast('فشل الحفظ: ' + e.message, 'err'); })
-    .then(function() { btn.disabled = false; btn.innerHTML = icon('save', 16) + ' حفظ في السجل'; });
+    .then(function() {
+      isSaving = false;
+      btn.disabled = false;
+      btn.innerHTML = icon('save', 16) + ' حفظ في السجل';
+    });
 }
 
 function hasPendingDeleteRequest(txId) { return cachedDeleteRequests.some(function(r) { return r.txId === txId; }); }
@@ -2006,8 +2187,11 @@ function startVoice() {
     if (item) {
       selectedItem = item;
       Object.keys(CATEGORIES).forEach(function(k) { if (CATEGORIES[k].items.indexOf(item) >= 0) selectedCategory = k; });
+      document.getElementById('searchInput').value = '';
+      var hint = document.getElementById('searchModeHint');
+      if (hint) hint.classList.remove('show');
       renderCats(); renderItems();
-      if (p.amount) { document.getElementById('amount').value = p.amount; clearAutoPrice(); }
+      if (p.amount) { document.getElementById('amount').value = p.amount; clearAutoPrice(); updateAmountClearBtn(); }
       else applyAutoPrice(item, true);
       toast('تم التعرف: ' + item);
     } else if (p.txt) toast('لم يتم التعرف على "' + p.txt + '"', 'err');
