@@ -1921,14 +1921,48 @@ const OfflineBanner = memo(({ online }) => {
   );
 });
 
-/* ─────────────── Online Status Badge ─────────────── */
-const OnlineStatusBadge = memo(({ online }) => (
-  <div className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black mt-0.5 ${online ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400' : 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400'}`}>
-    <span className={`w-1.5 h-1.5 rounded-full ${online ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'}`}></span>
-    {online ? 'متصل' : 'غير متصل'}
-  </div>
-));
+/* ─────────────── Router Status Lights ─────────────── */
+const RouterStatusLights = memo(({ isOnline, syncStatus, isSaving }) => {
+  // حالة المزامنة (السحابة)
+  let syncColor = 'bg-slate-300 dark:bg-slate-600';
+  let syncText = 'غير معروف';
+  let syncBlink = '';
 
+  if (isSaving) {
+    syncColor = 'bg-amber-400';
+    syncText = 'جاري الحفظ';
+    syncBlink = 'animate-pulse';
+  } else if (syncStatus === 'ready') {
+    syncColor = 'bg-emerald-500';
+    syncText = 'متزامن';
+  } else if (syncStatus === 'pending') {
+    syncColor = 'bg-amber-400';
+    syncText = 'مزامنة...';
+    syncBlink = 'animate-pulse';
+  } else if (syncStatus === 'offline') {
+    syncColor = 'bg-red-500';
+    syncText = 'محلي فقط';
+    syncBlink = 'animate-pulse';
+  }
+
+  // حالة الاتصال بالإنترنت (النت)
+  const onlineColor = isOnline ? 'bg-emerald-500' : 'bg-amber-400 animate-pulse';
+  const onlineText = isOnline ? 'متصل' : 'غير متصل';
+
+  return (
+    <div className="flex items-center gap-3 bg-black/5 dark:bg-white/5 px-3 py-1.5 rounded-full border border-black/10 dark:border-white/10 mt-1" dir="rtl">
+      <div className="flex items-center gap-1.5" title={`الإنترنت: ${onlineText}`}>
+        <span className={`w-2.5 h-2.5 rounded-full ${onlineColor} shadow-sm`}></span>
+        <span className="text-[10px] font-bold opacity-70">نت</span>
+      </div>
+      <div className="flex items-center gap-1.5" title={`المزامنة: ${syncText}`}>
+        <span className={`w-2.5 h-2.5 rounded-full ${syncColor} ${syncBlink} shadow-sm`}></span>
+        <span className="text-[10px] font-bold opacity-70">سحابة</span>
+      </div>
+    </div>
+  );
+});
+  
 /* ─────────────── Sync Status Indicator ─────────────── */
 const SyncStatusIndicator = memo(({ status, isSaving }) => {
   const [secondsAgo, setSecondsAgo] = useState(null);
@@ -2271,13 +2305,14 @@ const ProfessionalTicker = memo(({ updatedLoans, cards, liveBalances, walletVisi
 });
 
 /* ─────────────── Professional Header ─────────────── */
-const ProfessionalHeader = memo(({ isDarkMode, dispatch, onOpenSms, isOnline }) => (
+const ProfessionalHeader = memo(({ isDarkMode, dispatch, onOpenSms, isOnline, syncStatus, isSaving }) => (
   <header className="flex justify-between items-center gap-3 mb-4">
     <div className="flex items-center gap-2.5">
       <div className="p-2 rounded-lg text-white shadow-sm" style={{ background: 'var(--brand)' }}><Wallet size={18} /></div>
       <div>
         <h1 className="text-base font-black">محفظتي المالية</h1>
-        <OnlineStatusBadge online={isOnline} />
+        {/* استبدلنا OnlineStatusBadge بالمكون الجديد */}
+        <RouterStatusLights isOnline={isOnline} syncStatus={syncStatus} isSaving={isSaving} />
       </div>
     </div>
     <div className="flex gap-1.5">
@@ -2307,7 +2342,6 @@ const ProfessionalHeader = memo(({ isDarkMode, dispatch, onOpenSms, isOnline }) 
     </div>
   </header>
 ));
-
 /* ─────────────── Login Screen ─────────────── */
 const LoginScreen = ({ onLogin }) => {
   const [isLoading, setIsLoading] = useState(false);
@@ -9713,7 +9747,6 @@ function App() {
           data={data} 
         />
         <OfflineBanner online={isOnline} />
-        <SyncStatusIndicator status={cloudSyncStatus} isSaving={isSaving} />
         <ToastContainer notifications={notifications} removeNotification={removeNotification} />
         <ConfirmDialog confirmDialog={confirmDialog} dispatch={dispatch} />
         
@@ -9969,6 +10002,8 @@ function App() {
               dispatch={dispatch} 
               onOpenSms={() => dispatch({ type: 'SET_SMS_MODAL_OPEN', payload: true })} 
               isOnline={isOnline} 
+              syncStatus={cloudSyncStatus} 
+              isSaving={isSaving}        
             />
             {renderActiveView()}
           </div>
