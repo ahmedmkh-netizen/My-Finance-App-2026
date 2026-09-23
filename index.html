@@ -187,7 +187,7 @@ import {
   ArrowUp, Undo2, LogOut, Lock, Unlock, Moon, Sun, ShieldCheck, RefreshCcw, Menu,
   Search, FileSpreadsheet, Settings as SettingsIcon, Target, CalendarDays, BarChart3, Bell, Sparkles,
   AlertTriangle, Clock, CheckCircle2, Zap, Coins, Filter, Eye, EyeOff, ShieldAlert,
-  Download, Upload, Cloud, Signal, PiggyBank, Landmark as BuildingBank, ArrowDownCircle, ArrowUpCircle, Wifi, Store as StoreIcon, Users, Activity, Sliders, Table, RotateCcw, LineChart, Delete, Briefcase, Gift, Receipt, ArrowLeftRight, Camera,
+  Download, Upload, Cloud, Signal, PiggyBank, Landmark as BuildingBank, ArrowDownCircle, ArrowUpCircle, Wifi, Store as StoreIcon, Users, Activity, Sliders, Table, RotateCcw, LineChart, Delete, Briefcase, Gift, Receipt, ArrowLeftRight,
   MessageSquare, PieChart as PieChartIcon, CloudOff, Copy, Send, Bot, ExternalLink
 } from 'lucide-react';
 
@@ -212,13 +212,6 @@ db.enablePersistence({ synchronizeTabs: true }).catch((err) => { console.warn('F
 const FIREBASE_DOC_PATH = { collection: 'finance_2026', doc: 'user_ahmed_data' };
 const LAST_SYNC_LS_KEY = 'v81_last_sync_ts';
 const ALLOWED_EMAIL = "ahmedmkh@gmail.com";
-
-/* ═══════════════════════════════════════════════════════════════
-   CLOUDINARY (صور الفواتير)
-   ═══════════════════════════════════════════════════════════════ */
-const CLOUDINARY_CLOUD_NAME = 'rs4dgpc';
-const CLOUDINARY_UPLOAD_PRESET = 'finance_receipts';
-const CLOUDINARY_UPLOAD_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`;
 
 /* ═══════════════════════════════════════════════════════════════
    ENGINE VERSION
@@ -869,60 +862,6 @@ const verifyPin = async (pin) => {
     return current === stored;
   } catch { return false; }
 };
-
-/* ═══════════════════════════════════════════════════════════════
-   Receipt / Cloudinary
-   ═══════════════════════════════════════════════════════════════ */
-const MAX_RECEIPT_SIZE_MB = 5;
-
-const compressImage = (file, maxWidth = 1280, quality = 0.75) => new Promise((resolve, reject) => {
-  if (!file.type.startsWith('image/')) return reject(new Error('الملف ليس صورة'));
-  if (file.size > MAX_RECEIPT_SIZE_MB * 1024 * 1024) return reject(new Error(`حجم الصورة أكبر من ${MAX_RECEIPT_SIZE_MB}MB`));
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    const img = new Image();
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      let { width, height } = img;
-      if (width > maxWidth) { height = Math.round((height * maxWidth) / width); width = maxWidth; }
-      canvas.width = width; canvas.height = height;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(img, 0, 0, width, height);
-      canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error('فشل الضغط')), 'image/jpeg', quality);
-    };
-    img.onerror = () => reject(new Error('فشل قراءة الصورة'));
-    img.src = e.target.result;
-  };
-  reader.onerror = () => reject(new Error('فشل قراءة الملف'));
-  reader.readAsDataURL(file);
-});
-
-const uploadReceipt = async (txId, file) => {
-  const blob = await compressImage(file);
-  const formData = new FormData();
-  formData.append('file', blob, `${txId}_${Date.now()}.jpg`);
-  formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
-  formData.append('folder', `receipts/${txId}`);
-  formData.append('public_id', `${Date.now()}_${Math.random().toString(36).slice(2,8)}`);
-  const res = await fetch(CLOUDINARY_UPLOAD_URL, { method: 'POST', body: formData });
-  if (!res.ok) { const errText = await res.text(); console.error('Cloudinary Error:', errText); throw new Error('فشل رفع الصورة'); }
-  const data = await res.json();
-  return { url: data.secure_url, path: data.public_id, name: file.name, size: data.bytes };
-};
-
-const deleteReceipt = async (path) => { 
-  if (!path) return { success: false, reason: 'no_path' }; 
-  try { 
-    try { 
-      const orphans = safeParseJson(localStorage.getItem('cloudinary_orphans'), []); 
-      orphans.push({ path, deletedAt: new Date().toISOString() }); 
-      if (orphans.length > 200) orphans.splice(0, orphans.length - 200); 
-      localStorage.setItem('cloudinary_orphans', JSON.stringify(orphans)); 
-    } catch {} 
-    return { success: true, reason: 'marked_orphan', path }; 
-  } catch (e) { return { success: false, reason: 'error', error: e.message }; } 
-};
-
 /* ═══════════════════════════════════════════════════════════════
    Business helpers
    ═══════════════════════════════════════════════════════════════ */
@@ -1138,9 +1077,7 @@ const migrateTransaction = (t) => {
   }
   let subType = t.subType;
   if (!subType) subType = t.type === 'income' ? 'deposit' : 'withdrawal';
-  return { ...t, kind, year, month, monthIndex, subType, receipts: Array.isArray(t.receipts) ? t.receipts : [] };
-};
-
+return { ...t, kind, year, month, monthIndex, subType };
 const migrateRecurringItems = (items) => {
   if (!Array.isArray(items)) return DEFAULT_RECURRING;
   return items.map(r => {
@@ -1425,7 +1362,6 @@ const materializeRecurringItems = (data, asOfDateStr) => {
       linkedCardId: linkedCardId || undefined,
       sourceReceivableId: receivableLinkedId || undefined,
       transferChannel: r.transferChannel || undefined,
-      receipts: [], 
       createdAt: new Date().toISOString()
     });
     materialized[matKey] = true;
@@ -2043,24 +1979,6 @@ const FamilyBadge = memo(({ tx }) => {
   return (<span className={`badge ${m.bg} ${m.text} border ${m.border}`}>🛒 {m.name}</span>);
 });
 
-/* ─────────────── Receipt Indicator ─────────────── */
-const ReceiptIndicator = memo(({ tx, dispatch }) => {
-  if (!tx?.receipts?.length) return null;
-  return (
-    <button 
-      type="button" 
-      aria-label="عرض الفواتير" 
-      onClick={(e) => { 
-        e.stopPropagation(); 
-        dispatch({ type: 'SET_VIEWING_RECEIPT', payload: { tx, index: 0 } }); 
-      }} 
-      className="badge badge-brand cursor-pointer"
-    >
-      <Camera size={10} /> {tx.receipts.length}
-    </button>
-  );
-});
-
 /* ─────────────── Group Transactions by Date ─────────────── */
 const groupTransactionsByDate = (list) => {
   const groups = {};
@@ -2668,7 +2586,6 @@ const SmsParserModal = memo(({ isOpen, onClose, dispatch, addNotification, saveH
       linkedCardId: parsed.linkedCardId || undefined,
       cardLast4: parsed.last4 || undefined,
       accountKind: parsed.accountKind || undefined,
-      receipts: []
     };
     dispatch({ 
       type: 'UPDATE_TRANSACTIONS', 
@@ -2764,141 +2681,6 @@ const SmsParserModal = memo(({ isOpen, onClose, dispatch, addNotification, saveH
     </Modal>
   );
 });
-
-/* ─────────────── Receipt Viewer ─────────────── */
-const ReceiptViewer = memo(({ viewingReceipt, dispatch, transactions, saveHistory, addNotification }) => {
-  if (!viewingReceipt) return null;
-  const { tx } = viewingReceipt;
-  const [index, setIndex] = useState(viewingReceipt.index || 0);
-  const receipts = tx?.receipts || [];
-  const [uploading, setUploading] = useState(false);
-  const fileInputRef = useRef(null);
-
-  useEffect(() => {
-    setIndex(viewingReceipt.index || 0);
-  }, [tx?.id, viewingReceipt.index]);
-
-  useEffect(() => {
-    if (receipts.length > 0 && index >= receipts.length) {
-      setIndex(receipts.length - 1);
-    }
-  }, [receipts.length, index]);
-
-  const close = () => dispatch({ type: 'SET_VIEWING_RECEIPT', payload: null });
-
-  const handleUpload = async (files) => {
-    if (!files || files.length === 0) return;
-    setUploading(true);
-    try {
-      const uploaded = [];
-      for (const file of Array.from(files).slice(0, 5)) {
-        const result = await uploadReceipt(tx.id, file);
-        uploaded.push(result);
-      }
-      saveHistory();
-      const updatedTx = { ...tx, receipts: [...(tx.receipts || []), ...uploaded] };
-      const newTxList = transactions.map(t => t.id === tx.id ? updatedTx : t);
-      dispatch({ type: 'UPDATE_TRANSACTIONS', payload: newTxList });
-      dispatch({ type: 'SET_VIEWING_RECEIPT', payload: { tx: updatedTx, index: (tx.receipts?.length || 0) } });
-      addNotification({ type: 'success', title: `تم رفع ${uploaded.length} فاتورة` });
-    } catch (e) {
-      addNotification({ type: 'error', title: 'فشل الرفع', message: e.message });
-    } finally { setUploading(false); }
-  };
-
-  const deleteOne = (idx) => {
-    const r = receipts[idx];
-    if (!r) return;
-    dispatch({ 
-      type: 'SHOW_CONFIRM', 
-      danger: true, 
-      title: 'حذف الفاتورة', 
-      message: 'سيتم حذف الصورة نهائياً', 
-      onConfirm: async () => {
-        saveHistory();
-        await deleteReceipt(r.path);
-        const newReceipts = receipts.filter((_, i) => i !== idx);
-        const updatedTx = { ...tx, receipts: newReceipts };
-        dispatch({ type: 'UPDATE_TRANSACTIONS', payload: transactions.map(t => t.id === tx.id ? updatedTx : t) });
-        if (newReceipts.length === 0) close();
-        else dispatch({ type: 'SET_VIEWING_RECEIPT', payload: { tx: updatedTx, index: Math.min(idx, newReceipts.length - 1) } });
-        addNotification({ type: 'success', title: 'تم الحذف' });
-      }, 
-      onCancel: () => dispatch({ type: 'HIDE_CONFIRM' }) 
-    });
-  };
-
-  return (
-    <div className="modal-backdrop no-print" onClick={(e) => { if (e.target === e.currentTarget) close(); }}>
-      <div className="generic-modal max-w-3xl">
-        <div className="generic-modal-header">
-          <div className="min-w-0">
-            <h3 className="text-base font-black truncate flex items-center gap-2">
-              <Camera size={16} className="text-blue-500" /> فواتير المعاملة
-            </h3>
-            <p className="text-[11px] font-semibold truncate" style={{ color: 'var(--text-muted)' }}>
-              {tx?.description || tx?.category} • {fmt(tx?.amount)} ج.م
-            </p>
-          </div>
-          <button onClick={close} className="btn btn-ghost p-1.5"><X size={16} /></button>
-        </div>
-        <div className="generic-modal-body">
-          {receipts.length === 0 ? (
-            <div className="text-center py-8">
-              <Camera size={40} className="mx-auto mb-3" style={{ color: 'var(--text-muted)' }} />
-              <p className="font-bold text-sm mb-4" style={{ color: 'var(--text-secondary)' }}>لا توجد فواتير بعد</p>
-              <button onClick={() => fileInputRef.current?.click()} disabled={uploading} className="btn btn-primary text-sm">
-                <Upload size={14} /> {uploading ? 'جاري الرفع...' : 'رفع فاتورة'}
-              </button>
-            </div>
-          ) : (
-            <React.Fragment>
-              <div className="rounded-xl overflow-hidden mb-3" style={{ background: 'var(--bg-muted)' }}>
-                <img src={receipts[index]?.url} alt={`فاتورة ${index + 1}`} className="w-full max-h-[55vh] object-contain" />
-              </div>
-              {receipts.length > 1 && (
-                <div className="flex gap-2 overflow-x-auto scroll-hide pb-2 mb-3">
-                  {receipts.map((r, i) => (
-                    <button 
-                      key={i} 
-                      onClick={() => setIndex(i)} 
-                      className={`flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 ${i === index ? 'border-blue-500' : 'border-transparent'}`}
-                    >
-                      <img src={r.url} alt={`thumb ${i+1}`} className="w-full h-full object-cover" />
-                    </button>
-                  ))}
-                </div>
-              )}
-              <div className="flex gap-2 flex-wrap">
-                <button onClick={() => fileInputRef.current?.click()} disabled={uploading} className="btn btn-secondary text-xs flex-1 min-w-[120px]">
-                  <Upload size={12} /> إضافة
-                </button>
-                <button onClick={() => window.open(receipts[index]?.url, '_blank')} className="btn btn-secondary text-xs flex-1 min-w-[120px]">
-                  <Eye size={12} /> عرض كامل
-                </button>
-                <button onClick={() => deleteOne(index)} className="btn btn-secondary text-xs text-red-600 flex-1 min-w-[120px]">
-                  <Trash2 size={12} /> حذف
-                </button>
-              </div>
-            </React.Fragment>
-          )}
-          <input 
-            ref={fileInputRef} 
-            type="file" 
-            accept="image/*" 
-            multiple 
-            className="hidden" 
-            onChange={(e) => { handleUpload(e.target.files); e.target.value = ''; }} 
-          />
-        </div>
-        <div className="generic-modal-footer" data-pdf-hide="true">
-          <button onClick={close} className="btn btn-secondary flex-1 text-sm">إغلاق</button>
-        </div>
-      </div>
-    </div>
-  );
-});
-
 /* ─────────────── Enhanced Sidebar ─────────────── */
 const EnhancedSidebar = memo(({ activeTab, dispatch, canUndo, onUndo }) => {
   const groups = [
@@ -3297,7 +3079,7 @@ const DashboardView = memo(({
         <button 
           onClick={() => { 
             dispatch({ type: 'SET_FORM_MODE', payload: 'add' }); 
-            dispatch({ type: 'SET_FORM_DATA', payload: { type: 'expense', amount: '', date: getLocalISODate(), method: 'cash', subType: 'withdrawal', category: '', status: 'pending', receipts: [] } }); 
+            dispatch({ type: 'SET_FORM_DATA', payload: { type: 'expense', amount: '', date: getLocalISODate(), method: 'cash', subType: 'withdrawal', category: '', status: 'pending' } }); 
             dispatch({ type: 'SET_FORM_OPEN', payload: true }); 
           }} 
           className="card py-3 flex flex-col items-center gap-1 active:scale-95"
@@ -3308,7 +3090,7 @@ const DashboardView = memo(({
         <button 
           onClick={() => { 
             dispatch({ type: 'SET_FORM_MODE', payload: 'add' }); 
-            dispatch({ type: 'SET_FORM_DATA', payload: { type: 'income', amount: '', date: getLocalISODate(), method: 'cash', subType: 'deposit', category: '', status: 'pending', receipts: [] } }); 
+            dispatch({ type: 'SET_FORM_DATA', payload: { type: 'income', amount: '', date: getLocalISODate(), method: 'cash', subType: 'deposit', category: '', status: 'pending' } }); 
             dispatch({ type: 'SET_FORM_OPEN', payload: true }); 
           }} 
           className="card py-3 flex flex-col items-center gap-1 active:scale-95"
@@ -5825,7 +5607,6 @@ const LoansView = memo(({
                                 date: getLocalISODate(), 
                                 status: 'pending', 
                                 subType: 'withdrawal', 
-                                receipts: [] 
                               } 
                             }); 
                             dispatch({ type: 'SET_FORM_OPEN', payload: true }); 
@@ -8520,7 +8301,6 @@ const materializeShoppingRecurring = async () => {
         status: 'pending',
         recurringId: r.id, 
         createdAt: Date.now(), 
-        receipts: []
       });
       
       const prefDay = r.preferredDay || 10;
@@ -8561,7 +8341,7 @@ function App() {
     catViewType: 'expense',
     isFormOpen: false, 
     formMode: 'add',
-    formData: { type: 'expense', subType: 'withdrawal', status: 'pending', receipts: [] },
+    formData: { type: 'expense', subType: 'withdrawal', status: 'pending'},
     isLocked: false, 
     isDarkMode: localStorage.getItem('theme') === 'dark',
     budgets: safeParseJson(localStorage.getItem('budgets'), {}),
@@ -9262,7 +9042,6 @@ function App() {
         date: getLocalISODate(), 
         subType: kind, 
         status: 'pending', 
-        receipts: [] 
       } 
     });
     dispatch({ type: 'SET_FORM_OPEN', payload: true });
@@ -9350,7 +9129,6 @@ function App() {
           date: formData.date, 
           subType: finalSubType, 
           status, 
-          receipts: formData.receipts || [], 
           linkedCardId: syncLinkedCardId, 
           cardLast4: syncCardLast4 
         };
@@ -9578,7 +9356,6 @@ function App() {
               subType: 'withdrawal', status: 'paid',
               linkedTransferId: transferId,
               transferDirection: 'out',
-              receipts: []
             },
             {
               id: getSafeId(),
@@ -9591,7 +9368,6 @@ function App() {
               subType: 'deposit', status: 'paid',
               linkedTransferId: transferId,
               transferDirection: 'in',
-              receipts: []
             }
           ];
           
@@ -9607,7 +9383,6 @@ function App() {
               subType: 'withdrawal', status: 'paid',
               linkedTransferId: transferId,
               transferDirection: 'fee',
-              receipts: []
             });
           }
           
@@ -9688,7 +9463,7 @@ function App() {
           method: quickTransferData.from,
           transferChannel: useTelda ? ben.method : undefined,
           date, month: txMonth, year: txYear, monthIndex: d.getMonth(),
-          subType: 'withdrawal', status: 'paid', beneficiaryId: ben.id, receipts: []
+          subType: 'withdrawal', status: 'paid', beneficiaryId: ben.id
         });
       }
       
@@ -10258,17 +10033,7 @@ function App() {
             addNotification={addNotification} 
           />
         )}
-        
-        {viewingReceipt && (
-          <ReceiptViewer 
-            viewingReceipt={viewingReceipt} 
-            dispatch={dispatch} 
-            transactions={transactions} 
-            saveHistory={saveHistory} 
-            addNotification={addNotification} 
-          />
-        )}
-
+      
         {/* Bottom Nav */}
         <div className="bottom-nav-container no-print">
           <div className="scrollable-nav scroll-hide">
@@ -10435,7 +10200,7 @@ function App() {
               type: 'SET_FORM_DATA', 
               payload: { 
                 type: 'expense', category: '', amount: '', date: getLocalISODate(), 
-                method: 'cash', subType: 'withdrawal', status: 'pending', receipts: [] 
+                method: 'cash', subType: 'withdrawal', status: 'pending',  
               } 
             }); 
             dispatch({ type: 'SET_FORM_OPEN', payload: true }); 
@@ -10613,53 +10378,7 @@ function App() {
                     <p className="text-[9px] mt-2 text-amber-700 dark:text-amber-400">💡 اضغط على الصنف لإضافته للوصف</p>
                   </div>
                 )}
-
-                <div>
-                  <label className="block text-[11px] font-bold mb-1" style={{ color: 'var(--text-muted)' }}>فواتير (اختياري)</label>
-                  <div className="flex items-center gap-2">
-                    <input 
-                      type="file" 
-                      accept="image/*" 
-                      multiple 
-                      id="tx-receipt-upload" 
-                      className="hidden" 
-                      onChange={async (e) => {
-                        const files = e.target.files;
-                        if (!files || files.length === 0) return;
-                        try {
-                          const uploaded = [];
-                          for (const file of Array.from(files).slice(0, 5)) {
-                            const r = await uploadReceipt(formData.id || getSafeId(), file);
-                            uploaded.push(r);
-                          }
-                          dispatch({ 
-                            type: 'SET_FORM_DATA', 
-                            payload: { ...formData, receipts: [...(formData.receipts || []), ...uploaded] } 
-                          });
-                          addNotification({ type: 'success', title: `تم رفع ${uploaded.length} فاتورة` });
-                        } catch (err) { 
-                          addNotification({ type: 'error', title: 'فشل الرفع', message: err.message }); 
-                        }
-                        e.target.value = '';
-                      }} 
-                    />
-                    <button 
-                      type="button" 
-                      onClick={() => document.getElementById('tx-receipt-upload')?.click()} 
-                      className="btn btn-secondary text-xs flex-1"
-                    >
-                      <Camera size={12} /> إضافة صور ({(formData.receipts || []).length})
-                    </button>
-                    {(formData.receipts || []).length > 0 && (
-                      <div className="flex gap-1">
-                        {formData.receipts.slice(0, 3).map((r, i) => (
-                          <img key={i} src={r.url} className="w-10 h-10 rounded object-cover" alt={`فاتورة ${i+1}`} />
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
+       
                 <button type="submit" className="btn btn-primary w-full py-2.5 text-sm" disabled={isProcessing}>
                   {isProcessing ? 'جاري الحفظ...' : (
                     <React.Fragment>
