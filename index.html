@@ -182,10 +182,11 @@ const db = firebase.firestore();
 db.enablePersistence({ synchronizeTabs: true }).catch((err) => { console.warn('Firestore persistence failed:', err.code); });
 
 /* ═══════════════════════════════════════════════════════════════
-   V81 — مسار Firestore كـ constant
+   Firestore Path + Constants
    ═══════════════════════════════════════════════════════════════ */
 const FIREBASE_DOC_PATH = { collection: 'finance_2026', doc: 'user_ahmed_data' };
 const LAST_SYNC_LS_KEY = 'v81_last_sync_ts';
+const ALLOWED_EMAIL = "ahmedmkh@gmail.com";
 
 /* ═══════════════════════════════════════════════════════════════
    CLOUDINARY (صور الفواتير)
@@ -213,15 +214,9 @@ const CASHBACK_STATUS = { EXPECTED: 'expected', PARTIAL: 'partial', RECEIVED: 'r
 const CASHBACK_STATUS_LABELS = { expected: 'متوقع', partial: 'جزئي', received: 'مستلم' };
 
 const TELEGRAM_CONFIG_LS_KEY = 'tg_bot_config_v81';
-const TELEGRAM_DEFAULT_CONFIG = { 
-  botToken: '', chatId: '', enabled: false, notifyOnRecurring: true, notifyOnPending: false, notifyOnBackup: false
-};
-
+const TELEGRAM_DEFAULT_CONFIG = { botToken: '', chatId: '', enabled: false, notifyOnRecurring: true, notifyOnPending: false, notifyOnBackup: false };
 const GAS_CONFIG_LS_KEY = 'gas_config_v81';
-const GAS_DEFAULT_CONFIG = { 
-  webAppUrl: '', secret: '', enabled: false, autoSync: false, lastSync: null 
-};
-
+const GAS_DEFAULT_CONFIG = { webAppUrl: '', secret: '', enabled: false, autoSync: false, lastSync: null };
 const PAYMENT_METHODS_WITHOUT_ACCOUNT = new Set(['instapay', 'telda_shaimaa', 'telda_salma', 'telda_abdelrahman']);
 
 const DAILY_DHIKR = [
@@ -238,11 +233,7 @@ const DAILY_DHIKR = [
 ];
 
 const STORAGE_KEY = 'finance_tracker_V81_SECURE';
-const LEGACY_KEYS = [
-  'finance_tracker_V80_SECURE', 'finance_tracker_V79_SECURE',
-  'finance_tracker_V78_SECURE', 'finance_tracker_V77_SECURE',
-  'finance_tracker_V76_SECURE', 'finance_tracker_V75_SECURE'
-];
+const LEGACY_KEYS = ['finance_tracker_V80_SECURE', 'finance_tracker_V79_SECURE', 'finance_tracker_V78_SECURE', 'finance_tracker_V77_SECURE', 'finance_tracker_V76_SECURE', 'finance_tracker_V75_SECURE'];
 
 const ALL_MONTHS = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
 const ALL_MONTHS_EARLY = ALL_MONTHS;
@@ -465,7 +456,6 @@ const ACCOUNT_ICONS = { cib_savings: BuildingBank, aaib_savings: PiggyBank, cash
 const ACCOUNT_SHORT_NAMES = { cib_savings: 'CIB Savings', aaib_savings: 'AAIB Savings', cash: 'Cash', fawry: 'Fawry', etisalat: 'Etisalat' };
   /* ═══════════════════════════════════════════════════════════════
    PART 2 — Utilities + Date Parsing + Validation + Modals + SMS
-   + Migration + Cloud Helpers + dedupeRecurringTransactions
    ═══════════════════════════════════════════════════════════════ */
 
 /* ─────────────── Safe Utilities ─────────────── */
@@ -820,17 +810,12 @@ const hashPin = async (pin) => {
   try {
     const encoder = new TextEncoder();
     const keyMaterial = await crypto.subtle.importKey(
-      'raw',
-      encoder.encode(String(pin)),
-      'PBKDF2',
-      false,
-      ['deriveBits']
+      'raw', encoder.encode(String(pin)), 'PBKDF2', false, ['deriveBits']
     );
     const salt = encoder.encode('fintracker_salt_v2_2026');
     const bits = await crypto.subtle.deriveBits(
       { name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' },
-      keyMaterial,
-      256
+      keyMaterial, 256
     );
     return 'pbkdf2_' + Array.from(new Uint8Array(bits)).map(b => b.toString(16).padStart(2, '0')).join('');
   } catch (e) {
@@ -1330,7 +1315,7 @@ const getInitialData = () => {
 };
 
 /* ═══════════════════════════════════════════════════════════════
-   materializeRecurringItems — ID حتمي
+   materializeRecurringItems — ID حتمي (مع إصلاح الفلترة)
    ═══════════════════════════════════════════════════════════════ */
 const materializeRecurringItems = (data, asOfDateStr) => {
   if (!data?.recurringItems?.length) return null;
@@ -1346,7 +1331,9 @@ const materializeRecurringItems = (data, asOfDateStr) => {
   const newTxs = [];
   const loanPaidMap = {};
   
+  // ✅ إصلاح: فلترة deletedTxIds قبل بناء الخريطة
   existing.forEach(t => { 
+    if (permanentDeleted.has(t.id)) return;
     if (t.status === 'paid' && t.sourceReceivableId) 
       loanPaidMap[t.sourceReceivableId] = (loanPaidMap[t.sourceReceivableId] || 0) + safeNumber(t.amount); 
   });
@@ -1590,7 +1577,7 @@ const deriveMonthlyPlanFromHistory = (data, targetYear, targetMonth, monthsBack 
 };
 
 /* ═══════════════════════════════════════════════════════════════
-   useOnlineStatus hook
+   useOnlineStatus + Google Drive helpers
    ═══════════════════════════════════════════════════════════════ */
 const useOnlineStatus = () => {
   const [online, setOnline] = useState(() => (typeof navigator !== 'undefined' ? navigator.onLine : true));
@@ -1607,9 +1594,6 @@ const useOnlineStatus = () => {
   return online;
 };
 
-/* ═══════════════════════════════════════════════════════════════
-   Google Drive helpers
-   ═══════════════════════════════════════════════════════════════ */
 const DRIVE_CLIENT_ID = '190006477168-odmpreq26b618rdn1dsg4k1aag3k056g.apps.googleusercontent.com';
 const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive';
 const DRIVE_FOLDER_NAME = 'Finance Backups';
@@ -2335,7 +2319,7 @@ const LoginScreen = ({ onLogin }) => {
     const provider = new firebase.auth.GoogleAuthProvider();
     firebase.auth().signInWithPopup(provider)
       .then((result) => { 
-        if (result.user.email === "ahmedmkh@gmail.com") onLogin(); 
+        if (result.user.email === ALLOWED_EMAIL) onLogin(); 
         else { 
           setError('دخول غير مصرح'); 
           firebase.auth().signOut(); 
@@ -2961,7 +2945,7 @@ const EnhancedSidebar = memo(({ activeTab, dispatch, canUndo, onUndo }) => {
     </aside>
   );
 });
-  /* ═══════════════════════════════════════════════════════════════
+/* ═══════════════════════════════════════════════════════════════
    PART 4 — Dashboard + Categories + CategoryDetail + Transactions
    ═══════════════════════════════════════════════════════════════ */
 
@@ -6293,7 +6277,7 @@ const DuplicateDetectionSystem = ({ transactions, data, dispatch, addNotificatio
   );
 };
 
-/* ─────────────── Deleted Archive View (بالإصلاح الكامل) ─────────────── */
+/* ─────────────── Deleted Archive View ─────────────── */
 const DeletedArchiveView = memo(({ data, dispatch, saveHistory, addNotification, transactions }) => {
   const archive = data?.deletedTxArchive || [];
   const pendingRequests = useMemo(() => {
@@ -6656,7 +6640,7 @@ const DeletedArchiveView = memo(({ data, dispatch, saveHistory, addNotification,
   );
 });
   /* ═══════════════════════════════════════════════════════════════
-   PART 6 — Settings + Reducer + App + Render
+   PART 6 — Settings + Missing Views + Reducer + App + Render
    ═══════════════════════════════════════════════════════════════ */
 
 /* ─────────────── Settings View ─────────────── */
@@ -7103,6 +7087,658 @@ const SettingsView = memo(({ data, accountsData, cards, budgets, dispatch, saveH
         <button onClick={handleFreshStart} className="btn btn-secondary text-xs w-full text-red-600 py-2">
           <Trash2 size={12} /> بداية جديدة
         </button>
+      </div>
+    </div>
+  );
+});
+
+/* ═══════════════════════════════════════════════════════════════
+   PART 6B — Monthly Planning View
+   ═══════════════════════════════════════════════════════════════ */
+const MonthlyPlanningView = memo(({ data, monthlyPlans, dispatch, saveHistory, addNotification }) => {
+  const currentYear = new Date().getFullYear();
+  const [year, setYear] = useState(() => YEARS_LIST.includes(currentYear) ? currentYear : YEARS_LIST[0]);
+  const months = getMonthsForYear(year);
+  const plan = monthlyPlans || {};
+
+  const updatePlan = useCallback((monthKey, field, value) => {
+    dispatch({
+      type: 'UPDATE_MONTHLY_PLANS',
+      payload: {
+        ...plan,
+        [monthKey]: { ...(plan[monthKey] || {}), [field]: parseNumberInput(value) }
+      }
+    });
+  }, [plan, dispatch]);
+
+  const deriveFromHistory = useCallback((monthKey) => {
+    const parsed = parseMonthKey(monthKey);
+    if (!parsed) return;
+    const derived = deriveMonthlyPlanFromHistory(data, parsed.year, parsed.month, 3);
+    if (!derived) {
+      addNotification({ type: 'info', title: 'لا توجد بيانات كافية للاشتقاق' });
+      return;
+    }
+    const { _meta, ...values } = derived;
+    dispatch({
+      type: 'UPDATE_MONTHLY_PLANS',
+      payload: { ...plan, [monthKey]: { ...(plan[monthKey] || {}), ...values, _meta } }
+    });
+    addNotification({ type: 'success', title: 'تم الاشتقاق من التاريخ', message: _meta?.refMonths || '' });
+  }, [data, plan, dispatch, addNotification]);
+
+  const FIELDS = [
+    { id: 'expectedSalary',      label: 'راتب',       color: 'emerald' },
+    { id: 'expectedRent',        label: 'إيجار',      color: 'emerald' },
+    { id: 'expectedCashback',    label: 'كاش باك',    color: 'emerald' },
+    { id: 'expectedEmakWE',      label: 'عهدة إيماك', color: 'blue' },
+    { id: 'expectedZakat',       label: 'زكاة',       color: 'emerald' },
+    { id: 'expectedCash',        label: 'كاش حر',     color: 'blue' },
+    { id: 'expectedCashExpenses',label: 'مصروف كاش',  color: 'red' },
+    { id: 'plannedPayments',     label: 'أقساط',      color: 'red' }
+  ];
+
+  return (
+    <div className="space-y-4 animate-fadeIn pb-24">
+      <div className="card">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <h2 className="text-base font-black flex items-center gap-2">
+            <Table size={16} className="text-blue-500" /> التخطيط الشهري
+          </h2>
+          <div className="flex p-0.5 rounded-lg" style={{ background: 'var(--bg-muted)' }}>
+            {YEARS_LIST.map(y => (
+              <button key={y} type="button" onClick={() => setYear(y)}
+                className={`px-3 py-1.5 rounded-md text-[11px] font-black transition-all ${year === y ? 'shadow-sm' : ''}`}
+                style={year === y ? { background: 'var(--bg-card)', color: 'var(--brand)' } : { color: 'var(--text-muted)' }}>
+                {y}
+              </button>
+            ))}
+          </div>
+        </div>
+        <p className="text-[11px] mt-2" style={{ color: 'var(--text-muted)' }}>
+          💡 عدّل القيم يدوياً أو اضغط <strong>✨ اشتقاق</strong> لحسابها من متوسط آخر 3 شهور
+        </p>
+      </div>
+
+      <div className="space-y-3">
+        {months.map(m => {
+          const monthKey = makeMonthKey(year, m);
+          const p = plan[monthKey] || {};
+          const totalIn = safeNumber(p.expectedSalary) + safeNumber(p.expectedRent) + safeNumber(p.expectedCashback)
+            + safeNumber(p.expectedEmakWE) + safeNumber(p.expectedZakat) + safeNumber(p.expectedCash);
+          const totalOut = safeNumber(p.expectedCashExpenses) + safeNumber(p.plannedPayments);
+          const net = totalIn - totalOut;
+          const isClosed = isMonthClosed(data, year, m);
+
+          return (
+            <div key={monthKey} className="card">
+              <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+                <div className="flex items-center gap-2">
+                  <h3 className="font-black text-sm">{m} {year}</h3>
+                  {isClosed && <span className="badge badge-success text-[10px]"><ShieldCheck size={10} /> مغلق</span>}
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <button type="button" onClick={() => deriveFromHistory(monthKey)}
+                    className="btn btn-secondary text-[10px] py-1 px-2">
+                    <Sparkles size={10} /> اشتقاق
+                  </button>
+                  <span className={`badge ${net >= 0 ? 'badge-success' : 'badge-danger'}`}>
+                    {net >= 0 ? '+' : ''}{fmt(net)}
+                  </span>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                {FIELDS.map(f => (
+                  <div key={f.id}>
+                    <label className="text-[9px] font-bold block mb-0.5" style={{ color: 'var(--text-muted)' }}>{f.label}</label>
+                    <input type="text" inputMode="decimal"
+                      className={`planning-input text-xs ${p[f.id] ? 'user-edited' : ''}`}
+                      value={p[f.id] ?? ''}
+                      onChange={(e) => updatePlan(monthKey, f.id, e.target.value)}
+                      placeholder="0" />
+                  </div>
+                ))}
+              </div>
+              {p._meta?.refMonths && (
+                <p className="text-[9px] mt-2" style={{ color: 'var(--text-muted)' }}>📊 {p._meta.refMonths}</p>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+});
+
+/* ═══════════════════════════════════════════════════════════════
+   PART 6C — Planner View
+   ═══════════════════════════════════════════════════════════════ */
+const PlannerView = memo(({ updatedLoans, cards, selectedMonth, selectedYear, monthlyPlans, totalLiquidityNow, data, transactions, recurringItems }) => {
+  const planKey = makeMonthKey(selectedYear, selectedMonth);
+  const plan = monthlyPlans?.[planKey] || {};
+
+  const totals = useMemo(() => {
+    const monthTxs = transactions.filter(t => t.month === selectedMonth && (t.year || 2026) === selectedYear);
+    const actualIncome = monthTxs.filter(t => t.type === 'income' && t.status === 'paid').reduce((s, t) => s + safeNumber(t.amount), 0);
+    const actualExpense = monthTxs.filter(t => t.type === 'expense' && t.status === 'paid').reduce((s, t) => s + safeNumber(t.amount), 0);
+    const pendingIncome = monthTxs.filter(t => t.type === 'income' && t.status !== 'paid').reduce((s, t) => s + safeNumber(t.amount), 0);
+    const pendingExpense = monthTxs.filter(t => t.type === 'expense' && t.status !== 'paid').reduce((s, t) => s + safeNumber(t.amount), 0);
+
+    const plannedIncome = safeNumber(plan.expectedSalary) + safeNumber(plan.expectedRent) + safeNumber(plan.expectedCashback)
+      + safeNumber(plan.expectedEmakWE) + safeNumber(plan.expectedZakat) + safeNumber(plan.expectedCash);
+    const plannedExpense = safeNumber(plan.expectedCashExpenses) + safeNumber(plan.plannedPayments);
+
+    const cardDebt = cards.reduce((s, c) => s + computeCardDebt(data, c), 0);
+    const loanDebt = updatedLoans.filter(l => !l.isReceivable).reduce((s, l) => s + l.remaining, 0);
+
+    const projected = totalLiquidityNow + pendingIncome + (plannedIncome - actualIncome)
+      - pendingExpense - (plannedExpense - actualExpense);
+
+    return { actualIncome, actualExpense, pendingIncome, pendingExpense, plannedIncome, plannedExpense, cardDebt, loanDebt, projected };
+  }, [transactions, selectedMonth, selectedYear, plan, cards, updatedLoans, data, totalLiquidityNow]);
+
+  const progressIncome = totals.plannedIncome > 0 ? Math.min(100, (totals.actualIncome / totals.plannedIncome) * 100) : 0;
+  const progressExpense = totals.plannedExpense > 0 ? Math.min(100, (totals.actualExpense / totals.plannedExpense) * 100) : 0;
+
+  return (
+    <div className="space-y-4 animate-fadeIn pb-24">
+      <div className="card">
+        <h2 className="text-base font-black flex items-center gap-2 mb-3">
+          <Target size={16} className="text-blue-500" /> مخطط {selectedMonth} {selectedYear}
+        </h2>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="p-3 rounded-xl bg-blue-50 dark:bg-blue-950/30">
+            <p className="text-[10px] font-bold text-blue-700 dark:text-blue-400">السيولة الحالية</p>
+            <p className="text-lg font-black text-blue-600 mt-1">{fmt(totalLiquidityNow)}</p>
+          </div>
+          <div className="p-3 rounded-xl bg-red-50 dark:bg-red-950/30">
+            <p className="text-[10px] font-bold text-red-700 dark:text-red-400">إجمالي الديون</p>
+            <p className="text-lg font-black text-red-600 mt-1">{fmt(totals.cardDebt + totals.loanDebt)}</p>
+          </div>
+          <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/30">
+            <p className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400">متوقع نهاية الشهر</p>
+            <p className={`text-lg font-black mt-1 ${totals.projected >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>{fmt(totals.projected)}</p>
+          </div>
+          <div className="p-3 rounded-xl bg-purple-50 dark:bg-purple-950/30">
+            <p className="text-[10px] font-bold text-purple-700 dark:text-purple-400">صافي الشهر</p>
+            <p className={`text-lg font-black mt-1 ${(totals.actualIncome - totals.actualExpense) >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+              {fmt(totals.actualIncome - totals.actualExpense)}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div className="card">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-black text-sm text-emerald-600 flex items-center gap-2"><TrendingUp size={14} /> الإيرادات</h3>
+            <span className="text-[11px] font-bold" style={{ color: 'var(--text-muted)' }}>{Math.round(progressIncome)}%</span>
+          </div>
+          <div className="space-y-2">
+            <div className="flex justify-between text-xs">
+              <span style={{ color: 'var(--text-secondary)' }}>المخطط</span>
+              <strong className="text-emerald-600">{fmt(totals.plannedIncome)}</strong>
+            </div>
+            <div className="flex justify-between text-xs">
+              <span style={{ color: 'var(--text-secondary)' }}>المحقق</span>
+              <strong className="text-emerald-600">{fmt(totals.actualIncome)}</strong>
+            </div>
+            <div className="flex justify-between text-xs">
+              <span style={{ color: 'var(--text-secondary)' }}>معلق</span>
+              <strong className="text-amber-600">{fmt(totals.pendingIncome)}</strong>
+            </div>
+          </div>
+          <div className="w-full rounded-full h-2 overflow-hidden mt-3" style={{ background: 'var(--bg-muted)' }}>
+            <div className="h-full bg-emerald-500 transition-all" style={{ width: `${progressIncome}%` }}></div>
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-black text-sm text-red-600 flex items-center gap-2"><TrendingDown size={14} /> المصروفات</h3>
+            <span className="text-[11px] font-bold" style={{ color: 'var(--text-muted)' }}>{Math.round(progressExpense)}%</span>
+          </div>
+          <div className="space-y-2">
+            <div className="flex justify-between text-xs">
+              <span style={{ color: 'var(--text-secondary)' }}>المخطط</span>
+              <strong className="text-red-600">{fmt(totals.plannedExpense)}</strong>
+            </div>
+            <div className="flex justify-between text-xs">
+              <span style={{ color: 'var(--text-secondary)' }}>المحقق</span>
+              <strong className="text-red-600">{fmt(totals.actualExpense)}</strong>
+            </div>
+            <div className="flex justify-between text-xs">
+              <span style={{ color: 'var(--text-secondary)' }}>معلق</span>
+              <strong className="text-amber-600">{fmt(totals.pendingExpense)}</strong>
+            </div>
+          </div>
+          <div className="w-full rounded-full h-2 overflow-hidden mt-3" style={{ background: 'var(--bg-muted)' }}>
+            <div className="h-full bg-red-500 transition-all" style={{ width: `${progressExpense}%` }}></div>
+          </div>
+        </div>
+      </div>
+
+      {recurringItems.length > 0 && (
+        <div className="card">
+          <h3 className="font-black text-sm flex items-center gap-2 mb-3"><Repeat size={14} className="text-blue-500" /> الالتزامات المتكررة المتوقعة</h3>
+          <div className="space-y-1.5">
+            {recurringItems.filter(r => r.active !== false).map(r => (
+              <div key={r.id} className="flex justify-between items-center p-2 rounded-lg text-xs" style={{ background: 'var(--bg-muted)' }}>
+                <div className="min-w-0 flex-1">
+                  <p className="font-bold truncate">{r.title}</p>
+                  <p className="text-[9px]" style={{ color: 'var(--text-muted)' }}>يوم {r.day}</p>
+                </div>
+                <span className={`font-black flex-shrink-0 ${r.type === 'income' ? 'text-emerald-600' : 'text-red-600'}`}>
+                  {r.type === 'income' ? '+' : '−'}{fmt(r.amount)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+});
+
+/* ═══════════════════════════════════════════════════════════════
+   PART 6D — Liquidity Forecast View
+   ═══════════════════════════════════════════════════════════════ */
+const LiquidityForecastView = memo(({ transactions, updatedLoans, recurringItems, liveBalances, selectedYear, selectedMonth, monthlyPlans }) => {
+  const currentLiquidity = useMemo(() =>
+    ACCOUNT_KEYS.reduce((s, k) => s + safeNumber(liveBalances?.[k]), 0), [liveBalances]);
+
+  const forecast = useMemo(() => {
+    const startIdx = getMonthIndex(selectedMonth);
+    const months = [];
+    let runningBalance = currentLiquidity;
+
+    for (let i = 0; i < 6; i++) {
+      let mIdx = startIdx + i;
+      let year = selectedYear;
+      while (mIdx > 11) { mIdx -= 12; year++; }
+      const monthName = ALL_MONTHS[mIdx];
+      const monthKey = makeMonthKey(year, monthName);
+      const plan = monthlyPlans?.[monthKey] || {};
+
+      const plannedIncome = safeNumber(plan.expectedSalary) + safeNumber(plan.expectedRent)
+        + safeNumber(plan.expectedCashback) + safeNumber(plan.expectedEmakWE)
+        + safeNumber(plan.expectedZakat) + safeNumber(plan.expectedCash);
+      const plannedExpense = safeNumber(plan.expectedCashExpenses) + safeNumber(plan.plannedPayments);
+
+      const monthTxs = transactions.filter(t => t.month === monthName && (t.year || 2026) === year);
+      const actualIncome = monthTxs.filter(t => t.type === 'income' && t.status === 'paid').reduce((s, t) => s + safeNumber(t.amount), 0);
+      const actualExpense = monthTxs.filter(t => t.type === 'expense' && t.status === 'paid').reduce((s, t) => s + safeNumber(t.amount), 0);
+
+      const income = i === 0 ? actualIncome : plannedIncome;
+      const expense = i === 0 ? actualExpense : plannedExpense;
+      runningBalance += income - expense;
+
+      months.push({ month: monthName, year, income, expense, balance: runningBalance });
+    }
+    return months;
+  }, [transactions, selectedYear, selectedMonth, monthlyPlans, currentLiquidity]);
+
+  const chartData = forecast.map(f => ({
+    name: f.month.slice(0, 3),
+    الرصيد: f.balance,
+    دخل: f.income,
+    مصروف: f.expense
+  }));
+
+  const minBalance = Math.min(...forecast.map(f => f.balance));
+  const lastBalance = forecast[forecast.length - 1]?.balance || 0;
+
+  return (
+    <div className="space-y-4 animate-fadeIn pb-24">
+      <div className="card">
+        <h2 className="text-base font-black flex items-center gap-2 mb-3">
+          <LineChart size={16} className="text-blue-500" /> توقع السيولة — 6 شهور
+        </h2>
+        <div className="grid grid-cols-3 gap-2">
+          <div className="p-2.5 rounded-xl bg-blue-50 dark:bg-blue-950/30 text-center">
+            <p className="text-[10px] font-bold text-blue-700 dark:text-blue-400">الآن</p>
+            <p className="text-sm font-black text-blue-600 mt-1">{fmt(currentLiquidity)}</p>
+          </div>
+          <div className={`p-2.5 rounded-xl text-center ${lastBalance >= 0 ? 'bg-emerald-50 dark:bg-emerald-950/30' : 'bg-red-50 dark:bg-red-950/30'}`}>
+            <p className={`text-[10px] font-bold ${lastBalance >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-700 dark:text-red-400'}`}>بعد 6 شهور</p>
+            <p className={`text-sm font-black mt-1 ${lastBalance >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>{fmt(lastBalance)}</p>
+          </div>
+          <div className={`p-2.5 rounded-xl text-center ${minBalance >= 0 ? 'bg-emerald-50 dark:bg-emerald-950/30' : 'bg-amber-50 dark:bg-amber-950/30'}`}>
+            <p className={`text-[10px] font-bold ${minBalance >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-amber-700 dark:text-amber-400'}`}>أدنى نقطة</p>
+            <p className={`text-sm font-black mt-1 ${minBalance >= 0 ? 'text-emerald-600' : 'text-amber-600'}`}>{fmt(minBalance)}</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="card">
+        <h3 className="font-bold text-xs mb-3" style={{ color: 'var(--text-secondary)' }}>منحنى الرصيد المتوقع</h3>
+        <div className="h-56">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={chartData}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="currentColor" opacity={0.08} />
+              <XAxis dataKey="name" fontSize={10} stroke="#94A3B8" />
+              <YAxis fontSize={10} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} stroke="#94A3B8" />
+              <Tooltip formatter={(v) => `${fmt(v)} ج.م`} contentStyle={{ borderRadius: '10px', border: 'none', fontFamily: 'Cairo', fontSize: '12px' }} />
+              <Legend wrapperStyle={{ fontSize: '11px', fontWeight: 'bold' }} />
+              <Bar dataKey="دخل" fill="#059669" radius={[4, 4, 0, 0]} barSize={12} />
+              <Bar dataKey="مصروف" fill="#DC2626" radius={[4, 4, 0, 0]} barSize={12} />
+              <Bar dataKey="الرصيد" fill="#2563EB" radius={[4, 4, 0, 0]} barSize={12} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      <div className="card">
+        <h3 className="font-black text-sm mb-3">📋 التفاصيل الشهرية</h3>
+        <div className="space-y-2">
+          {forecast.map((f, i) => (
+            <div key={i} className="p-3 rounded-lg" style={{ background: 'var(--bg-muted)' }}>
+              <div className="flex justify-between items-center mb-1.5">
+                <span className="font-bold text-xs">{f.month} {f.year}</span>
+                <span className={`font-black text-sm ${f.balance >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>{fmt(f.balance)}</span>
+              </div>
+              <div className="flex justify-between text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                <span>دخل: <strong className="text-emerald-600">+{fmt(f.income)}</strong></span>
+                <span>مصروف: <strong className="text-red-600">−{fmt(f.expense)}</strong></span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+});
+
+/* ═══════════════════════════════════════════════════════════════
+   PART 6E — Month Comparison View
+   ═══════════════════════════════════════════════════════════════ */
+const MonthComparisonView = memo(({ transactions, selectedYear, selectedMonth }) => {
+  const [compareMonthIdx, setCompareMonthIdx] = useState(() => Math.max(0, getMonthIndex(selectedMonth) - 1));
+
+  const curMonthIdx = getMonthIndex(selectedMonth);
+  const compareMonth = ALL_MONTHS[compareMonthIdx];
+
+  const stats = useMemo(() => {
+    const calc = (m, y) => {
+      const txs = transactions.filter(t => t.month === m && (t.year || 2026) === y && t.status === 'paid');
+      const income = txs.filter(t => t.type === 'income').reduce((s, t) => s + safeNumber(t.amount), 0);
+      const expense = txs.filter(t => t.type === 'expense').reduce((s, t) => s + safeNumber(t.amount), 0);
+      const byCategory = {};
+      txs.filter(t => t.type === 'expense').forEach(t => {
+        byCategory[t.category] = (byCategory[t.category] || 0) + safeNumber(t.amount);
+      });
+      return { income, expense, net: income - expense, count: txs.length, byCategory };
+    };
+    return {
+      current: calc(selectedMonth, selectedYear),
+      previous: calc(compareMonth, selectedYear)
+    };
+  }, [transactions, selectedMonth, selectedYear, compareMonth]);
+
+  const allCategories = useMemo(() => {
+    const set = new Set([...Object.keys(stats.current.byCategory), ...Object.keys(stats.previous.byCategory)]);
+    return Array.from(set).sort();
+  }, [stats]);
+
+  const pctChange = (cur, prev) => {
+    if (prev === 0) return cur > 0 ? 100 : 0;
+    return ((cur - prev) / prev) * 100;
+  };
+
+  const chartData = [
+    { name: 'دخل', [selectedMonth]: stats.current.income, [compareMonth]: stats.previous.income },
+    { name: 'مصروف', [selectedMonth]: stats.current.expense, [compareMonth]: stats.previous.expense },
+    { name: 'صافي', [selectedMonth]: stats.current.net, [compareMonth]: stats.previous.net }
+  ];
+
+  return (
+    <div className="space-y-4 animate-fadeIn pb-24">
+      <div className="card">
+        <h2 className="text-base font-black flex items-center gap-2 mb-3">
+          <Activity size={16} className="text-blue-500" /> مقارنة الشهور
+        </h2>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>الشهر الحالي</label>
+            <div className="p-2.5 rounded-lg bg-blue-50 dark:bg-blue-950/30 text-center">
+              <p className="font-black text-sm text-blue-700 dark:text-blue-400">{selectedMonth} {selectedYear}</p>
+            </div>
+          </div>
+          <div>
+            <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>قارن مع</label>
+            <select className="input-field text-sm py-2.5"
+              value={compareMonthIdx}
+              onChange={e => setCompareMonthIdx(Number(e.target.value))}>
+              {ALL_MONTHS.map((m, i) => (
+                <option key={m} value={i} disabled={i === curMonthIdx}>
+                  {m} {selectedYear}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-3 gap-3">
+        {[
+          { label: 'الدخل', cur: stats.current.income, prev: stats.previous.income, color: 'emerald' },
+          { label: 'المصروف', cur: stats.current.expense, prev: stats.previous.expense, color: 'red' },
+          { label: 'الصافي', cur: stats.current.net, prev: stats.previous.net, color: 'blue' }
+        ].map(s => {
+          const change = pctChange(s.cur, s.prev);
+          const better = s.label === 'المصروف' ? change < 0 : change > 0;
+          const colorCls = s.color === 'emerald' ? 'text-emerald-600' : s.color === 'red' ? 'text-red-600' : 'text-blue-600';
+          return (
+            <div key={s.label} className="stat-card">
+              <p className="text-[10px] font-bold mb-1" style={{ color: 'var(--text-muted)' }}>{s.label}</p>
+              <p className={`text-base font-black ${colorCls}`}>{fmt(s.cur)}</p>
+              <p className="text-[10px] mt-1" style={{ color: 'var(--text-muted)' }}>
+                السابق: {fmt(s.prev)}
+              </p>
+              {change !== 0 && (
+                <p className={`text-[10px] font-black mt-1 ${better ? 'text-emerald-600' : 'text-red-600'}`}>
+                  {change > 0 ? '↑' : '↓'} {Math.abs(Math.round(change))}%
+                </p>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="card">
+        <h3 className="font-bold text-xs mb-3" style={{ color: 'var(--text-secondary)' }}>مقارنة بصرية</h3>
+        <div className="h-56">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={chartData}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="currentColor" opacity={0.08} />
+              <XAxis dataKey="name" fontSize={10} stroke="#94A3B8" />
+              <YAxis fontSize={10} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} stroke="#94A3B8" />
+              <Tooltip formatter={(v) => `${fmt(v)} ج.م`} contentStyle={{ borderRadius: '10px', border: 'none', fontFamily: 'Cairo', fontSize: '12px' }} />
+              <Legend wrapperStyle={{ fontSize: '11px', fontWeight: 'bold' }} />
+              <Bar dataKey={selectedMonth} fill="#2563EB" radius={[4, 4, 0, 0]} barSize={30} />
+              <Bar dataKey={compareMonth} fill="#94A3B8" radius={[4, 4, 0, 0]} barSize={30} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      {allCategories.length > 0 && (
+        <div className="card">
+          <h3 className="font-black text-sm mb-3">📂 المقارنة حسب الفئة</h3>
+          <div className="space-y-2">
+            {allCategories.map(cat => {
+              const cur = stats.current.byCategory[cat] || 0;
+              const prev = stats.previous.byCategory[cat] || 0;
+              const change = pctChange(cur, prev);
+              if (cur === 0 && prev === 0) return null;
+              return (
+                <div key={cat} className="p-2.5 rounded-lg" style={{ background: 'var(--bg-muted)' }}>
+                  <div className="flex justify-between items-center mb-1">
+                    <span className="font-bold text-xs truncate">{cat}</span>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <span className="text-xs font-black text-blue-600">{fmt(cur)}</span>
+                      {change !== 0 && (
+                        <span className={`text-[10px] font-black ${change > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+                          {change > 0 ? '↑' : '↓'} {Math.abs(Math.round(change))}%
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex justify-between text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                    <span>السابق: {fmt(prev)}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+});
+
+/* ═══════════════════════════════════════════════════════════════
+   PART 6F — Calendar View
+   ═══════════════════════════════════════════════════════════════ */
+const CalendarView = memo(({ data, getAgendaItems, dispatch, saveHistory, addNotification }) => {
+  const today = new Date();
+  const [viewYear, setViewYear] = useState(today.getFullYear());
+  const [viewMonth, setViewMonth] = useState(today.getMonth());
+
+  const agendaItems = useMemo(() => getAgendaItems(), [getAgendaItems]);
+
+  const itemsByDay = useMemo(() => {
+    const map = {};
+    agendaItems.forEach(item => {
+      const d = parseISODate(item.date);
+      if (!d) return;
+      if (d.getFullYear() !== viewYear || d.getMonth() !== viewMonth) return;
+      const day = d.getDate();
+      if (!map[day]) map[day] = [];
+      map[day].push(item);
+    });
+    return map;
+  }, [agendaItems, viewYear, viewMonth]);
+
+  const monthName = ALL_MONTHS[viewMonth];
+  const firstDay = new Date(viewYear, viewMonth, 1).getDay();
+  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+
+  const navigate = (delta) => {
+    let m = viewMonth + delta;
+    let y = viewYear;
+    if (m < 0) { m = 11; y--; }
+    if (m > 11) { m = 0; y++; }
+    setViewMonth(m);
+    setViewYear(y);
+  };
+
+  const dayNames = ['أحد', 'إثنين', 'ثلاثاء', 'أربعاء', 'خميس', 'جمعة', 'سبت'];
+  const emptyCells = Array.from({ length: firstDay }, (_, i) => i);
+  const dayCells = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+
+  const isToday = (day) =>
+    today.getFullYear() === viewYear &&
+    today.getMonth() === viewMonth &&
+    today.getDate() === day;
+
+  return (
+    <div className="space-y-4 animate-fadeIn pb-24">
+      <div className="card">
+        <div className="flex items-center justify-between mb-3">
+          <button type="button" onClick={() => navigate(-1)} className="btn btn-ghost p-2">
+            <ArrowRight size={16} />
+          </button>
+          <h2 className="text-base font-black flex items-center gap-2">
+            <CalendarDays size={16} className="text-blue-500" /> {monthName} {viewYear}
+          </h2>
+          <button type="button" onClick={() => navigate(1)} className="btn btn-ghost p-2">
+            <ArrowRight size={16} className="rotate-180" />
+          </button>
+        </div>
+
+        <div className="grid grid-cols-7 gap-1 mb-2">
+          {dayNames.map(d => (
+            <div key={d} className="text-center text-[10px] font-black py-1" style={{ color: 'var(--text-muted)' }}>
+              {d}
+            </div>
+          ))}
+        </div>
+
+        <div className="grid grid-cols-7 gap-1">
+          {emptyCells.map(i => <div key={`e-${i}`} />)}
+          {dayCells.map(day => {
+            const items = itemsByDay[day] || [];
+            const hasItems = items.length > 0;
+            const totalAmount = items.reduce((s, it) => s + safeNumber(it.amount), 0);
+
+            return (
+              <button
+                key={day}
+                type="button"
+                className={`aspect-square rounded-lg p-1 flex flex-col items-center justify-start transition-all relative ${isToday(day) ? 'ring-2 ring-blue-500' : ''}`}
+                style={{
+                  background: hasItems ? 'var(--brand-soft)' : 'var(--bg-muted)',
+                  color: hasItems ? 'var(--brand)' : 'var(--text-secondary)'
+                }}
+              >
+                <span className={`text-[11px] font-black ${isToday(day) ? 'text-blue-600' : ''}`}>{day}</span>
+                {hasItems && (
+                  <>
+                    <span className="text-[8px] font-black mt-0.5">{items.length}</span>
+                    <span className="text-[7px] font-bold opacity-70">{fmt(totalAmount).slice(0, 5)}</span>
+                  </>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="card">
+        <h3 className="font-black text-sm flex items-center gap-2 mb-3">
+          <Bell size={14} className="text-amber-500" /> الأجندة ({agendaItems.length})
+        </h3>
+        {agendaItems.length === 0 ? (
+          <p className="text-center py-6 text-xs font-semibold" style={{ color: 'var(--text-muted)' }}>
+            لا توجد التزامات قادمة
+          </p>
+        ) : (
+          <div className="space-y-2 max-h-[60vh] overflow-y-auto scroll-hide">
+            {agendaItems.map(item => {
+              const Icon = item.icon || Calendar;
+              const typeCls = item.type === 'danger' ? 'text-red-600 bg-red-50 dark:bg-red-950/30'
+                : item.type === 'warning' ? 'text-amber-600 bg-amber-50 dark:bg-amber-950/30'
+                : item.type === 'success' ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30'
+                : 'text-blue-600 bg-blue-50 dark:bg-blue-950/30';
+              const daysLeft = calculateDaysLeft(item.date);
+              return (
+                <div key={item.id} className="flex items-center gap-3 p-3 rounded-lg" style={{ background: 'var(--bg-muted)' }}>
+                  <div className={`p-2 rounded-lg flex-shrink-0 ${typeCls}`}>
+                    <Icon size={14} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold text-xs truncate">{item.title}</p>
+                    <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                      {item.date} • {item.desc || ''}
+                      {daysLeft !== null && (
+                        <span className={`mr-2 font-black ${daysLeft < 0 ? 'text-red-500' : daysLeft <= 3 ? 'text-amber-600' : ''}`}>
+                          {daysLeft < 0 ? `متأخر ${Math.abs(daysLeft)} يوم` :
+                           daysLeft === 0 ? 'اليوم' :
+                           daysLeft === 1 ? 'غداً' :
+                           `بعد ${daysLeft} يوم`}
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                  <span className={`font-black text-sm flex-shrink-0 ${item.type === 'success' ? 'text-emerald-600' : 'text-red-600'}`}>
+                    {fmt(item.amount)}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -7628,14 +8264,10 @@ function App() {
     return saveQueueRef.current;
   }, [isAuthenticated]);
 
-  const forceCloudSave = useCallback((newData) => {
-    queueCloudSave(newData);
-  }, [queueCloudSave]);
-
   useEffect(() => {
     const unsub = firebase.auth().onAuthStateChanged((user) => {
       setAuthLoading(false);
-      setIsAuthenticated(!!(user && user.email === "ahmkh@gmail.com") || !!(user && user.email === "ahmedmkh@gmail.com"));
+      setIsAuthenticated(!!(user && user.email === ALLOWED_EMAIL));
     });
     return () => unsub();
   }, []);
@@ -10069,3 +10701,4 @@ if (rootElement) {
 </script>
 </body>
 </html>
+  
