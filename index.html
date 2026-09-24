@@ -152,10 +152,6 @@ h1, h2, h3, h4 { font-weight: 800; letter-spacing: -0.02em; color: var(--text-pr
   <p style="margin-top:20px;font-weight:700;opacity:0.9;">جاري التحميل...</p>
 </div>
 <script type="text/babel" data-type="module">
-/* ═══════════════════════════════════════════════════════════════════════════════
-   المحفظة المالية — V81
-   Cloud-First • Dedupe-Enabled • PBKDF2 Secured
-   ═══════════════════════════════════════════════════════════════════════════════ */
 
 /* ═══════════════════════════════════════════════════════════════
    PART 1 — Imports + Firebase + Constants + Defaults
@@ -173,9 +169,7 @@ import {
   MessageSquare, PieChart as PieChartIcon, CloudOff, Copy, Send, Bot, ExternalLink
 } from 'lucide-react';
 
-/* ═══════════════════════════════════════════════════════════════
-   FIREBASE INIT
-   ═══════════════════════════════════════════════════════════════ */
+/* FIREBASE INIT */
 const firebaseConfig = { 
   apiKey: "AIzaSyCEq-Trf1oFsvPF5tlMvqU83ea_J2DLZjs", 
   authDomain: "finance-app-2026-3e318.firebaseapp.com", 
@@ -188,23 +182,13 @@ if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 db.enablePersistence({ synchronizeTabs: true }).catch((err) => { console.warn('Firestore persistence failed:', err.code); });
 
-/* ═══════════════════════════════════════════════════════════════
-   Firestore Path + Constants
-   ═══════════════════════════════════════════════════════════════ */
 const FIREBASE_DOC_PATH = { collection: 'finance_2026', doc: 'user_ahmed_data' };
 const LAST_SYNC_LS_KEY = 'v81_last_sync_ts';
 const ALLOWED_EMAIL = "ahmedmkh@gmail.com";
-
-/* ═══════════════════════════════════════════════════════════════
-   ENGINE VERSION
-   ═══════════════════════════════════════════════════════════════ */
 const CURRENT_ENGINE_VERSION = 17;
 const DEFAULT_PIN = '1033';
 const PIN_HASH_KEY = 'finance_pin_hash_v1';
 
-/* ═══════════════════════════════════════════════════════════════
-   ENUMS + CONSTANTS
-   ═══════════════════════════════════════════════════════════════ */
 const KIND = { OPERATIONAL: 'operational', FINANCIAL: 'financial', ADJUSTMENT: 'adjustment' };
 const CUSTODY_TYPE = { RECEIVE: 'receive', TRANSFER: 'transfer', SPEND_CASH: 'spend_cash', SPEND_CARD: 'spend_card', SETTLE: 'settle' };
 const CUSTODY_TYPE_LABELS = { receive: 'استلام عهدة', transfer: 'تحويل لحسابي', spend_cash: 'صرف كاش', spend_card: 'صرف من بطاقة', settle: 'تسوية نهائية' };
@@ -454,7 +438,7 @@ const DEFAULT_MONTHLY_PLANS = {
 
 const ACCOUNT_ICONS = { cib_savings: BuildingBank, aaib_savings: PiggyBank, cash: Wallet, fawry: StoreIcon, etisalat: Signal };
 const ACCOUNT_SHORT_NAMES = { cib_savings: 'CIB Savings', aaib_savings: 'AAIB Savings', cash: 'Cash', fawry: 'Fawry', etisalat: 'Etisalat' };
-  /* ═══════════════════════════════════════════════════════════════
+/* ═══════════════════════════════════════════════════════════════
    PART 2 — Utilities + Date Parsing + Validation + Modals + SMS
    ═══════════════════════════════════════════════════════════════ */
 
@@ -834,11 +818,9 @@ const savePinHash = async (pin) => {
   localStorage.setItem(PIN_HASH_KEY, hash); 
 };
 
-/* ✅ مُعدّل: رفض أي hash تالف بدلاً من السماح بالـ default */
 const verifyPin = async (pin) => { 
   const stored = getStoredPinHash(); 
   
-  // أول استخدام — لو مفيش hash محفوظ، نقبل الـ default مرة واحدة ونحفظه
   if (!stored) {
     if (pin === DEFAULT_PIN) {
       try { await savePinHash(pin); } catch(e) { console.warn('savePinHash failed', e); }
@@ -847,7 +829,6 @@ const verifyPin = async (pin) => {
     return false;
   }
   
-  // ✅ لو الـ hash تالف أو صيغة قديمة → ارفض الدخول
   if (!stored.startsWith('pbkdf2_')) {
     console.error('⚠️ PIN hash corrupt — reset required manually');
     return false;
@@ -1376,7 +1357,7 @@ const materializeRecurringItems = (data, asOfDateStr) => {
 
 /* ═══════════════════════════════════════════════════════════════
    dedupeRecurringTransactions
-   ✅ محدَّث: fuzzy dedupe بنافذة زمنية 10 ثواني (منع double-submit)
+   ✅ fuzzy dedupe بنافذة زمنية 10 ثواني (منع double-submit)
    ═══════════════════════════════════════════════════════════════ */
 const dedupeRecurringTransactions = (transactions) => {
   if (!Array.isArray(transactions) || transactions.length === 0) {
@@ -1389,7 +1370,6 @@ const dedupeRecurringTransactions = (transactions) => {
   const seenFuzzyKey = new Map();
   const keep = [];
   
-  // رتّب newest-first عشان لما نقارن، الأحدث هو المرجع
   const sorted = [...transactions].sort((a, b) => {
     const aTs = a.createdAt ? new Date(a.createdAt).getTime() : 0;
     const bTs = b.createdAt ? new Date(b.createdAt).getTime() : 0;
@@ -1400,13 +1380,11 @@ const dedupeRecurringTransactions = (transactions) => {
   sorted.forEach(t => {
     if (!t || !t.id) { keep.push(t); return; }
     
-    // 1) duplicate ID — دايماً مرفوض
     if (seenById.has(t.id)) {
       removed.push({ reason: 'duplicate_id', id: t.id, tx: t });
       return;
     }
     
-    // 2) duplicate recurring key (نفس البند المتكرر لنفس الشهر)
     if (t.sourceRecurringId && t.year && t.month) {
       const rKey = `${t.sourceRecurringId}|${t.year}|${t.month}`;
       if (seenRecurringKey.has(rKey)) {
@@ -1422,22 +1400,19 @@ const dedupeRecurringTransactions = (transactions) => {
       seenRecurringKey.set(rKey, t.id);
     }
     
-    // 3) ✅ fuzzy dedupe — نافذة 10 ثواني فقط (منع double-submit)
-    //    شرط أساسي: t.createdAt موجود (مش date اليومي)
     if (
       t.createdAt &&
       t.source !== 'sms' &&
       !t.linkedTransferId &&
       safeNumber(t.amount) > 0
     ) {
-      const FUZZY_WINDOW_MS = 10000; // 10 ثواني
+      const FUZZY_WINDOW_MS = 10000;
       const tTime = new Date(t.createdAt).getTime();
       
       if (!isNaN(tTime)) {
         const fKey = `${safeNumber(t.amount)}|${t.category}|${t.method}|${t.type}`;
         const lastSeen = seenFuzzyKey.get(fKey);
         
-        // sorted newest-first، فـ lastSeen هو الأحدث
         if (lastSeen && (lastSeen.time - tTime) < FUZZY_WINDOW_MS) {
           removed.push({ 
             reason: 'fuzzy_duplicate', 
@@ -1713,9 +1688,9 @@ const downloadBackupFromDrive = async (fileId) => {
   if (!res.ok) throw new Error('فشل التنزيل');
   return await res.json();
 };
-      /* ═══════════════════════════════════════════════════════════════
+  /* ═══════════════════════════════════════════════════════════════
    PART 3 — Shared UI (ErrorBoundary, Modals, Toasts, Login,
-   PIN, Sidebar, Header, Ticker, Badges, ReceiptViewer, SMS)
+   PIN, Sidebar, Header, Ticker, Badges, SMS Parser)
    ═══════════════════════════════════════════════════════════════ */
 
 /* ─────────────── Error Boundary ─────────────── */
@@ -4018,7 +3993,8 @@ const TransactionsView = memo(({
     </div>
   );
 });
-  /* ─────────────── Custody View ─────────────── */
+
+/* ─────────────── Custody View ─────────────── */
 const CustodyView = memo(({ data, dispatch, saveHistory, addNotification }) => {
   const [showAdd, setShowAdd] = useState(false);
   const [filterType, setFilterType] = useState('all');
@@ -4914,6 +4890,7 @@ const HanyShopLedger = memo(({ loan, prevMonthLoan, addNotification }) => {
     </div>
   );
 });
+
 /* ─────────────── Card Statement Modal ─────────────── */
 const CardStatementModal = memo(({ card, data, transactions, onClose, addNotification }) => {
   const [filterType, setFilterType] = useState('all');
@@ -5801,8 +5778,7 @@ const LoansView = memo(({
     </div>
   );
 });
-
-/* ─────────────── Wallets And Cards View ─────────────── */
+                      /* ─────────────── Wallets And Cards View ─────────────── */
 const WalletsAndCardsView = memo(({ 
   cards, buildLedger, expandedLedgers, expandedCardsSection, selectedMonth, selectedYear, 
   dispatch, handleDelete, handleAddWalletDeposit, handleAddWalletWithdrawal, 
@@ -6564,9 +6540,6 @@ const DeletedArchiveView = memo(({ data, dispatch, saveHistory, addNotification,
     </>
   );
 });
-  /* ═══════════════════════════════════════════════════════════════
-   PART 6 — Settings + Missing Views + Reducer + App + Render
-   ═══════════════════════════════════════════════════════════════ */
 
 /* ─────────────── Settings View ─────────────── */
 const SettingsView = memo(({ data, accountsData, cards, budgets, dispatch, saveHistory, addNotification }) => {
@@ -7017,9 +6990,7 @@ const SettingsView = memo(({ data, accountsData, cards, budgets, dispatch, saveH
   );
 });
 
-/* ═══════════════════════════════════════════════════════════════
-   PART 6B — Monthly Planning View
-   ═══════════════════════════════════════════════════════════════ */
+/* ─────────────── Monthly Planning View ─────────────── */
 const MonthlyPlanningView = memo(({ data, monthlyPlans, dispatch, saveHistory, addNotification }) => {
   const currentYear = new Date().getFullYear();
   const [year, setYear] = useState(() => YEARS_LIST.includes(currentYear) ? currentYear : YEARS_LIST[0]);
@@ -7135,9 +7106,7 @@ const MonthlyPlanningView = memo(({ data, monthlyPlans, dispatch, saveHistory, a
   );
 });
 
-/* ═══════════════════════════════════════════════════════════════
-   PART 6C — Planner View
-   ═══════════════════════════════════════════════════════════════ */
+/* ─────────────── Planner View ─────────────── */
 const PlannerView = memo(({ updatedLoans, cards, selectedMonth, selectedYear, monthlyPlans, totalLiquidityNow, data, transactions, recurringItems }) => {
   const planKey = makeMonthKey(selectedYear, selectedMonth);
   const plan = monthlyPlans?.[planKey] || {};
@@ -7265,9 +7234,7 @@ const PlannerView = memo(({ updatedLoans, cards, selectedMonth, selectedYear, mo
   );
 });
 
-/* ═══════════════════════════════════════════════════════════════
-   PART 6D — Liquidity Forecast View
-   ═══════════════════════════════════════════════════════════════ */
+/* ─────────────── Liquidity Forecast View ─────────────── */
 const LiquidityForecastView = memo(({ transactions, updatedLoans, recurringItems, liveBalances, selectedYear, selectedMonth, monthlyPlans }) => {
   const currentLiquidity = useMemo(() =>
     ACCOUNT_KEYS.reduce((s, k) => s + safeNumber(liveBalances?.[k]), 0), [liveBalances]);
@@ -7373,7 +7340,8 @@ const LiquidityForecastView = memo(({ transactions, updatedLoans, recurringItems
     </div>
   );
 });
-  /* ─────────────── Financial Forecast View (التنبؤ الشامل) ─────────────── */
+
+/* ─────────────── Financial Forecast View (التنبؤ الشامل) ─────────────── */
 const FinancialForecastView = memo(({ 
   data, transactions, cards, updatedLoans, recurringItems, 
   liveBalances, monthlyPlans, selectedYear, selectedMonth 
@@ -7749,9 +7717,7 @@ const FinancialForecastView = memo(({
   );
 });
 
-/* ═══════════════════════════════════════════════════════════════
-   PART 6E — Month Comparison View
-   ═══════════════════════════════════════════════════════════════ */
+/* ─────────────── Month Comparison View ─────────────── */
 const MonthComparisonView = memo(({ transactions, selectedYear, selectedMonth }) => {
   const [compareMonthIdx, setCompareMonthIdx] = useState(() => Math.max(0, getMonthIndex(selectedMonth) - 1));
 
@@ -7897,9 +7863,7 @@ const MonthComparisonView = memo(({ transactions, selectedYear, selectedMonth })
   );
 });
 
-/* ═══════════════════════════════════════════════════════════════
-   PART 6F — Calendar View
-   ═══════════════════════════════════════════════════════════════ */
+/* ─────────────── Calendar View ─────────────── */
 const CalendarView = memo(({ data, getAgendaItems, dispatch, saveHistory, addNotification }) => {
   const today = new Date();
   const [viewYear, setViewYear] = useState(today.getFullYear());
@@ -8085,8 +8049,7 @@ const CalendarView = memo(({ data, getAgendaItems, dispatch, saveHistory, addNot
     </div>
   );
 });
-
-/* ═══════════════════════════════════════════════════════════════
+  /* ═══════════════════════════════════════════════════════════════
    dataReducer
    ═══════════════════════════════════════════════════════════════ */
 function dataReducer(state, action) {
@@ -8346,7 +8309,8 @@ function dataReducer(state, action) {
     default: return state;
   }
 }
-  /* ═══════════════════════════════════════════════════════════════
+
+/* ═══════════════════════════════════════════════════════════════
    materializeShoppingRecurring — Family App integration
    ═══════════════════════════════════════════════════════════════ */
 const materializeShoppingRecurring = async () => {
@@ -8617,7 +8581,7 @@ function App() {
     return () => clearInterval(interval);
   }, [isAuthenticated]);
 
-  // ✅ Firestore Snapshot — Cloud-First (السحابة لها الأولوية المطلقة)
+  // Firestore Snapshot — Cloud-First (السحابة لها الأولوية المطلقة)
   useEffect(() => {
     if (!isAuthenticated) return;
     const docRef = db.collection(FIREBASE_DOC_PATH.collection).doc(FIREBASE_DOC_PATH.doc);
@@ -8672,7 +8636,7 @@ function App() {
           setTimeout(() => queueCloudSave(migrated, { silent: true }), 500);
         }
         
-        // 2) احترم deletedTxIds — أي قيد اتمسح عمداً يفضل ممسوح
+        // 2) احترم deletedTxIds
         const permanentDeleted = new Set([
           ...(migrated.deletedTxIds || []),
           ...(currentTxRef.current.filter(t => t?._deleted).map(t => t.id))
@@ -8682,49 +8646,43 @@ function App() {
           !t?.id || !permanentDeleted.has(t.id)
         );
         
-// ✅ 3) Cloud-First مع استثناء ذكي
-const remoteIds = new Set(migrated.transactions.map(t => t.id));
-const localOnly = currentTxRef.current.filter(t => 
-  t?.id && !remoteIds.has(t.id) && !permanentDeleted.has(t.id)
-);
-
-// 🔹 نرفع القيود دي للسحابة (مش نتجاهلها):
-//    - متولّدة من بند متكرر (sourceRecurringId)
-//    - متولّدة من shopping recurring (recurringId)
-//    - عمرها أقل من 60 ثانية (عمليات جديدة لسه هترفع)
-const now = Date.now();
-const localOnlyToUpload = localOnly.filter(t => {
-  if (t.sourceRecurringId) return true;
-  if (t.recurringId) return true;
-  if (t.createdAt) {
-    const age = now - new Date(t.createdAt).getTime();
-    if (age >= 0 && age < 60000) return true;
-  }
-  return false;
-});
-
-const localOnlyToIgnore = localOnly.filter(t => !localOnlyToUpload.includes(t));
-
-// 🔹 ارفع القيود الجديدة فوراً (بدون انتظار الـ auto-save)
-if (localOnlyToUpload.length > 0) {
-  console.log(`📤 ${localOnlyToUpload.length} قيد محلي جديد — جاري رفعه للسحابة`);
-  migrated.transactions = [...migrated.transactions, ...localOnlyToUpload];
-  setTimeout(() => queueCloudSave(migrated, { silent: true }), 800);
-}
-
-// 🔹 تجاهل القيود القديمة المفقودة
-if (localOnlyToIgnore.length > 0) {
-  console.warn(
-    `⚠️ ${localOnlyToIgnore.length} قيد قديم تم تجاهله — السحابة لها الأولوية`,
-    localOnlyToIgnore.map(t => ({ id: t.id, desc: t.description, amount: t.amount }))
-  );
-  setTimeout(() => addNotification({
-    type: 'warning',
-    title: `تم تجاهل ${localOnlyToIgnore.length} قيد قديم`,
-    message: 'السحابة هي المصدر — القيود دي مش موجودة في Firestore',
-    duration: 7000
-  }), 400);
-}
+        // 3) Cloud-First مع استثناء ذكي
+        const remoteIds = new Set(migrated.transactions.map(t => t.id));
+        const localOnly = currentTxRef.current.filter(t => 
+          t?.id && !remoteIds.has(t.id) && !permanentDeleted.has(t.id)
+        );
+        
+        const now = Date.now();
+        const localOnlyToUpload = localOnly.filter(t => {
+          if (t.sourceRecurringId) return true;
+          if (t.recurringId) return true;
+          if (t.createdAt) {
+            const age = now - new Date(t.createdAt).getTime();
+            if (age >= 0 && age < 60000) return true;
+          }
+          return false;
+        });
+        
+        const localOnlyToIgnore = localOnly.filter(t => !localOnlyToUpload.includes(t));
+        
+        if (localOnlyToUpload.length > 0) {
+          console.log(`📤 ${localOnlyToUpload.length} قيد محلي جديد — جاري رفعه للسحابة`);
+          migrated.transactions = [...migrated.transactions, ...localOnlyToUpload];
+          setTimeout(() => queueCloudSave(migrated, { silent: true }), 800);
+        }
+        
+        if (localOnlyToIgnore.length > 0) {
+          console.warn(
+            `⚠️ ${localOnlyToIgnore.length} قيد قديم تم تجاهله — السحابة لها الأولوية`,
+            localOnlyToIgnore.map(t => ({ id: t.id, desc: t.description, amount: t.amount }))
+          );
+          setTimeout(() => addNotification({
+            type: 'warning',
+            title: `تم تجاهل ${localOnlyToIgnore.length} قيد قديم`,
+            message: 'السحابة هي المصدر — القيود دي مش موجودة في Firestore',
+            duration: 7000
+          }), 400);
+        }
         
         // 4) منع إعادة الرفع + dispatch
         const incoming = JSON.stringify(migrated);
@@ -8932,14 +8890,14 @@ if (localOnlyToIgnore.length > 0) {
       return acc; 
     }, {});
 
-    // 🔹 خريطة الدفعات المرتبطة بكل التزام
-const paymentsByLoanId = transactions.reduce((acc, t) => {
-  if (t.linkedLoanId && t.status === 'paid') {
-    if (!acc[t.linkedLoanId]) acc[t.linkedLoanId] = [];
-    acc[t.linkedLoanId].push(t);
-  }
-  return acc;
-}, {});
+    const paymentsByLoanId = transactions.reduce((acc, t) => {
+      if (t.linkedLoanId && t.status === 'paid') {
+        if (!acc[t.linkedLoanId]) acc[t.linkedLoanId] = [];
+        acc[t.linkedLoanId].push(t);
+      }
+      return acc;
+    }, {});
+    
     const txByKey = new Map();
     transactions.forEach(t => {
       if (t.type !== 'expense' || !t.category) return;
@@ -8996,24 +8954,26 @@ const paymentsByLoanId = transactions.reduce((acc, t) => {
         const compositeId = `auto-${tpl.id}-${year}-${month}`;
         const repayments = safeNumber(map[compositeId]);
         
-autoMonthly.push({ 
-  ...tpl, 
-  id: compositeId, 
-  name: `${tpl.name} - ${month} ${year}`, 
-  totalAmount: total, 
-  prePaidAmount: 0, 
-  monthlyInstallment: 0, 
-  remaining: Math.max(0, total - repayments), 
-  totalPaid: repayments, 
-  dueDate: dueDateISO, 
-  dueDay, 
-  description: `${monthTx.length} مسحوبة`, 
-  autoGenerated: true, 
-  month, 
-  year, 
-  items: monthTx.slice().sort((a, b) => (parseISODate(b.date) || 0) - (parseISODate(a.date) || 0)),
-  payments: (paymentsByLoanId[compositeId] || []).slice().sort((a, b) => (parseISODate(b.date) || 0) - (parseISODate(a.date) || 0))
-});
+        autoMonthly.push({ 
+          ...tpl, 
+          id: compositeId, 
+          name: `${tpl.name} - ${month} ${year}`, 
+          totalAmount: total, 
+          prePaidAmount: 0, 
+          monthlyInstallment: 0, 
+          remaining: Math.max(0, total - repayments), 
+          totalPaid: repayments, 
+          dueDate: dueDateISO, 
+          dueDay, 
+          description: `${monthTx.length} مسحوبة`, 
+          autoGenerated: true, 
+          month, 
+          year, 
+          items: monthTx.slice().sort((a, b) => (parseISODate(b.date) || 0) - (parseISODate(a.date) || 0)),
+          payments: (paymentsByLoanId[compositeId] || []).slice().sort((a, b) => (parseISODate(b.date) || 0) - (parseISODate(a.date) || 0))
+        });
+      });
+    });
     
     const sortedAuto = autoMonthly.sort((a, b) => { 
       if (a.year !== b.year) return b.year - a.year; 
@@ -11035,7 +10995,4 @@ if (rootElement) {
 </script>
 </body>
 </html>
-
-
-
   
