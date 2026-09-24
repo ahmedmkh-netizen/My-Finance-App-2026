@@ -95,8 +95,6 @@ h1, h2, h3, h4 { font-weight: 800; letter-spacing: -0.02em; color: var(--text-pr
 .planning-input { width: 100%; background: transparent; border: 0; outline: none; text-align: center; font-weight: 700; color: var(--text-primary); font-family: 'Cairo', sans-serif; border-radius: 6px; padding: 6px 4px; }
 .planning-input:focus { background: var(--brand-soft); }
 .planning-input.user-edited { background: rgba(249, 115, 22, 0.08); border: 1px dashed rgba(249, 115, 22, 0.4); }
-.planning-cell { border: 1px solid var(--border-subtle); padding: 8px; text-align: center; position: relative; }
-.planning-cell-header { border: 1px solid var(--border-default); padding: 12px; text-align: center; font-weight: 900; background: var(--bg-muted); }
 .month-tab { flex-shrink: 0; padding: 8px 16px; border-radius: var(--radius-md); font-size: 12px; font-weight: 700; cursor: pointer; border: none; }
 .ticker-wrap { overflow: hidden; height: 100%; }
 .ticker-content { display: inline-flex; animation: ticker-scroll 80s linear infinite; }
@@ -106,7 +104,6 @@ h1, h2, h3, h4 { font-weight: 800; letter-spacing: -0.02em; color: var(--text-pr
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes shake { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }
-@keyframes popIn { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: scale(1); } }
 .animate-fadeIn { animation: fadeIn 0.25s ease-out; }
 .animate-slideInBottom { animation: slideUp 0.3s ease; }
 @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.1; } }
@@ -135,13 +132,6 @@ h1, h2, h3, h4 { font-weight: 800; letter-spacing: -0.02em; color: var(--text-pr
 .quick-chip { display: inline-flex; align-items: center; padding: 5px 11px; border-radius: 999px; font-size: 11px; font-weight: 700; background: var(--bg-muted); color: var(--text-secondary); border: 1px solid var(--border-subtle); cursor: pointer; transition: all 0.15s ease; white-space: nowrap; }
 .quick-chip:hover { background: var(--brand-soft); color: var(--brand); border-color: var(--brand); }
 .quick-chip:active { transform: scale(0.95); }
-.sync-indicator { position: fixed; top: 36px; left: 12px; z-index: 1500; padding: 4px 10px; border-radius: 999px; font-size: 10px; font-weight: 800; display: inline-flex; align-items: center; gap: 5px; box-shadow: var(--shadow-sm); transition: all 0.3s ease; }
-.sync-indicator.ready { background: rgba(16, 185, 129, 0.15); color: var(--success); }
-.sync-indicator.pending { background: rgba(251, 191, 36, 0.18); color: var(--warning); }
-.sync-indicator.offline { background: rgba(239, 68, 68, 0.15); color: var(--danger); }
-.sync-indicator.saving { background: rgba(59, 130, 246, 0.18); color: var(--brand); }
-.dup-badge { display: inline-flex; align-items: center; gap: 3px; padding: 2px 7px; border-radius: 999px; font-size: 9px; font-weight: 800; background: rgba(239, 68, 68, 0.15); color: #DC2626; border: 1px dashed rgba(239, 68, 68, 0.4); }
-.dark .dup-badge { background: rgba(248, 113, 113, 0.18); color: #F87171; }
 @media print { .no-print { display: none !important; } }
 </style>
 </head>
@@ -155,6 +145,7 @@ h1, h2, h3, h4 { font-weight: 800; letter-spacing: -0.02em; color: var(--text-pr
 
 /* ═══════════════════════════════════════════════════════════════
    PART 1 — Imports + Firebase + Constants + Defaults
+   V82 — Accounting Precision Edition
    ═══════════════════════════════════════════════════════════════ */
 import React, { useState, useMemo, useEffect, useCallback, useReducer, useRef, memo } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -169,7 +160,9 @@ import {
   MessageSquare, PieChart as PieChartIcon, CloudOff, Copy, Send, Bot, ExternalLink
 } from 'lucide-react';
 
-/* FIREBASE INIT */
+/* ═══════════════════════════════════════════════════════════════
+   FIREBASE INIT
+   ═══════════════════════════════════════════════════════════════ */
 const firebaseConfig = { 
   apiKey: "AIzaSyCEq-Trf1oFsvPF5tlMvqU83ea_J2DLZjs", 
   authDomain: "finance-app-2026-3e318.firebaseapp.com", 
@@ -182,12 +175,20 @@ if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 db.enablePersistence({ synchronizeTabs: true }).catch((err) => { console.warn('Firestore persistence failed:', err.code); });
 
+/* ═══════════════════════════════════════════════════════════════
+   Firestore Path + Constants
+   ═══════════════════════════════════════════════════════════════ */
 const FIREBASE_DOC_PATH = { collection: 'finance_2026', doc: 'user_ahmed_data' };
-const LAST_SYNC_LS_KEY = 'v81_last_sync_ts';
+const LAST_SYNC_LS_KEY = 'v82_last_sync_ts';
 const ALLOWED_EMAIL = "ahmedmkh@gmail.com";
-const CURRENT_ENGINE_VERSION = 17;
+const CURRENT_ENGINE_VERSION = 18;
 const DEFAULT_PIN = '1033';
 const PIN_HASH_KEY = 'finance_pin_hash_v1';
+
+/* ✅ تاريخ القطع — نهاية سبتمبر 2026 (أغسطس وسبتمبر انتهيا) */
+const CUTOFF_DATE_2026_09_30 = '2026-09-30';
+const CUTOFF_YEAR = 2026;
+const CUTOFF_MONTH = 'سبتمبر';
 
 const KIND = { OPERATIONAL: 'operational', FINANCIAL: 'financial', ADJUSTMENT: 'adjustment' };
 const CUSTODY_TYPE = { RECEIVE: 'receive', TRANSFER: 'transfer', SPEND_CASH: 'spend_cash', SPEND_CARD: 'spend_card', SETTLE: 'settle' };
@@ -197,11 +198,16 @@ const CUSTODY_TYPE_ICONS = { receive: ArrowDownCircle, transfer: ArrowLeftRight,
 const CASHBACK_STATUS = { EXPECTED: 'expected', PARTIAL: 'partial', RECEIVED: 'received' };
 const CASHBACK_STATUS_LABELS = { expected: 'متوقع', partial: 'جزئي', received: 'مستلم' };
 
-const TELEGRAM_CONFIG_LS_KEY = 'tg_bot_config_v81';
-const TELEGRAM_DEFAULT_CONFIG = { botToken: '', chatId: '', enabled: false, notifyOnRecurring: true, notifyOnPending: false, notifyOnBackup: false };
-const GAS_CONFIG_LS_KEY = 'gas_config_v81';
-const GAS_DEFAULT_CONFIG = { webAppUrl: '', secret: '', enabled: false, autoSync: false, lastSync: null };
+const TELEGRAM_CONFIG_LS_KEY = 'tg_bot_config_v82';
+const GAS_CONFIG_LS_KEY = 'gas_config_v82';
 const PAYMENT_METHODS_WITHOUT_ACCOUNT = new Set(['instapay', 'telda_shaimaa', 'telda_salma', 'telda_abdelrahman']);
+
+/* ✅ تصنيفات الحسابات */
+const CASH_METHOD_IDS = new Set(['cash']);                                  // الكاش — مصروف فقط، لا سجل
+const WALLET_METHOD_IDS = new Set(['fawry', 'etisalat']);                    // المحافظ الإلكترونية
+const BANK_METHOD_IDS = new Set(['cib_savings', 'aaib_savings']);             // الحسابات البنكية
+const LEDGER_METHOD_IDS = new Set(['fawry', 'etisalat', 'cib_savings', 'aaib_savings']); // التي لها سجل معاملات
+const NO_CASH_LEDGER = true; // ✅ الكاش بدون سجل معاملات
 
 const DAILY_DHIKR = [
   "سُبْحَانَ اللَّهِ وَبِحَمْدِهِ، سُبْحَانَ اللَّهِ الْعَظِيمِ",
@@ -216,8 +222,8 @@ const DAILY_DHIKR = [
   "اللَّهُمَّ إِنِّي أَسْأَلُكَ عِلْمًا نَافِعًا وَرِزقًا طَيِّبًا وَعَمَلًا مُتَقَبَّلًا"
 ];
 
-const STORAGE_KEY = 'finance_tracker_V81_SECURE';
-const LEGACY_KEYS = ['finance_tracker_V80_SECURE', 'finance_tracker_V79_SECURE', 'finance_tracker_V78_SECURE', 'finance_tracker_V77_SECURE', 'finance_tracker_V76_SECURE', 'finance_tracker_V75_SECURE'];
+const STORAGE_KEY = 'finance_tracker_V82_SECURE';
+const LEGACY_KEYS = ['finance_tracker_V81_SECURE', 'finance_tracker_V80_SECURE', 'finance_tracker_V79_SECURE', 'finance_tracker_V78_SECURE', 'finance_tracker_V77_SECURE'];
 
 const ALL_MONTHS = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
 const ALL_MONTHS_EARLY = ALL_MONTHS;
@@ -227,7 +233,7 @@ const getMonthsForYear = (y) => YEARS_CONFIG[y] || ALL_MONTHS;
 const getMonthIndex = (m) => ALL_MONTHS.indexOf(m);
 
 const PROJECT_START_YEAR = 2026;
-const PROJECT_START_MONTH = 'أغسطس';
+const PROJECT_START_MONTH = 'أكتوبر';              // ✅ البداية الفعلية من أكتوبر
 const PROJECT_START_MONTH_KEY = `${PROJECT_START_YEAR}-${PROJECT_START_MONTH}`;
 
 const LOANS_FINAL_SETTLEMENT_YEAR = 2027;
@@ -237,12 +243,32 @@ const LOANS_FINAL_SETTLEMENT_YM = LOANS_FINAL_SETTLEMENT_YEAR * 12 + getMonthInd
 const safeNumber = (v, f = 0) => { const n = Number(v); return isNaN(n) || !isFinite(n) ? f : n; };
 const fmt = (n) => safeNumber(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+/* ✅ دالة التحقق من نشاط القرض — ديناميكية لكل قرض */
 const isLoanActiveInMonth = (loan, year, month) => {
   if (!loan) return false;
   if (safeNumber(loan.monthlyInstallment) <= 0) return false;
   if (loan.remaining !== undefined && loan.remaining <= 0) return false;
+  
   const targetYM = year * 12 + getMonthIndex(month);
-  return targetYM <= LOANS_FINAL_SETTLEMENT_YM;
+  
+  // إذا القرض له نهاية محددة
+  if (loan.endYear && loan.endMonth) {
+    const endYM = safeNumber(loan.endYear) * 12 + getMonthIndex(loan.endMonth);
+    return targetYM <= endYM;
+  }
+  
+  // إذا القرض له بداية محددة
+  if (loan.startYear && loan.startMonth) {
+    const startYM = safeNumber(loan.startYear) * 12 + getMonthIndex(loan.startMonth);
+    if (targetYM < startYM) return false;
+  }
+  
+  // للقروض القديمة (بدون تواريخ): الحد العام أبريل 2027
+  if (!loan.startYear && !loan.endYear) {
+    return targetYM <= LOANS_FINAL_SETTLEMENT_YM;
+  }
+  
+  return true;
 };
 
 const HANY_QUICK_ITEMS = [
@@ -359,10 +385,32 @@ const SYSTEM_LOAN_IDS = { TAKYEEF: 'sys_takyeef_mahmoud', HANY: 'sys_hany_shop' 
 const isTakyeefLoan = (l) => l && (l.systemId === SYSTEM_LOAN_IDS.TAKYEEF || (l.name && l.name.includes('تكييف محمود')));
 const isHanyLoan = (l) => l && (l.systemId === SYSTEM_LOAN_IDS.HANY || (l.name && l.name.includes('محل هاني')));
 
+/* ✅ البطاقات — مع openingDate = تاريخ القطع 2026-09-30 */
 const DEFAULT_CARDS = [
-  { id:1, name:'Titanium', bank:'CIB', limit:100500, availableBalance:61186.11, openingDebt:39313.89, expiry:'01/29', holderName:'AHMED M. KHALIL', last4:'1016', subCardLast4: ['9380', '9352', '2014'], dueDate:'05 من كل شهر', type:'mastercard', theme:'silver', cashbackRate:2 },
-  { id:2, name:'Signature', bank:'AAIB', limit:100000, availableBalance:67313.87, openingDebt:32686.13, expiry:'10/26', holderName:'AHMED M. KHALIL', last4:'3391', subCardLast4: [], dueDate:'25 من كل شهر', type:'visa', theme:'black', cashbackRate:1.5 },
-  { id:3, name:'SWYPE', bank:'CIB', limit:49500, availableBalance:12274.29, openingDebt:37225.71, expiry:'01/29', holderName:'AHMED M. KHALIL', last4:'2017', subCardLast4: [], dueDate:'05 من كل شهر', type:'mastercard', theme:'blue', cashbackRate:1 }
+  { 
+    id:1, name:'Titanium', bank:'CIB', limit:100500, 
+    availableBalance:61186.11, openingDebt:39313.89, 
+    openingDate: CUTOFF_DATE_2026_09_30, 
+    expiry:'01/29', holderName:'AHMED M. KHALIL', 
+    last4:'1016', subCardLast4: ['9380', '9352', '2014'], 
+    dueDate:'05 من كل شهر', type:'mastercard', theme:'silver', cashbackRate:2 
+  },
+  { 
+    id:2, name:'Signature', bank:'AAIB', limit:100000, 
+    availableBalance:67313.87, openingDebt:32686.13, 
+    openingDate: CUTOFF_DATE_2026_09_30, 
+    expiry:'10/26', holderName:'AHMED M. KHALIL', 
+    last4:'3391', subCardLast4: [], 
+    dueDate:'25 من كل شهر', type:'visa', theme:'black', cashbackRate:1.5 
+  },
+  { 
+    id:3, name:'SWYPE', bank:'CIB', limit:49500, 
+    availableBalance:12274.29, openingDebt:37225.71, 
+    openingDate: CUTOFF_DATE_2026_09_30, 
+    expiry:'01/29', holderName:'AHMED M. KHALIL', 
+    last4:'2017', subCardLast4: [], 
+    dueDate:'05 من كل شهر', type:'mastercard', theme:'blue', cashbackRate:1 
+  }
 ];
 
 const CARD_LAST4_MAP = {
@@ -376,18 +424,30 @@ const CARD_LAST4_MAP = {
   '2017': { method: 'cib_swype', linkedCardId: 3, bank: 'CIB', kind: 'card', label: 'SWYPE' }
 };
 
+/* ✅ الحسابات — آخر تحديث = 2026-09-30، الكاش = 0 */
 const DEFAULT_ACCOUNTS = {
-  cib_savings: { balance: 151100, label: 'CIB Savings', lastUpdated: '2026-09-01', last4: '1809' },
-  aaib_savings: { balance: 5098.01, label: 'AAIB Savings', lastUpdated: '2026-09-01', last4: '2106' },
-  cash: { balance: 1100, label: 'Cash', lastUpdated: '2026-09-01', last4: null },
-  fawry: { balance: 0, label: 'Fawry', lastUpdated: '2026-09-01', last4: null },
-  etisalat: { balance: 0, label: 'Etisalat', lastUpdated: '2026-09-01', last4: null }
+  cib_savings: { balance: 151100, label: 'CIB Savings', lastUpdated: CUTOFF_DATE_2026_09_30, last4: '1809' },
+  aaib_savings: { balance: 5098.01, label: 'AAIB Savings', lastUpdated: CUTOFF_DATE_2026_09_30, last4: '2106' },
+  cash: { balance: 0, label: 'Cash', lastUpdated: CUTOFF_DATE_2026_09_30, last4: null },
+  fawry: { balance: 0, label: 'Fawry', lastUpdated: CUTOFF_DATE_2026_09_30, last4: null },
+  etisalat: { balance: 0, label: 'Etisalat', lastUpdated: CUTOFF_DATE_2026_09_30, last4: null }
 };
 
+/* ✅ القروض — مع تواريخ ديناميكية */
 const DEFAULT_LOANS = [
-  { id:1, name:'قرض عقاري AAIB - شقة العبور', totalAmount:30588.06, prePaidAmount:0, monthlyInstallment:5098.01, dueDay:3, interest:'حتى مارس 2027', description:'6 أقساط متبقية', type:'loan' },
+  { 
+    id:1, name:'قرض عقاري AAIB - شقة العبور', 
+    totalAmount:30588.06, prePaidAmount:0, monthlyInstallment:5098.01, 
+    dueDay:3, interest:'حتى مارس 2027', description:'6 أقساط متبقية', 
+    type:'loan', startYear:2026, startMonth:'أكتوبر', endYear:2027, endMonth:'مارس' 
+  },
   { id:2, name:'تسوية عقاري AAIB (أبريل 2027)', totalAmount:5062.84, prePaidAmount:0, monthlyInstallment:0, dueDay:3, interest:'القسط الأخير', description:'دفعة أبريل 2027', type:'debt' },
-  { id:7, systemId: SYSTEM_LOAN_IDS.TAKYEEF, name:'تكييف محمود', isReceivable:true, totalAmount:45600, prePaidAmount:14800, monthlyInstallment:2800, dueDay:1, interest:'مستحق لنا شهرياً', description:'مقدم 14,800 — متبقي 30,800 — 11 قسط × 2,800', type:'receivable', paused:false, totalInstallments: 12, paidInstallments: 1 },
+  { 
+    id:7, systemId: SYSTEM_LOAN_IDS.TAKYEEF, name:'تكييف محمود', isReceivable:true, 
+    totalAmount:45600, prePaidAmount:14800, monthlyInstallment:2800, dueDay:1, 
+    interest:'مستحق لنا شهرياً', description:'مقدم 14,800 — متبقي 30,800 — 11 قسط × 2,800', 
+    type:'receivable', paused:false, totalInstallments: 12, paidInstallments: 1 
+  },
   { id:4, name:'مصاريف جامعة سلمى', totalAmount:25000, prePaidAmount:0, monthlyInstallment:0, dueDay:5, interest:'مستحق', description:'إجمالي 25,000', type:'debt' },
   { id:3, name:'مصاريف جامعة عبد الرحمن', totalAmount:52550, prePaidAmount:26275, monthlyInstallment:0, dueDay:5, interest:'مدفوع 50%', description:'متبقي 26,275', type:'debt' },
   { id:5, name:'مصاريف مدرسة أنس', totalAmount:16000, prePaidAmount:0, monthlyInstallment:0, dueDay:15, interest:'دفعات مرنة', description:'إجمالي 16,000', type:'debt' },
@@ -398,37 +458,42 @@ const DEFAULT_LOANS = [
   { id:12, name:'أقساط ValU (قسط)', totalAmount:649, prePaidAmount:0, monthlyInstallment:649, dueDay:5, interest:'آخر قسط', description:'قسط واحد', type:'debt' },
   { id:13, name:'أقساط ValU (صغير)', totalAmount:570, prePaidAmount:341, monthlyInstallment:229, dueDay:5, interest:'بدون فوائد', description:'متبقي 229', type:'debt' },
   { id:14, name:'تقويم أسنان سلمى', totalAmount:1750, prePaidAmount:0, monthlyInstallment:350, dueDay:15, interest:'5 دفعات × 350', description:'بدأ 15 يوليو 2026', type:'debt' },
-  { id:15, systemId: SYSTEM_LOAN_IDS.HANY, name:'مسحوبات محل هاني', autoMonthly:true, dueNextMonth:true, mergeIntoNextCycle:['2026-أغسطس'], category:'مسحوبات محل هاني', totalAmount:0, prePaidAmount:0, monthlyInstallment:0, dueDay:5, interest:'مستحق شهري', description:'مسحوبات يومية — تُحسب تلقائياً من قيود الشهر', type:'debt' }
+  { 
+    id:15, systemId: SYSTEM_LOAN_IDS.HANY, name:'مسحوبات محل هاني', 
+    autoMonthly:true, dueNextMonth:true, 
+    mergeIntoNextCycle:['2026-أغسطس','2026-سبتمبر'], /* ✅ ديناميكي */
+    category:'مسحوبات محل هاني', totalAmount:0, prePaidAmount:0, 
+    monthlyInstallment:0, dueDay:5, interest:'مستحق شهري', 
+    description:'مسحوبات يومية — تُحسب تلقائياً من قيود الشهر', type:'debt' 
+  }
 ];
 
+/* ✅ البنود المتكررة — الرواتب من أكتوبر 2026 */
 const DEFAULT_RECURRING = [
-  { id:'r1', title:'إيجار المحل', amount:900, day:1, category:'إيجار المحل', type:'income', method:'cash', startMonth:'2026-08', endMonth:null, active:true },
-  { id:'r2', title:'زكاة - إسماعيل', amount:800, day:15, category:'الزكاة والتبرعات', type:'income', method:'cib_savings', startMonth:'2026-08', endMonth:null, active:true },
-  { id:'r3', title:'قسط تكييف محمود (دخل)', amount:2800, day:1, category:'تكييف محمود', type:'income', method:'cash', startMonth:'2026-08', endMonth:null, active:true, linkedLoanSystemId: SYSTEM_LOAN_IDS.TAKYEEF },
-  { id:'r4', title:'قسط شقة العبور', amount:5098.01, day:3, category:'الالتزامات البنكية والتمويلية', type:'expense', method:'aaib_savings', startMonth:'2026-08', endMonth:'2027-03', active:true },
-  { id:'r5', title:'قسط تقويم أسنان سلمى', amount:350, day:15, category:'الصحة والرعاية الطبية', type:'expense', method:'cash', startMonth:'2026-08', endMonth:'2026-12', active:true },
-  { id:'r6', title:'راتب شهري', amount:53466, day:25, category:'راتب شهري', type:'income', method:'aaib_savings', startMonth:'2026-08', endMonth:null, active:true },
-  { id:'r7', title:'عهدة إيماك - WE', amount:20000, day:10, category:'عهدة إيماك WE', type:'income', method:'cib_savings', startMonth:'2026-08', endMonth:null, active:true },
-  { id:'r8', title:'Cash Back متوقع', amount:2700, day:28, category:'Cash Back', type:'income', method:'cash', startMonth:'2026-08', endMonth:null, active:true },
-  { id:'r9', title:'رسوم شهرية - CIB Titanium', amount:25, day:5, category:'رسوم بنكية شهرية', type:'expense', kind:'financial', linkedCardId:1, method:'cib_card', startMonth:'2026-08', endMonth:null, active:true },
-  { id:'r10', title:'رسوم شهرية - CIB SWYPE', amount:15, day:5, category:'رسوم بنكية شهرية', type:'expense', kind:'financial', linkedCardId:3, method:'cib_swype', startMonth:'2026-08', endMonth:null, active:true },
-  { id:'r11', title:'رسوم شهرية - AAIB Signature', amount:20, day:25, category:'رسوم بنكية شهرية', type:'expense', kind:'financial', linkedCardId:2, method:'aaib_card', startMonth:'2026-08', endMonth:null, active:true },
-  { id:'r12', title:'مصروف شهري - شيماء', amount:5000, day:1, category:'مصروف شهري - شيماء', type:'expense', method:'cib_savings', startMonth:'2026-08', endMonth:null, active:true, transferChannel: 'telda_shaimaa' },
-  { id:'r13', title:'مصروف شهري - سلمى', amount:1200, day:1, category:'مصروف شهري - سلمى', type:'expense', method:'cib_savings', startMonth:'2026-08', endMonth:null, active:true, transferChannel: 'telda_salma' },
-  { id:'r14', title:'مصروف شهري - عبد الرحمن', amount:1200, day:1, category:'مصروف شهري - عبد الرحمن', type:'expense', method:'cib_savings', startMonth:'2026-08', endMonth:null, active:true, transferChannel: 'telda_abdelrahman' },
-  { id:'r15', title:'مصروف شهري - أنس', amount:250, day:1, category:'مصروف شهري - أنس', type:'expense', method:'cash', startMonth:'2026-08', endMonth:null, active:true }
+  { id:'r1', title:'إيجار المحل', amount:900, day:1, category:'إيجار المحل', type:'income', method:'cash', startMonth:'2026-10', endMonth:null, active:true },
+  { id:'r2', title:'زكاة - إسماعيل', amount:800, day:15, category:'الزكاة والتبرعات', type:'income', method:'cib_savings', startMonth:'2026-10', endMonth:null, active:true },
+  { id:'r3', title:'قسط تكييف محمود (دخل)', amount:2800, day:1, category:'تكييف محمود', type:'income', method:'cash', startMonth:'2026-10', endMonth:null, active:true, linkedLoanSystemId: SYSTEM_LOAN_IDS.TAKYEEF },
+  { id:'r4', title:'قسط شقة العبور', amount:5098.01, day:3, category:'الالتزامات البنكية والتمويلية', type:'expense', method:'aaib_savings', startMonth:'2026-10', endMonth:'2027-03', active:true },
+  { id:'r5', title:'قسط تقويم أسنان سلمى', amount:350, day:15, category:'الصحة والرعاية الطبية', type:'expense', method:'cash', startMonth:'2026-10', endMonth:'2026-12', active:true },
+  { id:'r6', title:'راتب شهري', amount:53466, day:25, category:'راتب شهري', type:'income', method:'aaib_savings', startMonth:'2026-10', endMonth:null, active:true },
+  { id:'r7', title:'عهدة إيماك - WE', amount:20000, day:10, category:'عهدة إيماك WE', type:'income', method:'cib_savings', startMonth:'2026-10', endMonth:null, active:true },
+  { id:'r8', title:'Cash Back متوقع', amount:2700, day:28, category:'Cash Back', type:'income', method:'cash', startMonth:'2026-10', endMonth:null, active:true },
+  { id:'r9', title:'رسوم شهرية - CIB Titanium', amount:25, day:5, category:'رسوم بنكية شهرية', type:'expense', kind:'financial', linkedCardId:1, method:'cib_card', startMonth:'2026-10', endMonth:null, active:true },
+  { id:'r10', title:'رسوم شهرية - CIB SWYPE', amount:15, day:5, category:'رسوم بنكية شهرية', type:'expense', kind:'financial', linkedCardId:3, method:'cib_swype', startMonth:'2026-10', endMonth:null, active:true },
+  { id:'r11', title:'رسوم شهرية - AAIB Signature', amount:20, day:25, category:'رسوم بنكية شهرية', type:'expense', kind:'financial', linkedCardId:2, method:'aaib_card', startMonth:'2026-10', endMonth:null, active:true },
+  { id:'r12', title:'مصروف شهري - شيماء', amount:5000, day:1, category:'مصروف شهري - شيماء', type:'expense', method:'cib_savings', startMonth:'2026-10', endMonth:null, active:true, transferChannel: 'telda_shaimaa' },
+  { id:'r13', title:'مصروف شهري - سلمى', amount:1200, day:1, category:'مصروف شهري - سلمى', type:'expense', method:'cib_savings', startMonth:'2026-10', endMonth:null, active:true, transferChannel: 'telda_salma' },
+  { id:'r14', title:'مصروف شهري - عبد الرحمن', amount:1200, day:1, category:'مصروف شهري - عبد الرحمن', type:'expense', method:'cib_savings', startMonth:'2026-10', endMonth:null, active:true, transferChannel: 'telda_abdelrahman' },
+  { id:'r15', title:'مصروف شهري - أنس', amount:250, day:1, category:'مصروف شهري - أنس', type:'expense', method:'cash', startMonth:'2026-10', endMonth:null, active:true }
 ];
 
 const DEFAULT_CUSTODY_ENTRIES = [
-  { id:'cust-demo-1', type:CUSTODY_TYPE.RECEIVE, amount:20000, date:'2026-09-01', description:'عهدة إيماك - WE (سبتمبر)', method:'cib_savings', status:'open', relatedCategory:'عهدة إيماك WE' }
+  { id:'cust-demo-1', type:CUSTODY_TYPE.RECEIVE, amount:20000, date:'2026-10-01', description:'عهدة إيماك - WE (أكتوبر)', method:'cib_savings', status:'open', relatedCategory:'عهدة إيماك WE' }
 ];
 
-const DEFAULT_CASHBACK_TRACKERS = [
-  { id:'cb-demo-1', cardId:1, month:'سبتمبر', year:2026, expectedAmount:2700, receivedAmount:0, receivedDate:'', status:'expected', notes:'كاش باك Titanium' }
-];
+const DEFAULT_CASHBACK_TRACKERS = [];
 
 const DEFAULT_MONTHLY_PLANS = {
-  '2026-سبتمبر': { expectedSalary: 53466, expectedRent: 900, expectedCashback: 2700, expectedEmakWE: 0, expectedZakat: 800, expectedCash: 1100, expectedCashExpenses: 102379, plannedPayments: 0, notes: '' },
   '2026-أكتوبر': { expectedSalary: 53466, expectedRent: 450, expectedCashback: 1500, expectedEmakWE: 20000, expectedZakat: 800, expectedCash: 900, expectedCashExpenses: 52547, plannedPayments: 0, notes: '' },
   '2026-نوفمبر': { expectedSalary: 53466, expectedRent: 450, expectedCashback: 0, expectedEmakWE: 0, expectedZakat: 800, expectedCash: 0, expectedCashExpenses: 44347, plannedPayments: 0, notes: '' },
   '2026-ديسمبر': { expectedSalary: 53466, expectedRent: 450, expectedCashback: 0, expectedEmakWE: 0, expectedZakat: 800, expectedCash: 0, expectedCashExpenses: 42730, plannedPayments: 0, notes: '' },
@@ -438,8 +503,23 @@ const DEFAULT_MONTHLY_PLANS = {
 
 const ACCOUNT_ICONS = { cib_savings: BuildingBank, aaib_savings: PiggyBank, cash: Wallet, fawry: StoreIcon, etisalat: Signal };
 const ACCOUNT_SHORT_NAMES = { cib_savings: 'CIB Savings', aaib_savings: 'AAIB Savings', cash: 'Cash', fawry: 'Fawry', etisalat: 'Etisalat' };
+
+/* ✅ أسماء جديدة للعرض */
+const VIEW_TITLES = {
+  cards: 'كروت الائتمان والمحافظ الإلكترونية',
+  cardsShort: 'الكروت والمحافظ',
+  creditCards: 'كروت الائتمان',
+  ewallets: 'المحافظ الإلكترونية'
+};
+
+/* ✅ الحسابات التي لها سجل معاملات (الكاش مستثنى) */
+const isLedgerAccount = (key) => LEDGER_METHOD_IDS.has(key) && !CASH_METHOD_IDS.has(key);
+const isCashAccount = (key) => CASH_METHOD_IDS.has(key);
+const isWalletAccount = (key) => WALLET_METHOD_IDS.has(key);
+const isBankAccount = (key) => BANK_METHOD_IDS.has(key);
 /* ═══════════════════════════════════════════════════════════════
-   PART 2 — Utilities + Date Parsing + Validation + Modals + SMS
+   PART 2 — Utilities + Date + Validation + Modals + PIN + SMS
+   V82 — Accounting Precision Edition
    ═══════════════════════════════════════════════════════════════ */
 
 /* ─────────────── Safe Utilities ─────────────── */
@@ -884,21 +964,30 @@ const invalidateSnapshotsFrom = (snapshots, year, month) => {
 const getAccountCutoff = (accountsData, key) => { 
   const iso = accountsData?.[key]?.lastUpdated; 
   const d = parseISODate(iso); 
-  return d || new Date(0); 
+  return d || parseISODate(CUTOFF_DATE_2026_09_30) || new Date(0); 
 };
 
 /* ═══════════════════════════════════════════════════════════════
-   Balance Computation
+   Balance Computation — الحسابات البنكية والمحافظ
+   ✅ الكاش مستثنى من السجل (يعامل كصندوق فقط)
    ═══════════════════════════════════════════════════════════════ */
 const computeBalance = (data, key, asOfDate) => {
   const accountsData = data?.accountsData || DEFAULT_ACCOUNTS;
   const base = safeNumber(accountsData[key]?.balance);
+  
+  // ✅ الكاش: لا سجل معاملات — الرصيد ثابت كما هو معرف
+  if (isCashAccount(key)) {
+    return base;
+  }
+  
   const cutoffDay = dayStart(getAccountCutoff(accountsData, key));
   const upper = asOfDate ? new Date(asOfDate) : endOfToday();
   const backward = upper < cutoffDay;
   let bal = base;
+  
   (data?.transactions || []).forEach(t => {
     if (t.status !== 'paid' || t.method !== key) return;
+    if (t.source === 'carryover') return; // القيود المرحّلة لا تؤثر على الرصيد
     const d = parseISODate(t.date);
     if (!d) return;
     const amt = safeNumber(t.amount);
@@ -916,27 +1005,52 @@ const getCardMethod = (card) => {
   return 'cib_card'; 
 };
 
+/* ═══════════════════════════════════════════════════════════════
+   ✅ computeCardDebt — مع قطع حسابي دقيق
+   - يبدأ من openingDate (2026-09-30)
+   - يعيد القيمة الحقيقية (سالب = رصيد دائن)
+   ═══════════════════════════════════════════════════════════════ */
 const computeCardDebt = (data, card, asOfDate) => {
   if (!card) return 0;
   const method = getCardMethod(card);
   const subCards = Array.isArray(card.subCardLast4) ? card.subCardLast4 : [];
   const upper = asOfDate ? new Date(asOfDate) : endOfToday();
+  
+  // ✅ نقطة القطع: من تاريخ openingDate للبطاقة
+  const cutoffISO = card.openingDate || CUTOFF_DATE_2026_09_30;
+  const cutoffDay = dayStart(parseISODate(cutoffISO) || new Date(0));
+  
   let debt = safeNumber(card.openingDebt);
   (data?.transactions || []).forEach(t => {
     if (t.status !== 'paid') return;
+    if (t.source === 'carryover') return;
     const d = parseISODate(t.date);
-    if (!d || d > upper) return;
+    if (!d) return;
+    
+    // ✅ لا تُحسب العمليات قبل الـ cutoff أو بعد upper
+    if (d < cutoffDay || d > upper) return;
+    
     const amt = safeNumber(t.amount);
     let belongsToCard = false;
     const hasExplicitCardLink = (t.linkedCardId !== undefined && t.linkedCardId !== null && t.linkedCardId !== '');
-    if (hasExplicitCardLink) { belongsToCard = (t.linkedCardId === card.id); }
-    else if (t.cardLast4 && subCards.includes(t.cardLast4)) { belongsToCard = true; }
-    else { belongsToCard = (t.method === method); }
+    
+    if (hasExplicitCardLink) { 
+      belongsToCard = (t.linkedCardId === card.id); 
+    } else if (t.cardLast4 && subCards.includes(t.cardLast4)) { 
+      belongsToCard = true; 
+    } else { 
+      belongsToCard = (t.method === method); 
+    }
+    
     if (!belongsToCard) return;
+    
+    // ✅ حساب دقيق: expense → زيادة، income → تخفيض
     if (t.type === 'expense') { debt += amt; return; }
     if (t.type === 'income') { debt -= amt; return; }
   });
-  return Math.max(0, debt);
+  
+  // ✅ لا Math.max — أعد القيمة الحقيقية (قد تكون سالبة = رصيد دائن)
+  return debt;
 };
 
 const getClosingBalance = (data, key, year, month) => {
@@ -959,9 +1073,9 @@ const getOpeningBalance = (data, key, year, month) => {
 
 const deriveDefaultCutoff = (txs) => { 
   const dates = (txs || []).filter(t => t.status === 'paid' && t.date).map(t => t.date).sort(); 
-  if (dates.length === 0) return '2026-08-31'; 
+  if (dates.length === 0) return CUTOFF_DATE_2026_09_30; 
   const d = parseISODate(dates[0]); 
-  if (!d) return '2026-08-31'; 
+  if (!d) return CUTOFF_DATE_2026_09_30; 
   d.setDate(d.getDate() - 1); 
   return getLocalISODate(d); 
 };
@@ -1012,7 +1126,11 @@ const migrateCards = (cards) => {
     const migrated = { ...c };
     if (!Array.isArray(migrated.subCardLast4)) migrated.subCardLast4 = [];
     if (migrated.id === 2 && String(migrated.last4) === '0391') migrated.last4 = '3391';
-    if (migrated.id === 1 && migrated.name === 'Titanium' && migrated.subCardLast4.length === 0) { migrated.subCardLast4 = ['9380', '9352', '2014']; }
+    if (migrated.id === 1 && migrated.name === 'Titanium' && migrated.subCardLast4.length === 0) { 
+      migrated.subCardLast4 = ['9380', '9352', '2014']; 
+    }
+    if (!migrated.openingDate) migrated.openingDate = CUTOFF_DATE_2026_09_30;
+    
     if (c.openingDebt !== undefined && c.availableBalance !== undefined) { 
       return { ...migrated, cashbackRate: c.cashbackRate !== undefined ? safeNumber(c.cashbackRate) : 1 }; 
     }
@@ -1063,9 +1181,9 @@ const migrateRecurringItems = (items) => {
   return items.map(r => {
     const migrated = { ...r };
     if (migrated.active === undefined) migrated.active = true;
-    if (migrated.startMonth && !/^\d{4}-\d{2}$/.test(migrated.startMonth)) migrated.startMonth = keyToInputMonth(migrated.startMonth) || null;
+    if (migrated.startMonth && !/^\d{4}-\d{2}$/.test(migrated.startMonth)) migrated.startMonth = keyToInputMonth(migrated.startMonth) || '2026-10';
     if (migrated.endMonth && !/^\d{4}-\d{2}$/.test(migrated.endMonth)) migrated.endMonth = keyToInputMonth(migrated.endMonth) || null;
-    if (migrated.startMonth === undefined) migrated.startMonth = null;
+    if (migrated.startMonth === undefined) migrated.startMonth = '2026-10';
     if (migrated.endMonth === undefined) migrated.endMonth = null;
     if (r.title && r.title.includes('تكييف محمود') && !migrated.linkedLoanSystemId) migrated.linkedLoanSystemId = SYSTEM_LOAN_IDS.TAKYEEF;
     if (!migrated.transferChannel && r.category && r.category.startsWith('مصروف شهري - ')) {
@@ -1121,7 +1239,7 @@ const migrateData = (parsed) => {
       systemId: SYSTEM_LOAN_IDS.HANY, 
       autoMonthly: true, 
       dueNextMonth: true, 
-      mergeIntoNextCycle: l.mergeIntoNextCycle || [PROJECT_START_MONTH_KEY], 
+      mergeIntoNextCycle: l.mergeIntoNextCycle || ['2026-أغسطس','2026-سبتمبر'], 
       category: l.category || 'مسحوبات محل هاني', 
       totalAmount: 0, 
       prePaidAmount: 0, 
@@ -1257,93 +1375,118 @@ const getInitialData = () => {
 };
 
 /* ═══════════════════════════════════════════════════════════════
-   materializeRecurringItems — ID حتمي
+   ✅ materializeRecurringItems — يعالج كل الشهور من startMonth حتى اليوم
    ═══════════════════════════════════════════════════════════════ */
 const materializeRecurringItems = (data, asOfDateStr) => {
   if (!data?.recurringItems?.length) return null;
   
   const now = asOfDateStr ? new Date(asOfDateStr) : new Date();
-  const nowYear = now.getFullYear();
-  const nowMonth = ALL_MONTHS[now.getMonth()];
-  const nowMonthKey = makeMonthKey(nowYear, nowMonth);
-  const nowInputMonth = `${nowYear}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   const permanentDeleted = new Set(data.deletedTxIds || []);
   const existing = (data.transactions || []).filter(t => !(permanentDeleted.has(t.id)));
   const materialized = { ...(data.materializedRecurring || {}) };
   const newTxs = [];
-  const loanPaidMap = {};
   
+  // خريطة المدفوعات المرتبطة بالذمم
+  const loanPaidMap = {};
   existing.forEach(t => { 
-    if (permanentDeleted.has(t.id)) return;
     if (t.status === 'paid' && t.sourceReceivableId) 
       loanPaidMap[t.sourceReceivableId] = (loanPaidMap[t.sourceReceivableId] || 0) + safeNumber(t.amount); 
   });
   
   data.recurringItems.forEach(r => {
-    if (r.active === false) return;
-    if (!r.id || !r.type) return;
-    if (r.startMonth && nowInputMonth < r.startMonth) return;
-    if (r.endMonth && nowInputMonth > r.endMonth) return;
-    
+    if (r.active === false || !r.id || !r.type) return;
     const day = safeNumber(r.day, 1);
     if (day < 1 || day > 31) return;
     
-    const maxDayInMonth = new Date(nowYear, now.getMonth() + 1, 0).getDate();
-    const safeDay = Math.min(day, maxDayInMonth);
-    const targetDate = new Date(nowYear, now.getMonth(), safeDay);
-    if (targetDate > now) return;    
+    // ✅ نطاق الشهور: من startMonth حتى الشهر الحالي (أو endMonth)
+    const startInput = r.startMonth || '2026-10';
+    const [sy, sm] = startInput.split('-').map(Number);
+    if (isNaN(sy) || isNaN(sm)) return;
     
-    const matKey = `${r.id}_${nowMonthKey}`;
-    if (materialized[matKey] === 'deleted') return;
-    if (materialized[matKey]) return;
+    const endInput = r.endMonth || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const [ey, em] = endInput.split('-').map(Number);
+    if (isNaN(ey) || isNaN(em)) return;
     
-    const manualExists = existing.some(t => t.sourceRecurringId === r.id && t.month === nowMonth && (t.year || nowYear) === nowYear);
-    if (manualExists) { materialized[matKey] = true; return; }
+    const startYM = sy * 12 + (sm - 1);
+    const endYM = ey * 12 + (em - 1);
     
-    let receivableLinkedId = null;
-    if (r.linkedLoanSystemId) {
-      const linkedLoan = (data.loans || []).find(l => l.systemId === r.linkedLoanSystemId);
-      if (linkedLoan) { 
-        const collected = safeNumber(linkedLoan.prePaidAmount) + (loanPaidMap[linkedLoan.id] || 0); 
-        if (collected >= safeNumber(linkedLoan.totalAmount) - 0.005) return; 
-        receivableLinkedId = linkedLoan.id; 
+    // ✅ Loop على كل الشهور من start حتى end (أو حتى اليوم)
+    for (let ym = startYM; ym <= endYM; ym++) {
+      const y = Math.floor(ym / 12);
+      const mIdx = ym % 12;
+      const monthName = ALL_MONTHS[mIdx];
+      
+      // تحقق أن التاريخ لم يأتِ بعد
+      const maxDayInMonth = new Date(y, mIdx + 1, 0).getDate();
+      const safeDay = Math.min(day, maxDayInMonth);
+      const targetDate = new Date(y, mIdx, safeDay);
+      if (targetDate > now) break; // تجاوز الشهور المستقبلية
+      
+      const matKey = `${r.id}_${makeMonthKey(y, monthName)}`;
+      if (materialized[matKey] === 'deleted') continue;
+      if (materialized[matKey]) continue;
+      
+      // تحقق من وجود قيد يدوي بنفس البند في نفس الشهر
+      const manualExists = existing.some(t => 
+        t.sourceRecurringId === r.id && 
+        t.month === monthName && 
+        (t.year || y) === y
+      );
+      if (manualExists) { 
+        materialized[matKey] = true; 
+        continue; 
       }
+      
+      // تحقق من قرض مرتبط (تكييف محمود)
+      let receivableLinkedId = null;
+      if (r.linkedLoanSystemId) {
+        const linkedLoan = (data.loans || []).find(l => l.systemId === r.linkedLoanSystemId);
+        if (linkedLoan) { 
+          const collected = safeNumber(linkedLoan.prePaidAmount) + (loanPaidMap[linkedLoan.id] || 0); 
+          if (collected >= safeNumber(linkedLoan.totalAmount) - 0.005) break; // لا مزيد من الأقساط
+          receivableLinkedId = linkedLoan.id; 
+        }
+      }
+      
+      let method = 'cash';
+      let linkedCardId = r.linkedCardId;
+      if (r.method) { method = r.method; }
+      else if (linkedCardId) { 
+        const card = (data.cards || []).find(c => c.id === linkedCardId); 
+        if (card) method = getCardMethod(card); 
+      }
+      
+      const isFee = BANK_FEE_CATEGORIES.has(r.category);
+      const kind = r.kind || (isFee ? KIND.FINANCIAL : KIND.OPERATIONAL);
+      const newId = `rec-${r.id}-${makeMonthKey(y, monthName)}`;
+      
+      if (permanentDeleted.has(newId)) { 
+        materialized[matKey] = 'deleted'; 
+        continue; 
+      }
+      
+      newTxs.push({
+        id: newId,
+        type: r.type, 
+        subType: r.type === 'income' ? 'deposit' : 'withdrawal', 
+        kind,
+        category: r.category, 
+        amount: safeNumber(r.amount), 
+        description: r.title || 'بند متكرر',
+        method, 
+        date: getLocalISODate(targetDate), 
+        month: monthName, 
+        year: y, 
+        monthIndex: mIdx,
+        status: 'pending', 
+        sourceRecurringId: r.id, 
+        linkedCardId: linkedCardId || undefined,
+        sourceReceivableId: receivableLinkedId || undefined,
+        transferChannel: r.transferChannel || undefined,
+        createdAt: new Date().toISOString()
+      });
+      materialized[matKey] = true;
     }
-    
-    let method = 'cash';
-    let linkedCardId = r.linkedCardId;
-    if (r.method) { method = r.method; }
-    else if (linkedCardId) { 
-      const card = (data.cards || []).find(c => c.id === linkedCardId); 
-      if (card) method = getCardMethod(card); 
-    }
-    
-    const isFee = BANK_FEE_CATEGORIES.has(r.category);
-    const kind = r.kind || (isFee ? KIND.FINANCIAL : KIND.OPERATIONAL);
-    const newId = `rec-${r.id}-${nowMonthKey}`;
-    if (permanentDeleted.has(newId)) { materialized[matKey] = 'deleted'; return; }
-    
-    newTxs.push({
-      id: newId,
-      type: r.type, 
-      subType: r.type === 'income' ? 'deposit' : 'withdrawal', 
-      kind,
-      category: r.category, 
-      amount: safeNumber(r.amount), 
-      description: r.title || 'بند متكرر',
-      method, 
-      date: getLocalISODate(targetDate), 
-      month: ALL_MONTHS[targetDate.getMonth()], 
-      year: targetDate.getFullYear(), 
-      monthIndex: targetDate.getMonth(),
-      status: 'pending', 
-      sourceRecurringId: r.id, 
-      linkedCardId: linkedCardId || undefined,
-      sourceReceivableId: receivableLinkedId || undefined,
-      transferChannel: r.transferChannel || undefined,
-      createdAt: new Date().toISOString()
-    });
-    materialized[matKey] = true;
   });
   
   if (newTxs.length === 0) return null;
@@ -1356,8 +1499,7 @@ const materializeRecurringItems = (data, asOfDateStr) => {
 };
 
 /* ═══════════════════════════════════════════════════════════════
-   dedupeRecurringTransactions
-   ✅ fuzzy dedupe بنافذة زمنية 10 ثواني (منع double-submit)
+   ✅ dedupeRecurringTransactions — نافذة 5 ثواني + الوصف
    ═══════════════════════════════════════════════════════════════ */
 const dedupeRecurringTransactions = (transactions) => {
   if (!Array.isArray(transactions) || transactions.length === 0) {
@@ -1400,17 +1542,19 @@ const dedupeRecurringTransactions = (transactions) => {
       seenRecurringKey.set(rKey, t.id);
     }
     
+    // ✅ نافذة 5 ثواني + الوصف مُضمَّن
     if (
       t.createdAt &&
       t.source !== 'sms' &&
       !t.linkedTransferId &&
       safeNumber(t.amount) > 0
     ) {
-      const FUZZY_WINDOW_MS = 10000;
+      const FUZZY_WINDOW_MS = 5000;
       const tTime = new Date(t.createdAt).getTime();
       
       if (!isNaN(tTime)) {
-        const fKey = `${safeNumber(t.amount)}|${t.category}|${t.method}|${t.type}`;
+        const descKey = normalizeText(t.description || '').slice(0, 30);
+        const fKey = `${safeNumber(t.amount)}|${t.category}|${t.method}|${t.type}|${descKey}`;
         const lastSeen = seenFuzzyKey.get(fKey);
         
         if (lastSeen && (lastSeen.time - tTime) < FUZZY_WINDOW_MS) {
@@ -1445,41 +1589,6 @@ const dedupeRecurringTransactions = (transactions) => {
   }
   
   return { transactions: keep, removed };
-};
-
-const applyDedupe = (data, addNotification) => {
-  const { transactions: cleanTx, removed } = dedupeRecurringTransactions(data?.transactions || []);
-  if (removed.length === 0) return data;
-  
-  const newArchive = [...(data.deletedTxArchive || [])];
-  const newDeletedIds = [...(data.deletedTxIds || [])];
-  
-  removed.forEach(r => {
-    if (r.tx) {
-      newArchive.push({
-        ...r.tx,
-        deletedAt: new Date().toISOString(),
-        deletedBy: 'dedupe',
-        originalStatus: r.tx.status || 'pending',
-        reason: 'dedupe_' + r.reason
-      });
-      newDeletedIds.push(r.tx.id);
-    }
-  });
-  
-  addNotification?.({
-    type: 'info',
-    title: `🧹 تم تنظيف ${removed.length} قيد مكرر`,
-    message: 'نُقلت للأرشيف — يمكن استرجاعها',
-    duration: 6000
-  });
-  
-  return {
-    ...data,
-    transactions: cleanTx,
-    deletedTxArchive: newArchive.slice(-500),
-    deletedTxIds: Array.from(new Set(newDeletedIds)).slice(-500)
-  };
 };
 
 /* ═══════════════════════════════════════════════════════════════
@@ -1572,8 +1681,8 @@ const DRIVE_CLIENT_ID = '190006477168-odmpreq26b618rdn1dsg4k1aag3k056g.apps.goog
 const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive';
 const DRIVE_FOLDER_NAME = 'Finance Backups';
 const DRIVE_DEFAULT_FOLDER_ID = '1rAupM2llGpThcodBrmL4DZIhDSJ-dGXW';
-const DRIVE_FOLDER_ID_LS_KEY = 'v81_drive_folder_id';
-const AUTO_BACKUP_LS_KEY = 'v81_last_drive_backup_ts';
+const DRIVE_FOLDER_ID_LS_KEY = 'v82_drive_folder_id';
+const AUTO_BACKUP_LS_KEY = 'v82_last_drive_backup_ts';
 let _driveTokenClient = null;
 let _driveAccessToken = null;
 let _driveTokenExpiry = 0;
@@ -1657,7 +1766,7 @@ const uploadBackupToDrive = async (payload, fileName) => {
   const folderId = await getOrCreateBackupFolder();
   const name = fileName || `finance_backup_${getLocalISODate()}_${Date.now()}.json`;
   const metadata = { name, parents: [folderId], mimeType: 'application/json' };
-  const boundary = '----V81DriveBoundary' + Date.now();
+  const boundary = '----V82DriveBoundary' + Date.now();
   const body = `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n--${boundary}\r\nContent-Type: application/json\r\n\r\n${JSON.stringify(payload)}\r\n--${boundary}--`;
   const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,size,createdTime', { 
     method: 'POST', 
@@ -1691,6 +1800,7 @@ const downloadBackupFromDrive = async (fileId) => {
   /* ═══════════════════════════════════════════════════════════════
    PART 3 — Shared UI (ErrorBoundary, Modals, Toasts, Login,
    PIN, Sidebar, Header, Ticker, Badges, SMS Parser)
+   V82 — Accounting Precision Edition
    ═══════════════════════════════════════════════════════════════ */
 
 /* ─────────────── Error Boundary ─────────────── */
@@ -1843,12 +1953,40 @@ const Modal = memo(({ isOpen, onClose, title, icon, size = 'md', children, foote
   );
 });
 
-/* ─────────────── Wallet Configs ─────────────── */
+/* ─────────────── Wallet Configs — أسماء محدّثة ─────────────── */
 const WALLET_CONFIGS = {
-  fawry: { id:'fawry', title:'Fawry Wallet', subtitle:'Track deposits & payments', icon: StoreIcon, csvName:'Fawry' },
-  etisalat: { id:'etisalat', title:'Etisalat Cash', subtitle:'Track deposits & withdrawals', icon: Signal, csvName:'Etisalat' },
-  cib_savings: { id:'cib_savings', title:'CIB Savings Account', subtitle:'Track transactions', icon: BuildingBank, csvName:'CIB_Savings' },
-  aaib_savings: { id:'aaib_savings', title:'AAIB Savings Account', subtitle:'Track transactions', icon: PiggyBank, csvName:'AAIB_Savings' }
+  fawry: { 
+    id:'fawry', 
+    title:'Fawry Wallet', 
+    subtitle:'محفظة إلكترونية', 
+    icon: StoreIcon, 
+    csvName:'Fawry', 
+    group: 'wallet' 
+  },
+  etisalat: { 
+    id:'etisalat', 
+    title:'Etisalat Cash', 
+    subtitle:'محفظة إلكترونية', 
+    icon: Signal, 
+    csvName:'Etisalat', 
+    group: 'wallet' 
+  },
+  cib_savings: { 
+    id:'cib_savings', 
+    title:'CIB Savings Account', 
+    subtitle:'حساب بنكي', 
+    icon: BuildingBank, 
+    csvName:'CIB_Savings', 
+    group: 'bank' 
+  },
+  aaib_savings: { 
+    id:'aaib_savings', 
+    title:'AAIB Savings Account', 
+    subtitle:'حساب بنكي', 
+    icon: PiggyBank, 
+    csvName:'AAIB_Savings', 
+    group: 'bank' 
+  }
 };
 
 /* ─────────────── Toast ─────────────── */
@@ -1973,6 +2111,13 @@ const TransferBadge = memo(({ tx }) => {
   if (dir === 'in') return <span className="badge badge-success" title="تحويل وارد لهذا الحساب">🔁↘ دخول</span>;
   if (dir === 'fee') return <span className="badge badge-warning" title="رسوم تحويل">💸 رسوم</span>;
   return <span className="badge badge-brand">🔁 تحويل</span>;
+});
+
+const CreditBadge = memo(({ tx }) => {
+  if (tx?.type !== 'income') return null;
+  if (tx?.sourceRecurringId) return null;
+  if (CASH_METHOD_IDS.has(tx?.method)) return null;
+  return <span className="badge badge-success" title="دخل / إيداع">💰 وارد</span>;
 });
 
 /* ─────────────── Family Members ─────────────── */
@@ -2143,15 +2288,18 @@ const EnhancedStatCard = ({ title, amount, icon: Icon, subtitle, isPrivate, colo
   );
 };
 
-/* ─────────────── Quick Balance Overview ─────────────── */
+/* ─────────────── Quick Balance Overview — بدون كاش ─────────────── */
 const QuickBalanceOverview = memo(({ balances, walletVisibility, onToggleVisibility }) => {
   const [isVisible, setIsVisible] = useState(true);
-  const accounts = ACCOUNT_KEYS.map(k => ({ 
+  
+  // ✅ عرض الحسابات بدون الكاش (لأنه بلا سجل)
+  const accounts = ['cib_savings', 'aaib_savings', 'fawry', 'etisalat'].map(k => ({ 
     key: k, 
     shortName: ACCOUNT_SHORT_NAMES[k] || k, 
     balance: safeNumber(balances?.[k]), 
     icon: ACCOUNT_ICONS[k], 
-    last4: DEFAULT_ACCOUNTS[k]?.last4 
+    last4: DEFAULT_ACCOUNTS[k]?.last4,
+    group: WALLET_CONFIGS[k]?.group
   }));
   const total = accounts.reduce((s, a) => s + a.balance, 0);
   
@@ -2163,7 +2311,7 @@ const QuickBalanceOverview = memo(({ balances, walletVisibility, onToggleVisibil
       </div>
       {isVisible && (
         <React.Fragment>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2 mb-3">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 mb-3">
             {accounts.map(acc => (
               <div key={acc.key} className="p-3 rounded-xl relative" style={{ background: 'var(--bg-muted)' }}>
                 <button 
@@ -2188,6 +2336,9 @@ const QuickBalanceOverview = memo(({ balances, walletVisibility, onToggleVisibil
             <span className="font-bold text-sm">إجمالي السيولة</span>
             <span className="text-2xl font-black tracking-tight">{fmt(total)}</span>
           </div>
+          <p className="text-[10px] mt-2 text-center" style={{ color: 'var(--text-muted)' }}>
+            💵 الكاش مصروف فقط (بلا سجل معاملات)
+          </p>
         </React.Fragment>
       )}
     </div>
@@ -2198,12 +2349,12 @@ const QuickBalanceOverview = memo(({ balances, walletVisibility, onToggleVisibil
 const ProfessionalTicker = memo(({ updatedLoans, cards, liveBalances, walletVisibility, custodyBalance, data }) => {
   const [quote] = useState(() => DAILY_DHIKR[Math.floor(Math.random() * DAILY_DHIKR.length)]);
   const totalDebt = updatedLoans.filter(l => !l.isReceivable).reduce((a, l) => a + l.remaining, 0) 
-    + cards.reduce((a, c) => a + computeCardDebt(data, c), 0);
+    + cards.reduce((a, c) => a + Math.max(0, computeCardDebt(data, c)), 0);
   const cashNow = safeNumber(liveBalances?.cash);
   
   const items = (
     <React.Fragment>
-      <span className="ticker-item">💰 {walletVisibility.cash ? fmt(cashNow) : '•••••'} ج.م</span>
+      <span className="ticker-item">💵 كاش {walletVisibility.cash ? fmt(cashNow) : '•••••'} ج.م</span>
       <span className="opacity-30 mx-2">•</span>
       <span className="ticker-item">💳 {fmt(totalDebt)} ج.م</span>
       <span className="opacity-30 mx-2">•</span>
@@ -2236,6 +2387,7 @@ const ProfessionalHeader = memo(({ isDarkMode, dispatch, onOpenSms, isOnline, sy
       <div className="p-2 rounded-lg text-white shadow-sm" style={{ background: 'var(--brand)' }}><Wallet size={18} /></div>
       <div>
         <h1 className="text-base font-black">محفظتي المالية</h1>
+        <p className="text-[9px] font-semibold" style={{ color: 'var(--text-muted)' }}>V82 — دقة محاسبية</p>
       </div>
     </div>
 
@@ -2299,7 +2451,7 @@ const LoginScreen = ({ onLogin }) => {
             <Wallet size={40} className="text-white" />
           </div>
           <h1 className="text-2xl font-black text-white mb-1">محفظتي المالية</h1>
-          <p className="text-sm font-medium" style={{ color: '#C8BEA8' }}>إدارة مالية ذكية</p>
+          <p className="text-sm font-medium" style={{ color: '#C8BEA8' }}>إدارة مالية ذكية — V82</p>
         </div>
         {error && (
           <div className="mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-300 text-xs font-bold flex items-center gap-2">
@@ -2614,6 +2766,7 @@ const SmsParserModal = memo(({ isOpen, onClose, dispatch, addNotification, saveH
       linkedCardId: parsed.linkedCardId || undefined,
       cardLast4: parsed.last4 || undefined,
       accountKind: parsed.accountKind || undefined,
+      createdAt: new Date().toISOString()
     };
     dispatch({ 
       type: 'UPDATE_TRANSACTIONS', 
@@ -2725,7 +2878,7 @@ const EnhancedSidebar = memo(({ activeTab, dispatch, canUndo, onUndo }) => {
       items: [
         { id: 'categories', label: 'الفئات', icon: Layers }, 
         { id: 'loans', label: 'الالتزامات والعهد', icon: Banknote }, 
-        { id: 'cards', label: 'المحافظ والكاش باك', icon: CreditCard }
+        { id: 'cards', label: 'الكروت والمحافظ', icon: CreditCard }
       ] 
     },
     { 
@@ -2755,7 +2908,7 @@ const EnhancedSidebar = memo(({ activeTab, dispatch, canUndo, onUndo }) => {
         <div className="p-2 rounded-lg text-white" style={{ background: 'var(--brand)' }}><Wallet size={18} /></div>
         <div>
           <h2 className="font-black text-sm">المحفظة الذكية</h2>
-          <p className="text-[10px] font-semibold" style={{ color: 'var(--text-muted)' }}>V81</p>
+          <p className="text-[10px] font-semibold" style={{ color: 'var(--text-muted)' }}>V82</p>
         </div>
       </div>
       <nav className="flex-1 scroll-hide overflow-y-auto -mx-1 px-1">
@@ -2788,7 +2941,8 @@ const EnhancedSidebar = memo(({ activeTab, dispatch, canUndo, onUndo }) => {
   );
 });
   /* ═══════════════════════════════════════════════════════════════
-   PART 4 — Dashboard + Categories + CategoryDetail + Transactions
+   PART 4 — Dashboard + Categories + Transactions + Custody + Loans
+   V82 — Accounting Precision Edition
    ═══════════════════════════════════════════════════════════════ */
 
 /* ─────────────── Pending Close Modal ─────────────── */
@@ -2917,6 +3071,8 @@ const GenericLedgerComponent = memo(({
   const mask = (v) => !walletVisibility?.[walletKey] ? '•••••' : fmt(v);
   const IconComponent = theme.icon;
   const stop = (e, action) => { e.stopPropagation(); e.preventDefault(); if (action) action(); };
+  const isWallet = theme.group === 'wallet';
+  const isBank = theme.group === 'bank';
   
   return (
     <div className="card mb-3">
@@ -2926,7 +3082,11 @@ const GenericLedgerComponent = memo(({
             <IconComponent size={20} />
           </div>
           <div className="min-w-0">
-            <h3 className="font-bold text-sm truncate">{theme.title}</h3>
+            <h3 className="font-bold text-sm truncate flex items-center gap-2">
+              {theme.title}
+              {isWallet && <span className="badge badge-brand text-[9px]">محفظة</span>}
+              {isBank && <span className="badge badge-neutral text-[9px]">بنك</span>}
+            </h3>
             <p className="text-[11px] mt-0.5 truncate" style={{ color: 'var(--text-muted)' }}>{theme.subtitle}</p>
           </div>
         </div>
@@ -3018,14 +3178,15 @@ const GenericLedgerComponent = memo(({
   );
 });
 
-/* ─────────────── Dashboard View ─────────────── */
+/* ─────────────── Dashboard View — مع توقع شامل ─────────────── */
 const DashboardView = memo(({ 
   data, financeSnapshot, liveBalances, totalLiquidity, walletVisibility, 
   onToggleVisibility, dispatch, selectedYear, selectedMonth, transactions, 
   cards, updatedLoans, chartData, isDarkMode, addNotification, 
   onSelectYear, onSelectMonth 
 }) => {
-  const totalCardDebt = useMemo(() => cards.reduce((s, c) => s + computeCardDebt(data, c), 0), [cards, data]);
+  const totalCardDebt = useMemo(() => 
+    cards.reduce((s, c) => s + Math.max(0, computeCardDebt(data, c)), 0), [cards, data]);
   const totalLoanDebt = useMemo(() => updatedLoans.filter(l => !l.isReceivable).reduce((s, l) => s + l.remaining, 0), [updatedLoans]);
   const grandTotalDebt = totalCardDebt + totalLoanDebt;
   const netPosition = totalLiquidity - grandTotalDebt;
@@ -3119,7 +3280,7 @@ const DashboardView = memo(({
         <button 
           onClick={() => { 
             dispatch({ type: 'SET_FORM_MODE', payload: 'add' }); 
-            dispatch({ type: 'SET_FORM_DATA', payload: { type: 'income', amount: '', date: getLocalISODate(), method: 'cash', subType: 'deposit', category: '', status: 'pending' } }); 
+            dispatch({ type: 'SET_FORM_DATA', payload: { type: 'income', amount: '', date: getLocalISODate(), method: 'cib_savings', subType: 'deposit', category: '', status: 'pending' } }); 
             dispatch({ type: 'SET_FORM_OPEN', payload: true }); 
           }} 
           className="card py-3 flex flex-col items-center gap-1 active:scale-95"
@@ -3166,17 +3327,38 @@ const DashboardView = memo(({
       
       <MonthSelector selectedYear={selectedYear} selectedMonth={selectedMonth} onSelectYear={onSelectYear} onSelectMonth={onSelectMonth} />
       
+      {/* ✅ Stat Cards — محسّنة مع التوقع الشامل */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <EnhancedStatCard title="الكاش في اليد" amount={net.actualCashInHand} icon={Wallet} subtitle="حتى نهاية اليوم" isPrivate={!walletVisibility.cash} color="emerald" />
-        <EnhancedStatCard title="دخل محصل" amount={net.actualIncome} icon={TrendingUp} subtitle={net.pendingIncome > 0 ? `+${fmt(net.pendingIncome)} معلق` : ''} color="emerald" />
-        <EnhancedStatCard title="مصاريف معلقة" amount={-net.pendingCash} icon={Clock} subtitle={`مدفوع: ${fmt(net.paidCash)}`} color="red" />
-        <button onClick={() => dispatch({ type: 'SET_ACTIVE_TAB', payload: 'forecast' })} className="stat-card text-right active:scale-95">
+        <EnhancedStatCard 
+          title="الكاش في اليد" 
+          amount={net.actualCashInHand} 
+          icon={Wallet} 
+          subtitle="بلا سجل معاملات" 
+          isPrivate={!walletVisibility.cash} 
+          color="emerald" 
+        />
+        <EnhancedStatCard 
+          title="دخل محصل" 
+          amount={net.actualIncome} 
+          icon={TrendingUp} 
+          subtitle={net.pendingIncome > 0 ? `+${fmt(net.pendingIncome)} معلق` : ''} 
+          color="emerald" 
+        />
+        <EnhancedStatCard 
+          title="مصاريف معلقة" 
+          amount={-net.pendingExpensesAll} 
+          icon={Clock} 
+          subtitle={`مدفوع: ${fmt(net.paidExpensesAll)}`} 
+          color="red" 
+        />
+        <button onClick={() => dispatch({ type: 'SET_ACTIVE_TAB', payload: 'financial-forecast' })} className="stat-card text-right active:scale-95">
           <div className="flex justify-between items-start mb-2">
             <div>
               <p className="text-[11px] font-bold mb-1" style={{ color: 'var(--text-muted)' }}>توقع القادم</p>
               <h3 className={`text-lg font-black ${net.projectedClosingBalance >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
                 {fmt(net.projectedClosingBalance)}
               </h3>
+              <p className="text-[10px] mt-1" style={{ color: 'var(--text-muted)' }}>شامل كل المعلقات</p>
             </div>
             <div className="p-2 rounded-lg bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400"><LineChart size={16} /></div>
           </div>
@@ -3360,24 +3542,9 @@ const CategoryDetailModal = memo(({ category, transactions, selectedMonth, selec
               <input type="text" placeholder="ابحث..." className="input-field pr-8 text-[11px] py-2" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
             </div>
             <div className="flex p-0.5 rounded-lg" style={{ background: 'var(--bg-muted)' }}>
-              <button 
-                type="button" 
-                onClick={() => setFilterType('all')} 
-                className={`px-2.5 py-1.5 rounded-md text-[10px] font-bold ${filterType === 'all' ? 'shadow-sm' : ''}`} 
-                style={filterType === 'all' ? { background: 'var(--bg-card)', color: 'var(--brand)' } : { color: 'var(--text-muted)' }}
-              >الكل ({categoryTx.length})</button>
-              <button 
-                type="button" 
-                onClick={() => setFilterType('paid')} 
-                className={`px-2.5 py-1.5 rounded-md text-[10px] font-bold ${filterType === 'paid' ? 'shadow-sm' : ''}`} 
-                style={filterType === 'paid' ? { background: 'var(--bg-card)', color: 'var(--success)' } : { color: 'var(--text-muted)' }}
-              >معتمد ({stats.paidCount})</button>
-              <button 
-                type="button" 
-                onClick={() => setFilterType('pending')} 
-                className={`px-2.5 py-1.5 rounded-md text-[10px] font-bold ${filterType === 'pending' ? 'shadow-sm' : ''}`} 
-                style={filterType === 'pending' ? { background: 'var(--bg-card)', color: 'var(--warning)' } : { color: 'var(--text-muted)' }}
-              >معلق ({stats.pendingCount})</button>
+              <button type="button" onClick={() => setFilterType('all')} className={`px-2.5 py-1.5 rounded-md text-[10px] font-bold ${filterType === 'all' ? 'shadow-sm' : ''}`} style={filterType === 'all' ? { background: 'var(--bg-card)', color: 'var(--brand)' } : { color: 'var(--text-muted)' }}>الكل ({categoryTx.length})</button>
+              <button type="button" onClick={() => setFilterType('paid')} className={`px-2.5 py-1.5 rounded-md text-[10px] font-bold ${filterType === 'paid' ? 'shadow-sm' : ''}`} style={filterType === 'paid' ? { background: 'var(--bg-card)', color: 'var(--success)' } : { color: 'var(--text-muted)' }}>معتمد ({stats.paidCount})</button>
+              <button type="button" onClick={() => setFilterType('pending')} className={`px-2.5 py-1.5 rounded-md text-[10px] font-bold ${filterType === 'pending' ? 'shadow-sm' : ''}`} style={filterType === 'pending' ? { background: 'var(--bg-card)', color: 'var(--warning)' } : { color: 'var(--text-muted)' }}>معلق ({stats.pendingCount})</button>
             </div>
             <button type="button" onClick={handlePrint} disabled={filteredTx.length === 0} className="btn btn-secondary text-[10px] py-2 px-2.5">
               <Printer size={11} /><span className="hidden sm:inline">طباعة</span>
@@ -3968,7 +4135,7 @@ const TransactionsView = memo(({
                         <p className="font-bold text-xs truncate">
                           {t.type === 'income' ? '💰' : '💸'} {t.description || t.category}{' '}
                           {pendingDeleteIds.has(t.id) && <span className="badge badge-warning text-[9px] mr-1">🗑️ طلب مسح</span>}{' '}
-                          <FamilyBadge tx={t} /> <SmsBadge tx={t} /> <TeldaBadge tx={t} /> <TransferBadge tx={t} /> <RecurringBadge tx={t} /> <CarryoverBadge tx={t} />
+                          <FamilyBadge tx={t} /> <SmsBadge tx={t} /> <TeldaBadge tx={t} /> <TransferBadge tx={t} /> <RecurringBadge tx={t} /> <CarryoverBadge tx={t} /> <CreditBadge tx={t} />
                         </p>
                         <p className="text-[10px] font-semibold" style={{ color: 'var(--text-muted)' }}>
                           {PAYMENT_METHODS.find(p => p.id === t.method)?.label || ''} • {new Date(t.createdAt || Date.now()).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}
@@ -3994,7 +4161,7 @@ const TransactionsView = memo(({
   );
 });
 
-/* ─────────────── Custody View ─────────────── */
+/* ─────────────── Custody View — مع التحقق من نوع الصرف ─────────────── */
 const CustodyView = memo(({ data, dispatch, saveHistory, addNotification }) => {
   const [showAdd, setShowAdd] = useState(false);
   const [filterType, setFilterType] = useState('all');
@@ -4038,6 +4205,41 @@ const CustodyView = memo(({ data, dispatch, saveHistory, addNotification }) => {
       addNotification({ type: 'error', title: 'شهر مغلق', message: `شهر ${txMonth} ${txYear} مغلق`, duration: 6000 }); 
       return; 
     }
+    
+    // ✅ التحقق من نوع الصرف
+    if (newEntry.type === CUSTODY_TYPE.SPEND_CASH) {
+      if (!CASH_METHOD_IDS.has(newEntry.method) && !WALLET_METHOD_IDS.has(newEntry.method)) {
+        addNotification({ 
+          type: 'error', 
+          title: '❌ صرف كاش من حساب خاطئ', 
+          message: 'صرف الكاش يجب أن يكون من cash/fawry/etisalat', 
+          duration: 7000 
+        });
+        return;
+      }
+    }
+    if (newEntry.type === CUSTODY_TYPE.SPEND_CARD) {
+      if (!CREDIT_CARD_METHOD_IDS.includes(newEntry.method)) {
+        addNotification({ 
+          type: 'error', 
+          title: '❌ صرف بطاقة من حساب خاطئ', 
+          message: 'صرف البطاقة يجب أن يكون من CIB Master/SWYPE/AAIB Visa', 
+          duration: 7000 
+        });
+        return;
+      }
+    }
+    if (newEntry.type === CUSTODY_TYPE.RECEIVE) {
+      if (CASH_METHOD_IDS.has(newEntry.method)) {
+        addNotification({ 
+          type: 'warning', 
+          title: '⚠️ استلام عهدة على الكاش', 
+          message: 'الكاش بلا سجل — لن يؤثر على رصيد حساب', 
+          duration: 7000 
+        });
+      }
+    }
+    
     saveHistory();
     const amount = check.value;
     const entry = { 
@@ -4049,7 +4251,7 @@ const CustodyView = memo(({ data, dispatch, saveHistory, addNotification }) => {
     };
     const newEntries = [entry, ...custodyEntries];
     const newTxs = [];
-    const baseTx = { date: newEntry.date, month: txMonth, year: txYear, monthIndex: d.getMonth(), status: 'paid' };
+    const baseTx = { date: newEntry.date, month: txMonth, year: txYear, monthIndex: d.getMonth(), status: 'paid', createdAt: new Date().toISOString() };
     
     if (newEntry.type === CUSTODY_TYPE.RECEIVE)
       newTxs.push({ 
@@ -4296,9 +4498,27 @@ const CustodyView = memo(({ data, dispatch, saveHistory, addNotification }) => {
               />
             </div>
             <div>
-              <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>الحساب/البطاقة</label>
+              <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>
+                الحساب/البطاقة
+                {newEntry.type === CUSTODY_TYPE.SPEND_CASH && <span className="text-[9px] mr-2 text-amber-600">(كاش فقط)</span>}
+                {newEntry.type === CUSTODY_TYPE.SPEND_CARD && <span className="text-[9px] mr-2 text-purple-600">(بطاقة فقط)</span>}
+              </label>
               <select className="input-field text-sm" value={newEntry.method} onChange={e => setNewEntry({ ...newEntry, method: e.target.value })}>
-                {PAYMENT_METHODS.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+                {newEntry.type === CUSTODY_TYPE.SPEND_CASH ? (
+                  <React.Fragment>
+                    {PAYMENT_METHODS.filter(m => CASH_METHOD_IDS.has(m.id) || WALLET_METHOD_IDS.has(m.id)).map(m => 
+                      <option key={m.id} value={m.id}>{m.label}</option>
+                    )}
+                  </React.Fragment>
+                ) : newEntry.type === CUSTODY_TYPE.SPEND_CARD ? (
+                  <React.Fragment>
+                    {PAYMENT_METHODS.filter(m => CREDIT_CARD_METHOD_IDS.includes(m.id)).map(m => 
+                      <option key={m.id} value={m.id}>{m.label}</option>
+                    )}
+                  </React.Fragment>
+                ) : (
+                  PAYMENT_METHODS.map(m => <option key={m.id} value={m.id}>{m.label}</option>)
+                )}
               </select>
             </div>
             <button onClick={addEntry} className="btn btn-primary w-full py-2.5 text-sm">
@@ -4408,7 +4628,8 @@ const CashbackView = memo(({ data, dispatch, saveHistory, addNotification, cards
       monthIndex: now.getMonth(),
       subType: 'deposit', 
       status: 'paid',
-      linkedCardId: useCard && card ? card.id : undefined
+      linkedCardId: useCard && card ? card.id : undefined,
+      createdAt: new Date().toISOString()
     };
     dispatch({ 
       type: 'UPDATE_TRANSACTIONS', 
@@ -4891,7 +5112,7 @@ const HanyShopLedger = memo(({ loan, prevMonthLoan, addNotification }) => {
   );
 });
 
-/* ─────────────── Card Statement Modal ─────────────── */
+/* ─────────────── Card Statement Modal — مع إظهار الرصيد الدائن ─────────────── */
 const CardStatementModal = memo(({ card, data, transactions, onClose, addNotification }) => {
   const [filterType, setFilterType] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
@@ -4904,8 +5125,14 @@ const CardStatementModal = memo(({ card, data, transactions, onClose, addNotific
 
   const cardTx = useMemo(() => {
     if (!card) return [];
+    const cutoffISO = card.openingDate || CUTOFF_DATE_2026_09_30;
+    const cutoffDay = dayStart(parseISODate(cutoffISO) || new Date(0));
+    
     return (transactions || []).filter(t => {
       if (t.status !== 'paid') return false;
+      if (t.source === 'carryover') return false;
+      const d = parseISODate(t.date);
+      if (!d || d < cutoffDay) return false;
       const hasExplicitCardLink = (t.linkedCardId !== undefined && t.linkedCardId !== null && t.linkedCardId !== '');
       if (hasExplicitCardLink) return t.linkedCardId === card.id;
       if (t.cardLast4 && subCards.includes(t.cardLast4)) return true;
@@ -4999,7 +5226,8 @@ const CardStatementModal = memo(({ card, data, transactions, onClose, addNotific
 
   const liveDebt = computeCardDebt(data, card);
   const liveAvailable = Math.max(0, safeNumber(card.limit) - liveDebt);
-  const usagePct = safeNumber(card.limit) > 0 ? (liveDebt / safeNumber(card.limit)) * 100 : 0;
+  const usagePct = safeNumber(card.limit) > 0 ? (Math.max(0, liveDebt) / safeNumber(card.limit)) * 100 : 0;
+  const isCredit = liveDebt < 0;
 
   return (
     <div className="modal-backdrop no-print" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
@@ -5020,8 +5248,12 @@ const CardStatementModal = memo(({ card, data, transactions, onClose, addNotific
           <div className="p-3 rounded-xl mb-3" style={{ background: 'var(--bg-muted)' }}>
             <div className="grid grid-cols-3 gap-2">
               <div className="text-center">
-                <p className="text-[10px] font-bold" style={{ color: 'var(--text-muted)' }}>المديونية الحية</p>
-                <p className="text-base font-black text-red-600 mt-0.5">{fmt(liveDebt)}</p>
+                <p className="text-[10px] font-bold" style={{ color: 'var(--text-muted)' }}>
+                  {isCredit ? 'رصيد دائن' : 'المديونية الحية'}
+                </p>
+                <p className={`text-base font-black mt-0.5 ${isCredit ? 'text-emerald-600' : 'text-red-600'}`}>
+                  {isCredit ? `+${fmt(Math.abs(liveDebt))}` : fmt(liveDebt)}
+                </p>
               </div>
               <div className="text-center">
                 <p className="text-[10px] font-bold" style={{ color: 'var(--text-muted)' }}>المتاح</p>
@@ -5038,6 +5270,9 @@ const CardStatementModal = memo(({ card, data, transactions, onClose, addNotific
                 style={{ width: `${Math.min(100, usagePct)}%` }}
               ></div>
             </div>
+            <p className="text-[9px] mt-2 text-center" style={{ color: 'var(--text-muted)' }}>
+              📅 من {card.openingDate || CUTOFF_DATE_2026_09_30}
+            </p>
           </div>
           
           <div className="grid grid-cols-3 gap-2 mb-3">
@@ -5181,7 +5416,7 @@ const CardStatementModal = memo(({ card, data, transactions, onClose, addNotific
   );
 });
 
-/* ─────────────── Loans View ─────────────── */
+/* ─────────────── Loans View — مع منع تكرار التحصيل ─────────────── */
 const LoansView = memo(({ 
   updatedLoans, cards, recurringItems, transactions, dispatch, deleteRecurring, 
   saveHistory, getLocalISODate, addNotification, data, selectedMonth, selectedYear 
@@ -5328,7 +5563,8 @@ const LoansView = memo(({
           status: 'pending',
           source: 'carryover', 
           carriedFromSource: 'hany-auto', 
-          carryoverFrom: monthLabel
+          carryoverFrom: monthLabel,
+          createdAt: new Date().toISOString()
         });
       }
       
@@ -5352,7 +5588,7 @@ const LoansView = memo(({
   const totalReceivable = useMemo(() => updatedLoans.filter(l => l.isReceivable).reduce((s, l) => s + l.remaining, 0), [updatedLoans]);
   const payables = useMemo(() => updatedLoans.filter(l => !l.isReceivable), [updatedLoans]);
   const receivables = useMemo(() => updatedLoans.filter(l => l.isReceivable), [updatedLoans]);
-  const totalCards = useMemo(() => cards.reduce((acc, c) => acc + computeCardDebt(data, c), 0), [cards, data]);
+  const totalCards = useMemo(() => cards.reduce((acc, c) => acc + Math.max(0, computeCardDebt(data, c)), 0), [cards, data]);
   const custodySummary = useMemo(() => computeCustodyBalance(data?.custodyEntries), [data?.custodyEntries]);
 
   const addLoan = () => {
@@ -5388,6 +5624,7 @@ const LoansView = memo(({
     addNotification({ type: 'success', title: 'تمت الإضافة' });
   };
 
+  // ✅ مع منع تكرار التحصيل
   const handleCollectReceivable = (loan, sourceTx) => {
     const d = new Date();
     const y = d.getFullYear(), m = ALL_MONTHS[d.getMonth()];
@@ -5395,6 +5632,23 @@ const LoansView = memo(({
       addNotification({ type: 'error', title: 'الشهر مغلق' }); 
       return; 
     }
+    
+    // ✅ منع تكرار التحصيل في نفس الشهر
+    const alreadyCollected = transactions.some(t => 
+      t.sourceReceivableId === loan.id && 
+      t.month === m && (t.year || y) === y && 
+      t.status === 'paid'
+    );
+    if (alreadyCollected) {
+      addNotification({ 
+        type: 'warning', 
+        title: '⚠️ تم التحصيل مسبقاً هذا الشهر', 
+        message: `دفعة ${m} ${y} محصّلة بالفعل`, 
+        duration: 6000 
+      });
+      return;
+    }
+    
     saveHistory();
     if (sourceTx) {
       dispatch({ 
@@ -5431,7 +5685,8 @@ const LoansView = memo(({
       monthIndex: d.getMonth(), 
       subType: 'deposit', 
       status: 'paid', 
-      sourceReceivableId: loan.id 
+      sourceReceivableId: loan.id,
+      createdAt: new Date().toISOString()
     };
     dispatch({ 
       type: 'UPDATE_TRANSACTIONS', 
@@ -5778,7 +6033,12 @@ const LoansView = memo(({
     </div>
   );
 });
-                      /* ─────────────── Wallets And Cards View ─────────────── */
+  /* ═══════════════════════════════════════════════════════════════
+   PART 5 — Wallets & Cards + Duplicates + Deleted + Settings + Forecasts
+   V82 — Accounting Precision Edition
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ─────────────── Wallets And Cards View — الاسم الجديد: كروت الائتمان والمحافظ الإلكترونية ─────────────── */
 const WalletsAndCardsView = memo(({ 
   cards, buildLedger, expandedLedgers, expandedCardsSection, selectedMonth, selectedYear, 
   dispatch, handleDelete, handleAddWalletDeposit, handleAddWalletWithdrawal, 
@@ -5817,6 +6077,7 @@ const WalletsAndCardsView = memo(({
         limit: limitCheck.value, 
         availableBalance: limitCheck.value, 
         openingDebt: 0, 
+        openingDate: getLocalISODate(),
         cashbackRate: safeNumber(newCard.cashbackRate, 1), 
         subCardLast4: Array.isArray(newCard.subCardLast4) ? newCard.subCardLast4 : [] 
       }] 
@@ -5842,11 +6103,25 @@ const WalletsAndCardsView = memo(({
     onToggleVisibility: (k) => dispatch({ type: 'TOGGLE_WALLET_VISIBILITY', payload: k })
   });
 
+  // ✅ الكروت المنفصلة
+  const creditCards = cards;
+
   return (
     <div className="space-y-4 animate-fadeIn">
+      {/* ✅ العنوان الجديد */}
+      <div className="card py-3">
+        <h2 className="text-base font-black flex items-center gap-2">
+          <CreditCard size={18} className="text-indigo-500" />
+          كروت الائتمان والمحافظ الإلكترونية
+        </h2>
+        <p className="text-[11px] mt-1" style={{ color: 'var(--text-muted)' }}>
+          إدارة {creditCards.length} كارت ائتماني + {Object.keys(WALLET_CONFIGS).length} محافظ/حسابات
+        </p>
+      </div>
+
       <div className="sub-tab-switcher">
         <button onClick={() => setActiveTab('wallets')} className={`sub-tab-btn ${activeTab === 'wallets' ? 'active' : ''}`}>
-          <CreditCard size={14} /> المحافظ والبطاقات
+          <CreditCard size={14} /> الكروت والمحافظ
         </button>
         <button onClick={() => setActiveTab('cashback')} className={`sub-tab-btn ${activeTab === 'cashback' ? 'active' : ''}`}>
           <Gift size={14} /> الكاش باك 
@@ -5866,6 +6141,7 @@ const WalletsAndCardsView = memo(({
         />
       ) : (
         <React.Fragment>
+          {/* ✅ قسم كروت الائتمان */}
           <details className="card p-0 overflow-hidden" open={expandedCardsSection}>
             <summary 
               className="p-4 cursor-pointer list-none flex items-center justify-between" 
@@ -5876,7 +6152,7 @@ const WalletsAndCardsView = memo(({
                   <CreditCard size={16} />
                 </div>
                 <div>
-                  <h3 className="font-black text-sm">البطاقات الائتمانية ({cards.length})</h3>
+                  <h3 className="font-black text-sm">💳 كروت الائتمان ({creditCards.length})</h3>
                   <p className="text-[10px] font-semibold mt-0.5" style={{ color: 'var(--text-muted)' }}>اضغط للعرض</p>
                 </div>
               </div>
@@ -5892,7 +6168,7 @@ const WalletsAndCardsView = memo(({
             </summary>
             {expandedCardsSection && (
               <div className="px-4 pb-4 grid grid-cols-1 md:grid-cols-2 gap-3" style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '16px' }}>
-                {cards.map(card => {
+                {creditCards.map(card => {
                   const themeCls = { 
                     silver: 'bg-gradient-to-br from-slate-100 via-slate-200 to-slate-300 border-slate-300 text-slate-800', 
                     gold: 'bg-gradient-to-br from-amber-100 via-yellow-200 to-amber-300 border-amber-300 text-amber-900', 
@@ -5902,8 +6178,9 @@ const WalletsAndCardsView = memo(({
                   }[card.theme] || 'bg-gradient-to-br from-slate-100 to-slate-300';
                   
                   const liveDebt = computeCardDebt(data, card);
-                  const liveAvailable = Math.max(0, safeNumber(card.limit) - liveDebt);
+                  const liveAvailable = Math.max(0, safeNumber(card.limit) - Math.max(0, liveDebt));
                   const subCards = Array.isArray(card.subCardLast4) ? card.subCardLast4 : [];
+                  const isCredit = liveDebt < 0;
                   
                   return (
                     <div key={card.id} className="space-y-2">
@@ -5965,9 +6242,13 @@ const WalletsAndCardsView = memo(({
                           <p className="text-[9px] font-bold text-emerald-700 dark:text-emerald-400">متاح</p>
                           <p className="text-[10px] font-black text-emerald-600">{fmt(liveAvailable)}</p>
                         </div>
-                        <div className="p-1.5 rounded-lg bg-red-50 dark:bg-red-950/30 text-center">
-                          <p className="text-[9px] font-bold text-red-700 dark:text-red-400">مديونية</p>
-                          <p className="text-[10px] font-black text-red-600">{fmt(liveDebt)}</p>
+                        <div className={`p-1.5 rounded-lg text-center ${isCredit ? 'bg-emerald-50 dark:bg-emerald-950/30' : 'bg-red-50 dark:bg-red-950/30'}`}>
+                          <p className={`text-[9px] font-bold ${isCredit ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-700 dark:text-red-400'}`}>
+                            {isCredit ? 'دائن' : 'مديونية'}
+                          </p>
+                          <p className={`text-[10px] font-black ${isCredit ? 'text-emerald-600' : 'text-red-600'}`}>
+                            {fmt(Math.abs(liveDebt))}
+                          </p>
                         </div>
                         <div className="p-1.5 rounded-lg bg-blue-50 dark:bg-blue-950/30 text-center">
                           <p className="text-[9px] font-bold text-blue-700 dark:text-blue-400">حد</p>
@@ -5985,16 +6266,43 @@ const WalletsAndCardsView = memo(({
             )}
           </details>
           
+          {/* ✅ قسم المحافظ الإلكترونية */}
+          <div className="card py-2">
+            <div className="flex items-center gap-2 px-2">
+              <Signal size={14} className="text-blue-500" />
+              <h3 className="font-black text-xs">📱 المحافظ الإلكترونية ({Object.keys(WALLET_CONFIGS).filter(k => WALLET_CONFIGS[k].group === 'wallet').length})</h3>
+            </div>
+          </div>
           <div className="space-y-2">
-            {[lp('fawry'), lp('etisalat'), lp('cib_savings'), lp('aaib_savings')].map(props => 
-              <GenericLedgerComponent key={props.walletKey} {...props} />
-            )}
+            {['fawry', 'etisalat'].map(k => (
+              <GenericLedgerComponent key={k} {...lp(k)} />
+            ))}
+          </div>
+
+          {/* ✅ قسم الحسابات البنكية */}
+          <div className="card py-2">
+            <div className="flex items-center gap-2 px-2">
+              <BuildingBank size={14} className="text-purple-500" />
+              <h3 className="font-black text-xs">🏦 الحسابات البنكية ({Object.keys(WALLET_CONFIGS).filter(k => WALLET_CONFIGS[k].group === 'bank').length})</h3>
+            </div>
+          </div>
+          <div className="space-y-2">
+            {['cib_savings', 'aaib_savings'].map(k => (
+              <GenericLedgerComponent key={k} {...lp(k)} />
+            ))}
+          </div>
+
+          {/* ✅ ملاحظة الكاش */}
+          <div className="card p-3" style={{ background: 'var(--bg-muted)' }}>
+            <p className="text-[11px] font-bold flex items-center gap-2" style={{ color: 'var(--text-muted)' }}>
+              💵 <strong>الكاش</strong> — لا يوجد سجل معاملات للكاش (سواء الداخل أو المصروف)
+            </p>
           </div>
         </React.Fragment>
       )}
 
       {showAddCard && (
-        <Modal isOpen={true} onClose={() => setShowAddCard(false)} title="بطاقة جديدة" icon="💳">
+        <Modal isOpen={true} onClose={() => setShowAddCard(false)} title="كارت ائتماني جديد" icon="💳">
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -6628,7 +6936,7 @@ const SettingsView = memo(({ data, accountsData, cards, budgets, dispatch, saveH
     setDriveBusy(true); 
     setDriveStatus('جاري الرفع...');
     try {
-      const payload = { data, budgets, exportedAt: new Date().toISOString(), version: 'V81' };
+      const payload = { data, budgets, exportedAt: new Date().toISOString(), version: 'V82' };
       const result = await uploadBackupToDrive(payload);
       localStorage.setItem(AUTO_BACKUP_LS_KEY, String(Date.now()));
       const folderId = localStorage.getItem(DRIVE_FOLDER_ID_LS_KEY) || DRIVE_DEFAULT_FOLDER_ID;
@@ -6724,7 +7032,7 @@ const SettingsView = memo(({ data, accountsData, cards, budgets, dispatch, saveH
             closedMonths: [], 
             monthlySnapshots: {}, 
             accountsData: zeroed, 
-            cards: (data.cards || []).map(c => ({ ...c, openingDebt: 0, availableBalance: safeNumber(c.limit) })), 
+            cards: (data.cards || []).map(c => ({ ...c, openingDebt: 0, availableBalance: safeNumber(c.limit), openingDate: getLocalISODate() })), 
             materializedRecurring: {}, 
             custodyEntries: [], 
             cashbackTrackers: [], 
@@ -6759,7 +7067,7 @@ const SettingsView = memo(({ data, accountsData, cards, budgets, dispatch, saveH
       <div className="card p-1 flex gap-1.5">
         {[
           { id: 'accounts', label: 'الحسابات', icon: Wallet }, 
-          { id: 'cards', label: 'البطاقات', icon: CreditCard }
+          { id: 'cards', label: 'الكروت', icon: CreditCard }
         ].map(s => {
           const Icon = s.icon;
           return (
@@ -6781,6 +7089,8 @@ const SettingsView = memo(({ data, accountsData, cards, budgets, dispatch, saveH
             const acc = localAccounts[key] || {};
             const Icon = ACCOUNT_ICONS[key] || Wallet;
             const last4 = DEFAULT_ACCOUNTS[key]?.last4;
+            const isCash = isCashAccount(key);
+            const isWallet = isWalletAccount(key);
             return (
               <div key={key} className="card">
                 <div className="flex justify-between items-center mb-3">
@@ -6789,6 +7099,8 @@ const SettingsView = memo(({ data, accountsData, cards, budgets, dispatch, saveH
                       <Icon size={14} />
                     </div>
                     <h4 className="font-black text-xs">{acc.label || key}</h4>
+                    {isCash && <span className="badge badge-warning text-[8px]">بلا سجل</span>}
+                    {isWallet && <span className="badge badge-brand text-[8px]">محفظة</span>}
                   </div>
                 </div>
                 <div className="space-y-2.5">
@@ -6832,7 +7144,7 @@ const SettingsView = memo(({ data, accountsData, cards, budgets, dispatch, saveH
         <div className="space-y-3">
           {localCards.map(card => {
             const liveDebt = computeCardDebt(data, card);
-            const debtPct = safeNumber(card.limit) > 0 ? (liveDebt / safeNumber(card.limit)) * 100 : 0;
+            const debtPct = safeNumber(card.limit) > 0 ? (Math.max(0, liveDebt) / safeNumber(card.limit)) * 100 : 0;
             const subCards = Array.isArray(card.subCardLast4) ? card.subCardLast4 : [];
             return (
               <div key={card.id} className="card">
@@ -6883,10 +7195,17 @@ const SettingsView = memo(({ data, accountsData, cards, budgets, dispatch, saveH
                   </div>
                 </div>
                 <div className="p-2 rounded-lg text-center mt-2" style={{ background: 'var(--bg-muted)' }}>
-                  <p className="text-[10px] font-semibold" style={{ color: 'var(--text-muted)' }}>المديونية الحية</p>
-                  <p className="font-black text-red-600 text-sm">{fmt(liveDebt)} ج.م</p>
+                  <p className="text-[10px] font-semibold" style={{ color: 'var(--text-muted)' }}>
+                    المديونية الحية {liveDebt < 0 && <span className="text-emerald-600">(دائن)</span>}
+                  </p>
+                  <p className={`font-black text-sm ${liveDebt < 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                    {fmt(Math.abs(liveDebt))} ج.م
+                  </p>
                   <p className="text-[10px] font-semibold mt-1" style={{ color: 'var(--text-muted)' }}>
-                    المتاح: {fmt(Math.max(0, safeNumber(card.limit) - liveDebt))} ج.م
+                    المتاح: {fmt(Math.max(0, safeNumber(card.limit) - Math.max(0, liveDebt)))} ج.م
+                  </p>
+                  <p className="text-[9px] font-semibold mt-1" style={{ color: 'var(--text-muted)' }}>
+                    📅 من: {card.openingDate || CUTOFF_DATE_2026_09_30}
                   </p>
                 </div>
                 <div className="w-full rounded-full h-1 overflow-hidden mt-2" style={{ background: 'var(--bg-muted)' }}>
@@ -6909,7 +7228,7 @@ const SettingsView = memo(({ data, accountsData, cards, budgets, dispatch, saveH
           <h3 className="font-black text-sm">رمز الدخول (PIN)</h3>
         </div>
         <p className="text-[11px] mb-3" style={{ color: 'var(--text-muted)' }}>
-          الرمز الافتراضي: <strong>1033</strong> — V81 يستخدم PBKDF2 للتشفير
+          الرمز الافتراضي: <strong>1033</strong> — V82 يستخدم PBKDF2 للتشفير
         </p>
         <button onClick={() => dispatch({ type: 'SET_PIN_CHANGE_OPEN', payload: true })} className="btn btn-secondary text-xs w-full">
           <Lock size={12} /> تغيير الرمز
@@ -6965,7 +7284,7 @@ const SettingsView = memo(({ data, accountsData, cards, budgets, dispatch, saveH
           </div>
           {driveStatus && <p className="text-[10px] font-semibold whitespace-pre-line" style={{ color: 'var(--text-muted)' }}>{driveStatus}</p>}
           {(() => {
-            const ts = Number(localStorage.getItem('v81_last_sync_ts') || 0);
+            const ts = Number(localStorage.getItem('v82_last_sync_ts') || 0);
             if (!ts) return null;
             const d = new Date(ts);
             return (
@@ -7122,7 +7441,7 @@ const PlannerView = memo(({ updatedLoans, cards, selectedMonth, selectedYear, mo
       + safeNumber(plan.expectedEmakWE) + safeNumber(plan.expectedZakat) + safeNumber(plan.expectedCash);
     const plannedExpense = safeNumber(plan.expectedCashExpenses) + safeNumber(plan.plannedPayments);
 
-    const cardDebt = cards.reduce((s, c) => s + computeCardDebt(data, c), 0);
+    const cardDebt = cards.reduce((s, c) => s + Math.max(0, computeCardDebt(data, c)), 0);
     const loanDebt = updatedLoans.filter(l => !l.isReceivable).reduce((s, l) => s + l.remaining, 0);
 
     const projected = totalLiquidityNow + pendingIncome + (plannedIncome - actualIncome)
@@ -7237,7 +7556,7 @@ const PlannerView = memo(({ updatedLoans, cards, selectedMonth, selectedYear, mo
 /* ─────────────── Liquidity Forecast View ─────────────── */
 const LiquidityForecastView = memo(({ transactions, updatedLoans, recurringItems, liveBalances, selectedYear, selectedMonth, monthlyPlans }) => {
   const currentLiquidity = useMemo(() =>
-    ACCOUNT_KEYS.reduce((s, k) => s + safeNumber(liveBalances?.[k]), 0), [liveBalances]);
+    ACCOUNT_KEYS.filter(k => !isCashAccount(k)).reduce((s, k) => s + safeNumber(liveBalances?.[k]), 0), [liveBalances]);
 
   const forecast = useMemo(() => {
     const startIdx = getMonthIndex(selectedMonth);
@@ -7351,10 +7670,10 @@ const FinancialForecastView = memo(({
   const [showSettings, setShowSettings] = useState(false);
   
   const currentLiquidity = useMemo(() => 
-    ACCOUNT_KEYS.reduce((s, k) => s + safeNumber(liveBalances?.[k]), 0), [liveBalances]);
+    ACCOUNT_KEYS.filter(k => !isCashAccount(k)).reduce((s, k) => s + safeNumber(liveBalances?.[k]), 0), [liveBalances]);
   
   const currentCardDebt = useMemo(() => 
-    cards.reduce((s, c) => s + computeCardDebt(data, c), 0), [cards, data]);
+    cards.reduce((s, c) => s + Math.max(0, computeCardDebt(data, c)), 0), [cards, data]);
   
   const currentLoanDebt = useMemo(() => 
     updatedLoans.filter(l => !l.isReceivable).reduce((s, l) => s + l.remaining, 0), [updatedLoans]);
@@ -8049,8 +8368,9 @@ const CalendarView = memo(({ data, getAgendaItems, dispatch, saveHistory, addNot
     </div>
   );
 });
-  /* ═══════════════════════════════════════════════════════════════
+                /* ═══════════════════════════════════════════════════════════════
    dataReducer
+   V82 — Accounting Precision Edition
    ═══════════════════════════════════════════════════════════════ */
 function dataReducer(state, action) {
   switch (action.type) {
@@ -8381,6 +8701,7 @@ const materializeShoppingRecurring = async () => {
 
 /* ═══════════════════════════════════════════════════════════════
    APP COMPONENT
+   V82 — Accounting Precision Edition
    ═══════════════════════════════════════════════════════════════ */
 function App() {
   const defMY = useMemo(() => getDefaultMonthYear(), []);
@@ -8405,7 +8726,7 @@ function App() {
     isRecurringModalOpen: false,
     recurringFormData: { 
       title: '', amount: '', day: 1, category: 'أخرى', type: 'expense', 
-      startMonth: '', endMonth: '', active: true, method: 'cash', 
+      startMonth: '2026-10', endMonth: '', active: true, method: 'cash', 
       kind: null, linkedLoanSystemId: null, linkedCardId: null, transferChannel: null 
     },
     notifications: [],
@@ -8418,7 +8739,7 @@ function App() {
     isQuickTransferModalOpen: false,
     quickTransferData: { 
       transferMode: 'monthly',
-      from: 'cash', to: 'fawry', amount: '', transferType: 'monthly', 
+      from: 'cib_savings', to: 'fawry', amount: '', transferType: 'monthly', 
       date: getLocalISODate(), beneficiaryId: null, forceCash: false,
       internalFrom: 'cib_savings', internalTo: 'fawry', internalFees: '', internalDescription: ''
     },
@@ -8581,7 +8902,7 @@ function App() {
     return () => clearInterval(interval);
   }, [isAuthenticated]);
 
-  // Firestore Snapshot — Cloud-First (السحابة لها الأولوية المطلقة)
+  // Firestore Snapshot — Cloud-First
   useEffect(() => {
     if (!isAuthenticated) return;
     const docRef = db.collection(FIREBASE_DOC_PATH.collection).doc(FIREBASE_DOC_PATH.doc);
@@ -8609,7 +8930,6 @@ function App() {
         const raw = doc.data();
         let migrated = migrateData(raw);
         
-        // 1) dedupe على بيانات السحابة
         const { transactions: cleanTx, removed } = dedupeRecurringTransactions(migrated.transactions || []);
         if (removed.length > 0) {
           console.log(`🧹 تنظيف ${removed.length} قيد مكرر من السحابة`);
@@ -8636,7 +8956,6 @@ function App() {
           setTimeout(() => queueCloudSave(migrated, { silent: true }), 500);
         }
         
-        // 2) احترم deletedTxIds
         const permanentDeleted = new Set([
           ...(migrated.deletedTxIds || []),
           ...(currentTxRef.current.filter(t => t?._deleted).map(t => t.id))
@@ -8646,7 +8965,6 @@ function App() {
           !t?.id || !permanentDeleted.has(t.id)
         );
         
-        // 3) Cloud-First مع استثناء ذكي
         const remoteIds = new Set(migrated.transactions.map(t => t.id));
         const localOnly = currentTxRef.current.filter(t => 
           t?.id && !remoteIds.has(t.id) && !permanentDeleted.has(t.id)
@@ -8684,7 +9002,6 @@ function App() {
           }), 400);
         }
         
-        // 4) منع إعادة الرفع + dispatch
         const incoming = JSON.stringify(migrated);
         if (lastRemoteRef.current === incoming && !isFirst) return;
         lastRemoteRef.current = incoming;
@@ -8739,7 +9056,7 @@ function App() {
     return () => clearTimeout(saveTimeoutRef.current);
   }, [data, isAuthenticated, cloudSyncStatus, queueCloudSave]);
   
-  // Materialize recurring items
+  // ✅ Materialize recurring items — يحفظ فوراً في السحابة
   useEffect(() => {
     if (!isAuthenticated || !data?.recurringItems?.length) return;
     const today = getLocalISODate();
@@ -8758,6 +9075,10 @@ function App() {
       }
       const added = updated.transactions.length - (data.transactions?.length || 0);
       dispatch({ type: 'SET_DATA', payload: updated });
+      
+      // ✅ حفظ فوري في السحابة
+      setTimeout(() => queueCloudSave(updated, { silent: true }), 200);
+      
       if (added > 0) {
         addNotification({ 
           type: 'info', 
@@ -8767,7 +9088,7 @@ function App() {
         });
       }
     }
-  }, [isAuthenticated, data?.recurringItems, data?.transactions?.length, data?.loans, addNotification]);
+  }, [isAuthenticated, data?.recurringItems, data?.transactions?.length, data?.loans, addNotification, queueCloudSave]);
 
   // Retry Firestore connection
   useEffect(() => {
@@ -8826,11 +9147,12 @@ function App() {
   }, [data]);
   
   const totalLiquidity = useMemo(() => 
-    ACCOUNT_KEYS.reduce((s, k) => s + liveBalances[k], 0), [liveBalances]);
+    ACCOUNT_KEYS.filter(k => !isCashAccount(k)).reduce((s, k) => s + liveBalances[k], 0), [liveBalances]);
   
   const custodySummary = useMemo(() => 
     computeCustodyBalance(data?.custodyEntries), [data?.custodyEntries]);
 
+  // ✅ Finance Snapshot — توقع شامل
   const financeSnapshot = useMemo(() => {
     const opening = getOpeningBalance(data, 'cash', selectedYear, selectedMonth);
     const actualCashInHand = computeBalance(data, 'cash', endOfToday());
@@ -8853,9 +9175,18 @@ function App() {
       t.type === 'expense' && t.status !== 'paid' && t.method === 'cash'
     ).reduce((s, t) => s + safeNumber(t.amount), 0);
     
+    // ✅ شامل كل المعلقات (مش كاش فقط)
+    const pendingIncomeAll = curMonth.filter(t => t.type === 'income' && t.status !== 'paid')
+      .reduce((s, t) => s + safeNumber(t.amount), 0);
+    const pendingExpensesAll = curMonth.filter(t => t.type === 'expense' && t.status !== 'paid')
+      .reduce((s, t) => s + safeNumber(t.amount), 0);
+    const paidExpensesAll = curMonth.filter(t => t.type === 'expense' && t.status === 'paid')
+      .reduce((s, t) => s + safeNumber(t.amount), 0);
+    
     return { 
       opening, actualIncome, pendingIncome, paidCash, pendingCash, actualCashInHand, 
-      projectedClosingBalance: actualCashInHand + pendingIncome - pendingCash 
+      pendingIncomeAll, pendingExpensesAll, paidExpensesAll,
+      projectedClosingBalance: actualCashInHand + pendingIncomeAll - pendingExpensesAll 
     };
   }, [data, transactions, selectedYear, selectedMonth]);
 
@@ -8877,6 +9208,7 @@ function App() {
     }));
   }, [transactions, selectedYear]);
 
+  // ✅ updatedLoans — مع isReceivable dynamic + payments
   const updatedLoans = useMemo(() => {
     const permanentlyDeleted = new Set(data?.deletedTxIds || []);
     const map = transactions.reduce((acc, t) => { 
@@ -8890,6 +9222,7 @@ function App() {
       return acc; 
     }, {});
 
+    // ✅ خريطة الدفعات المرتبطة بكل التزام
     const paymentsByLoanId = transactions.reduce((acc, t) => {
       if (t.linkedLoanId && t.status === 'paid') {
         if (!acc[t.linkedLoanId]) acc[t.linkedLoanId] = [];
@@ -8909,7 +9242,8 @@ function App() {
     
     const regular = loans.filter(l => !l.autoMonthly && !l.isReceivable).map(l => ({ 
       ...l, 
-      isReceivable: false, 
+      // ✅ isReceivable ديناميكي
+      isReceivable: l.type === 'receivable' || !!l.isReceivable, 
       totalPaid: safeNumber(l.prePaidAmount) + (map[l.id] || 0), 
       remaining: Math.max(0, safeNumber(l.totalAmount) - (safeNumber(l.prePaidAmount) + (map[l.id] || 0))) 
     }));
@@ -9013,11 +9347,16 @@ function App() {
     return Object.values(groups).sort((a, b) => b.total - a.total);
   }, [transactions, selectedYear, selectedMonth, transViewMode, searchTerm, statusFilter]);
 
+  // ✅ buildLedger — الكاش مستثنى
   const buildLedger = useCallback((methodId) => {
+    // ✅ الكاش: لا يوجد سجل
+    if (isCashAccount(methodId)) return [];
+    
     const cutoffDay = dayStart(getAccountCutoff(accountsData, methodId));
     const acc = transactions
       .filter(t => 
         t.method === methodId && t.status === 'paid' 
+        && t.source !== 'carryover'
         && (parseISODate(t.date) || new Date(0)) >= cutoffDay
       )
       .sort((a, b) => (parseISODate(a.date) || 0) - (parseISODate(b.date) || 0));
@@ -9043,7 +9382,7 @@ function App() {
           id: `ag-card-${c.id}`, 
           title: `سداد ${c.bank} - ${c.name}`, 
           date: getLocalISODate(new Date(ty, tm, d)), 
-          amount: computeCardDebt(data, c), 
+          amount: Math.max(0, computeCardDebt(data, c)), 
           type: 'warning', 
           icon: CreditCard, 
           desc: 'استحقاق دوري' 
@@ -9181,6 +9520,17 @@ function App() {
       addNotification({ type: 'error', title: 'محظور', message: `شهر ${txMonth} مغلق` }); 
       return; 
     }
+    
+    // ✅ منع دخل على الكاش
+    if (isCashAccount(formData.method) && formData.type === 'income') {
+      addNotification({ 
+        type: 'warning', 
+        title: '⚠️ الكاش بلا سجل', 
+        message: 'الكاش مصروف فقط، لا يوجد سجل للدخل — المعاملة ستُسجَّل لكن لن تُضاف إلى سجل الكاش', 
+        duration: 7000 
+      });
+    }
+    
     if (PAYMENT_METHODS_WITHOUT_ACCOUNT.has(formData.method) && formData.status === 'paid') {
       addNotification({ 
         type: 'warning', 
@@ -9420,6 +9770,15 @@ function App() {
         addNotification({ type: 'error', title: 'اختر حسابين مختلفين' }); 
         return; 
       }
+      if (isCashAccount(from) || isCashAccount(to)) {
+        saveLockRef.current = false;
+        addNotification({ 
+          type: 'error', 
+          title: '⚠️ الكاش بلا سجل', 
+          message: 'لا يمكن التحويل من/إلى الكاش — الكاش مصروف فقط' 
+        });
+        return;
+      }
       if (fees < 0) { 
         saveLockRef.current = false; 
         addNotification({ type: 'error', title: 'الرسوم لا تكون سالبة' }); 
@@ -9490,7 +9849,7 @@ function App() {
             type: 'SET_QUICK_TRANSFER_DATA', 
             payload: { 
               transferMode: 'monthly',
-              from: 'cash', to: 'fawry', amount: '', transferType: 'monthly', 
+              from: 'cib_savings', to: 'fawry', amount: '', transferType: 'monthly', 
               date: getLocalISODate(), beneficiaryId: null, forceCash: false,
               internalFrom: 'cib_savings', internalTo: 'fawry', internalFees: '', internalDescription: ''
             } 
@@ -9574,7 +9933,7 @@ function App() {
         type: 'SET_QUICK_TRANSFER_DATA', 
         payload: { 
           transferMode: 'monthly',
-          from: 'cash', to: 'fawry', amount: '', transferType: 'monthly', 
+          from: 'cib_savings', to: 'fawry', amount: '', transferType: 'monthly', 
           date: getLocalISODate(), beneficiaryId: null, forceCash: false,
           internalFrom: 'cib_savings', internalTo: 'fawry', internalFees: '', internalDescription: ''
         } 
@@ -9617,6 +9976,7 @@ function App() {
         availableBalance: Math.max(0, safeNumber(editingCard.limit) - safeNumber(editingCard.openingDebt)), 
         openingDebt: safeNumber(editingCard.openingDebt), 
         cashbackRate: safeNumber(editingCard.cashbackRate, 1), 
+        openingDate: editingCard.openingDate || CUTOFF_DATE_2026_09_30,
         subCardLast4: Array.isArray(editingCard.subCardLast4) ? editingCard.subCardLast4 : [] 
       } : c) 
     });
@@ -9682,7 +10042,7 @@ function App() {
       type: 'SET_RECURRING_FORM_DATA', 
       payload: { 
         title: '', amount: '', day: 1, category: 'أخرى', type: 'expense', 
-        startMonth: '', endMonth: '', active: true, method: 'cash', 
+        startMonth: '2026-10', endMonth: '', active: true, method: 'cash', 
         kind: null, linkedLoanSystemId: null, linkedCardId: null, transferChannel: null 
       } 
     });
@@ -10136,7 +10496,7 @@ function App() {
             {[
               { id: 'dashboard', label: 'الرئيسية', icon: LayoutDashboard }, 
               { id: 'transactions', label: 'المعاملات', icon: ArrowUpRight }, 
-              { id: 'cards', label: 'المحافظ', icon: CreditCard }, 
+              { id: 'cards', label: 'الكروت والمحافظ', icon: CreditCard }, 
               { id: 'calendar', label: 'الأجندة', icon: CalendarDays }
             ].map(item => (
               <button 
@@ -10344,6 +10704,15 @@ function App() {
                     </span>
                   </div>
                 )}
+
+                {isCashAccount(formData.method) && formData.type === 'income' && (
+                  <div className="p-2 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 flex items-center gap-2">
+                    <AlertTriangle size={12} className="text-amber-600" />
+                    <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400">
+                      الكاش بلا سجل — لا يوجد سجل للدخل في الكاش
+                    </span>
+                  </div>
+                )}
                 
                 <div className="grid grid-cols-2 gap-2.5">
                   <div>
@@ -10548,15 +10917,26 @@ function App() {
                     />
                   </div>
                 </div>
-                <div>
-                  <label className="text-[11px] font-bold" style={{ color: 'var(--text-muted)' }}>آخر 4 أرقام</label>
-                  <input 
-                    type="text" 
-                    maxLength={4} 
-                    className="input-field font-mono text-sm text-center" 
-                    value={editingCard.last4 || ''} 
-                    onChange={e => dispatch({ type: 'SET_EDITING_CARD', payload: { ...editingCard, last4: e.target.value } })} 
-                  />
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="text-[11px] font-bold" style={{ color: 'var(--text-muted)' }}>آخر 4 أرقام</label>
+                    <input 
+                      type="text" 
+                      maxLength={4} 
+                      className="input-field font-mono text-sm text-center" 
+                      value={editingCard.last4 || ''} 
+                      onChange={e => dispatch({ type: 'SET_EDITING_CARD', payload: { ...editingCard, last4: e.target.value } })} 
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-bold" style={{ color: 'var(--text-muted)' }}>تاريخ القطع</label>
+                    <input 
+                      type="date" 
+                      className="input-field text-sm" 
+                      value={editingCard.openingDate || CUTOFF_DATE_2026_09_30} 
+                      onChange={e => dispatch({ type: 'SET_EDITING_CARD', payload: { ...editingCard, openingDate: e.target.value } })} 
+                    />
+                  </div>
                 </div>
                 <button type="submit" className="btn btn-primary w-full py-2.5 text-sm">حفظ</button>
               </form>
@@ -10706,7 +11086,7 @@ function App() {
                           value={quickTransferData.internalFrom || 'cib_savings'} 
                           onChange={e => dispatch({ type: 'SET_QUICK_TRANSFER_DATA', payload: { internalFrom: e.target.value } })}
                         >
-                          {PAYMENT_METHODS.filter(m => m.group === 'account').map(m => 
+                          {PAYMENT_METHODS.filter(m => m.group === 'account' && !isCashAccount(m.id)).map(m => 
                             <option key={m.id} value={m.id}>{m.label}</option>
                           )}
                         </select>
@@ -10718,7 +11098,7 @@ function App() {
                           value={quickTransferData.internalTo || 'fawry'} 
                           onChange={e => dispatch({ type: 'SET_QUICK_TRANSFER_DATA', payload: { internalTo: e.target.value } })}
                         >
-                          {PAYMENT_METHODS.filter(m => m.group === 'account').map(m => 
+                          {PAYMENT_METHODS.filter(m => m.group === 'account' && !isCashAccount(m.id)).map(m => 
                             <option key={m.id} value={m.id}>{m.label}</option>
                           )}
                         </select>
@@ -10995,4 +11375,6 @@ if (rootElement) {
 </script>
 </body>
 </html>
+
+
   
