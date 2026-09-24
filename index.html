@@ -109,31 +109,14 @@ h1, h2, h3, h4 { font-weight: 800; letter-spacing: -0.02em; color: var(--text-pr
 @keyframes popIn { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: scale(1); } }
 .animate-fadeIn { animation: fadeIn 0.25s ease-out; }
 .animate-slideInBottom { animation: slideUp 0.3s ease; }
-  @keyframes blink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.1; }
-}
-.animate-blink-slow {
-  animation: blink 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-}
-.animate-blink {
-  animation: blink 1s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-}
-.animate-blink-fast {
-  animation: blink 0.4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-}
-  .light-glow-emerald {
-  box-shadow: 0 0 10px 2px rgba(16, 185, 129, 0.7), 0 0 3px 1px rgba(16, 185, 129, 1), inset 0 0 3px rgba(255,255,255,0.4);
-}
-.light-glow-amber {
-  box-shadow: 0 0 10px 2px rgba(251, 191, 36, 0.7), 0 0 3px 1px rgba(251, 191, 36, 1), inset 0 0 3px rgba(255,255,255,0.4);
-}
-.light-glow-red {
-  box-shadow: 0 0 10px 2px rgba(239, 68, 68, 0.7), 0 0 3px 1px rgba(239, 68, 68, 1), inset 0 0 3px rgba(255,255,255,0.4);
-}
-.light-glow-slate {
-  box-shadow: 0 0 6px 1px rgba(148, 163, 184, 0.5), inset 0 0 2px rgba(255,255,255,0.3);
-}
+@keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.1; } }
+.animate-blink-slow { animation: blink 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+.animate-blink { animation: blink 1s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+.animate-blink-fast { animation: blink 0.4s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+.light-glow-emerald { box-shadow: 0 0 10px 2px rgba(16, 185, 129, 0.7), 0 0 3px 1px rgba(16, 185, 129, 1), inset 0 0 3px rgba(255,255,255,0.4); }
+.light-glow-amber { box-shadow: 0 0 10px 2px rgba(251, 191, 36, 0.7), 0 0 3px 1px rgba(251, 191, 36, 1), inset 0 0 3px rgba(255,255,255,0.4); }
+.light-glow-red { box-shadow: 0 0 10px 2px rgba(239, 68, 68, 0.7), 0 0 3px 1px rgba(239, 68, 68, 1), inset 0 0 3px rgba(255,255,255,0.4); }
+.light-glow-slate { box-shadow: 0 0 6px 1px rgba(148, 163, 184, 0.5), inset 0 0 2px rgba(255,255,255,0.3); }
 .animate-shake { animation: shake 0.4s ease-in-out; }
 .text-gradient { background: linear-gradient(135deg, var(--brand) 0%, var(--brand-dark) 100%); background-clip: text; -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
 .sidebar-group-title { font-size: 10px; font-weight: 900; letter-spacing: 0.08em; text-transform: uppercase; padding: 0 12px; margin-bottom: 6px; margin-top: 4px; color: var(--text-muted); }
@@ -168,7 +151,6 @@ h1, h2, h3, h4 { font-weight: 800; letter-spacing: -0.02em; color: var(--text-pr
   <div style="width:48px;height:48px;border:3px solid rgba(255,255,255,0.15);border-radius:50%;border-top-color:#3B82F6;animation:spin 0.8s linear infinite;"></div>
   <p style="margin-top:20px;font-weight:700;opacity:0.9;">جاري التحميل...</p>
 </div>
-
 <script type="text/babel" data-type="module">
 /* ═══════════════════════════════════════════════════════════════════════════════
    المحفظة المالية — V81
@@ -488,9 +470,12 @@ const escapeHtml = (u) => {
   return u.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;"); 
 };
 
-const getSafeId = () => { 
-  try { return crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`; } 
-  catch { return `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`; } 
+let _idSeq = 0;
+const getSafeId = () => {
+  try { 
+    if (crypto?.randomUUID) return crypto.randomUUID();
+  } catch {}
+  return `${Date.now()}-${(++_idSeq).toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 };
 
 const normalizeText = (t) => !t ? "" : t.toString()
@@ -849,19 +834,31 @@ const savePinHash = async (pin) => {
   localStorage.setItem(PIN_HASH_KEY, hash); 
 };
 
+/* ✅ مُعدّل: رفض أي hash تالف بدلاً من السماح بالـ default */
 const verifyPin = async (pin) => { 
   const stored = getStoredPinHash(); 
-  if (!stored) return pin === DEFAULT_PIN;
-  if (stored.startsWith('plain_') || !stored.startsWith('pbkdf2_')) {
-    console.warn('Old PIN hash format detected, resetting...');
-    localStorage.removeItem(PIN_HASH_KEY);
-    return pin === DEFAULT_PIN;
+  
+  // أول استخدام — لو مفيش hash محفوظ، نقبل الـ default مرة واحدة ونحفظه
+  if (!stored) {
+    if (pin === DEFAULT_PIN) {
+      try { await savePinHash(pin); } catch(e) { console.warn('savePinHash failed', e); }
+      return true;
+    }
+    return false;
   }
+  
+  // ✅ لو الـ hash تالف أو صيغة قديمة → ارفض الدخول
+  if (!stored.startsWith('pbkdf2_')) {
+    console.error('⚠️ PIN hash corrupt — reset required manually');
+    return false;
+  }
+  
   try {
     const current = await hashPin(pin);
     return current === stored;
   } catch { return false; }
 };
+
 /* ═══════════════════════════════════════════════════════════════
    Business helpers
    ═══════════════════════════════════════════════════════════════ */
@@ -1077,7 +1074,7 @@ const migrateTransaction = (t) => {
   }
   let subType = t.subType;
   if (!subType) subType = t.type === 'income' ? 'deposit' : 'withdrawal';
-return { ...t, kind, year, month, monthIndex, subType };
+  return { ...t, kind, year, month, monthIndex, subType };
 };
 
 const migrateRecurringItems = (items) => {  
@@ -1279,7 +1276,7 @@ const getInitialData = () => {
 };
 
 /* ═══════════════════════════════════════════════════════════════
-   materializeRecurringItems — ID حتمي (مع إصلاح الفلترة)
+   materializeRecurringItems — ID حتمي
    ═══════════════════════════════════════════════════════════════ */
 const materializeRecurringItems = (data, asOfDateStr) => {
   if (!data?.recurringItems?.length) return null;
@@ -1295,7 +1292,6 @@ const materializeRecurringItems = (data, asOfDateStr) => {
   const newTxs = [];
   const loanPaidMap = {};
   
-  // ✅ إصلاح: فلترة deletedTxIds قبل بناء الخريطة
   existing.forEach(t => { 
     if (permanentDeleted.has(t.id)) return;
     if (t.status === 'paid' && t.sourceReceivableId) 
@@ -1380,6 +1376,7 @@ const materializeRecurringItems = (data, asOfDateStr) => {
 
 /* ═══════════════════════════════════════════════════════════════
    dedupeRecurringTransactions
+   ✅ محدَّث: fuzzy dedupe بنافذة زمنية 10 ثواني (منع double-submit)
    ═══════════════════════════════════════════════════════════════ */
 const dedupeRecurringTransactions = (transactions) => {
   if (!Array.isArray(transactions) || transactions.length === 0) {
@@ -1392,6 +1389,7 @@ const dedupeRecurringTransactions = (transactions) => {
   const seenFuzzyKey = new Map();
   const keep = [];
   
+  // رتّب newest-first عشان لما نقارن، الأحدث هو المرجع
   const sorted = [...transactions].sort((a, b) => {
     const aTs = a.createdAt ? new Date(a.createdAt).getTime() : 0;
     const bTs = b.createdAt ? new Date(b.createdAt).getTime() : 0;
@@ -1402,27 +1400,58 @@ const dedupeRecurringTransactions = (transactions) => {
   sorted.forEach(t => {
     if (!t || !t.id) { keep.push(t); return; }
     
+    // 1) duplicate ID — دايماً مرفوض
     if (seenById.has(t.id)) {
       removed.push({ reason: 'duplicate_id', id: t.id, tx: t });
       return;
     }
     
+    // 2) duplicate recurring key (نفس البند المتكرر لنفس الشهر)
     if (t.sourceRecurringId && t.year && t.month) {
       const rKey = `${t.sourceRecurringId}|${t.year}|${t.month}`;
       if (seenRecurringKey.has(rKey)) {
-        removed.push({ reason: 'duplicate_recurring', key: rKey, id: t.id, existingId: seenRecurringKey.get(rKey), tx: t });
+        removed.push({ 
+          reason: 'duplicate_recurring', 
+          key: rKey, 
+          id: t.id, 
+          existingId: seenRecurringKey.get(rKey), 
+          tx: t 
+        });
         return;
       }
       seenRecurringKey.set(rKey, t.id);
     }
     
-    if (t.source !== 'sms' && !t.linkedTransferId && t.status === 'paid' && safeNumber(t.amount) > 0) {
-      const fKey = `${t.date}|${safeNumber(t.amount)}|${t.category}|${t.method}|${t.type}`;
-      if (seenFuzzyKey.has(fKey)) {
-        removed.push({ reason: 'fuzzy_duplicate', key: fKey, id: t.id, existingId: seenFuzzyKey.get(fKey), tx: t });
-        return;
+    // 3) ✅ fuzzy dedupe — نافذة 10 ثواني فقط (منع double-submit)
+    //    شرط أساسي: t.createdAt موجود (مش date اليومي)
+    if (
+      t.createdAt &&
+      t.source !== 'sms' &&
+      !t.linkedTransferId &&
+      safeNumber(t.amount) > 0
+    ) {
+      const FUZZY_WINDOW_MS = 10000; // 10 ثواني
+      const tTime = new Date(t.createdAt).getTime();
+      
+      if (!isNaN(tTime)) {
+        const fKey = `${safeNumber(t.amount)}|${t.category}|${t.method}|${t.type}`;
+        const lastSeen = seenFuzzyKey.get(fKey);
+        
+        // sorted newest-first، فـ lastSeen هو الأحدث
+        if (lastSeen && (lastSeen.time - tTime) < FUZZY_WINDOW_MS) {
+          removed.push({ 
+            reason: 'fuzzy_duplicate', 
+            key: fKey, 
+            id: t.id, 
+            existingId: lastSeen.id, 
+            deltaMs: lastSeen.time - tTime,
+            tx: t 
+          });
+          return;
+        }
+        
+        seenFuzzyKey.set(fKey, { id: t.id, time: tTime });
       }
-      seenFuzzyKey.set(fKey, t.id);
     }
     
     seenById.add(t.id);
@@ -1430,7 +1459,14 @@ const dedupeRecurringTransactions = (transactions) => {
   });
   
   if (removed.length > 0) {
-    console.warn(`🧹 dedupeRecurringTransactions: أزال ${removed.length} قيد مكرر`, removed);
+    console.warn(
+      `🧹 dedupeRecurringTransactions: أزال ${removed.length} قيد مكرر`,
+      removed.map(r => ({ 
+        reason: r.reason, 
+        id: r.id, 
+        deltaMs: r.deltaMs 
+      }))
+    );
   }
   
   return { transactions: keep, removed };
@@ -1677,7 +1713,7 @@ const downloadBackupFromDrive = async (fileId) => {
   if (!res.ok) throw new Error('فشل التنزيل');
   return await res.json();
 };
-  /* ═══════════════════════════════════════════════════════════════
+      /* ═══════════════════════════════════════════════════════════════
    PART 3 — Shared UI (ErrorBoundary, Modals, Toasts, Login,
    PIN, Sidebar, Header, Ticker, Badges, ReceiptViewer, SMS)
    ═══════════════════════════════════════════════════════════════ */
@@ -2258,6 +2294,7 @@ const ProfessionalHeader = memo(({ isDarkMode, dispatch, onOpenSms, isOnline, sy
     </div>
   </header>
 ));
+
 /* ─────────────── Login Screen ─────────────── */
 const LoginScreen = ({ onLogin }) => {
   const [isLoading, setIsLoading] = useState(false);
@@ -2411,6 +2448,20 @@ const PinLockScreen = ({ onSuccess, onLogout }) => {
           className="w-full py-3 text-xs font-bold flex items-center justify-center gap-2 transition-colors" 
           style={{ color: '#8A8270' }}
         ><LogOut size={14} /> تسجيل الخروج</button>
+        <button
+          type="button"
+          onClick={() => {
+            if (window.confirm('هل تريد إعادة تعيين الرمز؟ ستحتاج إعادة تسجيل الدخول.')) {
+              localStorage.removeItem(PIN_HASH_KEY);
+              sessionStorage.removeItem('pin_verified');
+              onLogout();
+            }
+          }}
+          className="w-full py-2 text-[10px] font-bold"
+          style={{ color: '#8A8270' }}
+        >
+          نسيت الرمز؟ إعادة تعيين
+        </button>
       </div>
     </div>
   );
@@ -2683,6 +2734,7 @@ const SmsParserModal = memo(({ isOpen, onClose, dispatch, addNotification, saveH
     </Modal>
   );
 });
+
 /* ─────────────── Enhanced Sidebar ─────────────── */
 const EnhancedSidebar = memo(({ activeTab, dispatch, canUndo, onUndo }) => {
   const groups = [
@@ -2701,16 +2753,16 @@ const EnhancedSidebar = memo(({ activeTab, dispatch, canUndo, onUndo }) => {
         { id: 'cards', label: 'المحافظ والكاش باك', icon: CreditCard }
       ] 
     },
-{ 
-  title: 'التخطيط', 
-  items: [
-    { id: 'planning', label: 'التخطيط الشهري', icon: Table }, 
-    { id: 'planner', label: 'المخطط', icon: Target }, 
-    { id: 'forecast', label: 'التوقع', icon: LineChart }, 
-    { id: 'financial-forecast', label: 'التنبؤ الشامل', icon: TrendingUp }, 
-    { id: 'comparison', label: 'المقارنة', icon: Activity }
-  ] 
-},
+    { 
+      title: 'التخطيط', 
+      items: [
+        { id: 'planning', label: 'التخطيط الشهري', icon: Table }, 
+        { id: 'planner', label: 'المخطط', icon: Target }, 
+        { id: 'forecast', label: 'التوقع', icon: LineChart }, 
+        { id: 'financial-forecast', label: 'التنبؤ الشامل', icon: TrendingUp }, 
+        { id: 'comparison', label: 'المقارنة', icon: Activity }
+      ] 
+    },
     { 
       title: 'الأدوات', 
       items: [
@@ -2760,7 +2812,7 @@ const EnhancedSidebar = memo(({ activeTab, dispatch, canUndo, onUndo }) => {
     </aside>
   );
 });
-/* ═══════════════════════════════════════════════════════════════
+  /* ═══════════════════════════════════════════════════════════════
    PART 4 — Dashboard + Categories + CategoryDetail + Transactions
    ═══════════════════════════════════════════════════════════════ */
 
@@ -3256,6 +3308,10 @@ const CategoryDetailModal = memo(({ category, transactions, selectedMonth, selec
     if (categoryTx.length === 0) { 
       addNotification({ type: 'warning', title: 'لا توجد معاملات للتصدير' }); 
       return; 
+    }
+    if (!window.html2pdf) {
+      addNotification({ type: 'error', title: 'تعذّر تحميل مكتبة PDF', message: 'اتصل بالإنترنت وأعد المحاولة' });
+      return;
     }
     setExporting(true);
     try {
@@ -3878,7 +3934,7 @@ const TransactionsView = memo(({
                             <p className="font-bold text-xs truncate">
                               {t.description || 'بدون وصف'}{' '}
                               {pendingDeleteIds.has(t.id) && <span className="badge badge-warning text-[9px] mr-1">🗑️ طلب مسح</span>}{' '}
-<FamilyBadge tx={t} /> <SmsBadge tx={t} /> <TeldaBadge tx={t} /> <TransferBadge tx={t} /> <RecurringBadge tx={t} /> <CarryoverBadge tx={t} />
+                              <FamilyBadge tx={t} /> <SmsBadge tx={t} /> <TeldaBadge tx={t} /> <TransferBadge tx={t} /> <RecurringBadge tx={t} /> <CarryoverBadge tx={t} />
                             </p>
                             <p className="text-[10px] font-semibold mt-0.5" style={{ color: 'var(--text-muted)' }}>{t.date} • {PAYMENT_METHODS.find(p => p.id === t.method)?.label}</p>
                           </div>
@@ -3937,7 +3993,8 @@ const TransactionsView = memo(({
                         <p className="font-bold text-xs truncate">
                           {t.type === 'income' ? '💰' : '💸'} {t.description || t.category}{' '}
                           {pendingDeleteIds.has(t.id) && <span className="badge badge-warning text-[9px] mr-1">🗑️ طلب مسح</span>}{' '}
-                        <FamilyBadge tx={t} /> <SmsBadge tx={t} /> <TeldaBadge tx={t} /> <TransferBadge tx={t} /> <RecurringBadge tx={t} /> <CarryoverBadge tx={t} />                                                  </p>
+                          <FamilyBadge tx={t} /> <SmsBadge tx={t} /> <TeldaBadge tx={t} /> <TransferBadge tx={t} /> <RecurringBadge tx={t} /> <CarryoverBadge tx={t} />
+                        </p>
                         <p className="text-[10px] font-semibold" style={{ color: 'var(--text-muted)' }}>
                           {PAYMENT_METHODS.find(p => p.id === t.method)?.label || ''} • {new Date(t.createdAt || Date.now()).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}
                         </p>
@@ -3961,12 +4018,7 @@ const TransactionsView = memo(({
     </div>
   );
 });
-  /* ═══════════════════════════════════════════════════════════════
-   PART 5 — Loans + Custody + Cashback + Hany + Cards + Wallets
-   + Duplicates + Deleted Archive
-   ═══════════════════════════════════════════════════════════════ */
-
-/* ─────────────── Custody View ─────────────── */
+  /* ─────────────── Custody View ─────────────── */
 const CustodyView = memo(({ data, dispatch, saveHistory, addNotification }) => {
   const [showAdd, setShowAdd] = useState(false);
   const [filterType, setFilterType] = useState('all');
@@ -4599,6 +4651,10 @@ const HanyShopLedger = memo(({ loan, prevMonthLoan, addNotification }) => {
       addNotification({ type: 'warning', title: 'لا توجد مسحوبات معتمدة للتصدير' }); 
       return; 
     }
+    if (!window.html2pdf) {
+      addNotification({ type: 'error', title: 'تعذّر تحميل مكتبة PDF', message: 'اتصل بالإنترنت وأعد المحاولة' });
+      return;
+    }
     setExporting(true);
     if (!expanded) setExpanded(true);
     await new Promise(r => setTimeout(r, 350));
@@ -4876,6 +4932,10 @@ const CardStatementModal = memo(({ card, data, transactions, onClose, addNotific
     if (cardTx.length === 0) { 
       addNotification({ type: 'warning', title: 'لا توجد معاملات للتصدير' }); 
       return; 
+    }
+    if (!window.html2pdf) {
+      addNotification({ type: 'error', title: 'تعذّر تحميل مكتبة PDF', message: 'اتصل بالإنترنت وأعد المحاولة' });
+      return;
     }
     setExporting(true);
     try {
@@ -5233,7 +5293,6 @@ const LoansView = memo(({
           date: nextMonthDate,
           month: nextMonthName, 
           year: nextY, 
-          monthIdx: nextMIdx,
           monthIndex: nextMIdx,
           subType: 'withdrawal', 
           status: 'pending',
@@ -7279,7 +7338,6 @@ const FinancialForecastView = memo(({
   const currentLoanDebt = useMemo(() => 
     updatedLoans.filter(l => !l.isReceivable).reduce((s, l) => s + l.remaining, 0), [updatedLoans]);
   
-  // 🔹 هل دي "سداد بطاقة"؟
   const isCardPayment = (t) => {
     if (t.type !== 'expense') return false;
     if (CREDIT_CARD_METHOD_IDS.includes(t.method)) return false;
@@ -7295,12 +7353,10 @@ const FinancialForecastView = memo(({
     );
   };
   
-  // 🔹 هل دي "مشتريات بالبطاقة"؟
   const isCardSpending = (t) => {
     return t.type === 'expense' && (CREDIT_CARD_METHOD_IDS.includes(t.method) || t.linkedCardId);
   };
   
-  // 🔹 متوسط آخر 3 شهور
   const autoAverages = useMemo(() => {
     const curIdx = getMonthIndex(selectedMonth);
     let y = selectedYear, m = curIdx;
@@ -7354,9 +7410,6 @@ const FinancialForecastView = memo(({
       let pendingIncome = 0, pendingExpense = 0, pendingCount = 0;
       
       if (i === 0) {
-        // ===== الشهر الحالي: من المعاملات (معتمد + معلق) =====
-        
-        // الدخل (معتمد + معلق)
         income = monthTxs.filter(t => t.type === 'income')
           .reduce((s, t) => s + safeNumber(t.amount), 0);
         pendingIncome = monthTxs.filter(t => t.type === 'income' && t.status !== 'paid')
@@ -7365,25 +7418,19 @@ const FinancialForecastView = memo(({
           .reduce((s, t) => s + safeNumber(t.amount), 0);
         pendingCount = monthTxs.filter(t => t.status !== 'paid').length;
         
-        // مشتريات البطاقة (معتمد + معلق)
         cardSpending = monthTxs.filter(isCardSpending)
           .reduce((s, t) => s + safeNumber(t.amount), 0);
         
-        // سداد البطاقة (معتمد + معلق)
         cardPayment = monthTxs.filter(isCardPayment)
           .reduce((s, t) => s + safeNumber(t.amount), 0);
         
-        // لو مفيش سداد مسجل الشهر ده، نستخدم المتوسط
         if (cardPayment === 0) cardPayment = baseCardPayment;
         
-        // المصروفات النقدية = كل المصروفات - مشتريات البطاقة - سداد البطاقة
         cashExpenses = monthTxs.filter(t => t.type === 'expense' 
           && !isCardSpending(t) && !isCardPayment(t))
           .reduce((s, t) => s + safeNumber(t.amount), 0);
         
       } else {
-        // ===== الشهور الجاية: من المخطط + المتوسطات =====
-        
         const plan = monthlyPlans?.[mKey] || {};
         const planIncome = safeNumber(plan.expectedSalary) + safeNumber(plan.expectedRent)
           + safeNumber(plan.expectedCashback) + safeNumber(plan.expectedEmakWE)
@@ -7403,19 +7450,12 @@ const FinancialForecastView = memo(({
         cardSpending = baseCardSpending;
       }
       
-      // أقساط القروض
       const loanInstallments = updatedLoans
         .filter(l => !l.isReceivable && !l.autoGenerated && safeNumber(l.monthlyInstallment) > 0)
         .reduce((s, l) => s + safeNumber(l.monthlyInstallment), 0);
       
-      // 🔹✨ المعادلة الأساسية للبطاقة ✨🔹
-      // المديونية الجديدة = (المديونية الحالية − السداد) + المشتريات
       const newCardDebt = Math.max(0, cardDebt - cardPayment + cardSpending);
-      
-      // مديونية القروض
       const newLoanDebt = Math.max(0, loanDebt - loanInstallments);
-      
-      // السيولة الجديدة = السيولة + الدخل − (المصروفات النقدية + السداد + أقساط القروض)
       const newLiquidity = liq + income - cashExpenses - cardPayment - loanInstallments;
       
       const totalDebt = newCardDebt + newLoanDebt;
@@ -7472,7 +7512,6 @@ const FinancialForecastView = memo(({
   
   return (
     <div className="space-y-4 animate-fadeIn pb-24">
-      {/* Header */}
       <div className="card">
         <div className="flex justify-between items-start gap-3 flex-wrap">
           <div>
@@ -7532,7 +7571,6 @@ const FinancialForecastView = memo(({
         )}
       </div>
       
-      {/* Alerts */}
       {alerts.length > 0 && alerts.map((a, i) => (
         <div 
           key={i} 
@@ -7549,7 +7587,6 @@ const FinancialForecastView = memo(({
         </div>
       ))}
       
-      {/* Current Stats */}
       <div className="grid grid-cols-3 gap-2">
         <div className="stat-card">
           <p className="text-[10px] font-bold mb-1" style={{ color: 'var(--text-muted)' }}>السيولة الآن</p>
@@ -7567,7 +7604,6 @@ const FinancialForecastView = memo(({
         </div>
       </div>
       
-      {/* Chart */}
       <div className="card">
         <h3 className="font-bold text-xs mb-3" style={{ color: 'var(--text-secondary)' }}>
           📈 تطور السيولة والمديونية — 6 شهور
@@ -7588,7 +7624,6 @@ const FinancialForecastView = memo(({
         </div>
       </div>
       
-      {/* Detailed Monthly Breakdown */}
       <div className="space-y-3">
         <h3 className="font-black text-sm">📋 التفاصيل الشهرية</h3>
         {forecast.map((f, i) => (
@@ -7881,31 +7916,31 @@ const CalendarView = memo(({ data, getAgendaItems, dispatch, saveHistory, addNot
         <div className="grid grid-cols-7 gap-1">
           {emptyCells.map(i => <div key={`e-${i}`} />)}
           {dayCells.map(day => {
-  const items = itemsByDay[day] || [];
-  const hasItems = items.length > 0;
-  const totalAmount = items.reduce((s, it) => s + safeNumber(it.amount), 0);
+            const items = itemsByDay[day] || [];
+            const hasItems = items.length > 0;
+            const totalAmount = items.reduce((s, it) => s + safeNumber(it.amount), 0);
 
-  return (
-    <button
-      key={day}
-      type="button"
-      onClick={() => hasItems && setSelectedDayDetails({ day, items })}
-      className={`h-14 rounded-lg p-1 flex flex-col items-center justify-center transition-all relative ${isToday(day) ? 'ring-2 ring-blue-500' : ''} ${hasItems ? 'cursor-pointer hover:ring-2 hover:ring-blue-300' : 'cursor-default'}`}
-      style={{
-        background: hasItems ? 'var(--brand-soft)' : 'var(--bg-muted)',
-        color: hasItems ? 'var(--brand)' : 'var(--text-secondary)'
-      }}
-    >
-      <span className={`text-[11px] font-black ${isToday(day) ? 'text-blue-600' : ''}`}>{day}</span>
-      {hasItems && (
-        <>
-          <span className="text-[8px] font-black mt-0.5">{items.length} التزام</span>
-          <span className="text-[7px] font-bold opacity-70">{fmt(totalAmount).slice(0, 5)}</span>
-        </>
-      )}
-    </button>
-  );
-})}
+            return (
+              <button
+                key={day}
+                type="button"
+                onClick={() => hasItems && setSelectedDayDetails({ day, items })}
+                className={`h-14 rounded-lg p-1 flex flex-col items-center justify-center transition-all relative ${isToday(day) ? 'ring-2 ring-blue-500' : ''} ${hasItems ? 'cursor-pointer hover:ring-2 hover:ring-blue-300' : 'cursor-default'}`}
+                style={{
+                  background: hasItems ? 'var(--brand-soft)' : 'var(--bg-muted)',
+                  color: hasItems ? 'var(--brand)' : 'var(--text-secondary)'
+                }}
+              >
+                <span className={`text-[11px] font-black ${isToday(day) ? 'text-blue-600' : ''}`}>{day}</span>
+                {hasItems && (
+                  <>
+                    <span className="text-[8px] font-black mt-0.5">{items.length} التزام</span>
+                    <span className="text-[7px] font-bold opacity-70">{fmt(totalAmount).slice(0, 5)}</span>
+                  </>
+                )}
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -7954,7 +7989,8 @@ const CalendarView = memo(({ data, getAgendaItems, dispatch, saveHistory, addNot
           </div>
         )}
       </div>
-            {selectedDayDetails && (
+
+      {selectedDayDetails && (
         <div className="modal-backdrop no-print" onClick={(e) => { if (e.target === e.currentTarget) setSelectedDayDetails(null); }}>
           <div className="generic-modal max-w-md">
             <div className="generic-modal-header">
@@ -8257,8 +8293,7 @@ function dataReducer(state, action) {
     default: return state;
   }
 }
-
-/* ═══════════════════════════════════════════════════════════════
+  /* ═══════════════════════════════════════════════════════════════
    materializeShoppingRecurring — Family App integration
    ═══════════════════════════════════════════════════════════════ */
 const materializeShoppingRecurring = async () => {
@@ -8529,7 +8564,7 @@ function App() {
     return () => clearInterval(interval);
   }, [isAuthenticated]);
 
-  // Firestore Snapshot with dedupe
+  // ✅ Firestore Snapshot — Cloud-First (السحابة لها الأولوية المطلقة)
   useEffect(() => {
     if (!isAuthenticated) return;
     const docRef = db.collection(FIREBASE_DOC_PATH.collection).doc(FIREBASE_DOC_PATH.doc);
@@ -8557,6 +8592,7 @@ function App() {
         const raw = doc.data();
         let migrated = migrateData(raw);
         
+        // 1) dedupe على بيانات السحابة
         const { transactions: cleanTx, removed } = dedupeRecurringTransactions(migrated.transactions || []);
         if (removed.length > 0) {
           console.log(`🧹 تنظيف ${removed.length} قيد مكرر من السحابة`);
@@ -8583,35 +8619,47 @@ function App() {
           setTimeout(() => queueCloudSave(migrated, { silent: true }), 500);
         }
         
+        // 2) احترم deletedTxIds — أي قيد اتمسح عمداً يفضل ممسوح
         const permanentDeleted = new Set([
           ...(migrated.deletedTxIds || []),
           ...(currentTxRef.current.filter(t => t?._deleted).map(t => t.id))
         ]);
         
-        const filteredRemoteTx = (migrated.transactions || []).filter(t => 
+        migrated.transactions = (migrated.transactions || []).filter(t => 
           !t?.id || !permanentDeleted.has(t.id)
         );
-        migrated.transactions = filteredRemoteTx;
         
-        const localTx = currentTxRef.current;
-        const remoteTx = migrated.transactions || [];
-        const remoteIds = new Set(remoteTx.map(t => t.id));
-        const localOnly = localTx.filter(t => 
-          !remoteIds.has(t.id) && (!t?.id || !permanentDeleted.has(t.id))
+        // ✅ 3) السحابة لها الأولوية — نتجاهل أي قيد محلي مش موجود في Firestore
+        const remoteIds = new Set(migrated.transactions.map(t => t.id));
+        const localOnly = currentTxRef.current.filter(t => 
+          t?.id && !remoteIds.has(t.id) && !permanentDeleted.has(t.id)
         );
         
-        if (localOnly.length > 0 && !isFirst) {
-          console.warn(`⚠️ ${localOnly.length} معاملة محلية مش في Firestore — هتتحفظ`);
-          migrated.transactions = [...remoteTx, ...localOnly];
+        if (localOnly.length > 0) {
+          console.warn(
+            `⚠️ ${localOnly.length} قيد محلي تم تجاهله — السحابة لها الأولوية`,
+            localOnly.map(t => ({ id: t.id, desc: t.description, amount: t.amount }))
+          );
+          // نبّه المستخدم إن فيه قيود محلية اترمت
+          setTimeout(() => addNotification({
+            type: 'warning',
+            title: `تم تجاهل ${localOnly.length} قيد محلي`,
+            message: 'السحابة هي المصدر — القيود دي مش موجودة في Firestore',
+            duration: 7000
+          }), 400);
         }
         
+        // 4) منع إعادة الرفع + dispatch
         const incoming = JSON.stringify(migrated);
         if (lastRemoteRef.current === incoming && !isFirst) return;
         lastRemoteRef.current = incoming;
         
-        if (raw.budgets && typeof raw.budgets === 'object') dispatch({ type: 'SET_BUDGETS', payload: raw.budgets });
+        if (raw.budgets && typeof raw.budgets === 'object') {
+          dispatch({ type: 'SET_BUDGETS', payload: raw.budgets });
+        }
         dispatch({ type: 'SET_DATA', payload: migrated });
-        console.log('☁️ تم استقبال البيانات من Firestore');
+        console.log('☁️ تم استقبال البيانات من Firestore (السحابة لها الأولوية)');
+        
       } else if (isFirst) {
         console.log('📤 Firestore فاضي — أول استخدام');
       }
@@ -8627,7 +8675,7 @@ function App() {
       unsub();
       if (initialSnapshotTimeoutRef.current) clearTimeout(initialSnapshotTimeoutRef.current);
     };
-  }, [isAuthenticated, queueCloudSave]);
+  }, [isAuthenticated, queueCloudSave, addNotification]);
   
   // Auto-save with queue
   useEffect(() => {
@@ -9129,7 +9177,8 @@ function App() {
           subType: finalSubType, 
           status, 
           linkedCardId: syncLinkedCardId, 
-          cardLast4: syncCardLast4 
+          cardLast4: syncCardLast4,
+          createdAt: formData.createdAt || new Date().toISOString()
         };
         
         const next = formMode === 'add' 
@@ -9343,6 +9392,7 @@ function App() {
           const toLabel = PAYMENT_METHODS.find(p => p.id === to)?.label || to;
           const description = (quickTransferData.internalDescription || '').trim() || `تحويل من ${fromLabel} إلى ${toLabel}`;
           
+          const now = new Date().toISOString();
           const txs = [
             {
               id: getSafeId(),
@@ -9355,6 +9405,7 @@ function App() {
               subType: 'withdrawal', status: 'paid',
               linkedTransferId: transferId,
               transferDirection: 'out',
+              createdAt: now
             },
             {
               id: getSafeId(),
@@ -9367,6 +9418,7 @@ function App() {
               subType: 'deposit', status: 'paid',
               linkedTransferId: transferId,
               transferDirection: 'in',
+              createdAt: now
             }
           ];
           
@@ -9382,6 +9434,7 @@ function App() {
               subType: 'withdrawal', status: 'paid',
               linkedTransferId: transferId,
               transferDirection: 'fee',
+              createdAt: now
             });
           }
           
@@ -9462,7 +9515,8 @@ function App() {
           method: quickTransferData.from,
           transferChannel: useTelda ? ben.method : undefined,
           date, month: txMonth, year: txYear, monthIndex: d.getMonth(),
-          subType: 'withdrawal', status: 'paid', beneficiaryId: ben.id
+          subType: 'withdrawal', status: 'paid', beneficiaryId: ben.id,
+          createdAt: new Date().toISOString()
         });
       }
       
@@ -9883,20 +9937,20 @@ function App() {
             monthlyPlans={monthlyPlans} 
           />
         );
-        case 'financial-forecast': 
-  return (
-    <FinancialForecastView 
-      data={data} 
-      transactions={transactions} 
-      cards={cards} 
-      updatedLoans={updatedLoans} 
-      recurringItems={recurringItems} 
-      liveBalances={liveBalances} 
-      monthlyPlans={monthlyPlans} 
-      selectedYear={selectedYear} 
-      selectedMonth={selectedMonth} 
-    />
-  );
+      case 'financial-forecast': 
+        return (
+          <FinancialForecastView 
+            data={data} 
+            transactions={transactions} 
+            cards={cards} 
+            updatedLoans={updatedLoans} 
+            recurringItems={recurringItems} 
+            liveBalances={liveBalances} 
+            monthlyPlans={monthlyPlans} 
+            selectedYear={selectedYear} 
+            selectedMonth={selectedMonth} 
+          />
+        );
       case 'comparison': 
         return (
           <MonthComparisonView 
@@ -10033,7 +10087,6 @@ function App() {
           />
         )}
       
-        {/* Bottom Nav */}
         <div className="bottom-nav-container no-print">
           <div className="scrollable-nav scroll-hide">
             {[
@@ -10062,7 +10115,6 @@ function App() {
           </div>
         </div>
 
-        {/* Drawer */}
         {isDrawerOpen && (
           <div className="fixed inset-0 z-[4000] no-print">
             <div 
@@ -10189,7 +10241,6 @@ function App() {
           </div>
         )}
 
-        {/* FAB */}
         <button 
           type="button" 
           aria-label="إضافة" 
@@ -10225,7 +10276,6 @@ function App() {
           </div>
         </main>
 
-        {/* Form Modal */}
         {isFormOpen && (
           <div className="modal-backdrop no-print">
             <div 
@@ -10390,7 +10440,6 @@ function App() {
           </div>
         )}
 
-        {/* Card Edit Modal */}
         {editingCard && (
           <div className="modal-backdrop no-print">
             <div className="w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden animate-slideInBottom" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)' }}>
@@ -10471,7 +10520,6 @@ function App() {
           </div>
         )}
 
-        {/* Loan Edit Modal */}
         {editingLoan && (
           <div className="modal-backdrop no-print">
             <div className="w-full max-w-md rounded-2xl shadow-2xl animate-slideInBottom" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)' }}>
@@ -10543,7 +10591,6 @@ function App() {
           </div>
         )}
 
-        {/* Budget Modal */}
         {editingBudgetCategory && (
           <div className="modal-backdrop no-print">
             <div className="w-full max-w-sm rounded-2xl shadow-2xl p-5" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)' }}>
@@ -10567,7 +10614,6 @@ function App() {
           </div>
         )}
 
-        {/* Quick Transfer Modal */}
         {isQuickTransferModalOpen && (
           <div className="modal-backdrop no-print">
             <div className="w-full max-w-md rounded-2xl shadow-2xl animate-slideInBottom" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)' }}>
@@ -10744,7 +10790,6 @@ function App() {
           </div>
         )}
 
-        {/* Recurring Modal */}
         {isRecurringModalOpen && (
           <div className="modal-backdrop no-print">
             <div className="w-full max-w-md rounded-2xl shadow-2xl animate-slideInBottom" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)' }}>
@@ -10906,4 +10951,7 @@ if (rootElement) {
 </script>
 </body>
 </html>
+
+
+
   
