@@ -8629,25 +8629,49 @@ function App() {
           !t?.id || !permanentDeleted.has(t.id)
         );
         
-        // ✅ 3) السحابة لها الأولوية — نتجاهل أي قيد محلي مش موجود في Firestore
-        const remoteIds = new Set(migrated.transactions.map(t => t.id));
-        const localOnly = currentTxRef.current.filter(t => 
-          t?.id && !remoteIds.has(t.id) && !permanentDeleted.has(t.id)
-        );
-        
-        if (localOnly.length > 0) {
-          console.warn(
-            `⚠️ ${localOnly.length} قيد محلي تم تجاهله — السحابة لها الأولوية`,
-            localOnly.map(t => ({ id: t.id, desc: t.description, amount: t.amount }))
-          );
-          // نبّه المستخدم إن فيه قيود محلية اترمت
-          setTimeout(() => addNotification({
-            type: 'warning',
-            title: `تم تجاهل ${localOnly.length} قيد محلي`,
-            message: 'السحابة هي المصدر — القيود دي مش موجودة في Firestore',
-            duration: 7000
-          }), 400);
-        }
+// ✅ 3) Cloud-First مع استثناء ذكي
+const remoteIds = new Set(migrated.transactions.map(t => t.id));
+const localOnly = currentTxRef.current.filter(t => 
+  t?.id && !remoteIds.has(t.id) && !permanentDeleted.has(t.id)
+);
+
+// 🔹 نرفع القيود دي للسحابة (مش نتجاهلها):
+//    - متولّدة من بند متكرر (sourceRecurringId)
+//    - متولّدة من shopping recurring (recurringId)
+//    - عمرها أقل من 60 ثانية (عمليات جديدة لسه هترفع)
+const now = Date.now();
+const localOnlyToUpload = localOnly.filter(t => {
+  if (t.sourceRecurringId) return true;
+  if (t.recurringId) return true;
+  if (t.createdAt) {
+    const age = now - new Date(t.createdAt).getTime();
+    if (age >= 0 && age < 60000) return true;
+  }
+  return false;
+});
+
+const localOnlyToIgnore = localOnly.filter(t => !localOnlyToUpload.includes(t));
+
+// 🔹 ارفع القيود الجديدة فوراً (بدون انتظار الـ auto-save)
+if (localOnlyToUpload.length > 0) {
+  console.log(`📤 ${localOnlyToUpload.length} قيد محلي جديد — جاري رفعه للسحابة`);
+  migrated.transactions = [...migrated.transactions, ...localOnlyToUpload];
+  setTimeout(() => queueCloudSave(migrated, { silent: true }), 800);
+}
+
+// 🔹 تجاهل القيود القديمة المفقودة
+if (localOnlyToIgnore.length > 0) {
+  console.warn(
+    `⚠️ ${localOnlyToIgnore.length} قيد قديم تم تجاهله — السحابة لها الأولوية`,
+    localOnlyToIgnore.map(t => ({ id: t.id, desc: t.description, amount: t.amount }))
+  );
+  setTimeout(() => addNotification({
+    type: 'warning',
+    title: `تم تجاهل ${localOnlyToIgnore.length} قيد قديم`,
+    message: 'السحابة هي المصدر — القيود دي مش موجودة في Firestore',
+    duration: 7000
+  }), 400);
+}
         
         // 4) منع إعادة الرفع + dispatch
         const incoming = JSON.stringify(migrated);
