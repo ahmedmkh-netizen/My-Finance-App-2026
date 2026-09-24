@@ -203,11 +203,12 @@ const GAS_CONFIG_LS_KEY = 'gas_config_v82';
 const PAYMENT_METHODS_WITHOUT_ACCOUNT = new Set(['instapay', 'telda_shaimaa', 'telda_salma', 'telda_abdelrahman']);
 
 /* ✅ تصنيفات الحسابات */
-const CASH_METHOD_IDS = new Set(['cash']);                                  // الكاش — مصروف فقط، لا سجل
-const WALLET_METHOD_IDS = new Set(['fawry', 'etisalat']);                    // المحافظ الإلكترونية
+const CASH_METHOD_IDS = new Set(['cash']);                                    // الكاش
+const WALLET_METHOD_IDS = new Set(['fawry', 'etisalat']);                     // المحافظ الإلكترونية
 const BANK_METHOD_IDS = new Set(['cib_savings', 'aaib_savings']);             // الحسابات البنكية
-const LEDGER_METHOD_IDS = new Set(['fawry', 'etisalat', 'cib_savings', 'aaib_savings']); // التي لها سجل معاملات
-const NO_CASH_LEDGER = true; // ✅ الكاش بدون سجل معاملات
+// ✅ الكاش له سجل معاملات كامل مثل باقي الحسابات (دخل + مصروف)
+const LEDGER_METHOD_IDS = new Set(['cash', 'fawry', 'etisalat', 'cib_savings', 'aaib_savings']);
+const NO_CASH_LEDGER = false;الكاش بدون سجل معاملات
 
 const DAILY_DHIKR = [
   "سُبْحَانَ اللَّهِ وَبِحَمْدِهِ، سُبْحَانَ اللَّهِ الْعَظِيمِ",
@@ -975,11 +976,7 @@ const computeBalance = (data, key, asOfDate) => {
   const accountsData = data?.accountsData || DEFAULT_ACCOUNTS;
   const base = safeNumber(accountsData[key]?.balance);
   
-  // ✅ الكاش: لا سجل معاملات — الرصيد ثابت كما هو معرف
-  if (isCashAccount(key)) {
-    return base;
-  }
-  
+  // ✅ الكاش له سجل الآن — يُحسب مثل باقي الحسابات
   const cutoffDay = dayStart(getAccountCutoff(accountsData, key));
   const upper = asOfDate ? new Date(asOfDate) : endOfToday();
   const backward = upper < cutoffDay;
@@ -987,7 +984,7 @@ const computeBalance = (data, key, asOfDate) => {
   
   (data?.transactions || []).forEach(t => {
     if (t.status !== 'paid' || t.method !== key) return;
-    if (t.source === 'carryover') return; // القيود المرحّلة لا تؤثر على الرصيد
+    if (t.source === 'carryover') return;
     const d = parseISODate(t.date);
     if (!d) return;
     const amt = safeNumber(t.amount);
@@ -997,14 +994,6 @@ const computeBalance = (data, key, asOfDate) => {
   });
   return bal;
 };
-
-const getCardMethod = (card) => { 
-  if (!card) return null; 
-  if (card.bank === 'CIB' && card.name === 'SWYPE') return 'cib_swype'; 
-  if (card.bank === 'AAIB') return 'aaib_card'; 
-  return 'cib_card'; 
-};
-
 /* ═══════════════════════════════════════════════════════════════
    ✅ computeCardDebt — مع قطع حسابي دقيق
    - يبدأ من openingDate (2026-09-30)
@@ -1955,6 +1944,14 @@ const Modal = memo(({ isOpen, onClose, title, icon, size = 'md', children, foote
 
 /* ─────────────── Wallet Configs — أسماء محدّثة ─────────────── */
 const WALLET_CONFIGS = {
+  cash: { 
+    id:'cash', 
+    title:'Cash', 
+    subtitle:'كاش في اليد', 
+    icon: Wallet, 
+    csvName:'Cash', 
+    group: 'cash' 
+  },
   fawry: { 
     id:'fawry', 
     title:'Fawry Wallet', 
@@ -2292,15 +2289,15 @@ const EnhancedStatCard = ({ title, amount, icon: Icon, subtitle, isPrivate, colo
 const QuickBalanceOverview = memo(({ balances, walletVisibility, onToggleVisibility }) => {
   const [isVisible, setIsVisible] = useState(true);
   
-  // ✅ عرض الحسابات بدون الكاش (لأنه بلا سجل)
-  const accounts = ['cib_savings', 'aaib_savings', 'fawry', 'etisalat'].map(k => ({ 
-    key: k, 
-    shortName: ACCOUNT_SHORT_NAMES[k] || k, 
-    balance: safeNumber(balances?.[k]), 
-    icon: ACCOUNT_ICONS[k], 
-    last4: DEFAULT_ACCOUNTS[k]?.last4,
-    group: WALLET_CONFIGS[k]?.group
-  }));
+// ✅ جميع الحسابات بما فيها الكاش (له سجل الآن)
+const accounts = ['cash', 'cib_savings', 'aaib_savings', 'fawry', 'etisalat'].map(k => ({ 
+  key: k, 
+  shortName: ACCOUNT_SHORT_NAMES[k] || k, 
+  balance: safeNumber(balances?.[k]), 
+  icon: ACCOUNT_ICONS[k], 
+  last4: DEFAULT_ACCOUNTS[k]?.last4,
+  group: WALLET_CONFIGS[k]?.group
+}));
   const total = accounts.reduce((s, a) => s + a.balance, 0);
   
   return (
@@ -2336,9 +2333,6 @@ const QuickBalanceOverview = memo(({ balances, walletVisibility, onToggleVisibil
             <span className="font-bold text-sm">إجمالي السيولة</span>
             <span className="text-2xl font-black tracking-tight">{fmt(total)}</span>
           </div>
-          <p className="text-[10px] mt-2 text-center" style={{ color: 'var(--text-muted)' }}>
-            💵 الكاش مصروف فقط (بلا سجل معاملات)
-          </p>
         </React.Fragment>
       )}
     </div>
@@ -4229,17 +4223,7 @@ const CustodyView = memo(({ data, dispatch, saveHistory, addNotification }) => {
         return;
       }
     }
-    if (newEntry.type === CUSTODY_TYPE.RECEIVE) {
-      if (CASH_METHOD_IDS.has(newEntry.method)) {
-        addNotification({ 
-          type: 'warning', 
-          title: '⚠️ استلام عهدة على الكاش', 
-          message: 'الكاش بلا سجل — لن يؤثر على رصيد حساب', 
-          duration: 7000 
-        });
-      }
-    }
-    
+
     saveHistory();
     const amount = check.value;
     const entry = { 
@@ -6293,11 +6277,16 @@ const WalletsAndCardsView = memo(({
           </div>
 
           {/* ✅ ملاحظة الكاش */}
-          <div className="card p-3" style={{ background: 'var(--bg-muted)' }}>
-            <p className="text-[11px] font-bold flex items-center gap-2" style={{ color: 'var(--text-muted)' }}>
-              💵 <strong>الكاش</strong> — لا يوجد سجل معاملات للكاش (سواء الداخل أو المصروف)
-            </p>
-          </div>
+{/* ✅ قسم الكاش — له سجل الآن */}
+<div className="card py-2">
+  <div className="flex items-center gap-2 px-2">
+    <Wallet size={14} className="text-emerald-500" />
+    <h3 className="font-black text-xs">💵 الكاش (كاش في اليد)</h3>
+  </div>
+</div>
+<div className="space-y-2">
+  <GenericLedgerComponent {...lp('cash')} />
+</div>
         </React.Fragment>
       )}
 
@@ -7555,8 +7544,8 @@ const PlannerView = memo(({ updatedLoans, cards, selectedMonth, selectedYear, mo
 
 /* ─────────────── Liquidity Forecast View ─────────────── */
 const LiquidityForecastView = memo(({ transactions, updatedLoans, recurringItems, liveBalances, selectedYear, selectedMonth, monthlyPlans }) => {
-  const currentLiquidity = useMemo(() =>
-    ACCOUNT_KEYS.filter(k => !isCashAccount(k)).reduce((s, k) => s + safeNumber(liveBalances?.[k]), 0), [liveBalances]);
+const currentLiquidity = useMemo(() =>
+  ACCOUNT_KEYS.reduce((s, k) => s + safeNumber(liveBalances?.[k]), 0), [liveBalances]);
 
   const forecast = useMemo(() => {
     const startIdx = getMonthIndex(selectedMonth);
@@ -7669,8 +7658,8 @@ const FinancialForecastView = memo(({
   const [cardSpendingOverride, setCardSpendingOverride] = useState('');
   const [showSettings, setShowSettings] = useState(false);
   
-  const currentLiquidity = useMemo(() => 
-    ACCOUNT_KEYS.filter(k => !isCashAccount(k)).reduce((s, k) => s + safeNumber(liveBalances?.[k]), 0), [liveBalances]);
+const currentLiquidity = useMemo(() => 
+  ACCOUNT_KEYS.reduce((s, k) => s + safeNumber(liveBalances?.[k]), 0), [liveBalances]);
   
   const currentCardDebt = useMemo(() => 
     cards.reduce((s, c) => s + Math.max(0, computeCardDebt(data, c)), 0), [cards, data]);
@@ -9146,8 +9135,8 @@ function App() {
     return b; 
   }, [data]);
   
-  const totalLiquidity = useMemo(() => 
-    ACCOUNT_KEYS.filter(k => !isCashAccount(k)).reduce((s, k) => s + liveBalances[k], 0), [liveBalances]);
+const totalLiquidity = useMemo(() => 
+  ACCOUNT_KEYS.reduce((s, k) => s + liveBalances[k], 0), [liveBalances]);
   
   const custodySummary = useMemo(() => 
     computeCustodyBalance(data?.custodyEntries), [data?.custodyEntries]);
@@ -9348,25 +9337,23 @@ function App() {
   }, [transactions, selectedYear, selectedMonth, transViewMode, searchTerm, statusFilter]);
 
   // ✅ buildLedger — الكاش مستثنى
-  const buildLedger = useCallback((methodId) => {
-    // ✅ الكاش: لا يوجد سجل
-    if (isCashAccount(methodId)) return [];
-    
-    const cutoffDay = dayStart(getAccountCutoff(accountsData, methodId));
-    const acc = transactions
-      .filter(t => 
-        t.method === methodId && t.status === 'paid' 
-        && t.source !== 'carryover'
-        && (parseISODate(t.date) || new Date(0)) >= cutoffDay
-      )
-      .sort((a, b) => (parseISODate(a.date) || 0) - (parseISODate(b.date) || 0));
-    let bal = safeNumber(accountsData?.[methodId]?.balance);
-    return acc.map(t => { 
-      const a = safeNumber(t.amount); 
-      bal += (t.subType === 'deposit') ? a : -a; 
-      return { ...t, runningBalance: bal }; 
-    }).reverse();
-  }, [transactions, accountsData]);
+const buildLedger = useCallback((methodId) => {
+  // ✅ الكاش له سجل الآن — لا حاجة لاستثناء
+  const cutoffDay = dayStart(getAccountCutoff(accountsData, methodId));
+  const acc = transactions
+    .filter(t => 
+      t.method === methodId && t.status === 'paid' 
+      && t.source !== 'carryover'
+      && (parseISODate(t.date) || new Date(0)) >= cutoffDay
+    )
+    .sort((a, b) => (parseISODate(a.date) || 0) - (parseISODate(b.date) || 0));
+  let bal = safeNumber(accountsData?.[methodId]?.balance);
+  return acc.map(t => { 
+    const a = safeNumber(t.amount); 
+    bal += (t.subType === 'deposit') ? a : -a; 
+    return { ...t, runningBalance: bal }; 
+  }).reverse();
+}, [transactions, accountsData]);
 
   const getAgendaItems = useCallback(() => {
     try {
@@ -9520,17 +9507,7 @@ function App() {
       addNotification({ type: 'error', title: 'محظور', message: `شهر ${txMonth} مغلق` }); 
       return; 
     }
-    
-    // ✅ منع دخل على الكاش
-    if (isCashAccount(formData.method) && formData.type === 'income') {
-      addNotification({ 
-        type: 'warning', 
-        title: '⚠️ الكاش بلا سجل', 
-        message: 'الكاش مصروف فقط، لا يوجد سجل للدخل — المعاملة ستُسجَّل لكن لن تُضاف إلى سجل الكاش', 
-        duration: 7000 
-      });
-    }
-    
+       
     if (PAYMENT_METHODS_WITHOUT_ACCOUNT.has(formData.method) && formData.status === 'paid') {
       addNotification({ 
         type: 'warning', 
@@ -9770,15 +9747,7 @@ function App() {
         addNotification({ type: 'error', title: 'اختر حسابين مختلفين' }); 
         return; 
       }
-      if (isCashAccount(from) || isCashAccount(to)) {
-        saveLockRef.current = false;
-        addNotification({ 
-          type: 'error', 
-          title: '⚠️ الكاش بلا سجل', 
-          message: 'لا يمكن التحويل من/إلى الكاش — الكاش مصروف فقط' 
-        });
-        return;
-      }
+
       if (fees < 0) { 
         saveLockRef.current = false; 
         addNotification({ type: 'error', title: 'الرسوم لا تكون سالبة' }); 
@@ -10704,16 +10673,7 @@ function App() {
                     </span>
                   </div>
                 )}
-
-                {isCashAccount(formData.method) && formData.type === 'income' && (
-                  <div className="p-2 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 flex items-center gap-2">
-                    <AlertTriangle size={12} className="text-amber-600" />
-                    <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400">
-                      الكاش بلا سجل — لا يوجد سجل للدخل في الكاش
-                    </span>
-                  </div>
-                )}
-                
+               
                 <div className="grid grid-cols-2 gap-2.5">
                   <div>
                     <label className="block text-[11px] font-bold mb-1" style={{ color: 'var(--text-muted)' }}>النوع</label>
