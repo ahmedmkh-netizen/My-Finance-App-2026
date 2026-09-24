@@ -455,6 +455,10 @@ const isLedgerAccount = (key) => LEDGER_METHOD_IDS.has(key);
 const isCashAccount = (key) => CASH_METHOD_IDS.has(key);
 const isWalletAccount = (key) => WALLET_METHOD_IDS.has(key);
 const isBankAccount = (key) => BANK_METHOD_IDS.has(key);
+
+/* ✅ فئات مسحوبات هاني — دين على المحل، لا تؤثر على الكاش */
+const HANY_SHOP_CATEGORIES = new Set(['مسحوبات محل هاني', 'مشتريات بقالة هاني']);
+const isHanyShopCategory = (cat) => typeof cat === 'string' && HANY_SHOP_CATEGORIES.has(cat);
 /* ═══════════════════════════════════════════════════════════════
    PART 2 — Utilities + Date + Validation + Modals + PIN + SMS
    V82 — Accounting Precision Edition (FINAL)
@@ -921,6 +925,8 @@ const computeBalance = (data, key, asOfDate) => {
   (data?.transactions || []).forEach(t => {
     if (t.status !== 'paid' || t.method !== key) return;
     if (t.source === 'carryover') return;
+    // ✅ استثناء مسحوبات هاني من الكاش (بضاعة على الحساب، مش نقدية)
+    if (isCashAccount(key) && isHanyShopCategory(t.category)) return;
     const d = parseISODate(t.date);
     if (!d) return;
     const amt = safeNumber(t.amount);
@@ -8716,22 +8722,24 @@ function App() {
   }, [transactions, selectedYear, selectedMonth, transViewMode, searchTerm, statusFilter]);
 
   // ✅ buildLedger — كل الحسابات لها سجل
-  const buildLedger = useCallback((methodId) => {
-    const cutoffDay = dayStart(getAccountCutoff(accountsData, methodId));
-    const acc = transactions
-      .filter(t => 
-        t.method === methodId && t.status === 'paid' 
-        && t.source !== 'carryover'
-        && (parseISODate(t.date) || new Date(0)) >= cutoffDay
-      )
-      .sort((a, b) => (parseISODate(a.date) || 0) - (parseISODate(b.date) || 0));
-    let bal = safeNumber(accountsData?.[methodId]?.balance);
-    return acc.map(t => { 
-      const a = safeNumber(t.amount); 
-      bal += (t.subType === 'deposit') ? a : -a; 
-      return { ...t, runningBalance: bal }; 
-    }).reverse();
-  }, [transactions, accountsData]);
+const buildLedger = useCallback((methodId) => {
+  const cutoffDay = dayStart(getAccountCutoff(accountsData, methodId));
+  const acc = transactions
+    .filter(t => 
+      t.method === methodId && t.status === 'paid' 
+      && t.source !== 'carryover'
+      // ✅ استثناء مسحوبات هاني من سجل الكاش
+      && !(methodId === 'cash' && isHanyShopCategory(t.category))
+      && (parseISODate(t.date) || new Date(0)) >= cutoffDay
+    )
+    .sort((a, b) => (parseISODate(a.date) || 0) - (parseISODate(b.date) || 0));
+  let bal = safeNumber(accountsData?.[methodId]?.balance);
+  return acc.map(t => { 
+    const a = safeNumber(t.amount); 
+    bal += (t.subType === 'deposit') ? a : -a; 
+    return { ...t, runningBalance: bal }; 
+  }).reverse();
+}, [transactions, accountsData]);
 
   const getAgendaItems = useCallback(() => {
     try {
