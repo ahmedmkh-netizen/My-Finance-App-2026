@@ -1337,6 +1337,7 @@ const deletedTxArchive = Array.isArray(parsed.deletedTxArchive)
     accountsData,
     monthlyPlans: parsed.monthlyPlans && typeof parsed.monthlyPlans === 'object' ? parsed.monthlyPlans : {},
     materializedRecurring: parsed.materializedRecurring && typeof parsed.materializedRecurring === 'object' ? parsed.materializedRecurring : {},
+    materializedLoans: parsed.materializedLoans && typeof parsed.materializedLoans === 'object' ? parsed.materializedLoans : {},
     custodyEntries: Array.isArray(parsed.custodyEntries) ? parsed.custodyEntries : [],
     cashbackTrackers: Array.isArray(parsed.cashbackTrackers) ? parsed.cashbackTrackers : [],
     settledHanyMonths, 
@@ -1375,6 +1376,7 @@ const getInitialData = () => {
     closedMonths: [], 
     monthlySnapshots: {}, 
     materializedRecurring: {},
+    materializedLoans: {},
     custodyEntries: [], 
     cashbackTrackers: [],
     settledHanyMonths: [], 
@@ -1493,7 +1495,154 @@ const materializeRecurringItems = (data, asOfDateStr) => {
     materializedRecurring: materialized 
   };
 };
-
+  /* ✅ [V83.2] توليد أقساط القروض تلقائياً */
+useEffect(() => {
+  if (!isAuthenticated || !data?.loans?.length) return;
+  const today = getLocalISODate();
+  const loansSig = (data.loans || [])
+    .filter(l => !l.isReceivable && !l.autoMonthly && safeNumber(l.monthlyInstallment) > 0)
+    .map(l => `${l.id}:${l.startYear}-${l.startMonth}:${l.endYear || ''}-${l.endMonth || ''}:${l.monthlyInstallment}`)
+    .join('|');
+  const txCount = data.transactions?.length || 0;
+  const sig = `loan_${today}_${loansSig}_${txCount}`;
+  if (lastLoanMaterializeRef.current === sig) return;
+  lastLoanMaterializeRef.current = sig;
+  
+  let updated = materializeLoanInstallments(data, today);
+  if (updated) {
+    const permanentDeleted = new Set(data.deletedTxIds || []);
+    const filteredTx = updated.transactions.filter(t => !permanentDeleted.has(t.id));
+    if (filteredTx.length !== updated.transactions.length) {
+      updated = { ...updated, transactions: filteredTx };
+    }
+    const added = updated.transactions.length - (data.transactions?.length || 0);
+    dispatch({ type: 'SET_DATA', payload: updated });
+    setTimeout(() => queueCloudSave(updated, { silent: true }), 200);
+    
+    if (added > 0) {
+      addNotification({ 
+        type: 'info', 
+        title: 'تم توليد أقساط شهرية', 
+        message: `${added} قسط بانتظار الاعتماد`, 
+        duration: 5000 
+      });
+    }
+  }
+}, [isAuthenticated, data?.loans, data?.transactions?.length, addNotification, queueCloudSave]);
+/* ═══════════════════════════════════════════════════════════════
+   ✅ [V83.2] materializeLoanInstallments
+   توليد أقساط القروض تلقائياً كقيود pending في كل شهر
+   — يعطي المخطط رؤية كاملة للالتزامات القادمة
+   ═══════════════════════════════════════════════════════════════ */
+const materializeLoanInstallments = (data, asOfDateStr) => {
+  if (!data?.loans?.length) return null;
+  
+  const now = asOfDateStr ? new Date(asOfDateStr) : new Date();
+  const permanentDeleted = new Set(data.deletedTxIds || []);
+  const existing = (data.transactions || []).filter(t => !permanentDeleted.has(t.id));
+  const materialized = { ...(data.materializedLoans || {}) };
+  const newTxs = [];
+  
+  const nowYM = now.getFullYear() * 12 + now.getMonth();
+  const MAX_FUTURE = 12; /* نولّد فقط 12 شهر قادمة لتقليل الحمل */
+  
+  data.loans.forEach(loan => {
+    /* تجاهل: المستحقات لنا، autoMonthly (هاني)، أو بدون قسط */
+    if (loan.isReceivable || loan.autoMonthly) return;
+    if (safeNumber(loan.monthlyInstallment) <= 0) return;
+    if (!loan.startYear || !loan.startMonth) return;
+    
+    const startYM = safeNumber(loan.startYear) * 12 + getMonthIndex(loan.startMonth);
+    if (startYM < 0) return;
+    
+    let endYM;
+    if (loan.endYear && loan.endMonth) {
+      endYM = safeNumber(loan.endYear) * 12 + getMonthIndex(loan.endMonth);
+    } else {
+      endYM = startYM + 120; /* افتراضي: 10 سنوات */
+    }
+    
+    /* نحدّ النطاق: من startYM إلى min(endYM, nowYM + MAX_FUTURE) */
+    const finalEndYM = Math.min(endYM, nowYM + MAX_FUTURE);
+    const dueDay = safeNumber(loan.dueDay, 1);
+    
+    /* احسب عدد الأقساط المدفوعة فعلاً */
+    const paidAmount = existing
+      .filter(t => t.linkedLoanId === loan.id && t.status === 'paid')
+      .reduce((s, t) => s + safeNumber(t.amount), 0);
+    const totalInstallments = Math.ceil(safeNumber(loan.totalAmount) / safeNumber(loan.monthlyInstallment));
+    const paidCount = Math.floor(paidAmount / safeNumber(loan.monthlyInstallment));
+    
+    for (let ym = startYM; ym <= finalEndYM; ym++) {
+      const y = Math.floor(ym / 12);
+      const mIdx = ym % 12;
+      const monthName = ALL_MONTHS[mIdx];
+      
+      /* تحقق: هل تجاوزنا عدد الأقساط؟ */
+      if (paidCount >= totalInstallments) break;
+      
+      const matKey = `loan_${loan.id}_${makeMonthKey(y, monthName)}`;
+      if (materialized[matKey] === 'deleted') continue;
+      if (materialized[matKey]) continue;
+      
+      /* هل يوجد قسط معتمد لهذا الشهر؟ */
+      const monthPaidExists = existing.some(t =>
+        t.linkedLoanId === loan.id && t.month === monthName && 
+        (t.year || y) === y && t.status === 'paid'
+      );
+      if (monthPaidExists) { materialized[matKey] = true; continue; }
+      
+      /* هل يوجد قسط معلق لهذا الشهر؟ */
+      const monthPendingExists = existing.some(t =>
+        t.linkedLoanId === loan.id && t.month === monthName && 
+        (t.year || y) === y && t.status === 'pending'
+      );
+      if (monthPendingExists) { materialized[matKey] = true; continue; }
+      
+      const maxDayInMonth = new Date(y, mIdx + 1, 0).getDate();
+      const safeDay = Math.min(dueDay, maxDayInMonth);
+      const targetDate = new Date(y, mIdx, safeDay);
+      
+      /* لا نولّد في المستقبل البعيد — فقط حتى نهاية الشهر القادم */
+      const targetYM = y * 12 + mIdx;
+      if (targetYM > nowYM + 1) break;
+      
+      const newId = `loan-inst-${loan.id}-${makeMonthKey(y, monthName)}`;
+      if (permanentDeleted.has(newId)) { materialized[matKey] = 'deleted'; continue; }
+      
+      newTxs.push({
+        id: newId,
+        type: 'expense',
+        subType: 'withdrawal',
+        kind: KIND.FINANCIAL,
+        category: 'الالتزامات البنكية والتمويلية',
+        amount: safeNumber(loan.monthlyInstallment),
+        description: `قسط ${loan.name}`,
+        method: 'instapay',
+        date: getLocalISODate(targetDate),
+        month: monthName,
+        year: y,
+        monthIndex: mIdx,
+        status: 'pending',
+        linkedLoanId: loan.id,
+        sourceLoanId: loan.id,
+        generatedBy: 'materializeLoanInstallments',
+        createdAt: new Date().toISOString()
+      });
+      materialized[matKey] = true;
+    }
+  });
+  
+  if (newTxs.length === 0) return null;
+  
+  return {
+    ...data,
+    transactions: [...newTxs, ...existing].sort((a, b) => 
+      (parseISODate(b.date) || 0) - (parseISODate(a.date) || 0)
+    ),
+    materializedLoans: materialized
+  };
+};
 /* ═══════════════════════════════════════════════════════════════
    dedupeRecurringTransactions
    ═══════════════════════════════════════════════════════════════ */
@@ -7535,6 +7684,7 @@ function App() {
   const saveLockRef = useRef(false);
   const lastRemoteRef = useRef(null);
   const lastMaterializeRef = useRef('');
+  const lastLoanMaterializeRef = useRef('');
   const isSavingRef = useRef(false);
   const hasReceivedInitialSnapshot = useRef(false);
   const initialSnapshotTimeoutRef = useRef(null);
