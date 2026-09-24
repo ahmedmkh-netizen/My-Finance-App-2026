@@ -1531,8 +1531,8 @@ useEffect(() => {
 }, [isAuthenticated, data?.loans, data?.transactions?.length, addNotification, queueCloudSave]);
 /* ═══════════════════════════════════════════════════════════════
    ✅ [V83.2] materializeLoanInstallments
-   توليد أقساط القروض تلقائياً كقيود pending في كل شهر
-   — يعطي المخطط رؤية كاملة للالتزامات القادمة
+   توليد أقساط القروض تلقائياً كقيود pending
+   — يعطي المخطط والتنبؤ رؤية كاملة للالتزامات القادمة
    ═══════════════════════════════════════════════════════════════ */
 const materializeLoanInstallments = (data, asOfDateStr) => {
   if (!data?.loans?.length) return null;
@@ -1544,70 +1544,67 @@ const materializeLoanInstallments = (data, asOfDateStr) => {
   const newTxs = [];
   
   const nowYM = now.getFullYear() * 12 + now.getMonth();
-  const MAX_FUTURE = 12; /* نولّد فقط 12 شهر قادمة لتقليل الحمل */
+  const MAX_MONTHS_AHEAD = 24; /* نطاق أقصى: 24 شهر */
   
   data.loans.forEach(loan => {
-    /* تجاهل: المستحقات لنا، autoMonthly (هاني)، أو بدون قسط */
+    /* تجاهل: مستحقات لنا، هاني، بدون قسط */
     if (loan.isReceivable || loan.autoMonthly) return;
     if (safeNumber(loan.monthlyInstallment) <= 0) return;
-    if (!loan.startYear || !loan.startMonth) return;
     
-    const startYM = safeNumber(loan.startYear) * 12 + getMonthIndex(loan.startMonth);
+    /* تحديد نطاق التواريخ */
+    let startYM;
+    if (loan.startYear && loan.startMonth) {
+      startYM = safeNumber(loan.startYear) * 12 + getMonthIndex(loan.startMonth);
+    } else {
+      startYM = nowYM; /* fallback */
+    }
     if (startYM < 0) return;
     
     let endYM;
     if (loan.endYear && loan.endMonth) {
       endYM = safeNumber(loan.endYear) * 12 + getMonthIndex(loan.endMonth);
     } else {
-      endYM = startYM + 120; /* افتراضي: 10 سنوات */
+      const remainingInstallments = Math.ceil(safeNumber(loan.totalAmount) / safeNumber(loan.monthlyInstallment));
+      endYM = startYM + remainingInstallments - 1;
     }
+    if (endYM < startYM) endYM = startYM;
     
-    /* نحدّ النطاق: من startYM إلى min(endYM, nowYM + MAX_FUTURE) */
-    const finalEndYM = Math.min(endYM, nowYM + MAX_FUTURE);
+    /* تحديد نطاق التوليد — الأقصى: 24 شهر قادم */
+    const maxYM = Math.min(endYM, nowYM + MAX_MONTHS_AHEAD);
+    
     const dueDay = safeNumber(loan.dueDay, 1);
     
-    /* احسب عدد الأقساط المدفوعة فعلاً */
-    const paidAmount = existing
-      .filter(t => t.linkedLoanId === loan.id && t.status === 'paid')
-      .reduce((s, t) => s + safeNumber(t.amount), 0);
-    const totalInstallments = Math.ceil(safeNumber(loan.totalAmount) / safeNumber(loan.monthlyInstallment));
-    const paidCount = Math.floor(paidAmount / safeNumber(loan.monthlyInstallment));
+    /* الأقساط المدفوعة فعلاً */
+    const paidTxs = existing.filter(t => 
+      (t.linkedLoanId === loan.id || t.sourceLoanId === loan.id) && t.status === 'paid'
+    );
     
-    for (let ym = startYM; ym <= finalEndYM; ym++) {
+    for (let ym = startYM; ym <= maxYM; ym++) {
       const y = Math.floor(ym / 12);
       const mIdx = ym % 12;
       const monthName = ALL_MONTHS[mIdx];
+      const monthKey = makeMonthKey(y, monthName);
+      const matKey = `loan_${loan.id}_${monthKey}`;
       
-      /* تحقق: هل تجاوزنا عدد الأقساط؟ */
-      if (paidCount >= totalInstallments) break;
-      
-      const matKey = `loan_${loan.id}_${makeMonthKey(y, monthName)}`;
       if (materialized[matKey] === 'deleted') continue;
       if (materialized[matKey]) continue;
       
-      /* هل يوجد قسط معتمد لهذا الشهر؟ */
-      const monthPaidExists = existing.some(t =>
-        t.linkedLoanId === loan.id && t.month === monthName && 
-        (t.year || y) === y && t.status === 'paid'
-      );
-      if (monthPaidExists) { materialized[matKey] = true; continue; }
+      /* تحقق: قسط paid لهذا الشهر موجود؟ */
+      const paidExists = paidTxs.some(t => t.month === monthName && (t.year || y) === y);
+      if (paidExists) { materialized[matKey] = true; continue; }
       
-      /* هل يوجد قسط معلق لهذا الشهر؟ */
-      const monthPendingExists = existing.some(t =>
-        t.linkedLoanId === loan.id && t.month === monthName && 
-        (t.year || y) === y && t.status === 'pending'
+      /* تحقق: قسط pending لهذا الشهر موجود؟ */
+      const pendingExists = existing.some(t =>
+        (t.linkedLoanId === loan.id || t.sourceLoanId === loan.id) &&
+        t.month === monthName && (t.year || y) === y && t.status === 'pending'
       );
-      if (monthPendingExists) { materialized[matKey] = true; continue; }
+      if (pendingExists) { materialized[matKey] = true; continue; }
       
       const maxDayInMonth = new Date(y, mIdx + 1, 0).getDate();
       const safeDay = Math.min(dueDay, maxDayInMonth);
       const targetDate = new Date(y, mIdx, safeDay);
       
-      /* لا نولّد في المستقبل البعيد — فقط حتى نهاية الشهر القادم */
-      const targetYM = y * 12 + mIdx;
-      if (targetYM > nowYM + 1) break;
-      
-      const newId = `loan-inst-${loan.id}-${makeMonthKey(y, monthName)}`;
+      const newId = `loan-inst-${loan.id}-${monthKey}`;
       if (permanentDeleted.has(newId)) { materialized[matKey] = 'deleted'; continue; }
       
       newTxs.push({
@@ -1617,7 +1614,7 @@ const materializeLoanInstallments = (data, asOfDateStr) => {
         kind: KIND.FINANCIAL,
         category: 'الالتزامات البنكية والتمويلية',
         amount: safeNumber(loan.monthlyInstallment),
-        description: `قسط ${loan.name}`,
+        description: `قسط ${loan.name} — ${monthName} ${y}`,
         method: 'instapay',
         date: getLocalISODate(targetDate),
         month: monthName,
@@ -5034,8 +5031,14 @@ const LoansView = memo(({
 }) => {
   const [showAdd, setShowAdd] = useState(false);
   const [activeTab, setActiveTab] = useState('loans');
-  const [newLoan, setNewLoan] = useState({ name: '', totalAmount: '', monthlyInstallment: '', dueDay: 1, description: '', isReceivable: false });
-  const settlingRef = useRef(false);
+const [newLoan, setNewLoan] = useState({ 
+  name: '', totalAmount: '', monthlyInstallment: '', dueDay: 1, description: '', isReceivable: false,
+  startYear: new Date().getFullYear(),
+  startMonth: ALL_MONTHS[new Date().getMonth()],
+  endYear: '',
+  endMonth: '',
+});
+    const settlingRef = useRef(false);
 
   const openRecurringEdit = useCallback((item) => {
     dispatch({ 
@@ -5162,25 +5165,55 @@ const LoansView = memo(({
   const totalCards = useMemo(() => cards.reduce((acc, c) => acc + Math.max(0, computeCardDebt(data, c)), 0), [cards, data]);
   const custodySummary = useMemo(() => computeCustodyBalance(data?.custodyEntries), [data?.custodyEntries]);
 
-  const addLoan = () => {
-    const nameCheck = validateText(newLoan.name, { min: 2, max: 200, label: 'الاسم' });
-    if (!nameCheck.valid) { addNotification({ type: 'error', title: 'خطأ', message: nameCheck.error }); return; }
-    const amountCheck = validateAmount(newLoan.totalAmount, { min: 0.01, max: 10000000, label: 'المبلغ' });
-    if (!amountCheck.valid) { addNotification({ type: 'error', title: 'خطأ', message: amountCheck.error }); return; }
-    saveHistory();
-    dispatch({ 
-      type: 'UPDATE_LOANS', 
-      payload: [...updatedLoans, { 
-        id: Date.now(), name: nameCheck.value, totalAmount: amountCheck.value, prePaidAmount: 0, 
-        monthlyInstallment: safeNumber(newLoan.monthlyInstallment), dueDay: safeNumber(newLoan.dueDay, 1), 
-        interest: '', description: newLoan.description || '', 
-        type: newLoan.isReceivable ? 'receivable' : 'debt', isReceivable: newLoan.isReceivable, paused: false 
-      }] 
-    });
-    setShowAdd(false); 
-    setNewLoan({ name: '', totalAmount: '', monthlyInstallment: '', dueDay: 1, description: '', isReceivable: false });
-    addNotification({ type: 'success', title: 'تمت الإضافة' });
-  };
+const addLoan = () => {
+  const nameCheck = validateText(newLoan.name, { min: 2, max: 200, label: 'الاسم' });
+  if (!nameCheck.valid) { addNotification({ type: 'error', title: 'خطأ', message: nameCheck.error }); return; }
+  const amountCheck = validateAmount(newLoan.totalAmount, { min: 0.01, max: 10000000, label: 'المبلغ' });
+  if (!amountCheck.valid) { addNotification({ type: 'error', title: 'خطأ', message: amountCheck.error }); return; }
+  
+  /* ✅ [V83.2] التحقق من التواريخ */
+  const hasEnd = newLoan.endYear && newLoan.endMonth;
+  if (hasEnd) {
+    const startYM = safeNumber(newLoan.startYear) * 12 + getMonthIndex(newLoan.startMonth);
+    const endYM = safeNumber(newLoan.endYear) * 12 + getMonthIndex(newLoan.endMonth);
+    if (endYM < startYM) {
+      addNotification({ type: 'error', title: 'خطأ', message: 'تاريخ النهاية قبل البداية' });
+      return;
+    }
+  }
+  
+  saveHistory();
+  dispatch({ 
+    type: 'UPDATE_LOANS', 
+    payload: [...updatedLoans, { 
+      id: Date.now(), 
+      name: nameCheck.value, 
+      totalAmount: amountCheck.value, 
+      prePaidAmount: 0, 
+      monthlyInstallment: safeNumber(newLoan.monthlyInstallment), 
+      dueDay: safeNumber(newLoan.dueDay, 1), 
+      interest: '', 
+      description: newLoan.description || '', 
+      type: newLoan.isReceivable ? 'receivable' : 'debt', 
+      isReceivable: newLoan.isReceivable, 
+      paused: false,
+      /* ✅ حقول التواريخ الجديدة */
+      startYear: safeNumber(newLoan.startYear) || new Date().getFullYear(),
+      startMonth: newLoan.startMonth || ALL_MONTHS[new Date().getMonth()],
+      endYear: hasEnd ? safeNumber(newLoan.endYear) : undefined,
+      endMonth: hasEnd ? newLoan.endMonth : undefined,
+    }] 
+  });
+  setShowAdd(false); 
+  setNewLoan({ 
+    name: '', totalAmount: '', monthlyInstallment: '', dueDay: 1, description: '', isReceivable: false,
+    startYear: new Date().getFullYear(),
+    startMonth: ALL_MONTHS[new Date().getMonth()],
+    endYear: '',
+    endMonth: '',
+  });
+  addNotification({ type: 'success', title: 'تمت الإضافة' });
+};
 
   const handleCollectReceivable = (loan, sourceTx) => {
     const d = new Date();
@@ -5277,31 +5310,86 @@ const LoansView = memo(({
             </div>
           </div>
 
-          {showAdd && (
-            <Modal isOpen={true} onClose={() => setShowAdd(false)} title="التزام جديد" icon="📋">
-              <div className="space-y-3">
-                <div>
-                  <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>الاسم *</label>
-                  <input className="input-field text-sm" value={newLoan.name} onChange={e => setNewLoan({ ...newLoan, name: e.target.value })} />
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>المبلغ *</label>
-                    <input type="text" inputMode="decimal" className="input-field text-sm" value={newLoan.totalAmount} onChange={e => setNewLoan({ ...newLoan, totalAmount: e.target.value })} />
-                  </div>
-                  <div>
-                    <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>القسط</label>
-                    <input type="text" inputMode="decimal" className="input-field text-sm" value={newLoan.monthlyInstallment} onChange={e => setNewLoan({ ...newLoan, monthlyInstallment: e.target.value })} />
-                  </div>
-                </div>
-                <label className="flex items-center gap-3 p-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 cursor-pointer">
-                  <input type="checkbox" checked={newLoan.isReceivable} onChange={e => setNewLoan({ ...newLoan, isReceivable: e.target.checked })} className="w-4 h-4 accent-emerald-600" />
-                  <span className="text-xs font-bold text-emerald-700 dark:text-emerald-400">مستحق لي</span>
-                </label>
-                <button onClick={addLoan} className="btn btn-primary w-full py-2.5 text-sm">إضافة</button>
-              </div>
-            </Modal>
-          )}
+{showAdd && (
+  <Modal isOpen={true} onClose={() => setShowAdd(false)} title="التزام جديد" icon="📋">
+    <div className="space-y-3">
+      <div>
+        <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>الاسم *</label>
+        <input className="input-field text-sm" placeholder="قرض عقاري - شقة العبور" value={newLoan.name} onChange={e => setNewLoan({ ...newLoan, name: e.target.value })} />
+      </div>
+      
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>المبلغ الكلي *</label>
+          <input type="text" inputMode="decimal" className="input-field text-sm text-center font-black" style={{ color: 'var(--brand)' }} placeholder="30588.06" value={newLoan.totalAmount} onChange={e => setNewLoan({ ...newLoan, totalAmount: e.target.value })} />
+        </div>
+        <div>
+          <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>القسط الشهري</label>
+          <input type="text" inputMode="decimal" className="input-field text-sm text-center font-black" style={{ color: 'var(--brand)' }} placeholder="5098.01" value={newLoan.monthlyInstallment} onChange={e => setNewLoan({ ...newLoan, monthlyInstallment: e.target.value })} />
+        </div>
+      </div>
+      
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>يوم الاستحقاق</label>
+          <input type="number" min="1" max="31" className="input-field text-sm text-center" value={newLoan.dueDay} onChange={e => setNewLoan({ ...newLoan, dueDay: e.target.value })} />
+        </div>
+        <div>
+          <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>الوصف (اختياري)</label>
+          <input type="text" className="input-field text-sm" placeholder="6 أقساط متبقية" value={newLoan.description} onChange={e => setNewLoan({ ...newLoan, description: e.target.value })} />
+        </div>
+      </div>
+      
+      {/* ✅ [V83.2] فترة القرض */}
+      <div className="p-3 rounded-lg" style={{ background: 'var(--bg-muted)' }}>
+        <p className="text-[11px] font-black mb-2" style={{ color: 'var(--text-secondary)' }}>📅 فترة الالتزام</p>
+        
+        <div className="grid grid-cols-2 gap-3 mb-2">
+          <div>
+            <label className="text-[10px] font-bold block mb-1" style={{ color: 'var(--text-muted)' }}>شهر البداية</label>
+            <select className="input-field text-xs py-2" value={newLoan.startMonth} onChange={e => setNewLoan({ ...newLoan, startMonth: e.target.value })}>
+              {ALL_MONTHS.map(m => <option key={m} value={m}>{m}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-[10px] font-bold block mb-1" style={{ color: 'var(--text-muted)' }}>سنة البداية</label>
+            <select className="input-field text-xs py-2" value={newLoan.startYear} onChange={e => setNewLoan({ ...newLoan, startYear: e.target.value })}>
+              {YEARS_LIST.map(y => <option key={y} value={y}>{y}</option>)}
+            </select>
+          </div>
+        </div>
+        
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="text-[10px] font-bold block mb-1" style={{ color: 'var(--text-muted)' }}>شهر النهاية</label>
+            <select className="input-field text-xs py-2" value={newLoan.endMonth || ''} onChange={e => setNewLoan({ ...newLoan, endMonth: e.target.value })}>
+              <option value="">— مفتوح —</option>
+              {ALL_MONTHS.map(m => <option key={m} value={m}>{m}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-[10px] font-bold block mb-1" style={{ color: 'var(--text-muted)' }}>سنة النهاية</label>
+            <select className="input-field text-xs py-2" value={newLoan.endYear || ''} onChange={e => setNewLoan({ ...newLoan, endYear: e.target.value })}>
+              <option value="">—</option>
+              {YEARS_LIST.map(y => <option key={y} value={y}>{y}</option>)}
+            </select>
+          </div>
+        </div>
+        
+        <p className="text-[9px] mt-2 leading-relaxed" style={{ color: 'var(--text-muted)' }}>
+          💡 سيتم توليد قسط شهري تلقائياً في كل شهر من هذه الفترة (كمعاملات معلقة).
+        </p>
+      </div>
+      
+      <label className="flex items-center gap-3 p-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 cursor-pointer">
+        <input type="checkbox" checked={newLoan.isReceivable} onChange={e => setNewLoan({ ...newLoan, isReceivable: e.target.checked })} className="w-4 h-4 accent-emerald-600" />
+        <span className="text-xs font-bold text-emerald-700 dark:text-emerald-400">مستحق لي (لنا)</span>
+      </label>
+      
+      <button onClick={addLoan} className="btn btn-primary w-full py-2.5 text-sm"><Plus size={14} /> إضافة</button>
+    </div>
+  </Modal>
+)}
 
           {!hasLoans && !hasRecurring && (
             <div className="card text-center p-12">
@@ -7986,6 +8074,40 @@ function App() {
       }
     }
   }, [isAuthenticated, data?.recurringItems, data?.transactions?.length, data?.loans, addNotification, queueCloudSave]);
+  /* ✅ [V83.2] توليد أقساط القروض تلقائياً */
+useEffect(() => {
+  if (!isAuthenticated || !data?.loans?.length) return;
+  const today = getLocalISODate();
+  const loansSig = (data.loans || [])
+    .filter(l => !l.isReceivable && !l.autoMonthly && safeNumber(l.monthlyInstallment) > 0)
+    .map(l => `${l.id}:${l.startYear}-${l.startMonth}:${l.endYear || ''}-${l.endMonth || ''}:${l.monthlyInstallment}`)
+    .join('|');
+  const paidCount = (data.transactions || []).filter(t => t.linkedLoanId && t.status === 'paid').length;
+  const sig = `loan_${today}_${loansSig}_${paidCount}`;
+  if (lastLoanMaterializeRef.current === sig) return;
+  lastLoanMaterializeRef.current = sig;
+  
+  let updated = materializeLoanInstallments(data, today);
+  if (updated) {
+    const permanentDeleted = new Set(data.deletedTxIds || []);
+    const filteredTx = updated.transactions.filter(t => !permanentDeleted.has(t.id));
+    if (filteredTx.length !== updated.transactions.length) {
+      updated = { ...updated, transactions: filteredTx };
+    }
+    const added = updated.transactions.length - (data.transactions?.length || 0);
+    dispatch({ type: 'SET_DATA', payload: updated });
+    setTimeout(() => queueCloudSave(updated, { silent: true }), 200);
+    
+    if (added > 0) {
+      addNotification({ 
+        type: 'info', 
+        title: 'تم توليد أقساط قروض', 
+        message: `${added} قسط جديد بانتظار الاعتماد`, 
+        duration: 5000 
+      });
+    }
+  }
+}, [isAuthenticated, data?.loans, data?.transactions?.length, addNotification, queueCloudSave]);
 
   /* Retry Firestore connection */
   useEffect(() => {
