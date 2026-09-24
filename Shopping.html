@@ -1315,10 +1315,12 @@ const migrateData = (parsed) => {
 const settledHanyMonths = Array.isArray(parsed.settledHanyMonths) ? parsed.settledHanyMonths : [];
 const deletedTxIds = Array.isArray(parsed.deletedTxIds) ? parsed.deletedTxIds.slice(-500) : [];
 
-/* ✅ لا نعيد توليد سجلات _legacy من IDs فقط — احذفها نهائياً */
+/* ✅ [إصلاح V83.2] — لا نولّد سجلات _legacy من IDs
+   السبب: كان يولّد سجل وهمي بعد كل حذف
+   الحل: نحتفظ فقط بالسجلات الحقيقية (التي لها بيانات كاملة) */
 const deletedTxArchive = Array.isArray(parsed.deletedTxArchive) 
   ? parsed.deletedTxArchive.filter(a => !a._legacy).slice(-500) 
-  : [];
+    : [];
 
   const { openingBalance2026: _drop, ...rest } = parsed;
   
