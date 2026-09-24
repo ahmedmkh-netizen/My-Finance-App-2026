@@ -1312,18 +1312,13 @@ const migrateData = (parsed) => {
     return m ? { ...r, method: m } : { ...r, method: 'cash' };
   });
 
-  const settledHanyMonths = Array.isArray(parsed.settledHanyMonths) ? parsed.settledHanyMonths : [];
-  const deletedTxIds = Array.isArray(parsed.deletedTxIds) ? parsed.deletedTxIds.slice(-500) : [];
+const settledHanyMonths = Array.isArray(parsed.settledHanyMonths) ? parsed.settledHanyMonths : [];
+const deletedTxIds = Array.isArray(parsed.deletedTxIds) ? parsed.deletedTxIds.slice(-500) : [];
 
-  const existingArchive = Array.isArray(parsed.deletedTxArchive) ? parsed.deletedTxArchive : [];
-  const archiveIds = new Set(existingArchive.map(a => a.id).filter(Boolean));
-  const migratedArchive = [...existingArchive];
-  deletedTxIds.forEach(id => {
-    if (!archiveIds.has(id)) {
-      migratedArchive.push({ id, deletedAt: null, deletedBy: 'unknown', _legacy: true });
-    }
-  });
-  const deletedTxArchive = migratedArchive.slice(-500);
+/* ✅ لا نعيد توليد سجلات _legacy من IDs فقط — احذفها نهائياً */
+const deletedTxArchive = Array.isArray(parsed.deletedTxArchive) 
+  ? parsed.deletedTxArchive.filter(a => !a._legacy).slice(-500) 
+  : [];
 
   const { openingBalance2026: _drop, ...rest } = parsed;
   
