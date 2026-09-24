@@ -4594,7 +4594,7 @@ const HanyShopLedger = memo(({ loan, prevMonthLoan, addNotification }) => {
   const [exporting, setExporting] = useState(false);
   const [sortBy, setSortBy] = useState('date');
   const containerRef = useRef(null);
-    // 🔹 الدفعات المرتبطة بهذا الشهر
+
   const payments = useMemo(() => {
     const arr = Array.isArray(loan.payments) ? loan.payments : [];
     return arr.slice().sort((a, b) => (parseISODate(b.date) || 0) - (parseISODate(a.date) || 0));
@@ -4609,7 +4609,6 @@ const HanyShopLedger = memo(({ loan, prevMonthLoan, addNotification }) => {
   }, [loan.items]);
 
   const paidItems = useMemo(() => items.filter(i => i.status === 'paid'), [items]);
-  const totalPaidAmount = paidItems.reduce((s, i) => s + safeNumber(i.amount), 0);
   const totalAllAmount = items.reduce((s, i) => s + safeNumber(i.amount), 0);
 
   const filteredItems = useMemo(() => {
@@ -4688,10 +4687,7 @@ const HanyShopLedger = memo(({ loan, prevMonthLoan, addNotification }) => {
         pagebreak: { mode: ['avoid-all', 'css', 'legacy'] } 
       };
       await window.html2pdf().set(opt).from(element).save();
-      savedStyles.forEach(({ el, maxHeight, overflow }) => { 
-        el.style.maxHeight = maxHeight; 
-        el.style.overflow = overflow; 
-      });
+      savedStyles.forEach(({ el, maxHeight, overflow }) => { el.style.maxHeight = maxHeight; el.style.overflow = overflow; });
       hiddenSaved.forEach(({ el, disp }) => { el.style.display = disp; });
       addNotification({ type: 'success', title: 'تم تصدير PDF', message: `${filteredItems.length} معاملة — ${fmt(totalFiltered)} ج.م` });
     } catch (e) {
@@ -4719,9 +4715,12 @@ const HanyShopLedger = memo(({ loan, prevMonthLoan, addNotification }) => {
           {items.length > paidItems.length && (
             <span className="badge badge-warning text-[9px]">{items.length - paidItems.length} معلق</span>
           )}
+          {payments.length > 0 && (
+            <span className="badge badge-success text-[9px]">💵 {payments.length} دفعة</span>
+          )}
           {comparison && comparison.direction !== 'same' && (
             <span className={`badge text-[9px] ${comparison.direction === 'up' ? 'badge-danger' : 'badge-success'}`}>
-              {comparison.direction === 'up' ? '↑' : '↓'} {Math.abs(Math.round(comparison.change))}% عن الشهر السابق
+              {comparison.direction === 'up' ? '↑' : '↓'} {Math.abs(Math.round(comparison.change))}%
             </span>
           )}
         </div>
@@ -4774,6 +4773,53 @@ const HanyShopLedger = memo(({ loan, prevMonthLoan, addNotification }) => {
             </button>
           </div>
 
+          <div className="p-3 rounded-lg grid grid-cols-3 gap-2 text-center" style={{ background: 'var(--bg-muted)' }}>
+            <div>
+              <p className="text-[9px] font-bold mb-0.5" style={{ color: 'var(--text-muted)' }}>🛒 المشتريات</p>
+              <p className="text-[13px] font-black text-red-600">{fmt(totalAllAmount)}</p>
+            </div>
+            <div>
+              <p className="text-[9px] font-bold mb-0.5" style={{ color: 'var(--text-muted)' }}>💵 المدفوع</p>
+              <p className="text-[13px] font-black text-emerald-600">{fmt(totalPayments)}</p>
+            </div>
+            <div>
+              <p className="text-[9px] font-bold mb-0.5" style={{ color: 'var(--text-muted)' }}>⏳ المتبقي</p>
+              <p className={`text-[13px] font-black ${remainingAfterPayments > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                {fmt(remainingAfterPayments)}
+              </p>
+            </div>
+          </div>
+
+          {payments.length > 0 && (
+            <div className="p-2.5 rounded-lg" style={{ background: 'rgba(16, 185, 129, 0.08)' }}>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-[10px] font-black text-emerald-700 dark:text-emerald-400">
+                  💵 الدفعات المسجلة ({payments.length})
+                </p>
+                <span className="text-[10px] font-black text-emerald-600">
+                  إجمالي: {fmt(totalPayments)} ج.م
+                </span>
+              </div>
+              <div className="space-y-1 max-h-40 overflow-y-auto scroll-hide">
+                {payments.map(p => (
+                  <div 
+                    key={p.id} 
+                    className="flex justify-between items-center gap-2 p-2 rounded-lg text-[10px]" 
+                    style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)' }}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="font-bold truncate">{p.description || 'سداد مسحوبات هاني'}</p>
+                      <p className="text-[9px] font-semibold mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                        {p.date} • {PAYMENT_METHODS.find(m => m.id === p.method)?.label || p.method || 'cash'}
+                      </p>
+                    </div>
+                    <span className="font-black text-emerald-600 flex-shrink-0">−{fmt(p.amount)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {comparison && (
             <div className="p-2.5 rounded-lg grid grid-cols-3 gap-2 text-center" style={{ background: 'var(--bg-muted)' }}>
               <div>
@@ -4810,54 +4856,6 @@ const HanyShopLedger = memo(({ loan, prevMonthLoan, addNotification }) => {
             </div>
           )}
 
-          {/* 🔹 ملخص الرصيد — مشتريات/مدفوع/متبقي */}
-<div className="p-3 rounded-lg grid grid-cols-3 gap-2 text-center" style={{ background: 'var(--bg-muted)' }}>
-  <div>
-    <p className="text-[9px] font-bold mb-0.5" style={{ color: 'var(--text-muted)' }}>🛒 المشتريات</p>
-    <p className="text-[13px] font-black text-red-600">{fmt(loan.totalAmount)}</p>
-  </div>
-  <div>
-    <p className="text-[9px] font-bold mb-0.5" style={{ color: 'var(--text-muted)' }}>💵 المدفوع</p>
-    <p className="text-[13px] font-black text-emerald-600">{fmt(totalPayments)}</p>
-  </div>
-  <div>
-    <p className="text-[9px] font-bold mb-0.5" style={{ color: 'var(--text-muted)' }}>⏳ المتبقي</p>
-    <p className={`text-[13px] font-black ${remainingAfterPayments > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
-      {fmt(remainingAfterPayments)}
-    </p>
-  </div>
-</div>
-
-{/* 🔹 قائمة الدفعات */}
-{payments.length > 0 && (
-  <div className="p-2.5 rounded-lg" style={{ background: 'rgba(16, 185, 129, 0.08)' }}>
-    <div className="flex items-center justify-between mb-2">
-      <p className="text-[10px] font-black text-emerald-700 dark:text-emerald-400">
-        💵 الدفعات المسجلة ({payments.length})
-      </p>
-      <span className="text-[10px] font-black text-emerald-600">
-        إجمالي: {fmt(totalPayments)} ج.م
-      </span>
-    </div>
-    <div className="space-y-1 max-h-40 overflow-y-auto scroll-hide">
-      {payments.map(p => (
-        <div 
-          key={p.id} 
-          className="flex justify-between items-center gap-2 p-2 rounded-lg text-[10px]" 
-          style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)' }}
-        >
-          <div className="min-w-0 flex-1">
-            <p className="font-bold truncate">{p.description || 'سداد مسحوبات هاني'}</p>
-            <p className="text-[9px] font-semibold mt-0.5" style={{ color: 'var(--text-muted)' }}>
-              {p.date} • {PAYMENT_METHODS.find(m => m.id === p.method)?.label || p.method || 'cash'}
-            </p>
-          </div>
-          <span className="font-black text-emerald-600 flex-shrink-0">−{fmt(p.amount)}</span>
-        </div>
-      ))}
-    </div>
-  </div>
-)}
           {filteredItems.length === 0 ? (
             <div className="text-center py-6 text-[11px] font-semibold" style={{ color: 'var(--text-muted)' }}>
               {searchTerm ? '🔍 لا توجد نتائج للبحث' : 'لا توجد مسحوبات معتمدة'}
@@ -4898,13 +4896,13 @@ const HanyShopLedger = memo(({ loan, prevMonthLoan, addNotification }) => {
             </span>
             <span className="font-black text-red-600 text-[13px]">{fmt(totalFiltered)}</span>
           </div>
-          
+
           {items.length > paidItems.length && (
             <div className="flex justify-between items-center p-2 rounded-lg" style={{ background: 'rgba(217, 119, 6, 0.08)' }}>
               <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400">
                 ⏳ معلق ({items.length - paidItems.length})
               </span>
-              <span className="font-black text-amber-600 text-[12px]">{fmt(totalAllAmount - totalPaidAmount)}</span>
+              <span className="font-black text-amber-600 text-[12px]">{fmt(totalAllAmount - totalFiltered)}</span>
             </div>
           )}
 
@@ -4916,7 +4914,6 @@ const HanyShopLedger = memo(({ loan, prevMonthLoan, addNotification }) => {
     </div>
   );
 });
-
 /* ─────────────── Card Statement Modal ─────────────── */
 const CardStatementModal = memo(({ card, data, transactions, onClose, addNotification }) => {
   const [filterType, setFilterType] = useState('all');
