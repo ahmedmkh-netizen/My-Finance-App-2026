@@ -9166,6 +9166,251 @@ const AiAssistantView = memo(({ data, transactions, cards, updatedLoans, selecte
     </div>
   );
 });
+  
+/* ═══════════════════════════════════════════════════════════════
+   PART 6 — dataReducer + Modals
+   ═══════════════════════════════════════════════════════════════ */
+
+const initialReducerState = {
+  data: getInitialData(),
+  budgets: (() => {
+    try {
+      const saved = localStorage.getItem('finance_budgets_V83');
+      return saved ? safeParseJson(saved, {}) : {};
+    } catch { return {}; }
+  })(),
+  selectedYear: getDefaultMonthYear().year,
+  selectedMonth: getDefaultMonthYear().month,
+  activeTab: 'dashboard',
+  isFormOpen: false,
+  formMode: 'add',
+  formData: {},
+  editingCard: null,
+  editingLoan: null,
+  editingBudgetCategory: null,
+  budgetAmount: '',
+  viewingCardStatement: null,
+  activeCategoryDetail: null,
+  pendingCloseModal: { isOpen: false, pending: [], total: 0, month: '', year: 0 },
+  recurringModalOpen: false,
+  recurringFormData: {},
+  pinChangeOpen: false,
+  smsModalOpen: false,
+  quickTransferModalOpen: false,
+  confirmDialog: { isOpen: false, title: '', message: '', danger: false, onConfirm: null, onCancel: null },
+  expandedLedgers: { cash: false, fawry: false, etisalat: false, cib_savings: false, aaib_savings: false },
+  expandedCardsSection: false,
+  expandedGroup: null,
+  transViewMode: 'all',
+  statusFilter: 'all',
+  searchTerm: '',
+  catViewType: 'expense',
+  walletVisibility: (() => {
+    try {
+      const saved = localStorage.getItem('wallet_visibility_v83');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return { cib_savings: true, aaib_savings: true, cash: true, fawry: true, etisalat: true };
+  })(),
+  isDarkMode: (() => {
+    try {
+      const saved = localStorage.getItem('theme');
+      if (saved) return saved === 'dark';
+      return window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false;
+    } catch { return false; }
+  })(),
+  liquidityMode: (() => {
+    try { return localStorage.getItem('liquidity_mode') || DEFAULT_LIQUIDITY_MODE; }
+    catch { return DEFAULT_LIQUIDITY_MODE; }
+  })(),
+};
+
+const dataReducer = (state, action) => {
+  switch (action.type) {
+    case 'SET_DATA': {
+      const next = action.payload;
+      if (!next || typeof next !== 'object') return state;
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); } catch (e) {}
+      return { ...state, data: next };
+    }
+    case 'SET_BUDGETS': {
+      const next = action.payload || {};
+      try { localStorage.setItem('finance_budgets_V83', JSON.stringify(next)); } catch (e) {}
+      return { ...state, budgets: next };
+    }
+    case 'UPDATE_TRANSACTIONS': {
+      const transactions = Array.isArray(action.payload) ? action.payload : state.data.transactions;
+      const next = { ...state.data, transactions };
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); } catch (e) {}
+      return { ...state, data: next };
+    }
+    case 'UPDATE_LOANS': {
+      const loans = Array.isArray(action.payload) ? action.payload : state.data.loans;
+      const next = { ...state.data, loans };
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); } catch (e) {}
+      return { ...state, data: next };
+    }
+    case 'UPDATE_CARDS': {
+      const cards = Array.isArray(action.payload) ? action.payload : state.data.cards;
+      const next = { ...state.data, cards };
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); } catch (e) {}
+      return { ...state, data: next };
+    }
+    case 'UPDATE_ACCOUNTS': {
+      const accountsData = action.payload && typeof action.payload === 'object' ? action.payload : state.data.accountsData;
+      const next = { ...state.data, accountsData };
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); } catch (e) {}
+      return { ...state, data: next };
+    }
+    case 'UPDATE_RECURRING_ITEMS': {
+      const recurringItems = Array.isArray(action.payload) ? action.payload : state.data.recurringItems;
+      const next = { ...state.data, recurringItems };
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); } catch (e) {}
+      return { ...state, data: next };
+    }
+    case 'UPDATE_CASHBACK_TRACKERS': {
+      const cashbackTrackers = Array.isArray(action.payload) ? action.payload : state.data.cashbackTrackers;
+      const next = { ...state.data, cashbackTrackers };
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); } catch (e) {}
+      return { ...state, data: next };
+    }
+    case 'UPDATE_MONTHLY_PLANS': {
+      const monthlyPlans = action.payload && typeof action.payload === 'object' ? action.payload : state.data.monthlyPlans;
+      const next = { ...state.data, monthlyPlans };
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); } catch (e) {}
+      return { ...state, data: next };
+    }
+    case 'CLOSE_MONTH': {
+      const { year, month } = action.payload || {};
+      if (!year || !month) return state;
+      const monthKey = makeMonthKey(year, month);
+      const monthIdx = getMonthIndex(month);
+      if (monthIdx < 0) return state;
+      const monthEnd = new Date(year, monthIdx + 1, 0, 23, 59, 59);
+      const snapshots = { ...(state.data.monthlySnapshots || {}) };
+      const monthSnap = {};
+      ACCOUNT_KEYS.forEach(k => { monthSnap[k] = computeBalance(state.data, k, monthEnd); });
+      snapshots[monthKey] = monthSnap;
+      const closedMonths = Array.from(new Set([...(state.data.closedMonths || []), monthKey]));
+      const nextIdx = monthIdx + 1;
+      const nextYear = nextIdx > 11 ? year + 1 : year;
+      const nextMonth = ALL_MONTHS[nextIdx > 11 ? 0 : nextIdx];
+      const pending = (state.data.transactions || []).filter(t =>
+        t.month === month && (t.year || year) === year && t.status !== 'paid'
+      );
+      const nextMonthClosed = closedMonths.includes(makeMonthKey(nextYear, nextMonth));
+      let finalTxs = state.data.transactions || [];
+      if (pending.length > 0 && !nextMonthClosed) {
+        const pendingToCarry = pending.filter(t => {
+          if (isHanyShopCategory(t.category, t)) return false;
+          if (isCarryoverTransaction(t)) return false;
+          if (t.sourceLoanId || t.linkedLoanId || t.generatedBy === 'materializeLoanInstallments') return false;
+          if (isSystemGenerated(t) && t.importedFrom !== 'excel-v1') return false;
+          if (t.source === 'shopping-app' || t.source === 'shopping-legacy') return false;
+          return true;
+        });
+        const carriedTxs = pendingToCarry.map(t => ({
+          ...t,
+          id: `carry-${t.id}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          month: nextMonth,
+          year: nextYear,
+          monthIndex: nextIdx > 11 ? 0 : nextIdx,
+          date: `${nextYear}-${String((nextIdx > 11 ? 0 : nextIdx) + 1).padStart(2, '0')}-01`,
+          status: 'pending',
+          source: 'carryover',
+          originalCategory: t.category,
+          carriedFromSource: t.source || 'manual',
+          carryoverFrom: `${month} ${year}`,
+          carriedFromId: t.id,
+          createdAt: new Date().toISOString(),
+        }));
+        finalTxs = [...carriedTxs, ...finalTxs];
+      }
+      const next = {
+        ...state.data,
+        transactions: finalTxs,
+        closedMonths,
+        monthlySnapshots: snapshots,
+      };
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); } catch (e) {}
+      return { ...state, data: next };
+    }
+    case 'OPEN_MONTH': {
+      const monthKey = action.payload;
+      if (!monthKey) return state;
+      const closedMonths = (state.data.closedMonths || []).filter(k => k !== monthKey);
+      const next = { ...state.data, closedMonths };
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); } catch (e) {}
+      return { ...state, data: next };
+    }
+    case 'SET_FORM_OPEN': return { ...state, isFormOpen: !!action.payload };
+    case 'SET_FORM_MODE': return { ...state, formMode: action.payload || 'add' };
+    case 'SET_FORM_DATA': return { ...state, formData: action.payload || {} };
+    case 'SET_EDITING_CARD': return { ...state, editingCard: action.payload };
+    case 'SET_EDITING_LOAN': return { ...state, editingLoan: action.payload };
+    case 'SET_EDITING_BUDGET_CATEGORY': return { ...state, editingBudgetCategory: action.payload };
+    case 'SET_BUDGET_AMOUNT': return { ...state, budgetAmount: action.payload ?? '' };
+    case 'SET_VIEWING_CARD_STATEMENT': return { ...state, viewingCardStatement: action.payload };
+    case 'SET_ACTIVE_CATEGORY_DETAIL': return { ...state, activeCategoryDetail: action.payload };
+    case 'SET_ACTIVE_TAB': return { ...state, activeTab: action.payload || 'dashboard' };
+    case 'SET_PENDING_CLOSE_MODAL': return { ...state, pendingCloseModal: action.payload || { isOpen: false } };
+    case 'SET_RECURRING_MODAL_OPEN': return { ...state, recurringModalOpen: !!action.payload };
+    case 'SET_RECURRING_FORM_DATA': return { ...state, recurringFormData: action.payload || {} };
+    case 'SET_PIN_CHANGE_OPEN': return { ...state, pinChangeOpen: !!action.payload };
+    case 'SET_SMS_MODAL_OPEN': return { ...state, smsModalOpen: !!action.payload };
+    case 'SET_QUICK_TRANSFER_MODAL_OPEN': return { ...state, quickTransferModalOpen: !!action.payload };
+    case 'SHOW_CONFIRM': {
+      return {
+        ...state,
+        confirmDialog: {
+          isOpen: true,
+          title: action.title || 'تأكيد',
+          message: action.message || '',
+          danger: !!action.danger,
+          onConfirm: action.onConfirm || null,
+          onCancel: action.onCancel || null,
+        },
+      };
+    }
+    case 'HIDE_CONFIRM':
+      return {
+        ...state,
+        confirmDialog: { isOpen: false, title: '', message: '', danger: false, onConfirm: null, onCancel: null }
+      };
+    case 'TOGGLE_LEDGER': {
+      const key = action.payload;
+      return { ...state, expandedLedgers: { ...state.expandedLedgers, [key]: !state.expandedLedgers[key] } };
+    }
+    case 'TOGGLE_CARDS_SECTION': return { ...state, expandedCardsSection: !state.expandedCardsSection };
+    case 'SET_EXPANDED_GROUP': return { ...state, expandedGroup: action.payload };
+    case 'SET_TRANS_VIEW_MODE': return { ...state, transViewMode: action.payload || 'all' };
+    case 'SET_STATUS_FILTER': return { ...state, statusFilter: action.payload || 'all' };
+    case 'SET_SEARCH_TERM': return { ...state, searchTerm: action.payload || '' };
+    case 'SET_CAT_VIEW_TYPE': return { ...state, catViewType: action.payload === 'income' ? 'income' : 'expense' };
+    case 'SET_SELECTED_YEAR': return { ...state, selectedYear: safeNumber(action.payload, state.selectedYear) };
+    case 'SET_SELECTED_MONTH': return { ...state, selectedMonth: action.payload || state.selectedMonth };
+    case 'TOGGLE_WALLET_VISIBILITY': {
+      const key = action.payload;
+      if (!key) return state;
+      const next = { ...state.walletVisibility, [key]: !state.walletVisibility[key] };
+      try { localStorage.setItem('wallet_visibility_v83', JSON.stringify(next)); } catch (e) {}
+      return { ...state, walletVisibility: next };
+    }
+    case 'TOGGLE_DARK_MODE': {
+      const isDark = typeof action.payload === 'boolean' ? action.payload : !state.isDarkMode;
+      try { localStorage.setItem('theme', isDark ? 'dark' : 'light'); } catch (e) {}
+      return { ...state, isDarkMode: isDark };
+    }
+    case 'SET_LIQUIDITY_MODE': {
+      const mode = action.payload;
+      if (!LIQUIDITY_MODES[mode]) return state;
+      try { localStorage.setItem('liquidity_mode', mode); } catch (e) {}
+      return { ...state, liquidityMode: mode };
+    }
+    default:
+      return state;
+  }
+};
 /* ═══════════════════════════════════════════════════════════════
    PART 7 — Main App Component + Root Render + Listeners
    V83.5 — Bank-Grade Edition (Final)
