@@ -9572,34 +9572,96 @@ const FinancialForecastView = memo(({
       const mName = ALL_MONTHS[mIdx];
       const mKey = makeMonthKey(year, mName);
 
-      const monthTxs = transactions.filter(t => t.month === mName && (t.year || 2026) === year);
+      /* ✅ [V83.4] اقرأ المعاملات الفعلية للشهر */
+      const monthTxs = transactions.filter(t => 
+        t.month === mName && 
+        (t.year || 2026) === year
+      );
+
       let income, cardPayment, cardSpending, cashExpenses;
       let pendingIncome = 0, pendingExpense = 0, pendingCount = 0;
+      let dataSource = 'transactions';
 
       if (i === 0) {
-        income = monthTxs.filter(t => t.type === 'income').reduce((s, t) => s + safeNumber(t.amount), 0);
-        pendingIncome = monthTxs.filter(t => t.type === 'income' && t.status !== 'paid').reduce((s, t) => s + safeNumber(t.amount), 0);
-        pendingExpense = monthTxs.filter(t => t.type === 'expense' && t.status !== 'paid').reduce((s, t) => s + safeNumber(t.amount), 0);
+        /* الشهر الحالي: خذ المدفوع فقط */
+        income = monthTxs.filter(t => t.type === 'income' && t.status === 'paid')
+          .reduce((s, t) => s + safeNumber(t.amount), 0);
+        pendingIncome = monthTxs.filter(t => t.type === 'income' && t.status !== 'paid')
+          .reduce((s, t) => s + safeNumber(t.amount), 0);
+        pendingExpense = monthTxs.filter(t => t.type === 'expense' && t.status !== 'paid')
+          .reduce((s, t) => s + safeNumber(t.amount), 0);
         pendingCount = monthTxs.filter(t => t.status !== 'paid').length;
-        cardSpending = monthTxs.filter(isCardSpending).reduce((s, t) => s + safeNumber(t.amount), 0);
-        cardPayment = monthTxs.filter(isCardPayment).reduce((s, t) => s + safeNumber(t.amount), 0);
+        
+        cardSpending = monthTxs.filter(t => 
+          t.type === 'expense' && 
+          t.status === 'paid' &&
+          isCardSpending(t)
+        ).reduce((s, t) => s + safeNumber(t.amount), 0);
+        
+        cardPayment = monthTxs.filter(t => 
+          t.type === 'expense' && 
+          t.status === 'paid' &&
+          isCardPayment(t)
+        ).reduce((s, t) => s + safeNumber(t.amount), 0);
+        
         if (cardPayment === 0) cardPayment = baseCardPayment;
-        cashExpenses = monthTxs.filter(t => t.type === 'expense' && !isCardSpending(t) && !isCardPayment(t)).reduce((s, t) => s + safeNumber(t.amount), 0);
+        
+        cashExpenses = monthTxs.filter(t => 
+          t.type === 'expense' && 
+          t.status === 'paid' &&
+          !isCardSpending(t) && 
+          !isCardPayment(t)
+        ).reduce((s, t) => s + safeNumber(t.amount), 0);
+        
       } else {
-        const plan = monthlyPlans?.[mKey] || {};
-        const planIncome = safeNumber(plan.expectedSalary) + safeNumber(plan.expectedRent)
-          + safeNumber(plan.expectedCashback) + safeNumber(plan.expectedEmakWE)
-          + safeNumber(plan.expectedZakat) + safeNumber(plan.expectedCash);
-        const planExpense = safeNumber(plan.expectedCashExpenses) + safeNumber(plan.plannedPayments);
-        const recIncome = recurringItems.filter(r => r.active !== false && r.type === 'income' && !r.linkedLoanSystemId).reduce((s, r) => s + safeNumber(r.amount), 0);
-        const recExpense = recurringItems.filter(r => r.active !== false && r.type === 'expense' && !r.linkedLoanSystemId).reduce((s, r) => s + safeNumber(r.amount), 0);
-        income = planIncome || recIncome;
-        cashExpenses = planExpense || recExpense;
-        cardPayment = baseCardPayment;
-        cardSpending = baseCardSpending;
+        /* ✅ [V83.4 FIX] الشهور القادمة: اقرأ المعاملات الفعلية أولاً */
+        if (monthTxs.length > 0) {
+          dataSource = 'transactions-future';
+          
+          income = monthTxs.filter(t => t.type === 'income')
+            .reduce((s, t) => s + safeNumber(t.amount), 0);
+          
+          cashExpenses = monthTxs.filter(t => 
+            t.type === 'expense' && 
+            !isCardSpending(t) && 
+            !isCardPayment(t)
+          ).reduce((s, t) => s + safeNumber(t.amount), 0);
+          
+          cardSpending = monthTxs.filter(isCardSpending)
+            .reduce((s, t) => s + safeNumber(t.amount), 0);
+          
+          cardPayment = monthTxs.filter(isCardPayment)
+            .reduce((s, t) => s + safeNumber(t.amount), 0);
+          
+          pendingCount = monthTxs.filter(t => t.status !== 'paid').length;
+          
+        } else {
+          /* Fallback: لو مفيش معاملات، استخدم الخطة أو recurring */
+          dataSource = 'plan-or-recurring';
+          
+          const plan = monthlyPlans?.[mKey] || {};
+          const planIncome = safeNumber(plan.expectedSalary) + safeNumber(plan.expectedRent)
+            + safeNumber(plan.expectedCashback) + safeNumber(plan.expectedEmakWE)
+            + safeNumber(plan.expectedZakat) + safeNumber(plan.expectedCash);
+          const planExpense = safeNumber(plan.expectedCashExpenses) + safeNumber(plan.plannedPayments);
+          
+          const recIncome = recurringItems
+            .filter(r => r.active !== false && r.type === 'income' && !r.linkedLoanSystemId)
+            .reduce((s, r) => s + safeNumber(r.amount), 0);
+          const recExpense = recurringItems
+            .filter(r => r.active !== false && r.type === 'expense' && !r.linkedLoanSystemId)
+            .reduce((s, r) => s + safeNumber(r.amount), 0);
+          
+          income = planIncome || recIncome;
+          cashExpenses = planExpense || recExpense;
+          cardPayment = baseCardPayment;
+          cardSpending = baseCardSpending;
+        }
       }
 
-      const loanInstallments = updatedLoans.filter(l => !l.isReceivable && !l.autoGenerated && safeNumber(l.monthlyInstallment) > 0).reduce((s, l) => s + safeNumber(l.monthlyInstallment), 0);
+      const loanInstallments = updatedLoans
+        .filter(l => !l.isReceivable && !l.autoGenerated && safeNumber(l.monthlyInstallment) > 0)
+        .reduce((s, l) => s + safeNumber(l.monthlyInstallment), 0);
 
       const newCardDebt = Math.max(0, cardDebt - cardPayment + cardSpending);
       const newLoanDebt = Math.max(0, loanDebt - loanInstallments);
@@ -9608,12 +9670,26 @@ const FinancialForecastView = memo(({
       const netPosition = newLiquidity - totalDebt;
 
       months.push({
-        month: mName, year,
-        startLiquidity: liq, startCardDebt: cardDebt, startLoanDebt: loanDebt,
-        income, cashExpenses, cardSpending, cardPayment, loanInstallments,
-        pendingIncome, pendingExpense, pendingCount,
-        endLiquidity: newLiquidity, endCardDebt: newCardDebt,
-        endLoanDebt: newLoanDebt, totalDebt, netPosition
+        month: mName, 
+        year,
+        startLiquidity: liq, 
+        startCardDebt: cardDebt, 
+        startLoanDebt: loanDebt,
+        income, 
+        cashExpenses, 
+        cardSpending, 
+        cardPayment, 
+        loanInstallments,
+        pendingIncome, 
+        pendingExpense, 
+        pendingCount,
+        endLiquidity: newLiquidity, 
+        endCardDebt: newCardDebt,
+        endLoanDebt: newLoanDebt, 
+        totalDebt, 
+        netPosition,
+        dataSource,
+        txCount: monthTxs.length,
       });
 
       liq = newLiquidity;
@@ -9621,8 +9697,20 @@ const FinancialForecastView = memo(({
       loanDebt = newLoanDebt;
     }
     return months;
-  }, [transactions, selectedMonth, selectedYear, monthlyPlans, currentLiquidity, currentCardDebt, currentLoanDebt, baseCardPayment, baseCardSpending, recurringItems, updatedLoans]);
-
+  }, [
+    transactions, 
+    selectedMonth, 
+    selectedYear, 
+    monthlyPlans, 
+    currentLiquidity, 
+    currentCardDebt, 
+    currentLoanDebt, 
+    baseCardPayment, 
+    baseCardSpending, 
+    recurringItems, 
+    updatedLoans
+  ]);
+  
   const chartData = forecast.map(f => ({
     name: f.month.slice(0, 3),
     'السيولة': Math.round(f.endLiquidity),
