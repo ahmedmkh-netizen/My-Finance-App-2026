@@ -742,10 +742,12 @@ const firebaseConfig = {
 };
 if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
-// ✅ الجديد — بدون multi-tab sync
-db.enablePersistence({ synchronizeTabs: false }).catch((err) => {
-  console.warn('Firestore persistence failed:', err.code);
-});
+// ✅ [V83.4] Persistence معطّل مؤقتاً لمنع resource-exhausted
+// db.enablePersistence({ synchronizeTabs: false }).catch((err) => {
+//   console.warn('Firestore persistence failed:', err.code);
+// });
+console.log('Firestore persistence: DISABLED (V83.4)');
+  
 
 const FIREBASE_DOC_PATH = { collection: 'finance_2026', doc: 'user_ahmed_data' };
 const LAST_SYNC_LS_KEY = 'v83_last_sync_ts';
@@ -12025,28 +12027,35 @@ const App = () => {
     if (!user || !user.email) return;
     if (user.email !== ALLOWED_EMAIL) return;
 
-    const unsub = db.collection(FIREBASE_DOC_PATH.collection).doc(FIREBASE_DOC_PATH.doc)
-      .onSnapshot((doc) => {
-        if (!doc.exists) return;
-        const remote = doc.data();
-        if (!remote || !remote.data) return;
+const unsub = db.collection(FIREBASE_DOC_PATH.collection).doc(FIREBASE_DOC_PATH.doc)
+  .onSnapshot((doc) => {
+    if (!doc.exists) return;
+    const remote = doc.data();
+    if (!remote || !remote.data) return;
 
-        const remoteSavedAt = remote.savedAt || 0;
-        const localSavedAt = data?.savedAt || 0;
-        if (remoteSavedAt > localSavedAt) {
-          const migrated = migrateData(remote.data);
-          if (migrated) {
-            dispatch({ type: 'SET_DATA', payload: migrated });
-            if (remote.budgets) dispatch({ type: 'SET_BUDGETS', payload: remote.budgets });
-            localStorage.setItem(LAST_SYNC_LS_KEY, String(Date.now()));
-            setCloudSyncStatus('ready');
-          }
-        }
-      }, (err) => {
-        console.warn('Firestore snapshot error:', err);
-        setCloudSyncStatus('offline');
-      });
-
+    const remoteSavedAt = remote.savedAt || 0;
+    const lastSyncTs = Number(localStorage.getItem(LAST_SYNC_LS_KEY) || 0);
+    
+    // ✅ [V83.4] تجاهل الردود القريبة من رفعنا الحالي (منع loop)
+    if (Math.abs(remoteSavedAt - lastSyncTs) < 3000) {
+      return;
+    }
+    
+    // ✅ [V83.4] فقط لو السحابة أحدث بـ 5 ثواني على الأقل
+    if (remoteSavedAt > lastSyncTs + 5000) {
+      const migrated = migrateData(remote.data);
+      if (migrated) {
+        dispatch({ type: 'SET_DATA', payload: migrated });
+        if (remote.budgets) dispatch({ type: 'SET_BUDGETS', payload: remote.budgets });
+        localStorage.setItem(LAST_SYNC_LS_KEY, String(remoteSavedAt));
+        setCloudSyncStatus('ready');
+      }
+    }
+  }, (err) => {
+    console.warn('Firestore snapshot error:', err);
+    setCloudSyncStatus('offline');
+  });
+    
     return () => unsub();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
@@ -12059,18 +12068,23 @@ const App = () => {
     const now = Date.now();
     if (now - lastCloudSaveRef.current < 2000) return;
 
-    const timeout = setTimeout(async () => {
-      setIsSaving(true);
-      setCloudSyncStatus('pending');
-      try {
-        const payload = {
-          data: { ...data, savedAt: now },
-          budgets,
-          savedAt: now,
-          updatedAt: new Date().toISOString(),
-          version: 'V83.3',
-        };
-        await db.collection(FIREBASE_DOC_PATH.collection).doc(FIREBASE_DOC_PATH.doc).set(payload);
+const timeout = setTimeout(async () => {
+  setIsSaving(true);
+  setCloudSyncStatus('pending');
+  try {
+    // ✅ [V83.4] احفظ savedAt في ref، مش في data
+    const dataWithoutSavedAt = { ...data };
+    delete dataWithoutSavedAt.savedAt;
+    
+    const payload = {
+      data: dataWithoutSavedAt,
+      budgets,
+      savedAt: Date.now(), // ← savedAt في المستند، مش في data
+      updatedAt: new Date().toISOString(),
+      version: 'V83.4',
+    };
+    await db.collection(FIREBASE_DOC_PATH.collection).doc(FIREBASE_DOC_PATH.doc).set(payload);
+    
         lastCloudSaveRef.current = now;
         localStorage.setItem(LAST_SYNC_LS_KEY, String(now));
         setCloudSyncStatus('ready');
