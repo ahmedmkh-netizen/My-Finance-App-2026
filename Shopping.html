@@ -11,6 +11,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&family=Amiri:wght@400;700&display=swap" rel="stylesheet">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌸</text></svg>">
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
 <style>
@@ -22,14 +23,12 @@ body{font-family:var(--font);font-weight:600;color:var(--text);background:var(--
 button{font-family:var(--font);cursor:pointer;border:none;background:none;color:inherit}
 input,textarea,select{font-family:var(--font);outline:none}
 
-/* ═══ Loading Screen ═══ */
 .loading-screen{position:fixed;inset:0;z-index:9999;background:linear-gradient(160deg,#500E2B,#831843,#BE185D);display:flex;flex-direction:column;align-items:center;justify-content:center;color:#FFF;padding:24px;text-align:center}
 .loading-spinner{width:60px;height:60px;border:4px solid rgba(255,255,255,.2);border-radius:50%;border-top-color:#EC4899;animation:spin 0.9s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 .loading-title{margin-top:24px;font-size:18px;font-weight:900}
 .loading-sub{margin-top:8px;font-size:13px;color:#F9A8D4;font-weight:700}
 
-/* ═══ Sync Indicator ═══ */
 .sync-indicator{position:fixed;top:12px;left:12px;z-index:1500;padding:5px 12px;border-radius:999px;font-size:11px;font-weight:800;display:inline-flex;align-items:center;gap:6px;box-shadow:0 4px 12px rgba(0,0,0,.15);transition:all .3s;backdrop-filter:blur(8px)}
 .sync-indicator.ready{background:rgba(16,185,129,.2);color:#047857;border:1.5px solid rgba(16,185,129,.4)}
 .sync-indicator.pending{background:rgba(251,191,36,.25);color:#78350F;border:1.5px solid rgba(251,191,36,.5)}
@@ -51,7 +50,7 @@ input,textarea,select{font-family:var(--font);outline:none}
 .azkar-hint{margin-top:28px;font-size:12px;color:rgba(255,255,255,.5);font-weight:700;animation:blink 2s infinite}
 @keyframes blink{0%,100%{opacity:.5}50%{opacity:1}}
 .azkar-progress{position:absolute;bottom:0;left:0;right:0;height:3px;background:rgba(255,255,255,.1);border-radius:0 0 32px 32px;overflow:hidden}
-.azkar-progress-fill{height:100%;background:linear-gradient(90deg,#EC4899,#FBBF24);animation:fill 4s linear}
+.azkar-progress-fill{height:100%;background:linear-gradient(90deg,#EC4899,#FBBF24);animation:fill 2.5s linear}
 @keyframes fill{from{width:0}to{width:100%}}
 
 .pin-screen{position:fixed;inset:0;z-index:9100;background:linear-gradient(160deg,#3D0A20,#831843,#BE185D);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;overflow:hidden}
@@ -221,6 +220,7 @@ input,textarea,select{font-family:var(--font);outline:none}
 .feed-badge.recur{background:#EDE9FE;color:#6D28D9}
 .feed-badge.future{background:#FEF3C7;color:#92400E;border:1px dashed #F59E0B}
 .feed-badge.past{background:#E5E7EB;color:#6B7280}
+.feed-badge.synced{background:#D1FAE5;color:#047857}
 
 .future-card{margin:0 14px 14px;background:linear-gradient(135deg,#FEF3C7,#FDE68A);border:2px solid #FBBF24;border-radius:var(--radius-lg);padding:20px;box-shadow:0 4px 12px rgba(251,191,36,.2)}
 body.dark .future-card{background:linear-gradient(135deg,#3D2E0F,#4A3810);border-color:#B45309}
@@ -363,6 +363,8 @@ body.dark .nav{background:rgba(61,10,32,.96)}
 .rec-list-item .rli-actions{display:flex;gap:4px;flex-shrink:0}
 .rec-list-item button{width:30px;height:30px;border-radius:8px;font-size:13px;display:flex;align-items:center;justify-content:center}
 .rec-list-item .rli-del{background:#FEE2E2;color:#DC2626}
+
+.cloud-badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;background:rgba(16,185,129,.15);color:#047857;border-radius:999px;font-size:9px;font-weight:800;margin-inline-start:4px}
 
 @media(max-width:360px){.items{grid-template-columns:repeat(2,1fr)}.amz-grid{grid-template-columns:repeat(2,1fr)}.tasbih-count{font-size:80px}.future-stats{grid-template-columns:1fr}}
 </style>
@@ -760,7 +762,7 @@ var currentRecType='once';
 var currentRecDate='';
 var currentRecDay=10;
 
-/* ═══ Cloud-first state ═══ */
+/* Cloud-first state */
 var hasReceivedInitialSnapshot=false;
 var lastRemoteSnapshotKey='';
 var syncStatus='pending';
@@ -837,15 +839,14 @@ function sendTelegram(text){if(!TELEGRAM_ENABLED)return;fetch('https://api.teleg
 
 (function(){try{var svg='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#EC4899"/><stop offset="1" stop-color="#DB2777"/></linearGradient></defs><rect width="192" height="192" rx="42" fill="url(#g)"/><text x="96" y="130" font-size="100" text-anchor="middle" fill="white" font-family="sans-serif">🌸</text></svg>';var url='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);var m={name:'احتياجات البيت',short_name:'احتياجات',start_url:'./',scope:'./',display:'standalone',orientation:'portrait',background_color:'#FDF2F8',theme_color:'#EC4899',dir:'rtl',lang:'ar',icons:[{src:url,sizes:'192x192',type:'image/svg+xml',purpose:'any maskable'},{src:url,sizes:'512x512',type:'image/svg+xml',purpose:'any maskable'}]};var mUrl='data:application/manifest+json;charset=utf-8,'+encodeURIComponent(JSON.stringify(m));var l=document.createElement('link');l.rel='manifest';l.href=mUrl;document.head.appendChild(l);var ai=document.createElement('link');ai.rel='apple-touch-icon';ai.href=url;document.head.appendChild(ai);var fi=document.createElement('link');fi.rel='icon';fi.href=url;document.head.appendChild(fi);}catch(e){}})();
 
-/* ═══ Firebase Init ═══ */
+/* ═══ Firebase Init — Unified Document ═══ */
 try{
   firebase.initializeApp({apiKey:"AIzaSyCEq-Trf1oFsvPF5tlMvqU83ea_J2DLZjs",authDomain:"finance-app-2026-3e318.firebaseapp.com",projectId:FIREBASE_PROJECT,storageBucket:"finance-app-2026-3e318.firebasestorage.app",messagingSenderId:"855414629770",appId:"1:855414629770:web:8bb07198b8245b63781473"});
   var db=firebase.firestore();
-  // ✅ Collection منفصل للـ Shopping (أداء أسرع 100x)
-  shoppingDocRef=db.collection('shopping_data').doc('user_ahmed');
-  // ✅ docRef الأساسي (للمزامنة مع المحفظة - optional)
+  // ✅ مستند موحّد — نفس مستند المحفظة
   docRef=db.collection('finance_2026').doc('user_ahmed_data');
-  console.log('✅ Firebase initialized');
+  shoppingDocRef=docRef;
+  console.log('✅ Firebase initialized (unified document)');
 }catch(e){console.error('❌ Firebase init failed:',e);}
 
 /* ═══ Sync Indicator ═══ */
@@ -891,57 +892,67 @@ function extractShoppingTx(allTx){
   return (allTx||[]).filter(function(t){return t.source==='shopping-app';});
 }
 
-/* ═══ Cloud-First Subscribe (من Collection منفصل — سريع جداً) ═══ */
+/* ═══════════════════════════════════════════════════════════════
+   Cloud-First Subscribe — نفس مستند المحفظة
+   ═══════════════════════════════════════════════════════════════ */
 function subscribe(){
-  // 1. حمّلي من localStorage فوراً (تجربة سريعة)
+  // ✅ 1. أخفِ شاشة التحميل فوراً (Cloud-First: نعرض فوراً)
+  setTimeout(function(){
+    var ls=document.getElementById('loadingScreen');
+    var main=document.getElementById('main');
+    if(ls)ls.style.display='none';
+    if(main)main.style.display='block';
+    hasReceivedInitialSnapshot=true;
+    renderAll();
+    console.log('✅ التطبيق ظاهر — انتظار السحابة في الخلفية');
+  }, 200);
+
+  // ✅ 2. حمل cache مؤقتاً (للعرض الفوري فقط)
   var local=loadFromLocalCache();
   if(local){
     cachedTx=local.transactions;
     recurringRules=local.shoppingRecurring;
-    console.log('📦 تم تحميل',cachedTx.length,'من cache محلي');
+    console.log('📦 cache محلي مؤقت:',cachedTx.length,'معاملة');
   }
-  
+
   if(!shoppingDocRef){
     updateSyncIndicator('offline');
-    hasReceivedInitialSnapshot=true;
-    document.getElementById('loadingScreen').style.display='none';
-    renderAll();
     return;
   }
-  
-  // 2. Timeout 5 ثواني: نضمن عدم انتظار لا نهائي
+
+  // ✅ 3. Timeout 8 ثواني — بعدها نستخدم cache
   syncTimeoutId=setTimeout(function(){
     if(!hasReceivedInitialSnapshot){
-      console.warn('⚠️ Firebase timeout — using local cache');
+      console.warn('⚠️ Firebase timeout — استخدام cache محلي');
       updateSyncIndicator('offline');
       hasReceivedInitialSnapshot=true;
-      document.getElementById('loadingScreen').style.display='none';
-      renderAll();
     }
-  },5000);
-  
+  },8000);
+
   if(unsubscribe)unsubscribe();
-  
-  // 3. onSnapshot على Collection Shopping فقط (صغير جداً)
+
+  // ✅ 4. onSnapshot على المستند الموحّد
   unsubscribe=shoppingDocRef.onSnapshot({includeMetadataChanges:false},function(doc){
     if(syncTimeoutId){clearTimeout(syncTimeoutId);syncTimeoutId=null;}
-    
+
     if(!doc.exists){
-      // أول استخدام — Firebase فاضي
+      console.log('📄 أول استخدام — مستند فارغ');
       cachedTx=[];
       recurringRules=[];
       hasReceivedInitialSnapshot=true;
       updateSyncIndicator('ready');
-      document.getElementById('loadingScreen').style.display='none';
       renderAll();
       return;
     }
-    
+
     var d=doc.data()||{};
-    var remoteTx=Array.isArray(d.transactions)?d.transactions:[];
+    var allTx=Array.isArray(d.transactions)?d.transactions:[];
+
+    // ✅ 5. استخرج فقط معاملات Shopping App
+    var remoteTx=extractShoppingTx(allTx);
     var remoteRecurring=Array.isArray(d.shoppingRecurring)?d.shoppingRecurring:[];
-    
-    // ✅ ادمج مع أي recurring rules محلية مش موجودة (حماية من الفقدان)
+
+    // ✅ 6. دمج مع الـ recurring المحلي
     var localCache=loadFromLocalCache();
     var allRecurringIds=new Set(remoteRecurring.map(function(r){return r.id;}));
     if(localCache&&localCache.shoppingRecurring){
@@ -952,19 +963,21 @@ function subscribe(){
         }
       });
     }
-    
+
+    // ✅ 7. حدّث state من السحابة (الأولوية للسحابة)
     cachedTx=remoteTx.sort(function(a,b){return(b.createdAt||0)-(a.createdAt||0);});
     recurringRules=remoteRecurring.sort(function(a,b){return(b.createdAt||0)-(a.createdAt||0);});
-    
-    // احفظي cache محلي
+
+    // ✅ 8. احفظ cache محلياً
     saveToLocalCache({transactions:cachedTx,shoppingRecurring:recurringRules});
-    
+
     if(!hasReceivedInitialSnapshot){
       hasReceivedInitialSnapshot=true;
-      document.getElementById('loadingScreen').style.display='none';
       console.log('☁️ تم استقبال',cachedTx.length,'من السحابة');
+    } else {
+      console.log('☁️ تحديث سحابي:',cachedTx.length,'معاملة');
     }
-    
+
     updateSyncIndicator('ready');
     renderAll();
   },function(e){
@@ -973,8 +986,6 @@ function subscribe(){
     if(!hasReceivedInitialSnapshot){
       updateSyncIndicator('offline');
       hasReceivedInitialSnapshot=true;
-      document.getElementById('loadingScreen').style.display='none';
-      renderAll();
     }
   });
 }
@@ -982,7 +993,7 @@ function subscribe(){
 /* ═══ Cloud-First Save (Queue-based) ═══ */
 function queueCloudSave(operation){
   if(!shoppingDocRef)return Promise.reject(new Error('غير متصل'));
-  
+
   saveQueuePromise=saveQueuePromise.then(function(){
     isSavingInProgress=true;
     updateSyncIndicator('pending');
@@ -1001,51 +1012,83 @@ function queueCloudSave(operation){
     saveQueuePromise=Promise.resolve();
     throw err;
   });
-  
+
   return saveQueuePromise;
 }
 
-function saveToFirebaseShopping(updates){
-  if(!shoppingDocRef)return Promise.reject(new Error('غير متصل'));
-  return queueCloudSave(function(){
-    return shoppingDocRef.set(updates,{merge:true});
-  });
+/* ═══════════════════════════════════════════════════════════════
+   ✅ ربط Shopping بالمحفظة — إضافة/تعديل/حذف
+   ═══════════════════════════════════════════════════════════════ */
+function convertToWalletTx(t){
+  var txDate=t.date||isoDate();
+  var txObj=new Date(txDate+'T12:00:00');
+  return {
+    id:'shop-'+t.id,
+    type:'expense',
+    kind:'operational',
+    category:t.category||'كازيون / العثيم',
+    subCategory:t.subCategory||'',
+    amount:Number(t.amount||0),
+    quantity:Number(t.quantity||1),
+    unitPrice:Number(t.unitPrice||t.amount||0),
+    description:t.description||'',
+    source:'shopping-app',
+    sourceLabel:t.sourceLabel||'',
+    method:t.method||'cash',
+    linkedCardId:t.linkedCardId||undefined,
+    date:txDate,
+    month:MONTHS_AR[txObj.getMonth()],
+    year:txObj.getFullYear(),
+    monthIndex:txObj.getMonth(),
+    subType:'withdrawal',
+    status:'pending',  // ← معلق في المحفظة
+    createdAt:t.createdAt||Date.now(),
+    updatedAt:Date.now(),
+    receipts:[]
+  };
 }
 
-/* ═══ Sync to Main Wallet (finance_2026) — Best Effort ═══ */
-function syncToMainWallet(shoppingTxs){
-  if(!docRef)return Promise.resolve();
-  // حول shopping tx للشكل اللي المحفظة تفهمه
-  var walletTxs=shoppingTxs.map(function(t){
-    return {
-      id:'shop-'+t.id,
-      type:'expense',
-      kind:'operational',
-      category:'كازيون / العثيم',
-      subCategory:t.subCategory||'',
-      amount:Number(t.amount||0),
-      quantity:Number(t.quantity||1),
-      unitPrice:Number(t.unitPrice||t.amount||0),
-      description:t.description||'',
-      source:'shopping-app',
-      sourceLabel:t.sourceLabel||'',
-      method:t.method||'cash',
-      linkedCardId:t.linkedCardId||undefined,
-      date:t.date,
-      month:t.month,
-      year:t.year,
-      monthIndex:t.monthIndex,
-      subType:'withdrawal',
-      status:'pending',
-      createdAt:t.createdAt||Date.now(),
-      receipts:[]
-    };
-  });
-  
+function addToMainWallet(shoppingTxs){
+  if(!docRef||!shoppingTxs||!shoppingTxs.length)return Promise.resolve();
+  var walletTxs=shoppingTxs.map(convertToWalletTx);
   return docRef.set({
     transactions:firebase.firestore.FieldValue.arrayUnion.apply(null,walletTxs)
   },{merge:true}).catch(function(e){
-    console.warn('Wallet sync failed (non-critical):',e);
+    console.warn('⚠️ Wallet sync failed:',e);
+  });
+}
+
+function updateInMainWallet(oldShoppingTx,newShoppingTx){
+  if(!docRef)return Promise.resolve();
+  var oldWallet=convertToWalletTx(oldShoppingTx);
+  var newWallet=convertToWalletTx(newShoppingTx);
+  return docRef.get().then(function(doc){
+    if(!doc.exists)return;
+    var data=doc.data()||{};
+    var txs=Array.isArray(data.transactions)?data.transactions:[];
+    var updated=txs.map(function(t){
+      if(t.id===oldWallet.id){
+        return Object.assign({},newWallet,{createdAt:t.createdAt||newWallet.createdAt});
+      }
+      return t;
+    });
+    return docRef.set({transactions:updated},{merge:true});
+  }).catch(function(e){
+    console.warn('⚠️ Wallet update failed:',e);
+  });
+}
+
+function deleteFromMainWallet(shoppingTxs){
+  if(!docRef||!shoppingTxs||!shoppingTxs.length)return Promise.resolve();
+  var walletIds=shoppingTxs.map(function(t){return 'shop-'+t.id;});
+  return docRef.get().then(function(doc){
+    if(!doc.exists)return;
+    var data=doc.data()||{};
+    var txs=Array.isArray(data.transactions)?data.transactions:[];
+    var filtered=txs.filter(function(t){return walletIds.indexOf(t.id)<0;});
+    return docRef.set({transactions:filtered},{merge:true});
+  }).catch(function(e){
+    console.warn('⚠️ Wallet delete failed:',e);
   });
 }
 
@@ -1061,7 +1104,7 @@ function showAzkar(){
     sessionStorage.setItem('shop_azkar_'+today,'yes');
     var done=false;
     function finish(){if(done)return;done=true;screen.classList.remove('show');screen.removeEventListener('click',finish);resolve();}
-    setTimeout(finish,4000);
+    setTimeout(finish,2500);
     screen.addEventListener('click',finish);
   });
 }
@@ -1164,29 +1207,54 @@ function finalizeSource(srcId){
   applyItemSelection(selectedItem);
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   INIT — التطبيق يظهر فوراً (بدون انتظار)
+   ═══════════════════════════════════════════════════════════════ */
 function init(){
   if(!currentUser)return;
-  loadUserTemplate();loadFavsRecent();loadTasbih();
-  showAzkar().then(function(){
-    document.getElementById('main').style.display='block';
-    document.getElementById('greet').textContent=GREETING_MESSAGES[Math.floor(Math.random()*GREETING_MESSAGES.length)];
-    applyTheme();
-    bindEvents();
-    renderCategoriesTabs();renderItems();renderFavs();renderFeed();updateHeaderTotal();updateDateQuickButtons();updateCalcDisplay();updateRecurringInfo();
-    subscribe(); // ✅ تشغيل المزامنة السحابية
-    resetLock();setupOffline();setupInstall();
-    setTimeout(loadPrayerTimes,1500);
-    setInterval(checkPrayerTime,60000);
-    
-    // ✅ ضمان إخفاء loading screen بعد 3 ثواني كحد أقصى
-    setTimeout(function(){
-      var ls=document.getElementById('loadingScreen');
-      if(ls&&ls.style.display!=='none'){
-        console.warn('⚠️ Force hiding loading screen');
-        ls.style.display='none';
-      }
-    },3000);
-  });
+
+  loadUserTemplate();
+  loadFavsRecent();
+  loadTasbih();
+
+  // ✅ 1. اظهر التطبيق فوراً
+  document.getElementById('main').style.display='block';
+  document.getElementById('greet').textContent=GREETING_MESSAGES[Math.floor(Math.random()*GREETING_MESSAGES.length)];
+  applyTheme();
+  bindEvents();
+  renderCategoriesTabs();
+  renderItems();
+  renderFavs();
+  renderFeed();
+  updateHeaderTotal();
+  updateDateQuickButtons();
+  updateCalcDisplay();
+  updateRecurringInfo();
+
+  // ✅ 2. ابدأ المزامنة (Cloud-First)
+  subscribe();
+
+  // ✅ 3. Azkar يظهر كطبقة فوق التطبيق
+  showAzkar();
+
+  resetLock();
+  setupOffline();
+  setupInstall();
+  setTimeout(loadPrayerTimes,1500);
+  setInterval(checkPrayerTime,60000);
+
+  // ✅ 4. حماية نهائية
+  setTimeout(function(){
+    var ls=document.getElementById('loadingScreen');
+    if(ls&&ls.style.display!=='none'){
+      console.warn('⚠️ Force hiding loading screen (safety)');
+      ls.style.display='none';
+    }
+    var main=document.getElementById('main');
+    if(main&&main.style.display==='none'){
+      main.style.display='block';
+    }
+  },2000);
 }
 
 function setupOffline(){
@@ -1351,6 +1419,7 @@ function renderTxItem(t){
   var today=isoDate();
   if(t.date>today)badge+=' <span class="feed-badge future">🔮</span>';
   else if(t.date<today)badge+=' <span class="feed-badge past">📅</span>';
+  badge+=' <span class="feed-badge synced">☁️ متزامن</span>';
   return '<div class="feed-item" data-tx="'+t.id+'"><div class="feed-body"><div class="feed-name">'+esc(t.description||t.subCategory)+' '+badge+'</div><div class="feed-time">'+time+' • '+esc(t.category||'')+'</div></div><div class="feed-amount">'+fmt(t.amount)+' ج</div><div class="tx-actions"><button class="tx-btn edit" data-edit="'+t.id+'">✏️</button><button class="tx-btn delete" data-del="'+t.id+'">🗑️</button></div></div>';
 }
 
@@ -1373,7 +1442,8 @@ function deleteTx(id){
         bg.remove();
         if(!shoppingDocRef)return;
         queueCloudSave(function(){return shoppingDocRef.update({transactions:firebase.firestore.FieldValue.arrayRemove(tx)});}).then(function(){
-          toast('تم الحذف — التكرار شغال ✅');
+          deleteFromMainWallet([tx]);
+          toast('تم الحذف من التطبيقين ✅');
           if(navigator.vibrate)navigator.vibrate([40,40,40]);
         }).catch(function(e){toast('فشل: '+e.message,'err');});
       }
@@ -1385,7 +1455,8 @@ function deleteTx(id){
         var p1=queueCloudSave(function(){return shoppingDocRef.update({transactions:firebase.firestore.FieldValue.arrayRemove.apply(null,allRecTxs)});});
         var p2=rule?queueCloudSave(function(){return shoppingDocRef.update({shoppingRecurring:firebase.firestore.FieldValue.arrayRemove(rule)});}):Promise.resolve();
         Promise.all([p1,p2]).then(function(){
-          toast('تم حذف '+allRecTxs.length+' معاملة + القاعدة ✅');
+          deleteFromMainWallet(allRecTxs);
+          toast('تم حذف '+allRecTxs.length+' من التطبيقين ✅');
           if(navigator.vibrate)navigator.vibrate([40,40,40]);
         }).catch(function(e){toast('فشل: '+e.message,'err');});
       }
@@ -1395,7 +1466,8 @@ function deleteTx(id){
   modal({title:'حذف المشترى؟',message:tx.description+'\n'+fmt(tx.amount)+' ج.م\n\nهيتم الحذف نهائياً',icon:'🗑️',danger:true,confirmText:'احذفي',onConfirm:function(){
     if(!shoppingDocRef)return;
     queueCloudSave(function(){return shoppingDocRef.update({transactions:firebase.firestore.FieldValue.arrayRemove(tx)});}).then(function(){
-      toast('تم الحذف ✅');
+      deleteFromMainWallet([tx]);
+      toast('تم الحذف من التطبيقين ✅');
       if(navigator.vibrate)navigator.vibrate([40,40,40]);
     }).catch(function(e){toast('فشل: '+e.message,'err');});
   }});
@@ -1416,12 +1488,13 @@ function editTx(id){
       if(!na||na<=0){toast('مبلغ غير صحيح','err');return;}
       if(!nd){toast('اكتبي وصف','err');return;}
       bg.remove();
-      var newTx=Object.assign({},tx,{description:nd,amount:na});
+      var newTx=Object.assign({},tx,{description:nd,amount:na,updatedAt:Date.now()});
       if(!shoppingDocRef)return;
       queueCloudSave(function(){return shoppingDocRef.update({transactions:firebase.firestore.FieldValue.arrayRemove(tx)});}).then(function(){
         return queueCloudSave(function(){return shoppingDocRef.set({transactions:firebase.firestore.FieldValue.arrayUnion(newTx)},{merge:true});});
       }).then(function(){
-        toast('تم التعديل ✅');
+        updateInMainWallet(tx,newTx);
+        toast('تم التعديل في التطبيقين ✅');
         if(navigator.vibrate)navigator.vibrate(30);
       }).catch(function(e){toast('فشل: '+e.message,'err');});
     }
@@ -1529,7 +1602,7 @@ function renderProfile(){
 
 function saveTx(){
   if(!shoppingDocRef){toast('التطبيق مش متصل','err');return;}
-  
+
   if(selectedCategoryKey==='amazon'){
     var va=amazonItems.filter(function(i){return i.name.trim()&&i.price>0&&i.qty>0;});
     if(!va.length){toast('ضيفي منتج واحد','err');return;}
@@ -1552,16 +1625,13 @@ function saveTx(){
         createdAt:nowA+i,receipts:[]
       };
     });
-    
-    // ✅ احفظ في Collection Shopping (السحابة = مصدر أساسي)
+
     queueCloudSave(function(){return shoppingDocRef.set({transactions:firebase.firestore.FieldValue.arrayUnion.apply(null,txs)},{merge:true});}).then(function(){
-      // ✅ كمان زامن مع المحفظة (best effort, مش blocking)
-      syncToMainWallet(txs);
-      
+      addToMainWallet(txs);
       var tt=va.reduce(function(s,i){return s+i.price*i.qty;},0);
       sendTelegram('📦 *مشتريات أمازون*\n'+va.map(function(i){return '• '+i.name+' — '+fmt(i.price*i.qty)+' ج';}).join('\n')+'\n💰 '+fmt(tt)+' ج.م');
       amazonItems=[];renderAmazonList();confetti();setTimeout(friendlyToast,400);
-      toast('تم حفظ '+va.length+' منتج ✅');
+      toast('تم حفظ '+va.length+' منتج ✅ (معلقة في المحفظة)');
     }).catch(function(e){
       toast('فشل: '+e.message,'err');
     }).then(function(){
@@ -1598,13 +1668,13 @@ function saveTx(){
 
   var recRule=null;
   var futureTxs=[];
-  
+
   if(currentRecType!=='once'){
     var recId='rec-'+Date.now()+'-'+Math.random().toString(36).slice(2,7);
     var step=currentRecType==='bimonthly'?2:1;
     var count=currentRecType==='bimonthly'?6:12;
     var firstDue;
-    
+
     if(currentRecType==='custom_future'){
       if(!currentRecDate){toast('اختاري التاريخ','err');return;}
       if(currentRecDate<tIso){toast('التاريخ بعد النهاردة','err');return;}
@@ -1612,7 +1682,7 @@ function saveTx(){
     }else{
       firstDue=getNextDueForDay(currentRecDay);
     }
-    
+
     for(var k=0;k<count;k++){
       var dueDate;
       if(k===0){dueDate=firstDue;}
@@ -1638,7 +1708,7 @@ function saveTx(){
         receipts:[]
       });
     }
-    
+
     recRule={
       id:recId,
       template:{
@@ -1662,14 +1732,13 @@ function saveTx(){
 
   var btn2=document.getElementById('saveBtn');btn2.disabled=true;btn2.innerHTML='⏳ بنحفظ...';
   var allTxs=[tx].concat(futureTxs);
-  
+
   var promises=[queueCloudSave(function(){return shoppingDocRef.set({transactions:firebase.firestore.FieldValue.arrayUnion.apply(null,allTxs)},{merge:true});})];
   if(recRule)promises.push(queueCloudSave(function(){return shoppingDocRef.set({shoppingRecurring:firebase.firestore.FieldValue.arrayUnion(recRule)},{merge:true});}));
 
   Promise.all(promises).then(function(){
-    // ✅ زامن مع المحفظة (best effort)
-    syncToMainWallet(allTxs);
-    
+    addToMainWallet(allTxs);
+
     trackRecent(selectedItem);
     var sn=selectedItem;
     var di=selectedDateMode!=='today'?' ('+formatDateLabel(tIso)+')':'';
@@ -1678,7 +1747,7 @@ function saveTx(){
     var tm='🛒 *مشترى جديد*\n📦 '+sn+(qty>1?' × '+qty:'')+si+'\n💰 '+fmt(amt)+' ج.م\n💳 '+pm.label+di+ri;
     if(note)tm+='\n📝 '+note;
     sendTelegram(tm);
-    
+
     document.getElementById('amount').value='';document.getElementById('note').value='';
     selectedItem=null;unitPrice=null;selectedQty=1;selectedSource=null;customSourceLabel='';
     clearAutoPrice();
@@ -1691,9 +1760,9 @@ function saveTx(){
     updateRecurringInfo();
     if(selectedDateMode!=='today'){selectedDateMode='today';updateDateQuickButtons();}
     renderItems();updateCalcDisplay();confetti();setTimeout(friendlyToast,400);
-    
-    if(recRule){toast('✅ تم الحفظ + '+futureTxs.length+' معاملة قادمة 🔮');}
-    else{toast('اتحفظت! '+sn);}
+
+    if(recRule){toast('✅ تم الحفظ + '+futureTxs.length+' معاملة معلقة في المحفظة 🔮');}
+    else{toast('اتحفظت! '+sn+' (معلقة في المحفظة)');}
     if(navigator.vibrate)navigator.vibrate([30,50,30]);
   }).catch(function(e){
     toast('فشل: '+e.message,'err');
@@ -1725,7 +1794,8 @@ function deleteRecurring(id){
     var p1=allRecTxs.length?queueCloudSave(function(){return shoppingDocRef.update({transactions:firebase.firestore.FieldValue.arrayRemove.apply(null,allRecTxs)});}):Promise.resolve();
     var p2=queueCloudSave(function(){return shoppingDocRef.update({shoppingRecurring:firebase.firestore.FieldValue.arrayRemove(r)});});
     Promise.all([p1,p2]).then(function(){
-      toast('تم حذف '+allRecTxs.length+' معاملة + القاعدة ✅');
+      deleteFromMainWallet(allRecTxs);
+      toast('تم حذف '+allRecTxs.length+' من التطبيقين ✅');
     }).catch(function(e){toast('فشل: '+e.message,'err');});
   }});
 }
@@ -1745,17 +1815,17 @@ function renderHistory(){
   var box=document.getElementById('histList');
   var tBox=document.getElementById('histTotal');
   var futureCard=document.getElementById('futureCard');
-  
+
   if(currentPeriod==='future'){renderFutureCard();}
   else{futureCard.style.display='none';}
-  
+
   if(!list.length){box.innerHTML='<div class="empty"><span class="empty-emoji">📭</span>مفيش حاجة</div>';tBox.style.display='none';return;}
-  
+
   var groups={};
   list.forEach(function(t){var d=t.date||'unknown';if(!groups[d])groups[d]=[];groups[d].push(t);});
   var dates=Object.keys(groups).sort(function(a,b){return b.localeCompare(a);});
   var today=isoDate(),yest=yesterdayISO();
-  
+
   box.innerHTML=dates.slice(0,60).map(function(date){
     var dTx=groups[date];
     var dTot=dTx.reduce(function(s,t){return s+Number(t.amount||0);},0);
@@ -1765,12 +1835,12 @@ function renderHistory(){
     else if(date===yest)label='📅 امبارح';
     else if(isFuture){try{var dO=new Date(date);label='🔮 '+dO.toLocaleDateString('ar-EG',{weekday:'long',day:'numeric',month:'long',year:'numeric'});}catch(e){label='🔮 '+date;}}
     else{try{var dO2=new Date(date);label='📅 '+dO2.toLocaleDateString('ar-EG',{weekday:'long',day:'numeric',month:'long'});}catch(e){label='📅 '+date;}}
-    
+
     var headerClass='day-header'+(isFuture?' future':'');
     return '<div class="day-group"><div class="'+headerClass+'"><div class="day-badge">'+label+'</div><div class="day-total">'+fmt(dTot)+' ج</div></div>'+dTx.map(function(t){return renderTxItem(t);}).join('')+'</div>';
   }).join('');
   bindTxActions();
-  
+
   var total=list.reduce(function(s,t){return s+Number(t.amount||0);},0);
   document.getElementById('histTotalVal').textContent=fmt(total)+' ج.م';
   tBox.style.display='flex';
@@ -1783,36 +1853,36 @@ function renderStats(){
   var mTot=ml.reduce(function(s,t){return s+Number(t.amount||0);},0);
   var tTot=tl.reduce(function(s,t){return s+Number(t.amount||0);},0);
   var amzTot=ml.filter(function(t){return t.subCategory==='أمازون';}).reduce(function(s,t){return s+Number(t.amount||0);},0);
-  
+
   document.getElementById('statMonth').textContent=fmt(mTot);
   document.getElementById('statToday').textContent=fmt(tTot);
   document.getElementById('statCount').textContent=ml.length;
   document.getElementById('statAmazon').textContent=fmt(amzTot);
-  
+
   var future=getFutureTx();
   var futureTotal=future.reduce(function(s,t){return s+Number(t.amount||0);},0);
   document.getElementById('statFutureTotal').textContent=fmt(futureTotal);
   document.getElementById('statFutureCount').textContent=future.length;
-  
+
   var byPay={};
   Object.keys(PAYMENT_METHODS).forEach(function(k){byPay[k]=0;});
   ml.forEach(function(t){if(byPay[t.method]!==undefined)byPay[t.method]+=Number(t.amount||0);});
-  
+
   document.getElementById('payBreakdown').innerHTML=Object.keys(byPay).filter(function(k){return byPay[k]>0;}).map(function(k){
     var pm=PAYMENT_METHODS[k];
     return '<div class="tpl-item"><span style="font-size:20px">'+pm.icon+'</span><span style="flex:1;font-size:13px;font-weight:800">'+pm.label+'</span><span style="font-size:15px;font-weight:900;color:var(--primary-2)">'+fmt(byPay[k])+'</span></div>';
   }).join('')||'<div class="empty" style="padding:20px 0"><span style="font-size:32px;opacity:.3">💳</span></div>';
-  
+
   var byCat={};
   ml.forEach(function(t){byCat[t.category]=(byCat[t.category]||0)+Number(t.amount||0);});
   document.getElementById('catBreakdown').innerHTML=Object.keys(byCat).sort(function(a,b){return byCat[b]-byCat[a];}).map(function(c){
     return '<div class="tpl-item"><span style="font-size:20px">📁</span><span style="flex:1;font-size:13px;font-weight:800">'+esc(c)+'</span><span style="font-size:15px;font-weight:900;color:var(--primary-2)">'+fmt(byCat[c])+'</span></div>';
   }).join('')||'<div class="empty" style="padding:20px 0"><span style="font-size:32px;opacity:.3">📁</span></div>';
-  
+
   var cnt={};
   ml.forEach(function(t){var n=(t.description||'').split(' — ')[0].split(' × ')[0].replace(/\s*\([^)]*\)\s*$/,'');if(!n)return;cnt[n]=(cnt[n]||0)+1;});
   var sorted=Object.keys(cnt).map(function(k){return[k,cnt[k]];}).sort(function(a,b){return b[1]-a[1];}).slice(0,8);
-  
+
   var tbx=document.getElementById('topItems');
   if(!sorted.length)tbx.innerHTML='<div class="empty"><span class="empty-emoji">🌟</span>لسه مفيش مشتريات</div>';
   else{
@@ -1843,7 +1913,7 @@ function renderTplBody(bg){
       return '<div class="tpl-item" data-k="'+k+'" data-i="'+idx+'"><input value="'+esc(it.name)+'" style="flex:1" data-field="name"><input type="text" inputmode="decimal" value="'+it.price+'" style="width:70px;text-align:center;color:var(--primary-2);font-weight:900" data-field="price"><button class="ti-del" data-del="'+k+':'+idx+'">🗑️</button></div>';
     }).join('')+'<button class="modal-btn ok" style="width:100%;margin-top:8px;padding:12px;font-size:13px" data-add="'+k+'">➕ إضافة صنف</button></div>';
   }).join('');
-  
+
   tb.querySelectorAll('input').forEach(function(inp){
     inp.addEventListener('change',function(){
       var r=inp.closest('.tpl-item');var k=r.dataset.k,i=parseInt(r.dataset.i),f=inp.dataset.field;
