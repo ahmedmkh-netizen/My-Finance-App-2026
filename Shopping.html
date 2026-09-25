@@ -1139,8 +1139,33 @@ function checkPin(){
   }
 }
 
-(function(){var p=sessionStorage.getItem('shop_user_pin');if(p&&VALID_PINS[p]){currentUser=VALID_PINS[p];pinScreen.style.display='none';init();}})();
-
+(function autoLoginCheck(){
+  // ✅ أخفِ شاشة التحميل فوراً
+  var ls = document.getElementById('loadingScreen');
+  if (ls) ls.style.display = 'none';
+  
+  // ✅ أظهر شاشة PIN افتراضياً
+  var ps = document.getElementById('pinScreen');
+  if (ps) ps.style.display = 'flex';
+  
+  try {
+    var p = sessionStorage.getItem('shop_user_pin');
+    if (p && VALID_PINS[p]) {
+      // PIN محفوظ — ادخل مباشرة
+      currentUser = VALID_PINS[p];
+      if (ps) ps.style.display = 'none';
+      if (typeof init === 'function') {
+        init();
+        console.log('✅ auto-login نجح');
+      }
+    } else {
+      console.log('ℹ️ شاشة PIN جاهزة — أدخل الرمز');
+    }
+  } catch (e) {
+    console.error('❌ خطأ في auto-login:', e);
+  }
+})();
+  
 var lockTimer=null;
 function resetLock(){if(lockTimer)clearTimeout(lockTimer);lockTimer=setTimeout(function(){sessionStorage.removeItem('shop_user_pin');location.reload();},AUTO_LOCK_MS);}
 ['click','touchstart','keydown'].forEach(function(e){document.addEventListener(e,resetLock,{passive:true});});
