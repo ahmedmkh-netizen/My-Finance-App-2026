@@ -889,7 +889,28 @@ function loadFromLocalCache(){
 }
 
 function extractShoppingTx(allTx){
-  return (allTx||[]).filter(function(t){return t.source==='shopping-app';});
+  var SHOPPING_CATEGORIES = [
+    'كازيون / العثيم',
+    'لحوم / أسماك / دواجن',
+    'توابل / خزين',
+    'منظفات',
+    'خضروات',
+    'بقالة / فاكهة',
+    'مستلزمات منزلية'
+  ];
+  return (allTx||[]).filter(function(t){
+    if (t.source === 'shopping-app') return true;
+    if (SHOPPING_CATEGORIES.indexOf(t.category) >= 0) return true;
+    if (t.subCategory === 'أمازون') return true;
+    return false;
+  }).map(function(t){
+    return Object.assign({}, t, {
+      source: t.source || 'shopping-legacy',
+      sourceLabel: t.sourceLabel || (t.category || '').split(' / ')[0] || 'تسوق',
+      quantity: t.quantity || 1,
+      unitPrice: t.unitPrice || t.amount
+    });
+  });
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -948,8 +969,38 @@ function subscribe(){
     var d=doc.data()||{};
     var allTx=Array.isArray(d.transactions)?d.transactions:[];
 
-    // ✅ 5. استخرج فقط معاملات Shopping App
-    var remoteTx=extractShoppingTx(allTx);
+    // ✅ 5. استخرج كل معاملات التسوق (بما فيها القديمة)
+    // نأخذ أي معاملة في فئات التسوق بغض النظر عن مصدرها
+    var SHOPPING_CATEGORIES = [
+      'كازيون / العثيم',
+      'لحوم / أسماك / دواجن',
+      'توابل / خزين',
+      'منظفات',
+      'خضروات',
+      'بقالة / فاكهة',
+      'مستلزمات منزلية'
+    ];
+    
+    var remoteTx = allTx.filter(function(t) {
+      // 1. معاملات Shopping App الحديثة
+      if (t.source === 'shopping-app') return true;
+      
+      // 2. المعاملات القديمة في فئات التسوق
+      if (SHOPPING_CATEGORIES.indexOf(t.category) >= 0) return true;
+      
+      // 3. أمازون
+      if (t.subCategory === 'أمازون') return true;
+      
+      return false;
+    }).map(function(t) {
+      // ✅ طبّع الشكل — أضف حقول ناقصة
+      return Object.assign({}, t, {
+        source: t.source || 'shopping-legacy',
+        sourceLabel: t.sourceLabel || (t.category || '').split(' / ')[0] || 'تسوق',
+        quantity: t.quantity || 1,
+        unitPrice: t.unitPrice || t.amount
+      });
+    });
     var remoteRecurring=Array.isArray(d.shoppingRecurring)?d.shoppingRecurring:[];
 
     // ✅ 6. دمج مع الـ recurring المحلي
@@ -1463,11 +1514,17 @@ function deleteTx(id){
     bg.addEventListener('click',function(e){
       var a=e.target.dataset?e.target.dataset.a:null;
       if(a==='cancel'||e.target===bg){bg.remove();return;}
-      if(a==='once'){
+           if(a==='once'){
         bg.remove();
         if(!shoppingDocRef)return;
+        // احذف من المستند الموحّد مباشرة
         queueCloudSave(function(){return shoppingDocRef.update({transactions:firebase.firestore.FieldValue.arrayRemove(tx)});}).then(function(){
-          deleteFromMainWallet([tx]);
+          console.log('✅ تم الحذف من المستند الموحّد');
+          toast('تم الحذف من التطبيقين ✅');
+          if(navigator.vibrate)navigator.vibrate([40,40,40]);
+        }).catch(function(e){toast('فشل: '+e.message,'err');});
+      }
+      
           toast('تم الحذف من التطبيقين ✅');
           if(navigator.vibrate)navigator.vibrate([40,40,40]);
         }).catch(function(e){toast('فشل: '+e.message,'err');});
