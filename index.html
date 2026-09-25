@@ -6,7 +6,7 @@
 <title>المحفظة المالية V83.5</title>
 <meta name="theme-color" content="#F8FAFC">
 <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="محفظتي">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -791,6 +791,21 @@ const ACCOUNT_SHORT_NAMES = {
 
 const isLedgerAccount = (key) => LEDGER_METHOD_IDS.has(key);
 const isCashAccount = (key) => CASH_METHOD_IDS.has(key);
+
+// ✅ V83.5 — تصنيفات التسوق (للاستثناء من رصيد الكاش فقط)
+const SHOPPING_CATEGORIES = new Set([
+  'كازيون / العثيم',
+  'لحوم / أسماك / دواجن',
+  'توابل / خزين',
+  'منظفات',
+  'خضروات',
+  'بقالة / فاكهة',
+  'مستلزمات منزلية'
+]);
+
+const isShoppingCategory = (cat) => 
+  typeof cat === 'string' && SHOPPING_CATEGORIES.has(cat);
+
 const isWalletAccount = (key) => WALLET_METHOD_IDS.has(key);
 const isBankAccount = (key) => BANK_METHOD_IDS.has(key);
 
@@ -1154,6 +1169,9 @@ const getAccountCutoff = (accountsData, key) => {
 };
 
 /* ═══════════════ BALANCE COMPUTATION ═══════════════ */
+/* ⚠️ V83.5: المشتريات المعلقة من تطبيق التسوق (shopping-app / shopping-legacy)
+   لا تؤثر على الرصيد الحي — فقط عند الاعتماد (status='paid') تُحسب.
+   لذلك دالة computeBalance تبقى كما هي (تتحقق من status='paid'). */
 const computeBalance = (data, key, asOfDate) => {
   const accountsData = data?.accountsData || DEFAULT_ACCOUNTS;
   const base = safeNumber(accountsData[key]?.balance);
@@ -1167,6 +1185,8 @@ const computeBalance = (data, key, asOfDate) => {
     if (t.status !== 'paid' || t.method !== key) return;
     if (t.source === 'carryover') return;
     if (isCashAccount(key) && isHanyShopCategory(t.category, t)) return;
+    // ✅ V83.5: المشتريات من تطبيق التسوق لا تُحسب إلا بعد الاعتماد (status='paid')
+    // والشرط أعلاه يتحقق من status='paid' بالفعل
     const d = parseISODate(t.date);
     if (!d) return;
     const amt = safeNumber(t.amount);
@@ -2183,7 +2203,7 @@ const runHealthCheck = (data) => {
 
   return { ok: issues.length === 0, issues };
 };
-  /* ═══════════════════════════════════════════════════════════════
+/* ═══════════════════════════════════════════════════════════════
    PART 3 — Shared UI Components
    V83.5 — Bank-Grade Edition
    ═══════════════════════════════════════════════════════════════ */
@@ -2481,6 +2501,13 @@ const LoanInstallmentBadge = memo(({ tx }) => {
   if (!tx?.linkedLoanId && !tx?.sourceLoanId) return null;
   if (tx.generatedBy !== 'materializeLoanInstallments' && !tx.systemGenerated) return null;
   return <span className="badge badge-brand" title="قسط قرض مولّد تلقائياً">🏦 قسط</span>;
+});
+
+/* ═══════════════ SHOPPING BADGE (جديد) ═══════════════ */
+const ShoppingBadge = memo(({ tx }) => {
+  if (tx?.source !== 'shopping-app' && tx?.source !== 'shopping-legacy') return null;
+  const label = tx.source === 'shopping-app' ? '🛒 تسوق' : '🛒 تسوق (قديم)';
+  return <span className="badge badge-brand text-[9px]">{label}</span>;
 });
 
 /* ═══════════════ FAMILY MEMBERS ═══════════════ */
@@ -3470,7 +3497,7 @@ const SmsParserModal = memo(({ isOpen, onClose, dispatch, addNotification, saveH
     </Modal>
   );
 });
-      /* ═══════════════════════════════════════════════════════════════
+/* ═══════════════════════════════════════════════════════════════
    PART 4 — Main Views (Part 1): Dashboard + Categories + Transactions
    V83.5 — Bank-Grade Edition
    ═══════════════════════════════════════════════════════════════ */
@@ -3698,7 +3725,8 @@ const DashboardView = memo(({
   data, financeSnapshot, liveBalances, totalLiquidity, walletVisibility,
   onToggleVisibility, dispatch, selectedYear, selectedMonth, transactions,
   cards, updatedLoans, chartData, isDarkMode, addNotification,
-  onSelectYear, onSelectMonth, liquidityMode, onChangeLiquidityMode
+  onSelectYear, onSelectMonth, liquidityMode, onChangeLiquidityMode,
+  shoppingPendingByMonth  // ✅ جديد — يستقبل المشتريات المعلقة
 }) => {
   const totalCardDebt = useMemo(() => cards.reduce((s, c) => s + Math.max(0, computeCardDebt(data, c)), 0), [cards, data]);
   const totalLoanDebt = useMemo(() => updatedLoans.filter(l => !l.isReceivable).reduce((s, l) => s + l.remaining, 0), [updatedLoans]);
@@ -3858,6 +3886,59 @@ const DashboardView = memo(({
           <span className="text-[11px] font-bold">تحويل / شهري</span>
         </button>
       </div>
+
+      {/* ✅ NEW: المشتريات المعلقة من تطبيق التسوق */}
+      {shoppingPendingByMonth && shoppingPendingByMonth.length > 0 && (
+        <div className="card" style={{ background: 'linear-gradient(135deg, rgba(236,72,153,0.08), rgba(219,39,119,0.05))', borderColor: 'rgba(236,72,153,0.3)' }}>
+          <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+            <div className="flex items-center gap-2">
+              <div className="p-2 rounded-lg bg-pink-100 dark:bg-pink-950/40 text-pink-600 dark:text-pink-400">
+                <StoreIcon size={16} />
+              </div>
+              <div>
+                <h3 className="font-black text-sm">🛒 مشتريات التسوق القادمة</h3>
+                <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                  {shoppingPendingByMonth.reduce((s, m) => s + m.items.length, 0)} معاملة معلقة
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => dispatch({ type: 'SET_ACTIVE_TAB', payload: 'loans' })}
+              className="text-[11px] text-pink-600 dark:text-pink-400 font-bold"
+            >
+              عرض الكل →
+            </button>
+          </div>
+          <div className="space-y-2 max-h-48 overflow-y-auto scroll-hide">
+            {shoppingPendingByMonth.slice(0, 6).map(m => (
+              <button
+                key={m.key}
+                onClick={() => {
+                  dispatch({ type: 'SET_SELECTED_YEAR', payload: m.year });
+                  dispatch({ type: 'SET_SELECTED_MONTH', payload: m.month });
+                  dispatch({ type: 'SET_ACTIVE_TAB', payload: 'transactions' });
+                }}
+                className="w-full flex justify-between items-center p-2.5 rounded-lg text-right hover:shadow-sm transition-all"
+                style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)' }}
+              >
+                <div className="flex items-center gap-2 min-w-0 flex-1">
+                  <span className="badge badge-brand text-[9px] flex-shrink-0">{m.month}</span>
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-bold truncate">
+                      {Object.keys(m.byCategory).slice(0, 2).join(' • ')}
+                      {Object.keys(m.byCategory).length > 2 && ` +${Object.keys(m.byCategory).length - 2}`}
+                    </p>
+                    <p className="text-[9px]" style={{ color: 'var(--text-muted)' }}>{m.items.length} معاملة</p>
+                  </div>
+                </div>
+                <span className="font-black text-xs text-pink-600 dark:text-pink-400 flex-shrink-0">
+                  {fmt(m.total)} ج.م
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-3 gap-2">
         <button onClick={() => dispatch({ type: 'SET_ACTIVE_TAB', payload: 'loans' })} className="card card-hover py-2.5 text-center">
@@ -4150,6 +4231,7 @@ const CategoryDetailModal = memo(({ category, transactions, selectedMonth, selec
                             <FamilyBadge tx={t} /> <SmsBadge tx={t} /> <TeldaBadge tx={t} />
                             <TransferBadge tx={t} /> <RecurringBadge tx={t} />
                             <CarryoverBadge tx={t} /> <LoanInstallmentBadge tx={t} />
+                            <ShoppingBadge tx={t} />
                           </p>
                           <p className="text-[10px] font-semibold mt-0.5" style={{ color: 'var(--text-muted)' }}>
                             {PAYMENT_METHODS.find(p => p.id === t.method)?.label || t.method || '—'}
@@ -4317,6 +4399,7 @@ const TransactionsView = memo(({
   const [showSmsOnly, setShowSmsOnly] = useState(false);
   const [showBeneficiariesOnly, setShowBeneficiariesOnly] = useState(false);
   const [showLoansOnly, setShowLoansOnly] = useState(false);
+  const [showShoppingOnly, setShowShoppingOnly] = useState(false);  // ✅ جديد
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState(new Set());
 
@@ -4338,21 +4421,25 @@ const TransactionsView = memo(({
   const filterBySms = useCallback((list) => showSmsOnly ? list.filter(t => t.source === 'sms') : list, [showSmsOnly]);
   const filterByBeneficiaries = useCallback((list) => showBeneficiariesOnly ? list.filter(t => isBeneficiaryCategorySafe(t.category)) : list, [showBeneficiariesOnly]);
   const filterByLoans = useCallback((list) => showLoansOnly ? list.filter(t => t.linkedLoanId || t.sourceLoanId) : list, [showLoansOnly]);
+  // ✅ جديد: فلتر المشتريات من تطبيق التسوق
+  const filterByShopping = useCallback((list) => showShoppingOnly ? list.filter(t => t.source === 'shopping-app' || t.source === 'shopping-legacy') : list, [showShoppingOnly]);
   const filterByType = useCallback((list) => transViewMode === 'all' ? list : list.filter(t => t.type === transViewMode), [transViewMode]);
 
   const applyAllFilters = useCallback((list) =>
     filterByType(
-      filterByLoans(
-        filterByBeneficiaries(
-          filterBySms(
-            filterByBankFees(
-              filterBySource(list)
+      filterByShopping(
+        filterByLoans(
+          filterByBeneficiaries(
+            filterBySms(
+              filterByBankFees(
+                filterBySource(list)
+              )
             )
           )
         )
       )
     ),
-    [filterByType, filterByLoans, filterByBeneficiaries, filterBySms, filterByBankFees, filterBySource]
+    [filterByType, filterByShopping, filterByLoans, filterByBeneficiaries, filterBySms, filterByBankFees, filterBySource]
   );
 
   const pendingGroups = useMemo(() => groupedTransactions
@@ -4473,7 +4560,8 @@ const TransactionsView = memo(({
     (showBankFeesOnly ? 1 : 0) +
     (showSmsOnly ? 1 : 0) +
     (showBeneficiariesOnly ? 1 : 0) +
-    (showLoansOnly ? 1 : 0);
+    (showLoansOnly ? 1 : 0) +
+    (showShoppingOnly ? 1 : 0);
 
   const dailyGroups = useMemo(() => groupTransactionsByDate(paidArchive), [paidArchive]);
 
@@ -4586,6 +4674,10 @@ const TransactionsView = memo(({
           </button>
           <button onClick={() => setShowLoansOnly(v => !v)} className={`btn text-[11px] px-2.5 py-1.5 ${showLoansOnly ? 'btn-primary' : 'btn-secondary'}`}>
             🏦 أقساط قروض
+          </button>
+          {/* ✅ جديد: فلتر المشتريات */}
+          <button onClick={() => setShowShoppingOnly(v => !v)} className={`btn text-[11px] px-2.5 py-1.5 ${showShoppingOnly ? 'btn-primary' : 'btn-secondary'}`}>
+            🛒 تسوق
           </button>
           {isClosed ? (
             <React.Fragment>
@@ -4760,6 +4852,7 @@ const TransactionsView = memo(({
                               <FamilyBadge tx={t} /> <SmsBadge tx={t} /> <TeldaBadge tx={t} />
                               <TransferBadge tx={t} /> <RecurringBadge tx={t} />
                               <CarryoverBadge tx={t} /> <LoanInstallmentBadge tx={t} />
+                              <ShoppingBadge tx={t} />
                             </p>
                             <p className="text-[10px] font-semibold mt-0.5" style={{ color: 'var(--text-muted)' }}>
                               {t.date} • {PAYMENT_METHODS.find(p => p.id === t.method)?.label}
@@ -4827,6 +4920,7 @@ const TransactionsView = memo(({
                           <TransferBadge tx={t} /> <RecurringBadge tx={t} />
                           <CarryoverBadge tx={t} /> <CreditBadge tx={t} />
                           <LoanInstallmentBadge tx={t} />
+                          <ShoppingBadge tx={t} />
                         </p>
                         <p className="text-[10px] font-semibold" style={{ color: 'var(--text-muted)' }}>
                           {PAYMENT_METHODS.find(p => p.id === t.method)?.label || ''} • {new Date(t.createdAt || Date.now()).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}
@@ -4853,7 +4947,7 @@ const TransactionsView = memo(({
     </div>
   );
 });
-  /* ═══════════════════════════════════════════════════════════════
+/* ═══════════════════════════════════════════════════════════════
    PART 5 — Main Views (Part 2): Custody + Loans + Cards + Cashback
                        + Planning + Forecasts + Calendar + Export + AI
    V83.5 — Bank-Grade Edition
@@ -5563,6 +5657,7 @@ const HanyShopLedger = memo(({ loan, prevMonthLoan, addNotification }) => {
                     <p className="font-bold truncate">{item.description || 'بدون وصف'}</p>
                     <p className="text-[9px] font-semibold mt-0.5" style={{ color: 'var(--text-muted)' }}>
                       {item.date} • {PAYMENT_METHODS.find(p => p.id === item.method)?.label || item.method}
+                      <ShoppingBadge tx={item} />
                     </p>
                   </div>
                   <span className="font-black text-red-600 flex-shrink-0">{fmt(item.amount)}</span>
@@ -5805,6 +5900,7 @@ const CardStatementModal = memo(({ card, data, transactions, onClose, addNotific
                             {t.description || t.category}{' '}
                             <SmsBadge tx={t} /> <TeldaBadge tx={t} />
                             <RecurringBadge tx={t} /> <LoanInstallmentBadge tx={t} />
+                            <ShoppingBadge tx={t} />
                           </p>
                           <p className="text-[10px] font-semibold mt-0.5" style={{ color: 'var(--text-muted)' }}>
                             {t.category}
@@ -5843,7 +5939,8 @@ const CardStatementModal = memo(({ card, data, transactions, onClose, addNotific
 /* ═══════════════ LOANS VIEW ═══════════════ */
 const LoansView = memo(({
   updatedLoans, cards, recurringItems, transactions, dispatch, deleteRecurring,
-  saveHistory, getLocalISODate, addNotification, data, selectedMonth, selectedYear
+  saveHistory, getLocalISODate, addNotification, data, selectedMonth, selectedYear,
+  shoppingPendingByMonth  // ✅ جديد
 }) => {
   const [showAdd, setShowAdd] = useState(false);
   const [activeTab, setActiveTab] = useState('loans');
@@ -6159,6 +6256,57 @@ const LoansView = memo(({
               </button>
             </div>
           </div>
+
+          {/* ✅ NEW: مشتريات التسوق المعلقة */}
+          {shoppingPendingByMonth && shoppingPendingByMonth.length > 0 && (
+            <div className="card">
+              <h3 className="font-black text-sm flex items-center gap-2 mb-3 text-pink-600 dark:text-pink-400">
+                <StoreIcon size={14} /> 🛒 مشتريات التسوق (معلقة)
+              </h3>
+              <div className="space-y-2 max-h-80 overflow-y-auto scroll-hide">
+                {shoppingPendingByMonth.map(m => (
+                  <details key={m.key} className="rounded-lg overflow-hidden" style={{ background: 'var(--bg-muted)' }}>
+                    <summary className="p-3 cursor-pointer list-none flex justify-between items-center">
+                      <div className="flex items-center gap-2">
+                        <span className="badge badge-brand text-[10px]">{m.month} {m.year}</span>
+                        <span className="text-[10px] font-bold" style={{ color: 'var(--text-muted)' }}>
+                          {m.items.length} معاملة
+                        </span>
+                      </div>
+                      <span className="font-black text-sm text-pink-600 dark:text-pink-400">
+                        {fmt(m.total)} ج.م
+                      </span>
+                    </summary>
+                    <div className="px-3 pb-3 space-y-1.5" style={{ borderTop: '1px solid var(--border-subtle)' }}>
+                      {m.items.map(t => (
+                        <div key={t.id} className="flex justify-between items-center gap-2 p-2 rounded-lg text-[11px]" style={{ background: 'var(--bg-card)' }}>
+                          <div className="min-w-0 flex-1">
+                            <p className="font-bold truncate">{t.description || t.category}</p>
+                            <p className="text-[9px] mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                              {t.date} • {t.category} • {t.sourceLabel || 'تسوق'}
+                            </p>
+                          </div>
+                          <div className="flex gap-1 flex-shrink-0">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                dispatch({ type: 'SET_ACTIVE_TAB', payload: 'transactions' });
+                                dispatch({ type: 'SET_SELECTED_YEAR', payload: m.year });
+                                dispatch({ type: 'SET_SELECTED_MONTH', payload: m.month });
+                              }}
+                              className="text-[10px] font-black text-blue-600 px-2 py-1 rounded"
+                            >
+                              عرض
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </details>
+                ))}
+              </div>
+            </div>
+          )}
 
           {showAdd && (
             <Modal isOpen={true} onClose={() => setShowAdd(false)} title="التزام جديد" icon="📋">
@@ -9018,1106 +9166,7 @@ const AiAssistantView = memo(({ data, transactions, cards, updatedLoans, selecte
     </div>
   );
 });
-  /* ═══════════════════════════════════════════════════════════════
-   PART 6 — dataReducer + Modals (TransactionForm, Recurring,
-            QuickTransfer, EditCard, EditLoan)
-   V83.5 — Bank-Grade Edition
-   ═══════════════════════════════════════════════════════════════ */
-
-/* ═══════════════ INITIAL REDUCER STATE ═══════════════ */
-const initialReducerState = {
-  data: getInitialData(),
-  budgets: (() => {
-    try {
-      const saved = localStorage.getItem('finance_budgets_V83');
-      return saved ? safeParseJson(saved, {}) : {};
-    } catch { return {}; }
-  })(),
-  selectedYear: getDefaultMonthYear().year,
-  selectedMonth: getDefaultMonthYear().month,
-  activeTab: 'dashboard',
-  isFormOpen: false,
-  formMode: 'add',
-  formData: {},
-  editingCard: null,
-  editingLoan: null,
-  editingBudgetCategory: null,
-  budgetAmount: '',
-  viewingCardStatement: null,
-  activeCategoryDetail: null,
-  pendingCloseModal: { isOpen: false, pending: [], total: 0, month: '', year: 0 },
-  recurringModalOpen: false,
-  recurringFormData: {},
-  pinChangeOpen: false,
-  smsModalOpen: false,
-  quickTransferModalOpen: false,
-  confirmDialog: { isOpen: false, title: '', message: '', danger: false, onConfirm: null, onCancel: null },
-  expandedLedgers: { cash: false, fawry: false, etisalat: false, cib_savings: false, aaib_savings: false },
-  expandedCardsSection: false,
-  expandedGroup: null,
-  transViewMode: 'all',
-  statusFilter: 'all',
-  searchTerm: '',
-  catViewType: 'expense',
-  walletVisibility: (() => {
-    try {
-      const saved = localStorage.getItem('wallet_visibility_v83');
-      if (saved) return JSON.parse(saved);
-    } catch (e) {}
-    return { cib_savings: true, aaib_savings: true, cash: true, fawry: true, etisalat: true };
-  })(),
-  isDarkMode: (() => {
-    try {
-      const saved = localStorage.getItem('theme');
-      if (saved) return saved === 'dark';
-      return window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false;
-    } catch { return false; }
-  })(),
-  liquidityMode: (() => {
-    try { return localStorage.getItem('liquidity_mode') || DEFAULT_LIQUIDITY_MODE; }
-    catch { return DEFAULT_LIQUIDITY_MODE; }
-  })(),
-};
-
-/* ═══════════════ DATA REDUCER ═══════════════ */
-const dataReducer = (state, action) => {
-  switch (action.type) {
-    case 'SET_DATA': {
-      const next = action.payload;
-      if (!next || typeof next !== 'object') return state;
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); } catch (e) {}
-      return { ...state, data: next };
-    }
-    case 'SET_BUDGETS': {
-      const next = action.payload || {};
-      try { localStorage.setItem('finance_budgets_V83', JSON.stringify(next)); } catch (e) {}
-      return { ...state, budgets: next };
-    }
-    case 'UPDATE_TRANSACTIONS': {
-      const transactions = Array.isArray(action.payload) ? action.payload : state.data.transactions;
-      const next = { ...state.data, transactions };
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); } catch (e) {}
-      return { ...state, data: next };
-    }
-    case 'UPDATE_LOANS': {
-      const loans = Array.isArray(action.payload) ? action.payload : state.data.loans;
-      const next = { ...state.data, loans };
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); } catch (e) {}
-      return { ...state, data: next };
-    }
-    case 'UPDATE_CARDS': {
-      const cards = Array.isArray(action.payload) ? action.payload : state.data.cards;
-      const next = { ...state.data, cards };
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); } catch (e) {}
-      return { ...state, data: next };
-    }
-    case 'UPDATE_ACCOUNTS': {
-      const accountsData = action.payload && typeof action.payload === 'object' ? action.payload : state.data.accountsData;
-      const next = { ...state.data, accountsData };
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); } catch (e) {}
-      return { ...state, data: next };
-    }
-    case 'UPDATE_RECURRING_ITEMS': {
-      const recurringItems = Array.isArray(action.payload) ? action.payload : state.data.recurringItems;
-      const next = { ...state.data, recurringItems };
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); } catch (e) {}
-      return { ...state, data: next };
-    }
-    case 'UPDATE_CASHBACK_TRACKERS': {
-      const cashbackTrackers = Array.isArray(action.payload) ? action.payload : state.data.cashbackTrackers;
-      const next = { ...state.data, cashbackTrackers };
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); } catch (e) {}
-      return { ...state, data: next };
-    }
-    case 'UPDATE_MONTHLY_PLANS': {
-      const monthlyPlans = action.payload && typeof action.payload === 'object' ? action.payload : state.data.monthlyPlans;
-      const next = { ...state.data, monthlyPlans };
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); } catch (e) {}
-      return { ...state, data: next };
-    }
-
-    case 'CLOSE_MONTH': {
-      const { year, month } = action.payload || {};
-      if (!year || !month) return state;
-      const monthKey = makeMonthKey(year, month);
-      const monthIdx = getMonthIndex(month);
-      if (monthIdx < 0) return state;
-
-      const monthEnd = new Date(year, monthIdx + 1, 0, 23, 59, 59);
-      const snapshots = { ...(state.data.monthlySnapshots || {}) };
-      const monthSnap = {};
-      ACCOUNT_KEYS.forEach(k => {
-        monthSnap[k] = computeBalance(state.data, k, monthEnd);
-      });
-      snapshots[monthKey] = monthSnap;
-
-      const closedMonths = Array.from(new Set([...(state.data.closedMonths || []), monthKey]));
-
-      const nextIdx = monthIdx + 1;
-      const nextYear = nextIdx > 11 ? year + 1 : year;
-      const nextMonth = ALL_MONTHS[nextIdx > 11 ? 0 : nextIdx];
-
-      const pending = (state.data.transactions || []).filter(t =>
-        t.month === month && (t.year || year) === year && t.status !== 'paid'
-      );
-      const nextMonthClosed = closedMonths.includes(makeMonthKey(nextYear, nextMonth));
-
-      let finalTxs = state.data.transactions || [];
-
-      if (pending.length > 0 && !nextMonthClosed) {
-        /* ═══════════════════════════════════════════════════════
-           V83.5 — ترحيل ذكي:
-           - استثنِ مسحوبات هاني (تُدار عبر HanyShopLedger)
-           - استثنِ أقساط القروض (تُولَّد تلقائياً في الشهر الجديد)
-           - استثنِ القيود المرحّلة (منع double-carryover)
-           ═══════════════════════════════════════════════════════ */
-        const pendingToCarry = pending.filter(t => {
-          if (isHanyShopCategory(t.category, t)) return false;
-          if (isCarryoverTransaction(t)) return false;
-          if (t.sourceLoanId || t.linkedLoanId || t.generatedBy === 'materializeLoanInstallments') return false;
-          if (isSystemGenerated(t) && t.importedFrom !== 'excel-v1') return false;
-          return true;
-        });
-
-        const skipped = pending.length - pendingToCarry.length;
-        if (skipped > 0) {
-          console.log(`🛡️ CLOSE_MONTH: تم تجاهل ${skipped} قيد من الترحيل`);
-        }
-
-        const carriedTxs = pendingToCarry.map(t => ({
-          ...t,
-          id: `carry-${t.id}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-          month: nextMonth,
-          year: nextYear,
-          monthIndex: nextIdx > 11 ? 0 : nextIdx,
-          date: `${nextYear}-${String((nextIdx > 11 ? 0 : nextIdx) + 1).padStart(2, '0')}-01`,
-          status: 'pending',
-          source: 'carryover',
-          originalCategory: t.category,
-          carriedFromSource: t.source || 'manual',
-          carryoverFrom: `${month} ${year}`,
-          carriedFromId: t.id,
-          createdAt: new Date().toISOString(),
-        }));
-        finalTxs = [...carriedTxs, ...finalTxs];
-      }
-
-      const next = {
-        ...state.data,
-        transactions: finalTxs,
-        closedMonths,
-        monthlySnapshots: snapshots,
-      };
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); } catch (e) {}
-      return { ...state, data: next };
-    }
-
-    case 'OPEN_MONTH': {
-      const monthKey = action.payload;
-      if (!monthKey) return state;
-      const closedMonths = (state.data.closedMonths || []).filter(k => k !== monthKey);
-      const next = { ...state.data, closedMonths };
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); } catch (e) {}
-      return { ...state, data: next };
-    }
-
-    case 'SET_FORM_OPEN': return { ...state, isFormOpen: !!action.payload };
-    case 'SET_FORM_MODE': return { ...state, formMode: action.payload || 'add' };
-    case 'SET_FORM_DATA': return { ...state, formData: action.payload || {} };
-
-    case 'SET_EDITING_CARD': return { ...state, editingCard: action.payload };
-    case 'SET_EDITING_LOAN': return { ...state, editingLoan: action.payload };
-    case 'SET_EDITING_BUDGET_CATEGORY': return { ...state, editingBudgetCategory: action.payload };
-    case 'SET_BUDGET_AMOUNT': return { ...state, budgetAmount: action.payload ?? '' };
-
-    case 'SET_VIEWING_CARD_STATEMENT': return { ...state, viewingCardStatement: action.payload };
-    case 'SET_ACTIVE_CATEGORY_DETAIL': return { ...state, activeCategoryDetail: action.payload };
-    case 'SET_ACTIVE_TAB': return { ...state, activeTab: action.payload || 'dashboard' };
-
-    case 'SET_PENDING_CLOSE_MODAL': return { ...state, pendingCloseModal: action.payload || { isOpen: false } };
-    case 'SET_RECURRING_MODAL_OPEN': return { ...state, recurringModalOpen: !!action.payload };
-    case 'SET_RECURRING_FORM_DATA': return { ...state, recurringFormData: action.payload || {} };
-    case 'SET_PIN_CHANGE_OPEN': return { ...state, pinChangeOpen: !!action.payload };
-    case 'SET_SMS_MODAL_OPEN': return { ...state, smsModalOpen: !!action.payload };
-    case 'SET_QUICK_TRANSFER_MODAL_OPEN': return { ...state, quickTransferModalOpen: !!action.payload };
-
-    case 'SHOW_CONFIRM': {
-      return {
-        ...state,
-        confirmDialog: {
-          isOpen: true,
-          title: action.title || 'تأكيد',
-          message: action.message || '',
-          danger: !!action.danger,
-          onConfirm: action.onConfirm || null,
-          onCancel: action.onCancel || null,
-        },
-      };
-    }
-    case 'HIDE_CONFIRM':
-      return {
-        ...state,
-        confirmDialog: { isOpen: false, title: '', message: '', danger: false, onConfirm: null, onCancel: null }
-      };
-
-    case 'TOGGLE_LEDGER': {
-      const key = action.payload;
-      return { ...state, expandedLedgers: { ...state.expandedLedgers, [key]: !state.expandedLedgers[key] } };
-    }
-    case 'TOGGLE_CARDS_SECTION': return { ...state, expandedCardsSection: !state.expandedCardsSection };
-    case 'SET_EXPANDED_GROUP': return { ...state, expandedGroup: action.payload };
-
-    case 'SET_TRANS_VIEW_MODE': return { ...state, transViewMode: action.payload || 'all' };
-    case 'SET_STATUS_FILTER': return { ...state, statusFilter: action.payload || 'all' };
-    case 'SET_SEARCH_TERM': return { ...state, searchTerm: action.payload || '' };
-    case 'SET_CAT_VIEW_TYPE': return { ...state, catViewType: action.payload === 'income' ? 'income' : 'expense' };
-
-    case 'SET_SELECTED_YEAR': return { ...state, selectedYear: safeNumber(action.payload, state.selectedYear) };
-    case 'SET_SELECTED_MONTH': return { ...state, selectedMonth: action.payload || state.selectedMonth };
-
-    case 'TOGGLE_WALLET_VISIBILITY': {
-      const key = action.payload;
-      if (!key) return state;
-      const next = { ...state.walletVisibility, [key]: !state.walletVisibility[key] };
-      try { localStorage.setItem('wallet_visibility_v83', JSON.stringify(next)); } catch (e) {}
-      return { ...state, walletVisibility: next };
-    }
-
-    case 'TOGGLE_DARK_MODE': {
-      const isDark = typeof action.payload === 'boolean' ? action.payload : !state.isDarkMode;
-      try { localStorage.setItem('theme', isDark ? 'dark' : 'light'); } catch (e) {}
-      return { ...state, isDarkMode: isDark };
-    }
-
-    case 'SET_LIQUIDITY_MODE': {
-      const mode = action.payload;
-      if (!LIQUIDITY_MODES[mode]) return state;
-      try { localStorage.setItem('liquidity_mode', mode); } catch (e) {}
-      return { ...state, liquidityMode: mode };
-    }
-
-    default:
-      return state;
-  }
-};
-
 /* ═══════════════════════════════════════════════════════════════
-   QUICK TRANSFER MODAL
-   ═══════════════════════════════════════════════════════════════ */
-const QuickTransferModal = memo(({ isOpen, onClose, dispatch, data, addNotification, saveHistory }) => {
-  const [beneficiaryId, setBeneficiaryId] = useState(BENEFICIARIES[0]?.id || 'shaimaa');
-  const [amount, setAmount] = useState('');
-  const [date, setDate] = useState(getLocalISODate());
-  const [method, setMethod] = useState('cib_savings');
-  const [status, setStatus] = useState('pending');
-  const [description, setDescription] = useState('');
-
-  useEffect(() => {
-    if (!isOpen) {
-      setBeneficiaryId(BENEFICIARIES[0]?.id || 'shaimaa');
-      setAmount('');
-      setDate(getLocalISODate());
-      setMethod('cib_savings');
-      setStatus('pending');
-      setDescription('');
-    }
-  }, [isOpen]);
-
-  const beneficiary = BENEFICIARIES.find(b => b.id === beneficiaryId);
-
-  useEffect(() => {
-    if (beneficiary) {
-      setAmount(String(beneficiary.defaultAmount));
-      setMethod(beneficiary.hasTelda ? beneficiary.method : 'cash');
-      setDescription(`مصروف شهري - ${beneficiary.label}`);
-    }
-  }, [beneficiary]);
-
-  const handleSubmit = () => {
-    const check = validateAmount(amount, { min: 0.01, max: 10000000, label: 'المبلغ' });
-    if (!check.valid) {
-      addNotification({ type: 'error', title: 'خطأ', message: check.error });
-      return;
-    }
-    const dateCheck = validateDate(date);
-    if (!dateCheck.valid) {
-      addNotification({ type: 'error', title: 'خطأ', message: dateCheck.error });
-      return;
-    }
-    const d = dateCheck.value;
-    const txYear = d.getFullYear();
-    const txMonth = ALL_MONTHS[d.getMonth()];
-    if (isMonthClosed(data, txYear, txMonth)) {
-      addNotification({ type: 'error', title: 'شهر مغلق', message: `شهر ${txMonth} ${txYear} مغلق` });
-      return;
-    }
-    saveHistory();
-    const newTx = {
-      id: getSafeId(),
-      type: 'expense',
-      subType: 'withdrawal',
-      kind: KIND.OPERATIONAL,
-      category: `مصروف شهري - ${beneficiary.label}`,
-      amount: check.value,
-      description: description || `تحويل شهري إلى ${beneficiary.name}`,
-      method,
-      date,
-      month: txMonth,
-      year: txYear,
-      monthIndex: d.getMonth(),
-      status,
-      transferChannel: beneficiary.hasTelda ? beneficiary.method : undefined,
-      createdAt: new Date().toISOString(),
-    };
-    dispatch({
-      type: 'UPDATE_TRANSACTIONS',
-      payload: [newTx, ...(data.transactions || [])].sort((a, b) =>
-        (parseISODate(b.date) || 0) - (parseISODate(a.date) || 0)
-      ),
-    });
-    addNotification({
-      type: 'success',
-      title: 'تمت الإضافة',
-      message: `${beneficiary.label} — ${fmt(check.value)} ج.م`
-    });
-    onClose();
-  };
-
-  if (!isOpen) return null;
-
-  return (
-    <Modal isOpen={true} onClose={onClose} title="تحويل شهري / مصروف عائلي" icon="💸" size="md">
-      <div className="space-y-3">
-        <div>
-          <p className="text-[11px] font-bold mb-2" style={{ color: 'var(--text-muted)' }}>المستفيد:</p>
-          <div className="grid grid-cols-2 gap-2">
-            {BENEFICIARIES.map(b => (
-              <button
-                key={b.id}
-                type="button"
-                onClick={() => setBeneficiaryId(b.id)}
-                className="p-2.5 rounded-lg text-xs font-bold transition-all border-2"
-                style={beneficiaryId === b.id
-                  ? { borderColor: 'var(--brand)', background: 'var(--brand-soft)', color: 'var(--brand)' }
-                  : { borderColor: 'var(--border-default)' }}
-              >
-                {b.hasTelda ? '💳 ' : '💵 '}{b.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>المبلغ *</label>
-            <input
-              type="text" inputMode="decimal"
-              className="input-field text-base font-black text-center"
-              style={{ color: 'var(--brand)' }}
-              value={amount}
-              onChange={e => setAmount(e.target.value)}
-              placeholder="0.00"
-            />
-          </div>
-          <div>
-            <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>التاريخ *</label>
-            <input type="date" className="input-field text-xs font-bold" value={date} onChange={e => setDate(e.target.value)} />
-          </div>
-        </div>
-
-        <div>
-          <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>طريقة الدفع</label>
-          <select className="input-field text-sm" value={method} onChange={e => setMethod(e.target.value)}>
-            {PAYMENT_METHODS.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
-          </select>
-        </div>
-
-        <div>
-          <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>الوصف</label>
-          <input type="text" className="input-field text-sm" value={description} onChange={e => setDescription(e.target.value)} placeholder={`مصروف شهري - ${beneficiary?.label || ''}`} />
-        </div>
-
-        <div>
-          <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>الحالة</label>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => setStatus('pending')}
-              className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${status === 'pending' ? 'text-white' : ''}`}
-              style={status === 'pending' ? { background: 'var(--warning)' } : { background: 'var(--bg-muted)', color: 'var(--text-secondary)' }}
-            >
-              ⏳ معلق
-            </button>
-            <button
-              type="button"
-              onClick={() => setStatus('paid')}
-              className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${status === 'paid' ? 'text-white' : ''}`}
-              style={status === 'paid' ? { background: 'var(--success)' } : { background: 'var(--bg-muted)', color: 'var(--text-secondary)' }}
-            >
-              ✅ مدفوع
-            </button>
-          </div>
-        </div>
-
-        <button onClick={handleSubmit} className="btn btn-primary w-full py-2.5 text-sm">
-          <Send size={14} /> تسجيل التحويل
-        </button>
-      </div>
-    </Modal>
-  );
-});
-
-/* ═══════════════════════════════════════════════════════════════
-   RECURRING MODAL
-   ═══════════════════════════════════════════════════════════════ */
-const RecurringModal = memo(({ isOpen, onClose, dispatch, data, addNotification, saveHistory, formData }) => {
-  const [title, setTitle] = useState('');
-  const [amount, setAmount] = useState('');
-  const [day, setDay] = useState(1);
-  const [category, setCategory] = useState('');
-  const [type, setType] = useState('expense');
-  const [startMonth, setStartMonth] = useState('');
-  const [endMonth, setEndMonth] = useState('');
-  const [active, setActive] = useState(true);
-  const [method, setMethod] = useState('cash');
-  const [transferChannel, setTransferChannel] = useState('');
-
-  useEffect(() => {
-    if (!isOpen) return;
-    if (formData && formData.id) {
-      setTitle(formData.title || '');
-      setAmount(String(formData.amount || ''));
-      setDay(formData.day || 1);
-      setCategory(formData.category || '');
-      setType(formData.type || 'expense');
-      setStartMonth(formData.startMonth || '');
-      setEndMonth(formData.endMonth || '');
-      setActive(formData.active !== false);
-      setMethod(formData.method || 'cash');
-      setTransferChannel(formData.transferChannel || '');
-    } else {
-      const now = new Date();
-      setTitle('');
-      setAmount('');
-      setDay(1);
-      setCategory('');
-      setType('expense');
-      setStartMonth(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`);
-      setEndMonth(`${now.getFullYear()}-12`);
-      setActive(true);
-      setMethod('cash');
-      setTransferChannel('');
-    }
-  }, [isOpen, formData]);
-
-  const handleSubmit = () => {
-    const titleCheck = validateText(title, { min: 2, max: 200, label: 'العنوان' });
-    if (!titleCheck.valid) { addNotification({ type: 'error', title: 'خطأ', message: titleCheck.error }); return; }
-    const amountCheck = validateAmount(amount, { min: 0.01, max: 10000000, label: 'المبلغ' });
-    if (!amountCheck.valid) { addNotification({ type: 'error', title: 'خطأ', message: amountCheck.error }); return; }
-    if (!category) { addNotification({ type: 'error', title: 'الفئة مطلوبة' }); return; }
-    const safeDay = safeNumber(day, 1);
-    if (safeDay < 1 || safeDay > 31) {
-      addNotification({ type: 'error', title: 'اليوم بين 1 و 31' });
-      return;
-    }
-
-    saveHistory();
-    const isEdit = formData && formData.id;
-    const newItem = {
-      id: isEdit ? formData.id : getSafeId(),
-      title: titleCheck.value,
-      amount: amountCheck.value,
-      day: safeDay,
-      category,
-      type,
-      startMonth: startMonth || null,
-      endMonth: endMonth || null,
-      active,
-      method,
-      transferChannel: transferChannel || null,
-      linkedLoanSystemId: formData.linkedLoanSystemId || null,
-      linkedCardId: formData.linkedCardId || null,
-      kind: formData.kind || null,
-    };
-
-    let items = data.recurringItems || [];
-    if (isEdit) items = items.map(i => i.id === formData.id ? newItem : i);
-    else items = [...items, newItem];
-
-    dispatch({ type: 'UPDATE_RECURRING_ITEMS', payload: items });
-    addNotification({ type: 'success', title: isEdit ? 'تم التعديل' : 'تمت الإضافة' });
-    onClose();
-  };
-
-  if (!isOpen) return null;
-
-  const isEdit = formData && formData.id;
-
-  return (
-    <Modal isOpen={true} onClose={onClose} title={isEdit ? 'تعديل بند متكرر' : 'بند متكرر جديد'} icon="🔁" size="md">
-      <div className="space-y-3">
-        <div>
-          <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>العنوان *</label>
-          <input type="text" className="input-field text-sm" value={title} onChange={e => setTitle(e.target.value)} placeholder="إيجار، راتب، اشتراك..." />
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>المبلغ *</label>
-            <input type="text" inputMode="decimal" className="input-field text-sm text-center font-black" style={{ color: 'var(--brand)' }} value={amount} onChange={e => setAmount(e.target.value)} placeholder="0.00" />
-          </div>
-          <div>
-            <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>اليوم في الشهر *</label>
-            <input type="number" min="1" max="31" className="input-field text-sm text-center font-bold" value={day} onChange={e => setDay(e.target.value)} />
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>النوع *</label>
-            <select className="input-field text-sm" value={type} onChange={e => { setType(e.target.value); setCategory(''); }}>
-              <option value="expense">💸 مصروف</option>
-              <option value="income">💰 دخل</option>
-            </select>
-          </div>
-          <div>
-            <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>الفئة *</label>
-            <select className="input-field text-sm" value={category} onChange={e => setCategory(e.target.value)}>
-              <option value="">اختر...</option>
-              {Object.entries(CATEGORY_GROUPS[type] || {}).map(([g, items]) => (
-                <optgroup key={g} label={g}>
-                  {items.map(c => <option key={c} value={c}>{c}</option>)}
-                </optgroup>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        <div>
-          <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>طريقة الدفع *</label>
-          <select className="input-field text-sm" value={method} onChange={e => setMethod(e.target.value)}>
-            {PAYMENT_METHODS.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
-          </select>
-        </div>
-
-        <div className="p-3 rounded-lg" style={{ background: 'var(--bg-muted)' }}>
-          <p className="text-[11px] font-black mb-2" style={{ color: 'var(--text-secondary)' }}>📅 فترة التكرار</p>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-[10px] font-bold block mb-1" style={{ color: 'var(--text-muted)' }}>من</label>
-              <input type="month" className="input-field text-xs py-2" value={startMonth} onChange={e => setStartMonth(e.target.value)} />
-            </div>
-            <div>
-              <label className="text-[10px] font-bold block mb-1" style={{ color: 'var(--text-muted)' }}>إلى</label>
-              <input type="month" className="input-field text-xs py-2" value={endMonth} onChange={e => setEndMonth(e.target.value)} />
-            </div>
-          </div>
-        </div>
-
-        <label className="flex items-center gap-3 p-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 cursor-pointer">
-          <input type="checkbox" checked={active} onChange={e => setActive(e.target.checked)} className="w-4 h-4 accent-emerald-600" />
-          <span className="text-xs font-bold text-emerald-700 dark:text-emerald-400">نشط</span>
-        </label>
-
-        <button onClick={handleSubmit} className="btn btn-primary w-full py-2.5 text-sm">
-          <Save size={14} /> {isEdit ? 'حفظ التعديلات' : 'إضافة'}
-        </button>
-      </div>
-    </Modal>
-  );
-});
-
-/* ═══════════════════════════════════════════════════════════════
-   TRANSACTION FORM MODAL
-   ═══════════════════════════════════════════════════════════════ */
-const TransactionFormModal = memo(({ isOpen, onClose, dispatch, data, addNotification, saveHistory, formMode, formData }) => {
-  const [localForm, setLocalForm] = useState({
-    type: 'expense', subType: 'withdrawal', kind: KIND.OPERATIONAL,
-    category: '', amount: '', description: '', method: 'cash',
-    date: getLocalISODate(), status: 'pending',
-    linkedCardId: null, linkedLoanId: null, cardLast4: null,
-  });
-  const [errors, setErrors] = useState({});
-
-  useEffect(() => {
-    if (!isOpen) return;
-    if (formMode === 'edit' && formData) {
-      setLocalForm({
-        ...formData,
-        amount: String(formData.amount || ''),
-        linkedCardId: formData.linkedCardId || null,
-        linkedLoanId: formData.linkedLoanId || null,
-      });
-    } else {
-      const base = {
-        type: formData?.type || 'expense',
-        subType: formData?.subType || (formData?.type === 'income' ? 'deposit' : 'withdrawal'),
-        kind: formData?.kind || KIND.OPERATIONAL,
-        category: formData?.category || '',
-        amount: String(formData?.amount || ''),
-        description: formData?.description || '',
-        method: formData?.method || 'cash',
-        date: formData?.date || getLocalISODate(),
-        status: formData?.status || 'pending',
-        linkedCardId: formData?.linkedCardId || null,
-        linkedLoanId: formData?.linkedLoanId || null,
-        cardLast4: formData?.cardLast4 || null,
-      };
-      setLocalForm(base);
-    }
-    setErrors({});
-  }, [isOpen, formMode, formData]);
-
-  const handleSubmit = () => {
-    const errs = {};
-    const amountCheck = validateAmount(localForm.amount, { min: 0.01, max: 10000000, label: 'المبلغ' });
-    if (!amountCheck.valid) errs.amount = amountCheck.error;
-
-    const dateCheck = validateDate(localForm.date);
-    if (!dateCheck.valid) errs.date = dateCheck.error;
-
-    if (!localForm.category) errs.category = 'الفئة مطلوبة';
-    if (!localForm.method) errs.method = 'طريقة الدفع مطلوبة';
-
-    setErrors(errs);
-    if (Object.keys(errs).length > 0) {
-      addNotification({ type: 'error', title: 'راجع الحقول', message: Object.values(errs)[0] });
-      return;
-    }
-
-    const d = dateCheck.value;
-    const txYear = d.getFullYear();
-    const txMonth = ALL_MONTHS[d.getMonth()];
-
-    if (isMonthClosed(data, txYear, txMonth)) {
-      addNotification({ type: 'error', title: 'شهر مغلق', message: `شهر ${txMonth} ${txYear} مغلق` });
-      return;
-    }
-
-    saveHistory();
-    const isEdit = formMode === 'edit' && formData?.id;
-    const newTx = {
-      ...localForm,
-      id: isEdit ? formData.id : getSafeId(),
-      amount: amountCheck.value,
-      year: txYear,
-      month: txMonth,
-      monthIndex: d.getMonth(),
-      subType: localForm.type === 'income' ? 'deposit' : 'withdrawal',
-      createdAt: formData?.createdAt || new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-
-    let txs = data.transactions || [];
-    if (isEdit) txs = txs.map(t => t.id === formData.id ? newTx : t);
-    else txs = [newTx, ...txs];
-
-    txs = txs.sort((a, b) => (parseISODate(b.date) || 0) - (parseISODate(a.date) || 0));
-    dispatch({ type: 'UPDATE_TRANSACTIONS', payload: txs });
-    addNotification({
-      type: 'success',
-      title: isEdit ? 'تم التعديل' : 'تمت الإضافة',
-      message: `${fmt(amountCheck.value)} ج.م`
-    });
-    onClose();
-  };
-
-  const handleDelete = () => {
-    if (formMode !== 'edit' || !formData?.id) return;
-    dispatch({
-      type: 'SHOW_CONFIRM', danger: true,
-      title: 'حذف المعاملة',
-      message: 'سيتم نقلها للأرشيف مع إمكانية الاسترجاع',
-      onConfirm: () => {
-        saveHistory();
-        const t = data.transactions.find(x => x.id === formData.id);
-        if (!t) { dispatch({ type: 'HIDE_CONFIRM' }); return; }
-        const newArchive = [
-          ...(data.deletedTxArchive || []),
-          { ...t, deletedAt: new Date().toISOString(), deletedBy: 'self' }
-        ].slice(-500);
-        const newTx = data.transactions.filter(x => x.id !== formData.id);
-        const newDeletedIds = Array.from(new Set([...(data.deletedTxIds || []), formData.id])).slice(-500);
-        const newMaterialized = { ...(data.materializedRecurring || {}) };
-        if (t.sourceRecurringId && t.year && t.month) {
-          newMaterialized[`${t.sourceRecurringId}_${makeMonthKey(t.year, t.month)}`] = 'deleted';
-        }
-        dispatch({
-          type: 'SET_DATA',
-          payload: {
-            ...data, transactions: newTx, deletedTxArchive: newArchive,
-            deletedTxIds: newDeletedIds, materializedRecurring: newMaterialized
-          }
-        });
-        addNotification({ type: 'success', title: 'تم الحذف' });
-        onClose();
-      },
-      onCancel: () => dispatch({ type: 'HIDE_CONFIRM' }),
-    });
-  };
-
-  if (!isOpen) return null;
-
-  const isEdit = formMode === 'edit';
-
-  return (
-    <Modal
-      isOpen={true}
-      onClose={onClose}
-      title={isEdit ? 'تعديل معاملة' : 'معاملة جديدة'}
-      icon={localForm.type === 'income' ? '💰' : '💸'}
-      size="md"
-      footer={
-        <React.Fragment>
-          {isEdit && (
-            <button
-              onClick={handleDelete}
-              className="btn text-xs"
-              style={{ background: 'var(--danger-soft)', color: 'var(--danger)' }}
-            >
-              <Trash2 size={14} /> حذف
-            </button>
-          )}
-          <button onClick={onClose} className="btn btn-secondary flex-1 text-xs">إلغاء</button>
-          <button onClick={handleSubmit} className="btn btn-primary flex-1 text-xs">
-            <Save size={14} /> {isEdit ? 'حفظ' : 'إضافة'}
-          </button>
-        </React.Fragment>
-      }
-    >
-      <div className="space-y-3">
-        <div>
-          <div className="flex p-1 rounded-lg mb-3" style={{ background: 'var(--bg-muted)' }}>
-            <button
-              type="button"
-              onClick={() => setLocalForm(f => ({ ...f, type: 'expense', subType: 'withdrawal' }))}
-              className={`flex-1 py-2 rounded-md text-xs font-black transition-all ${localForm.type === 'expense' ? 'shadow-sm' : ''}`}
-              style={localForm.type === 'expense' ? { background: 'var(--bg-card)', color: 'var(--danger)' } : { color: 'var(--text-muted)' }}
-            >
-              💸 مصروف
-            </button>
-            <button
-              type="button"
-              onClick={() => setLocalForm(f => ({ ...f, type: 'income', subType: 'deposit' }))}
-              className={`flex-1 py-2 rounded-md text-xs font-black transition-all ${localForm.type === 'income' ? 'shadow-sm' : ''}`}
-              style={localForm.type === 'income' ? { background: 'var(--bg-card)', color: 'var(--success)' } : { color: 'var(--text-muted)' }}
-            >
-              💰 دخل
-            </button>
-          </div>
-        </div>
-
-        <div>
-          <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>المبلغ *</label>
-          <input
-            type="text"
-            inputMode="decimal"
-            autoFocus
-            className={`input-field text-2xl font-black text-center py-3 ${errors.amount ? 'error' : ''}`}
-            style={{ color: localForm.type === 'income' ? 'var(--success)' : 'var(--danger)' }}
-            value={localForm.amount}
-            onChange={e => setLocalForm(f => ({ ...f, amount: e.target.value }))}
-            placeholder="0.00"
-          />
-          {errors.amount && <p className="text-[10px] mt-1 text-red-500 font-bold">{errors.amount}</p>}
-        </div>
-
-        <div>
-          <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>الفئة *</label>
-          <select
-            className={`input-field text-sm ${errors.category ? 'error' : ''}`}
-            value={localForm.category}
-            onChange={e => setLocalForm(f => ({ ...f, category: e.target.value }))}
-          >
-            <option value="">اختر...</option>
-            {Object.entries(CATEGORY_GROUPS[localForm.type] || {}).map(([g, items]) => (
-              <optgroup key={g} label={g}>
-                {items.map(c => <option key={c} value={c}>{c}</option>)}
-              </optgroup>
-            ))}
-          </select>
-          {errors.category && <p className="text-[10px] mt-1 text-red-500 font-bold">{errors.category}</p>}
-        </div>
-
-        <div>
-          <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>الوصف</label>
-          <input
-            type="text"
-            className="input-field text-sm"
-            value={localForm.description}
-            onChange={e => setLocalForm(f => ({ ...f, description: e.target.value }))}
-            placeholder="تفاصيل المعاملة..."
-          />
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>طريقة الدفع *</label>
-            <select
-              className={`input-field text-sm ${errors.method ? 'error' : ''}`}
-              value={localForm.method}
-              onChange={e => setLocalForm(f => ({ ...f, method: e.target.value }))}
-            >
-              {PAYMENT_METHODS.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>التاريخ *</label>
-            <input
-              type="date"
-              className={`input-field text-sm ${errors.date ? 'error' : ''}`}
-              value={localForm.date}
-              onChange={e => setLocalForm(f => ({ ...f, date: e.target.value }))}
-            />
-          </div>
-        </div>
-
-        <div>
-          <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>الحالة</label>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => setLocalForm(f => ({ ...f, status: 'pending' }))}
-              className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${localForm.status === 'pending' ? 'text-white' : ''}`}
-              style={localForm.status === 'pending' ? { background: 'var(--warning)' } : { background: 'var(--bg-muted)', color: 'var(--text-secondary)' }}
-            >
-              ⏳ معلق
-            </button>
-            <button
-              type="button"
-              onClick={() => setLocalForm(f => ({ ...f, status: 'paid' }))}
-              className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${localForm.status === 'paid' ? 'text-white' : ''}`}
-              style={localForm.status === 'paid' ? { background: 'var(--success)' } : { background: 'var(--bg-muted)', color: 'var(--text-secondary)' }}
-            >
-              ✅ مدفوع
-            </button>
-          </div>
-        </div>
-      </div>
-    </Modal>
-  );
-});
-
-/* ═══════════════════════════════════════════════════════════════
-   EDIT CARD MODAL
-   ═══════════════════════════════════════════════════════════════ */
-const EditCardModal = memo(({ card, onClose, dispatch, data, saveHistory, addNotification }) => {
-  const [local, setLocal] = useState({ ...card });
-
-  useEffect(() => { setLocal({ ...card }); }, [card]);
-
-  const handleSave = () => {
-    saveHistory();
-    const updated = {
-      ...local,
-      limit: safeNumber(local.limit),
-      openingDebt: safeNumber(local.openingDebt),
-      cashbackRate: safeNumber(local.cashbackRate, 0),
-      subCardLast4: Array.isArray(local.subCardLast4) ? local.subCardLast4 : [],
-    };
-    const newCards = (data.cards || []).map(c => c.id === updated.id ? updated : c);
-    dispatch({ type: 'UPDATE_CARDS', payload: newCards });
-    addNotification({ type: 'success', title: 'تم الحفظ' });
-    onClose();
-  };
-
-  const handleDelete = () => {
-    dispatch({
-      type: 'SHOW_CONFIRM', danger: true,
-      title: 'حذف الكارت',
-      message: 'سيتم حذف الكارت من القائمة',
-      onConfirm: () => {
-        saveHistory();
-        const newCards = (data.cards || []).filter(c => c.id !== card.id);
-        const newDeleted = Array.from(new Set([...(data.deletedDefaultIds || []), card.id]));
-        dispatch({ type: 'SET_DATA', payload: { ...data, cards: newCards, deletedDefaultIds: newDeleted } });
-        addNotification({ type: 'success', title: 'تم الحذف' });
-        onClose();
-      },
-      onCancel: () => dispatch({ type: 'HIDE_CONFIRM' }),
-    });
-  };
-
-  if (!card) return null;
-
-  return (
-    <Modal isOpen={true} onClose={onClose} title="تعديل كارت" icon="💳" size="md">
-      <div className="space-y-3">
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>الاسم</label>
-            <input className="input-field text-sm" value={local.name || ''} onChange={e => setLocal({ ...local, name: e.target.value })} />
-          </div>
-          <div>
-            <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>البنك</label>
-            <input className="input-field text-sm" value={local.bank || ''} onChange={e => setLocal({ ...local, bank: e.target.value })} />
-          </div>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>الحد</label>
-            <input type="text" inputMode="decimal" className="input-field text-sm text-center font-black text-blue-600" value={local.limit || ''} onChange={e => setLocal({ ...local, limit: e.target.value })} />
-          </div>
-          <div>
-            <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>مديونية أساسية</label>
-            <input type="text" inputMode="decimal" className="input-field text-sm text-center font-black text-red-600" value={local.openingDebt || ''} onChange={e => setLocal({ ...local, openingDebt: e.target.value })} />
-          </div>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>آخر 4</label>
-            <input maxLength="4" className="input-field text-center text-sm font-mono font-bold" value={local.last4 || ''} onChange={e => setLocal({ ...local, last4: e.target.value })} />
-          </div>
-          <div>
-            <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>كاش باك %</label>
-            <input type="text" inputMode="decimal" className="input-field text-center text-sm font-black text-amber-600" value={local.cashbackRate || ''} onChange={e => setLocal({ ...local, cashbackRate: e.target.value })} />
-          </div>
-        </div>
-        <div>
-          <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>تاريخ البداية</label>
-          <input type="date" className="input-field text-sm" value={local.openingDate || ''} onChange={e => setLocal({ ...local, openingDate: e.target.value })} />
-        </div>
-        <div className="flex gap-2">
-          <button
-            onClick={handleDelete}
-            className="btn text-xs"
-            style={{ background: 'var(--danger-soft)', color: 'var(--danger)' }}
-          >
-            <Trash2 size={14} /> حذف
-          </button>
-          <button onClick={handleSave} className="btn btn-primary flex-1 text-xs">
-            <Save size={14} /> حفظ
-          </button>
-        </div>
-      </div>
-    </Modal>
-  );
-});
-
-/* ═══════════════════════════════════════════════════════════════
-   EDIT LOAN MODAL
-   ═══════════════════════════════════════════════════════════════ */
-const EditLoanModal = memo(({ loan, onClose, dispatch, data, saveHistory, addNotification }) => {
-  const [local, setLocal] = useState({ ...loan });
-
-  useEffect(() => { setLocal({ ...loan }); }, [loan]);
-
-  const handleSave = () => {
-    saveHistory();
-    const updated = {
-      ...local,
-      totalAmount: safeNumber(local.totalAmount),
-      prePaidAmount: safeNumber(local.prePaidAmount),
-      monthlyInstallment: safeNumber(local.monthlyInstallment),
-      dueDay: safeNumber(local.dueDay, 1),
-    };
-    const newLoans = (data.loans || []).map(l => l.id === updated.id ? updated : l);
-    dispatch({ type: 'UPDATE_LOANS', payload: newLoans });
-    addNotification({ type: 'success', title: 'تم الحفظ' });
-    onClose();
-  };
-
-  const handleDelete = () => {
-    dispatch({
-      type: 'SHOW_CONFIRM', danger: true,
-      title: 'حذف الالتزام',
-      message: 'سيتم حذف الالتزام نهائياً',
-      onConfirm: () => {
-        saveHistory();
-        const newLoans = (data.loans || []).filter(l => l.id !== loan.id);
-        const newDeleted = Array.from(new Set([...(data.deletedDefaultIds || []), loan.id]));
-        dispatch({ type: 'SET_DATA', payload: { ...data, loans: newLoans, deletedDefaultIds: newDeleted } });
-        addNotification({ type: 'success', title: 'تم الحذف' });
-        onClose();
-      },
-      onCancel: () => dispatch({ type: 'HIDE_CONFIRM' }),
-    });
-  };
-
-  if (!loan) return null;
-
-  const isHanySystem = loan.autoMonthly || loan.systemId === SYSTEM_LOAN_IDS.HANY;
-  const isTakyeef = loan.systemId === SYSTEM_LOAN_IDS.TAKYEEF;
-
-  return (
-    <Modal isOpen={true} onClose={onClose} title="تعديل التزام" icon="📋" size="md">
-      <div className="space-y-3">
-        <div>
-          <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>الاسم</label>
-          <input
-            className="input-field text-sm"
-            value={local.name || ''}
-            onChange={e => setLocal({ ...local, name: e.target.value })}
-            disabled={isHanySystem || isTakyeef}
-          />
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>المبلغ الكلي</label>
-            <input
-              type="text" inputMode="decimal"
-              className="input-field text-sm text-center font-black text-red-600"
-              value={local.totalAmount || ''}
-              onChange={e => setLocal({ ...local, totalAmount: e.target.value })}
-              disabled={isHanySystem}
-            />
-          </div>
-          <div>
-            <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>القسط الشهري</label>
-            <input
-              type="text" inputMode="decimal"
-              className="input-field text-sm text-center font-black text-blue-600"
-              value={local.monthlyInstallment || ''}
-              onChange={e => setLocal({ ...local, monthlyInstallment: e.target.value })}
-              disabled={isHanySystem}
-            />
-          </div>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>مدفوع مسبقاً</label>
-            <input
-              type="text" inputMode="decimal"
-              className="input-field text-sm text-center font-black text-emerald-600"
-              value={local.prePaidAmount || ''}
-              onChange={e => setLocal({ ...local, prePaidAmount: e.target.value })}
-            />
-          </div>
-          <div>
-            <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>يوم الاستحقاق</label>
-            <input
-              type="number" min="1" max="31"
-              className="input-field text-sm text-center"
-              value={local.dueDay || ''}
-              onChange={e => setLocal({ ...local, dueDay: e.target.value })}
-              disabled={isHanySystem}
-            />
-          </div>
-        </div>
-        <div>
-          <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>الوصف</label>
-          <input className="input-field text-sm" value={local.description || ''} onChange={e => setLocal({ ...local, description: e.target.value })} />
-        </div>
-        <div className="flex gap-2">
-          {!isHanySystem && !isTakyeef && (
-            <button
-              onClick={handleDelete}
-              className="btn text-xs"
-              style={{ background: 'var(--danger-soft)', color: 'var(--danger)' }}
-            >
-              <Trash2 size={14} /> حذف
-            </button>
-          )}
-          <button onClick={handleSave} className="btn btn-primary flex-1 text-xs">
-            <Save size={14} /> حفظ
-          </button>
-        </div>
-      </div>
-    </Modal>
-  );
-});
-  /* ═══════════════════════════════════════════════════════════════
    PART 7 — Main App Component + Root Render + Listeners
    V83.5 — Bank-Grade Edition (Final)
    ═══════════════════════════════════════════════════════════════ */
@@ -10359,7 +9408,9 @@ const App = () => {
     initializationRef.current = true;
   }, [data]);
 
-  /* ═══════ DERIVED: UPDATED LOANS ═══════ */
+  /* ═══════════════════════════════════════════════════════════════
+     V83.5 — UPDATED LOANS + SHOPPING INTEGRATION
+     ═══════════════════════════════════════════════════════════════ */
   const updatedLoans = useMemo(() => {
     const loans = data?.loans || [];
     const transactionsList = data?.transactions || [];
@@ -10371,23 +9422,14 @@ const App = () => {
 
         /* ═══════════════════════════════════════════════════════════
            V83.5 — HANY SHOP ITEMS FILTER (STRICT)
-           يجمع فقط القيود الحقيقية من مسحوبات هاني
            ═══════════════════════════════════════════════════════════ */
         const monthHanyItems = transactionsList.filter(t => {
-          // 1) الشهر والسنة
           if (t.month !== selectedMonth) return false;
           if ((t.year || selectedYear) !== selectedYear) return false;
-          
-          // 2) الفئة (تصفية صارمة)
           if (!isHanyShopCategory(t.category, t)) return false;
-          
-          // 3) الحالة: مدفوع فقط
           if (t.status !== 'paid') return false;
-          
-          // 4) استثناءات صريحة
           if (isCarryoverTransaction(t)) return false;
           if (isSystemGenerated(t) && t.importedFrom !== 'excel-v1') return false;
-          
           return true;
         });
 
@@ -10424,6 +9466,43 @@ const App = () => {
       return { ...loan, totalPaid, remaining };
     });
   }, [data, selectedMonth, selectedYear]);
+
+  /* ═══════════════════════════════════════════════════════════════
+     ✅ NEW: SHOPPING PENDING TRANSACTIONS BY MONTH
+     ═══════════════════════════════════════════════════════════════ */
+  const shoppingPendingByMonth = useMemo(() => {
+    const txList = data?.transactions || [];
+    
+    const shoppingTxs = txList.filter(t => 
+      (t.source === 'shopping-app' || t.source === 'shopping-legacy') &&
+      t.status === 'pending' &&
+      t.type === 'expense'
+    );
+
+    const byMonth = {};
+    shoppingTxs.forEach(t => {
+      const key = makeMonthKey(t.year || 2026, t.month);
+      if (!byMonth[key]) {
+        byMonth[key] = {
+          key,
+          year: t.year || 2026,
+          month: t.month,
+          monthIndex: t.monthIndex,
+          items: [],
+          total: 0,
+          byCategory: {},
+        };
+      }
+      byMonth[key].items.push(t);
+      byMonth[key].total += safeNumber(t.amount);
+      const cat = t.category || 'أخرى';
+      byMonth[key].byCategory[cat] = (byMonth[key].byCategory[cat] || 0) + safeNumber(t.amount);
+    });
+
+    return Object.values(byMonth).sort((a, b) => 
+      a.year !== b.year ? a.year - b.year : a.monthIndex - b.monthIndex
+    );
+  }, [data?.transactions]);
 
   /* ═══════ DERIVED: LIVE BALANCES ═══════ */
   const liveBalances = useMemo(() => {
@@ -10845,6 +9924,7 @@ const App = () => {
               onSelectMonth={handleSelectMonth}
               liquidityMode={liquidityMode}
               onChangeLiquidityMode={onChangeLiquidityMode}
+              shoppingPendingByMonth={shoppingPendingByMonth}
             />
           )}
 
@@ -10898,6 +9978,7 @@ const App = () => {
               data={data}
               selectedMonth={selectedMonth}
               selectedYear={selectedYear}
+              shoppingPendingByMonth={shoppingPendingByMonth}
             />
           )}
 
@@ -11363,4 +10444,17 @@ document.addEventListener('keydown', (e) => {
     if (fab) fab.click();
   }
 });
+</script>
+</body>
+</html>
+  
+  
+
+  
+
+
+  
+
+
+
   
