@@ -1575,7 +1575,7 @@ function switchTab(t) {
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   ⭐⭐ V83.5 — SAVE TX (متوافق 100% مع المحفظة)
+   ⭐⭐ V83.5 — SAVE TX (بـ runTransaction للضمان الكامل)
    ═══════════════════════════════════════════════════════════════ */
 function saveTx() {
   if (!selectedItem) { toast('اختر صنفاً أولاً', 'err'); return; }
@@ -1585,7 +1585,6 @@ function saveTx() {
   var amount = parseFloat(document.getElementById('amount').value);
   if (!amount || amount <= 0) { toast('أدخل المبلغ', 'err'); return; }
 
-  /* ⭐ Sanitize note لمنع كلمات carryover */
   var rawNote = document.getElementById('note').value.trim();
   var note = sanitizeNote(rawNote);
 
@@ -1607,6 +1606,118 @@ function saveTx() {
   var originalCatLabel = CATEGORIES[selectedCategory].label;
   var walletSubCat = WALLET_SUBCATEGORY_MAP[originalCatLabel] || 'بقالة / فاكهة';
 
+  var tx = {
+    id: 'fam-' + Date.now() + '-' + Math.random().toString(36).slice(2,9),
+    type: 'expense',
+    subType: 'withdrawal',
+    kind: 'operational',
+    category: CATEGORY_NAME,
+    subCategory: walletSubCat,
+    originalCategory: originalCatLabel,
+    itemName: selectedItem,
+    amount: amount,
+    description: note ? selectedItem + ' — ' + note : selectedItem,
+    method: 'cash',
+    date: txDateISO,
+    month: MONTHS_AR[txDateObj.getMonth()],
+    year: txDateObj.getFullYear(),
+    monthIndex: txDateObj.getMonth(),
+    status: 'paid',
+    source: 'family-app',
+    sourceLabel: 'محل هاني',
+    familySource: 'hany-shop',
+    createdBy: currentUser.id,
+    createdByName: currentUser.name,
+    createdAt: now,
+    updatedAt: now,
+    txDateMode: selectedDateMode,
+    autoPriced: amountAutoFilled,
+    receipts: []
+  };
+
+  var btn = document.getElementById('saveBtn');
+  btn.disabled = true;
+  btn.innerHTML = 'جارٍ الحفظ...';
+
+  /* ⭐⭐⭐ الحل: runTransaction بدل arrayUnion */
+  db.runTransaction(function(transaction) {
+    return transaction.get(docRef).then(function(snap) {
+      var existing = snap.exists ? (snap.data() || {}) : {};
+      var existingTxs = Array.isArray(existing.transactions) ? existing.transactions : [];
+
+      /* ✅ فحص التكرار (نفس id) */
+      var alreadyExists = existingTxs.some(function(t) { return t && t.id === tx.id; });
+      if (alreadyExists) {
+        console.log('⚠️ Transaction already exists, skipping');
+        return { skipped: true, count: existingTxs.length };
+      }
+
+      /* ✅ إضافة المعاملة الجديدة في المقدمة */
+      var newTxs = [tx].concat(existingTxs);
+
+      /* ⭐⭐⭐ كتابة صريحة + savedAt مع بعض */
+      transaction.set(docRef, {
+        transactions: newTxs,                          // ← array كامل
+        savedAt: now,                                   // ← savedAt صريح
+        updatedAt: new Date(now).toISOString(),
+        version: 'hani-family-v1'
+      }, { merge: true });
+
+      return { skipped: false, count: newTxs.length, txId: tx.id };
+    });
+  }).then(function(result) {
+    if (result.skipped) {
+      toast('العملية موجودة بالفعل', 'warn');
+      return;
+    }
+
+    console.log('✅ TX Saved. Total txs:', result.count, 'ID:', result.txId);
+
+    trackRecent(selectedItem);
+    var itemName = selectedItem;
+    var dateInfo = selectedDateMode !== 'today' ? ' (' + formatDateLabel(txDateISO) + ')' : '';
+
+    var tgMsg = '🛒 <b>' + currentUser.name + '</b> سجّل عملية\n' +
+                '━━━━━━━━━━━━━━━\n' +
+                '📦 الصنف: <b>' + itemName + '</b>\n' +
+                '💰 المبلغ: <b>' + fmt(amount) + ' ج.م</b>' + dateInfo + '\n' +
+                (note ? '📝 ملاحظة: ' + note + '\n' : '') +
+                '☁️ <i>متزامن مع المحفظة تلقائياً</i>\n' +
+                '🕐 ' + new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
+    sendTelegram(tgMsg);
+
+    lastSaveInfo = { item: itemName, amount: Number(amount), time: Date.now() };
+
+    document.getElementById('amount').value = '';
+    document.getElementById('note').value = '';
+    selectedItem = '';
+    clearAutoPrice();
+    updateAmountClearBtn();
+    document.getElementById('searchInput').value = '';
+    var hint = document.getElementById('searchModeHint');
+    if (hint) hint.classList.remove('show');
+    if (selectedDateMode !== 'today') { selectedDateMode = 'today'; updateDateQuickButtons(); }
+    renderItems();
+
+    toast('✅ ' + itemName + ' · ' + fmt(amount) + ' ج.م' + dateInfo);
+
+    if (navigator.vibrate) navigator.vibrate([20,40,20]);
+
+    if (budget > 0) {
+      var monthPfx = txDateISO.slice(0, 7);
+      var spent = cachedTx.filter(function(t) { return t._isoDate && t._isoDate.indexOf(monthPfx) === 0 && t.createdBy === currentUser.id; }).reduce(function(s, t) { return s + Number(t.amount || 0); }, 0) + amount;
+      if (spent > budget) setTimeout(function() { toast('تجاوزت الميزانية بـ ' + fmt(spent - budget) + ' ج.م', 'err'); }, 800);
+    }
+  }).catch(function(e) {
+    console.error('Save TX error:', e);
+    toast('فشل الحفظ: ' + (e.message || e), 'err');
+  }).then(function() {
+    isSaving = false;
+    btn.disabled = false;
+    btn.innerHTML = icon('save', 16) + ' حفظ في السجل';
+  });
+}
+  
   /* ═══════════════════════════════════════════════════════════
      ⭐ بنية tx المتوافقة مع المحفظة V83.5
      - category: 'مسحوبات محل هاني' ← يخلي المحفظة تكتشفها
@@ -1772,27 +1883,40 @@ function submitDeleteRequest(tx, reason) {
     requestedAt: Date.now(),
     status: 'pending'
   };
-  /* ⭐ savedAt للمزامنة */
-  docRef.set({
-    deleteRequests: firebase.firestore.FieldValue.arrayUnion(request),
-    savedAt: Date.now(),
-    updatedAt: new Date().toISOString()
-  }, { merge: true })
-    .then(function() {
-      toast('تم إرسال الطلب');
-      if (navigator.vibrate) navigator.vibrate([20, 40, 20]);
-      var tgMsg = '🗑️ <b>طلب حذف عملية</b>\n' +
-                  '━━━━━━━━━━━━━━━\n' +
-                  '👤 من: <b>' + currentUser.name + '</b>\n' +
-                  '📦 الصنف: ' + (tx.description || '') + '\n' +
-                  '💰 المبلغ: <b>' + fmt(tx.amount) + ' ج.م</b>\n' +
-                  '📝 السبب: ' + reason + '\n' +
-                  '🕐 ' + new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
-      sendTelegram(tgMsg);
-    })
-    .catch(function(e) { toast('فشل الإرسال: ' + e.message, 'err'); });
-}
 
+  var now = Date.now();
+
+  /* ⭐ runTransaction عشان savedAt يبقى مضمون */
+  db.runTransaction(function(transaction) {
+    return transaction.get(docRef).then(function(snap) {
+      var d = snap.exists ? (snap.data() || {}) : {};
+      var reqs = Array.isArray(d.deleteRequests) ? d.deleteRequests.slice() : [];
+      reqs.push(request);
+
+      transaction.set(docRef, {
+        deleteRequests: reqs,
+        savedAt: now,
+        updatedAt: new Date(now).toISOString()
+      }, { merge: true });
+
+      return true;
+    });
+  }).then(function() {
+    toast('تم إرسال الطلب');
+    if (navigator.vibrate) navigator.vibrate([20, 40, 20]);
+    var tgMsg = '🗑️ <b>طلب حذف عملية</b>\n' +
+                '━━━━━━━━━━━━━━━\n' +
+                '👤 من: <b>' + currentUser.name + '</b>\n' +
+                '📦 الصنف: ' + (tx.description || '') + '\n' +
+                '💰 المبلغ: <b>' + fmt(tx.amount) + ' ج.م</b>\n' +
+                '📝 السبب: ' + reason + '\n' +
+                '🕐 ' + new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
+    sendTelegram(tgMsg);
+  }).catch(function(e) {
+    console.error('Delete request error:', e);
+    toast('فشل الإرسال: ' + (e.message || e), 'err');
+  });
+}
 function doEdit(id) {
   if (deleteModalOpen || editModalOpen) return;
   if (!isAuthReady || !docRef) { toast('التطبيق غير متصل', 'err'); return; }
@@ -1885,32 +2009,33 @@ function submitEdit(tx, newAmount, newNote, oldNote, reason) {
   var itemName = descParts[0] || tx.description || '';
   var newDesc = newNote ? itemName + ' — ' + newNote : itemName;
 
+  var now = Date.now();
+
+  /* ⭐ نفس الحل: runTransaction */
   db.runTransaction(function(transaction) {
     return transaction.get(docRef).then(function(snap) {
       if (!snap.exists) throw new Error('doc_not_found');
       var d = snap.data() || {};
-      var txs = d.transactions || [];
+      var txs = Array.isArray(d.transactions) ? d.transactions.slice() : [];
       var found = false;
       var original = null;
 
       for (var i = 0; i < txs.length; i++) {
-        if (txs[i].id === tx.id) {
-          original = {
-            amount: txs[i].amount,
-            description: txs[i].description
-          };
-          txs[i].amount = newAmount;
-          txs[i].description = newDesc;
-          txs[i].editedAt = Date.now();
-          txs[i].editedBy = currentUser.id;
-          txs[i].editedByName = currentUser.name;
-          txs[i].editReason = reason;
-          txs[i].originalAmount = txs[i].originalAmount || original.amount;
-          txs[i].originalDescription = txs[i].originalDescription || original.description;
-          txs[i].lastEditedAt = Date.now();
-          txs[i].updatedAt = Date.now();
-          /* ⭐ ضمان status: 'paid' */
-          txs[i].status = 'paid';
+        if (txs[i] && txs[i].id === tx.id) {
+          original = { amount: txs[i].amount, description: txs[i].description };
+          txs[i] = Object.assign({}, txs[i], {
+            amount: newAmount,
+            description: newDesc,
+            editedAt: now,
+            editedBy: currentUser.id,
+            editedByName: currentUser.name,
+            editReason: reason,
+            originalAmount: txs[i].originalAmount || original.amount,
+            originalDescription: txs[i].originalDescription || original.description,
+            lastEditedAt: now,
+            updatedAt: now,
+            status: 'paid'                              // ⭐ ضمان
+          });
           found = true;
           break;
         }
@@ -1918,12 +2043,13 @@ function submitEdit(tx, newAmount, newNote, oldNote, reason) {
 
       if (!found) throw new Error('tx_not_found');
 
-      /* ⭐ إضافة savedAt للمزامنة */
+      /* ⭐ كتابة array كامل + savedAt */
       transaction.set(docRef, {
         transactions: txs,
-        savedAt: Date.now(),
-        updatedAt: new Date().toISOString()
+        savedAt: now,
+        updatedAt: new Date(now).toISOString()
       }, { merge: true });
+
       return { original: original, updated: { amount: newAmount, description: newDesc } };
     });
   }).then(function(result) {
@@ -1956,7 +2082,7 @@ function submitEdit(tx, newAmount, newNote, oldNote, reason) {
     }
   });
 }
-
+  
 function cleanHandledRequests() {
   if (!currentUser || !docRef) return;
   docRef.get({ source: 'server' }).then(function(snap) {
@@ -2175,72 +2301,6 @@ function startVoice() {
 }
 
 function subscribe() {
-  if (unsubscribe) unsubscribe();
-  if (!docRef) return;
-
-  initialSnapshotTimeout = setTimeout(function() {
-    if (isFirstLoad) {
-      console.warn('⚠️ Firestore timeout');
-      var hv = document.getElementById('heroValue');
-      if (hv) hv.classList.remove('loading');
-      document.getElementById('heroToday').textContent = '—';
-      document.getElementById('heroSub').textContent = 'تعذر تحميل البيانات — تحقق من الإنترنت';
-      toast('تعذر تحميل البيانات', 'err');
-      isFirstLoad = false;
-    }
-  }, 10000);
-
-  unsubscribe = docRef.onSnapshot(function(doc) {
-    if (initialSnapshotTimeout) { clearTimeout(initialSnapshotTimeout); initialSnapshotTimeout = null; }
-    isFirstLoad = false;
-
-    if (!doc.exists) {
-      cachedTx = [];
-      cachedDeleteRequests = [];
-      renderAll();
-      return;
-    }
-    var d = doc.data() || {};
-
-    var seen = {};
-    var cleaned = [];
-    (d.transactions || []).forEach(function(t) {
-      if (!t || t.category !== CATEGORY_NAME) return;
-      if (!isActiveTx(t)) return;
-      var iso = getTxDate(t);
-      if (!iso) return;
-      if (seen[t.id]) {
-        if ((t.createdAt || 0) > (seen[t.id].createdAt || 0)) {
-          cleaned = cleaned.filter(function(x) { return x.id !== t.id; });
-          var copy = Object.assign({}, t);
-          copy._isoDate = iso;
-          seen[t.id] = copy;
-          cleaned.push(copy);
-        }
-      } else {
-        var copy2 = Object.assign({}, t);
-        copy2._isoDate = iso;
-        seen[t.id] = copy2;
-        cleaned.push(copy2);
-      }
-    });
-
-    cachedTx = cleaned.sort(function(a, b) { return (b.createdAt || 0) - (a.createdAt || 0); });
-
-    cachedDeleteRequests = (d.deleteRequests || []).filter(function(r) {
-      return r && r.status === 'pending' && r.txSnapshot && r.txSnapshot.category === CATEGORY_NAME;
-    });
-
-    renderAll();
-  }, function(e) {
-    console.error('Snapshot error:', e);
-    if (initialSnapshotTimeout) { clearTimeout(initialSnapshotTimeout); initialSnapshotTimeout = null; }
-    toast('انقطع الاتصال بالبيانات', 'err');
-    var hv = document.getElementById('heroValue');
-    if (hv) hv.classList.remove('loading');
-    document.getElementById('heroSub').textContent = 'لا يوجد اتصال — البيانات غير محدّثة';
-  });
-}
 
 function renderAll() {
   renderFamilyStrip();
