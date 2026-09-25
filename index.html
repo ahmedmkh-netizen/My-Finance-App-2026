@@ -6,6 +6,7 @@
 <title>المحفظة المالية V83.5</title>
 <meta name="theme-color" content="#F8FAFC">
 <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="محفظتي">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -10115,5 +10116,1251 @@ const EditLoanModal = memo(({ loan, onClose, dispatch, data, saveHistory, addNot
       </div>
     </Modal>
   );
+});
+  /* ═══════════════════════════════════════════════════════════════
+   PART 7 — Main App Component + Root Render + Listeners
+   V83.5 — Bank-Grade Edition (Final)
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ═══════════════════════════════════════════════════════════════
+   MAIN APP COMPONENT
+   ═══════════════════════════════════════════════════════════════ */
+const App = () => {
+  /* ═══════ AUTH STATE ═══════ */
+  const [user, setUser] = useState(null);
+  const [isAuthReady, setIsAuthReady] = useState(false);
+  const [isPinUnlocked, setIsPinUnlocked] = useState(() => sessionStorage.getItem('pin_verified') === 'true');
+  const [cloudSyncStatus, setCloudSyncStatus] = useState('pending');
+  const [isSaving, setIsSaving] = useState(false);
+
+  /* ═══════ REDUCER ═══════ */
+  const [state, dispatch] = useReducer(dataReducer, initialReducerState);
+  const {
+    data, budgets, selectedYear, selectedMonth, activeTab,
+    isFormOpen, formMode, formData, editingCard, editingLoan,
+    editingBudgetCategory, budgetAmount,
+    viewingCardStatement, activeCategoryDetail,
+    pendingCloseModal, recurringModalOpen, recurringFormData,
+    pinChangeOpen, smsModalOpen, quickTransferModalOpen,
+    confirmDialog,
+    expandedLedgers, expandedCardsSection, expandedGroup,
+    transViewMode, statusFilter, searchTerm, catViewType,
+    walletVisibility, isDarkMode, liquidityMode,
+  } = state;
+
+  /* ═══════ stateRef للوصول للحالة داخل onSnapshot ═══════ */
+  const stateRef = useRef(state);
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
+
+  /* ═══════ NOTIFICATIONS ═══════ */
+  const [notifications, setNotifications] = useState([]);
+
+  const addNotification = useCallback((payload) => {
+    const id = getSafeId();
+    setNotifications(prev => [...prev, { id, type: 'info', duration: 5000, ...payload }]);
+    return id;
+  }, []);
+
+  const removeNotification = useCallback((id) => {
+    setNotifications(prev => prev.filter(n => n.id !== id));
+  }, []);
+
+  /* ═══════ HISTORY / UNDO ═══════ */
+  const historyRef = useRef([]);
+  const [canUndo, setCanUndo] = useState(false);
+
+  const saveHistory = useCallback(() => {
+    try {
+      const snapshot = {
+        data: JSON.parse(JSON.stringify(data)),
+        budgets: JSON.parse(JSON.stringify(budgets)),
+        timestamp: Date.now(),
+      };
+      historyRef.current = [snapshot, ...historyRef.current].slice(0, 10);
+      setCanUndo(true);
+    } catch (e) {
+      console.error('saveHistory failed:', e);
+    }
+  }, [data, budgets]);
+
+  const handleUndo = useCallback(() => {
+    if (historyRef.current.length === 0) {
+      addNotification({ type: 'info', title: 'لا يوجد شيء للتراجع عنه' });
+      return;
+    }
+    const [snapshot, ...rest] = historyRef.current;
+    dispatch({ type: 'SET_DATA', payload: snapshot.data });
+    dispatch({ type: 'SET_BUDGETS', payload: snapshot.budgets });
+    historyRef.current = rest;
+    setCanUndo(rest.length > 0);
+    addNotification({ type: 'success', title: 'تم التراجع' });
+  }, [addNotification]);
+
+  /* ═══════ ONLINE STATUS ═══════ */
+  const isOnline = useOnlineStatus();
+
+  /* ═══════ REFS ═══════ */
+  const lastMaterializeRef = useRef('');
+  const lastCloudSaveRef = useRef(0);
+  const initializationRef = useRef(false);
+
+  /* ═══════ FIREBASE AUTH ═══════ */
+  useEffect(() => {
+    const unsubscribe = firebase.auth().onAuthStateChanged((u) => {
+      setUser(u);
+      setIsAuthReady(true);
+      if (!u) {
+        setIsPinUnlocked(false);
+        sessionStorage.removeItem('pin_verified');
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
+  /* ═══════════════════════════════════════════════════════════════
+     FIRESTORE REAL-TIME LISTENER (onSnapshot)
+     ═══════════════════════════════════════════════════════════════ */
+  useEffect(() => {
+    if (!user || !user.email) return;
+    if (user.email !== ALLOWED_EMAIL) return;
+
+    const unsub = db.collection(FIREBASE_DOC_PATH.collection).doc(FIREBASE_DOC_PATH.doc)
+      .onSnapshot((doc) => {
+        if (!doc.exists) return;
+        const remote = doc.data();
+        if (!remote || !remote.data) return;
+
+        const remoteSavedAt = remote.savedAt || 0;
+        const lastSyncTs = Number(localStorage.getItem(LAST_SYNC_LS_KEY) || 0);
+        const timeSinceLastLocalSave = Date.now() - lastSyncTs;
+
+        /* ═══════════════════════════════════════════════════════
+           V83.5 — قواعد المزامنة الذكية:
+           1) تجاهل التحديثات خلال 10 ثواني من رفعنا (منع loop)
+           2) اقبل فقط التحديثات الأحدث بـ 10+ ثواني
+           3) استخدم الدمج الذكي بدل الاستبدال
+           ═══════════════════════════════════════════════════════ */
+        
+        // القاعدة 1: تجاهل التحديثات أثناء الرفع
+        if (timeSinceLastLocalSave < 10000) {
+          console.log('⏸️ تجاهل تحديث سحابي — رفعنا المحلي خلال آخر 10 ثواني');
+          return;
+        }
+        
+        // القاعدة 2: اقبل فقط الأحدث بكثير
+        if (remoteSavedAt <= lastSyncTs + 10000) {
+          console.log('⏸️ تجاهل تحديث سحابي — ليس أحدث بفارق كافٍ');
+          return;
+        }
+
+        // القاعدة 3: دمج ذكي
+        try {
+          const migrated = migrateData(remote.data);
+          if (!migrated) return;
+
+          const merged = smartMergeData(stateRef.current.data, migrated);
+
+          dispatch({ type: 'SET_DATA', payload: merged });
+          if (remote.budgets) dispatch({ type: 'SET_BUDGETS', payload: remote.budgets });
+
+          localStorage.setItem(LAST_SYNC_LS_KEY, String(remoteSavedAt));
+          setCloudSyncStatus('ready');
+
+          console.log('✅ تم دمج البيانات السحابية بنجاح');
+          console.log(`   📊 معاملات محلية: ${(stateRef.current.data.transactions || []).length}`);
+          console.log(`   📊 معاملات سحابية: ${(migrated.transactions || []).length}`);
+          console.log(`   📊 بعد الدمج: ${(merged.transactions || []).length}`);
+        } catch (e) {
+          console.error('❌ فشل دمج البيانات السحابية:', e);
+          setCloudSyncStatus('pending');
+        }
+      }, (err) => {
+        console.warn('Firestore snapshot error:', err);
+        setCloudSyncStatus('offline');
+      });
+
+    return () => unsub();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
+
+  /* ═══════════════════════════════════════════════════════════════
+     FIRESTORE SAVE (DEBOUNCED + SAFE)
+     ═══════════════════════════════════════════════════════════════ */
+  useEffect(() => {
+    if (!user || user.email !== ALLOWED_EMAIL) return;
+    if (!data || !initializationRef.current) return;
+
+    const now = Date.now();
+    // ✅ تأخير 3 ثواني بين المحاولات
+    if (now - lastCloudSaveRef.current < 3000) return;
+
+    // ✅ debounce 2000ms
+    const timeout = setTimeout(async () => {
+      setIsSaving(true);
+      setCloudSyncStatus('pending');
+
+      try {
+        const dataWithoutSavedAt = { ...data };
+        delete dataWithoutSavedAt.savedAt;
+
+        const savedAt = Date.now();
+
+        const payload = {
+          data: dataWithoutSavedAt,
+          budgets,
+          savedAt: savedAt,
+          updatedAt: new Date().toISOString(),
+          version: 'V83.5',
+        };
+
+        await db.collection(FIREBASE_DOC_PATH.collection).doc(FIREBASE_DOC_PATH.doc).set(payload);
+
+        lastCloudSaveRef.current = savedAt;
+        localStorage.setItem(LAST_SYNC_LS_KEY, String(savedAt));
+        setCloudSyncStatus('ready');
+
+        console.log(`✅ تم الحفظ للسحابة — ${new Date(savedAt).toLocaleTimeString('ar-EG')}`);
+      } catch (err) {
+        console.error('❌ فشل الحفظ للسحابة:', err);
+        setCloudSyncStatus(isOnline ? 'pending' : 'offline');
+      } finally {
+        setIsSaving(false);
+      }
+    }, 2000);
+
+    return () => clearTimeout(timeout);
+  }, [data, budgets, user, isOnline]);
+
+  /* ═══════════════════════════════════════════════════════════════
+     MATERIALIZE (Recurring + Loans)
+     ═══════════════════════════════════════════════════════════════ */
+  useEffect(() => {
+    if (!data) return;
+    const now = new Date();
+    const todayKey = getLocalISODate(now);
+    const runKey = `${todayKey}_${(data.recurringItems || []).length}_${(data.loans || []).length}`;
+    if (lastMaterializeRef.current === runKey) return;
+
+    let working = data;
+    let changed = false;
+
+    const recurringResult = materializeRecurringItems(working, todayKey);
+    if (recurringResult) { working = recurringResult; changed = true; }
+
+    const loansResult = materializeLoanInstallments(working, todayKey);
+    if (loansResult) { working = loansResult; changed = true; }
+
+    if (changed) {
+      dispatch({ type: 'SET_DATA', payload: working });
+    }
+    lastMaterializeRef.current = runKey;
+    initializationRef.current = true;
+  }, [data]);
+
+  /* ═══════ DERIVED: UPDATED LOANS ═══════ */
+  const updatedLoans = useMemo(() => {
+    const loans = data?.loans || [];
+    const transactionsList = data?.transactions || [];
+
+    return loans.map(loan => {
+      if (loan.autoMonthly) {
+        const monthKey = makeMonthKey(selectedYear, selectedMonth);
+        const isSettled = (data?.settledHanyMonths || []).includes(monthKey);
+
+        /* ═══════════════════════════════════════════════════════════
+           V83.5 — HANY SHOP ITEMS FILTER (STRICT)
+           يجمع فقط القيود الحقيقية من مسحوبات هاني
+           ═══════════════════════════════════════════════════════════ */
+        const monthHanyItems = transactionsList.filter(t => {
+          // 1) الشهر والسنة
+          if (t.month !== selectedMonth) return false;
+          if ((t.year || selectedYear) !== selectedYear) return false;
+          
+          // 2) الفئة (تصفية صارمة)
+          if (!isHanyShopCategory(t.category, t)) return false;
+          
+          // 3) الحالة: مدفوع فقط
+          if (t.status !== 'paid') return false;
+          
+          // 4) استثناءات صريحة
+          if (isCarryoverTransaction(t)) return false;
+          if (isSystemGenerated(t) && t.importedFrom !== 'excel-v1') return false;
+          
+          return true;
+        });
+
+        const totalAmount = monthHanyItems.reduce((s, t) => s + safeNumber(t.amount), 0);
+
+        const payments = transactionsList.filter(t =>
+          t.linkedLoanId === loan.id &&
+          t.settledHanyMonth === monthKey &&
+          t.status === 'paid'
+        );
+        const totalPaid = payments.reduce((s, t) => s + safeNumber(t.amount), 0);
+        const remaining = isSettled ? 0 : Math.max(0, totalAmount - totalPaid);
+
+        return {
+          ...loan,
+          month: selectedMonth,
+          year: selectedYear,
+          items: monthHanyItems,
+          payments,
+          totalAmount,
+          totalPaid,
+          remaining,
+          autoGenerated: true,
+        };
+      }
+
+      const paidTxs = transactionsList.filter(t =>
+        (t.linkedLoanId === loan.id || t.sourceLoanId === loan.id) &&
+        t.status === 'paid'
+      );
+      const totalPaid = safeNumber(loan.prePaidAmount) + paidTxs.reduce((s, t) => s + safeNumber(t.amount), 0);
+      const remaining = Math.max(0, safeNumber(loan.totalAmount) - totalPaid);
+
+      return { ...loan, totalPaid, remaining };
+    });
+  }, [data, selectedMonth, selectedYear]);
+
+  /* ═══════ DERIVED: LIVE BALANCES ═══════ */
+  const liveBalances = useMemo(() => {
+    const balances = {};
+    ACCOUNT_KEYS.forEach(k => { balances[k] = computeBalance(data, k); });
+    return balances;
+  }, [data]);
+
+  /* ═══════ DERIVED: LIQUIDITY ═══════ */
+  const totalLiquidity = useMemo(() =>
+    computeLiquidity(data, liquidityMode, liveBalances, data?.cards || []).total,
+    [data, liquidityMode, liveBalances]
+  );
+
+  /* ═══════ DERIVED: ARRAYS ═══════ */
+  const transactions = data?.transactions || [];
+  const cards = data?.cards || [];
+  const recurringItems = data?.recurringItems || [];
+
+  /* ═══════ DERIVED: MONTH INSIGHTS ═══════ */
+  const monthInsights = useMemo(() => {
+    const monthTx = transactions.filter(t =>
+      t.month === selectedMonth && (t.year || selectedYear) === selectedYear
+    );
+    const inc = monthTx.filter(t => t.type === 'income' && t.status === 'paid')
+      .reduce((s, t) => s + safeNumber(t.amount), 0);
+    const exp = monthTx.filter(t => t.type === 'expense' && t.status === 'paid')
+      .reduce((s, t) => s + safeNumber(t.amount), 0);
+    return { inc, exp, net: inc - exp };
+  }, [transactions, selectedMonth, selectedYear]);
+
+  /* ═══════ DERIVED: FINANCE SNAPSHOT ═══════ */
+  const financeSnapshot = useMemo(() => {
+    const monthTx = transactions.filter(t =>
+      t.month === selectedMonth && (t.year || selectedYear) === selectedYear
+    );
+    const actualIncome = monthTx.filter(t => t.type === 'income' && t.status === 'paid')
+      .reduce((s, t) => s + safeNumber(t.amount), 0);
+    const actualExpenses = monthTx.filter(t => t.type === 'expense' && t.status === 'paid')
+      .reduce((s, t) => s + safeNumber(t.amount), 0);
+    const pendingIncome = monthTx.filter(t => t.type === 'income' && t.status !== 'paid')
+      .reduce((s, t) => s + safeNumber(t.amount), 0);
+    const pendingExpensesAll = monthTx.filter(t => t.type === 'expense' && t.status !== 'paid')
+      .reduce((s, t) => s + safeNumber(t.amount), 0);
+
+    const operationalLiquidity = computeLiquidity(data, 'operational', liveBalances, cards).total;
+    const projectedClosingBalance = operationalLiquidity + pendingIncome - pendingExpensesAll;
+
+    return {
+      actualIncome,
+      actualExpenses,
+      paidExpensesAll: actualExpenses,
+      pendingIncome,
+      pendingExpensesAll,
+      actualCashInHand: safeNumber(liveBalances.cash),
+      projectedClosingBalance,
+      netMonth: actualIncome - actualExpenses,
+    };
+  }, [transactions, selectedMonth, selectedYear, liveBalances, data, cards]);
+
+  /* ═══════ DERIVED: CHART DATA ═══════ */
+  const chartData = useMemo(() => {
+    return getMonthsForYear(selectedYear).map((month) => {
+      const monthTx = transactions.filter(t =>
+        t.month === month && (t.year || selectedYear) === selectedYear && t.status === 'paid'
+      );
+      const income = monthTx.filter(t => t.type === 'income').reduce((s, t) => s + safeNumber(t.amount), 0);
+      const expense = monthTx.filter(t => t.type === 'expense').reduce((s, t) => s + safeNumber(t.amount), 0);
+      return { name: month.slice(0, 3), 'دخل': Math.round(income), 'مصروف': Math.round(expense) };
+    });
+  }, [transactions, selectedYear]);
+
+  /* ═══════════════════════════════════════════════════════════════
+     GROUPED TRANSACTIONS (يدعم transViewMode)
+     ═══════════════════════════════════════════════════════════════ */
+  const groupedTransactions = useMemo(() => {
+    let monthTx = transactions.filter(t =>
+      t.month === selectedMonth &&
+      (t.year || selectedYear) === selectedYear &&
+      t.status !== 'paid'
+    );
+
+    if (transViewMode !== 'all') {
+      monthTx = monthTx.filter(t => t.type === transViewMode);
+    }
+
+    const groups = {};
+    monthTx.forEach(t => {
+      const cat = t.category || 'أخرى';
+      if (!groups[cat]) groups[cat] = [];
+      groups[cat].push(t);
+    });
+    return Object.entries(groups).map(([category, items]) => ({
+      category,
+      items: items.sort((a, b) => (parseISODate(b.date) || 0) - (parseISODate(a.date) || 0)),
+      total: items.reduce((s, i) => s + safeNumber(i.amount), 0),
+    })).sort((a, b) => b.total - a.total);
+  }, [transactions, selectedMonth, selectedYear, transViewMode]);
+
+  /* ═══════ DERIVED: BUILD LEDGER ═══════ */
+  const buildLedger = useCallback((accountKey) => {
+    const cutoff = getAccountCutoff(data.accountsData, accountKey);
+    const cutoffDay = dayStart(cutoff);
+
+    const list = transactions.filter(t => {
+      if (t.status !== 'paid' || t.method !== accountKey) return false;
+      if (t.source === 'carryover') return false;
+      if (isCashAccount(accountKey) && isHanyShopCategory(t.category, t)) return false;
+      const d = parseISODate(t.date);
+      return d && d >= cutoffDay;
+    }).sort((a, b) => (parseISODate(b.date) || 0) - (parseISODate(a.date) || 0));
+
+    let running = safeNumber(data.accountsData?.[accountKey]?.balance);
+    return list.map(t => {
+      const signed = t.subType === 'deposit' ? safeNumber(t.amount) : -safeNumber(t.amount);
+      running += signed;
+      return { ...t, runningBalance: running };
+    });
+  }, [transactions, data.accountsData]);
+
+  /* ═══════ DERIVED: AGENDA ITEMS ═══════ */
+  const getAgendaItems = useCallback(() => {
+    const items = [];
+    const now = new Date();
+
+    updatedLoans.forEach(loan => {
+      if (loan.isReceivable || loan.paused) return;
+      if (safeNumber(loan.monthlyInstallment) <= 0 && !loan.autoGenerated) return;
+      const dueDay = safeNumber(loan.dueDay, 1);
+      let targetMonth = now.getMonth(), targetYear = now.getFullYear();
+      if (now.getDate() > dueDay) {
+        targetMonth++;
+        if (targetMonth > 11) { targetMonth = 0; targetYear++; }
+      }
+      const maxDay = new Date(targetYear, targetMonth + 1, 0).getDate();
+      const safeDay = Math.min(dueDay, maxDay);
+      const dueDate = `${targetYear}-${String(targetMonth + 1).padStart(2, '0')}-${String(safeDay).padStart(2, '0')}`;
+      items.push({
+        id: `loan-${loan.id}`,
+        title: `قسط ${loan.name}`,
+        date: dueDate,
+        amount: safeNumber(loan.monthlyInstallment),
+        desc: `يوم ${dueDay} من الشهر`,
+        type: 'danger',
+        icon: Banknote,
+      });
+    });
+
+    cards.forEach(card => {
+      if (!card.dueDate) return;
+      const match = String(card.dueDate).match(/(\d+)/);
+      if (!match) return;
+      const dueDay = Number(match[1]);
+      if (!dueDay || dueDay < 1 || dueDay > 31) return;
+      const liveDebt = computeCardDebt(data, card);
+      if (liveDebt <= 0) return;
+      let targetMonth = now.getMonth(), targetYear = now.getFullYear();
+      if (now.getDate() > dueDay) {
+        targetMonth++;
+        if (targetMonth > 11) { targetMonth = 0; targetYear++; }
+      }
+      const maxDay = new Date(targetYear, targetMonth + 1, 0).getDate();
+      const safeDay = Math.min(dueDay, maxDay);
+      const dueDate = `${targetYear}-${String(targetMonth + 1).padStart(2, '0')}-${String(safeDay).padStart(2, '0')}`;
+      items.push({
+        id: `card-${card.id}`,
+        title: `استحقاق ${card.bank} ${card.name}`,
+        date: dueDate,
+        amount: liveDebt,
+        desc: `•••• ${card.last4}`,
+        type: 'warning',
+        icon: CreditCard,
+      });
+    });
+
+    recurringItems.forEach(r => {
+      if (r.active === false) return;
+      const day = safeNumber(r.day, 1);
+      if (day < 1 || day > 31) return;
+      let targetMonth = now.getMonth(), targetYear = now.getFullYear();
+      if (now.getDate() > day) {
+        targetMonth++;
+        if (targetMonth > 11) { targetMonth = 0; targetYear++; }
+      }
+      const maxDay = new Date(targetYear, targetMonth + 1, 0).getDate();
+      const safeDay = Math.min(day, maxDay);
+      const dueDate = `${targetYear}-${String(targetMonth + 1).padStart(2, '0')}-${String(safeDay).padStart(2, '0')}`;
+      items.push({
+        id: `rec-${r.id}`,
+        title: r.title,
+        date: dueDate,
+        amount: safeNumber(r.amount),
+        desc: r.type === 'income' ? 'دخل متكرر' : 'مصروف متكرر',
+        type: r.type === 'income' ? 'success' : 'warning',
+        icon: Repeat,
+      });
+    });
+
+    updatedLoans.forEach(loan => {
+      if (!loan.isReceivable || loan.paused) return;
+      if (safeNumber(loan.monthlyInstallment) <= 0) return;
+      const dueDay = safeNumber(loan.dueDay, 1);
+      let targetMonth = now.getMonth(), targetYear = now.getFullYear();
+      if (now.getDate() > dueDay) {
+        targetMonth++;
+        if (targetMonth > 11) { targetMonth = 0; targetYear++; }
+      }
+      const maxDay = new Date(targetYear, targetMonth + 1, 0).getDate();
+      const safeDay = Math.min(dueDay, maxDay);
+      const dueDate = `${targetYear}-${String(targetMonth + 1).padStart(2, '0')}-${String(safeDay).padStart(2, '0')}`;
+      items.push({
+        id: `receivable-${loan.id}`,
+        title: `تحصيل ${loan.name}`,
+        date: dueDate,
+        amount: safeNumber(loan.monthlyInstallment),
+        desc: 'مستحق لي',
+        type: 'success',
+        icon: TrendingUp,
+      });
+    });
+
+    return items.sort((a, b) => (parseISODate(a.date) || 0) - (parseISODate(b.date) || 0));
+  }, [updatedLoans, cards, recurringItems, data]);
+
+  /* ═══════ HANDLERS ═══════ */
+  const handleSelectYear = useCallback((y) => dispatch({ type: 'SET_SELECTED_YEAR', payload: y }), []);
+  const handleSelectMonth = useCallback((m) => dispatch({ type: 'SET_SELECTED_MONTH', payload: m }), []);
+  const handleToggleVisibility = useCallback((key) => dispatch({ type: 'TOGGLE_WALLET_VISIBILITY', payload: key }), []);
+  const onChangeLiquidityMode = useCallback((mode) => dispatch({ type: 'SET_LIQUIDITY_MODE', payload: mode }), []);
+
+  const handleAddWalletDeposit = useCallback((walletKey) => {
+    dispatch({ type: 'SET_FORM_MODE', payload: 'add' });
+    dispatch({
+      type: 'SET_FORM_DATA',
+      payload: {
+        type: 'income', subType: 'deposit', kind: KIND.OPERATIONAL,
+        category: '', amount: '', date: getLocalISODate(),
+        method: walletKey, status: 'paid',
+        description: `إيداع في ${ACCOUNT_SHORT_NAMES[walletKey] || walletKey}`,
+      },
+    });
+    dispatch({ type: 'SET_FORM_OPEN', payload: true });
+  }, []);
+
+  const handleAddWalletWithdrawal = useCallback((walletKey) => {
+    dispatch({ type: 'SET_FORM_MODE', payload: 'add' });
+    dispatch({
+      type: 'SET_FORM_DATA',
+      payload: {
+        type: 'expense', subType: 'withdrawal', kind: KIND.OPERATIONAL,
+        category: '', amount: '', date: getLocalISODate(),
+        method: walletKey, status: 'paid',
+        description: `سحب من ${ACCOUNT_SHORT_NAMES[walletKey] || walletKey}`,
+      },
+    });
+    dispatch({ type: 'SET_FORM_OPEN', payload: true });
+  }, []);
+
+  const handleBulkDelete = useCallback((ids) => {
+    if (!Array.isArray(ids) || ids.length === 0) return;
+    saveHistory();
+    const idSet = new Set(ids);
+    const toDelete = (data.transactions || []).filter(t => idSet.has(t.id));
+    const newArchive = [
+      ...(data.deletedTxArchive || []),
+      ...toDelete.map(t => ({ ...t, deletedAt: new Date().toISOString(), deletedBy: 'self' })),
+    ].slice(-500);
+    const newTx = (data.transactions || []).filter(t => !idSet.has(t.id));
+    const newDeletedIds = Array.from(new Set([...(data.deletedTxIds || []), ...ids])).slice(-500);
+    const newMaterialized = { ...(data.materializedRecurring || {}) };
+    toDelete.forEach(t => {
+      if (t.sourceRecurringId && t.year && t.month) {
+        newMaterialized[`${t.sourceRecurringId}_${makeMonthKey(t.year, t.month)}`] = 'deleted';
+      }
+    });
+    dispatch({
+      type: 'SET_DATA',
+      payload: {
+        ...data, transactions: newTx, deletedTxArchive: newArchive,
+        deletedTxIds: newDeletedIds, materializedRecurring: newMaterialized,
+      },
+    });
+    addNotification({ type: 'success', title: `تم حذف ${ids.length} معاملة` });
+  }, [data, dispatch, saveHistory, addNotification]);
+
+  const handleDelete = useCallback((id) => {
+    const t = (data.transactions || []).find(x => x.id === id);
+    if (!t) return;
+    if (isMonthClosed(data, t.year || selectedYear, t.month)) {
+      addNotification({ type: 'error', title: 'محظور', message: `شهر ${t.month} ${t.year} مغلق` });
+      return;
+    }
+    dispatch({
+      type: 'SHOW_CONFIRM', danger: true,
+      title: 'حذف المعاملة',
+      message: `سيتم نقل "${t.description || t.category}" بمبلغ ${fmt(t.amount)} للأرشيف.`,
+      onConfirm: () => handleBulkDelete([id]),
+      onCancel: () => dispatch({ type: 'HIDE_CONFIRM' }),
+    });
+  }, [data, selectedYear, dispatch, addNotification, handleBulkDelete]);
+
+  const deleteRecurring = useCallback((id) => {
+    dispatch({
+      type: 'SHOW_CONFIRM', danger: true,
+      title: 'حذف البند المتكرر',
+      message: 'سيتم حذف البند من القائمة',
+      onConfirm: () => {
+        saveHistory();
+        const items = (data.recurringItems || []).filter(i => i.id !== id);
+        dispatch({ type: 'UPDATE_RECURRING_ITEMS', payload: items });
+        addNotification({ type: 'success', title: 'تم الحذف' });
+      },
+      onCancel: () => dispatch({ type: 'HIDE_CONFIRM' }),
+    });
+  }, [data, dispatch, saveHistory, addNotification]);
+
+  /* ═══════ LOGIN / LOGOUT ═══════ */
+  const handleLoginSuccess = useCallback(() => {
+    sessionStorage.setItem('pin_verified', 'true');
+    setIsPinUnlocked(true);
+  }, []);
+
+  const handlePinSuccess = useCallback(() => {
+    sessionStorage.setItem('pin_verified', 'true');
+    setIsPinUnlocked(true);
+  }, []);
+
+  const handleLogout = useCallback(async () => {
+    try {
+      await firebase.auth().signOut();
+      sessionStorage.removeItem('pin_verified');
+      setIsPinUnlocked(false);
+      setUser(null);
+    } catch (e) {
+      console.error('Logout failed:', e);
+    }
+  }, []);
+
+  /* ═══════ DARK MODE EFFECT ═══════ */
+  useEffect(() => {
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [isDarkMode]);
+
+  /* ═══════ RENDER GUARDS ═══════ */
+  if (!isAuthReady) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--bg-app)' }}>
+        <div className="flex flex-col items-center">
+          <div className="w-12 h-12 border-3 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+          <p className="font-bold text-sm" style={{ color: 'var(--text-secondary)' }}>جاري التحميل...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) return <LoginScreen onLogin={handleLoginSuccess} />;
+  if (!isPinUnlocked) return <PinLockScreen onSuccess={handlePinSuccess} onLogout={handleLogout} />;
+
+  /* ═══════ CUSTODY SUMMARY ═══════ */
+  const custodySummary = computeCustodyBalance(data.custodyEntries);
+
+  /* ═══════════════════════════════════════════════════════════════
+     MAIN RENDER
+     ═══════════════════════════════════════════════════════════════ */
+  return (
+    <React.Fragment>
+      <ProfessionalTicker
+        updatedLoans={updatedLoans}
+        cards={cards}
+        liveBalances={liveBalances}
+        walletVisibility={walletVisibility}
+        custodyBalance={custodySummary.balance}
+        data={data}
+        liquidityMode={liquidityMode}
+      />
+
+      <OfflineBanner online={isOnline} />
+
+      <div className="flex" style={{ paddingTop: 'calc(var(--ticker-h) + 8px)' }}>
+        <EnhancedSidebar
+          activeTab={activeTab}
+          dispatch={dispatch}
+          canUndo={canUndo}
+          onUndo={handleUndo}
+        />
+
+        <main className="flex-1 min-w-0 px-3 md:px-5 pb-24">
+          <ProfessionalHeader
+            isDarkMode={isDarkMode}
+            dispatch={dispatch}
+            onOpenSms={() => dispatch({ type: 'SET_SMS_MODAL_OPEN', payload: true })}
+            isOnline={isOnline}
+            syncStatus={cloudSyncStatus}
+            isSaving={isSaving}
+          />
+
+          {activeTab === 'dashboard' && (
+            <DashboardView
+              data={data}
+              financeSnapshot={financeSnapshot}
+              liveBalances={liveBalances}
+              totalLiquidity={totalLiquidity}
+              walletVisibility={walletVisibility}
+              onToggleVisibility={handleToggleVisibility}
+              dispatch={dispatch}
+              selectedYear={selectedYear}
+              selectedMonth={selectedMonth}
+              transactions={transactions}
+              cards={cards}
+              updatedLoans={updatedLoans}
+              chartData={chartData}
+              isDarkMode={isDarkMode}
+              addNotification={addNotification}
+              onSelectYear={handleSelectYear}
+              onSelectMonth={handleSelectMonth}
+              liquidityMode={liquidityMode}
+              onChangeLiquidityMode={onChangeLiquidityMode}
+            />
+          )}
+
+          {activeTab === 'transactions' && (
+            <TransactionsView
+              groupedTransactions={groupedTransactions}
+              transactions={transactions}
+              selectedMonth={selectedMonth}
+              selectedYear={selectedYear}
+              transViewMode={transViewMode}
+              statusFilter={statusFilter}
+              searchTerm={searchTerm}
+              expandedGroup={expandedGroup}
+              data={data}
+              monthInsights={monthInsights}
+              dispatch={dispatch}
+              handleDelete={handleDelete}
+              addNotification={addNotification}
+              onSelectYear={handleSelectYear}
+              onSelectMonth={handleSelectMonth}
+              saveHistory={saveHistory}
+              onBulkDelete={handleBulkDelete}
+            />
+          )}
+
+          {activeTab === 'categories' && (
+            <CategoriesView
+              transactions={transactions}
+              selectedMonth={selectedMonth}
+              selectedYear={selectedYear}
+              catViewType={catViewType}
+              budgets={budgets}
+              dispatch={dispatch}
+              handleDelete={handleDelete}
+              onSelectYear={handleSelectYear}
+              onSelectMonth={handleSelectMonth}
+            />
+          )}
+
+          {activeTab === 'loans' && (
+            <LoansView
+              updatedLoans={updatedLoans}
+              cards={cards}
+              recurringItems={recurringItems}
+              transactions={transactions}
+              dispatch={dispatch}
+              deleteRecurring={deleteRecurring}
+              saveHistory={saveHistory}
+              getLocalISODate={getLocalISODate}
+              addNotification={addNotification}
+              data={data}
+              selectedMonth={selectedMonth}
+              selectedYear={selectedYear}
+            />
+          )}
+
+          {activeTab === 'cards' && (
+            <WalletsAndCardsView
+              cards={cards}
+              buildLedger={buildLedger}
+              expandedLedgers={expandedLedgers}
+              expandedCardsSection={expandedCardsSection}
+              selectedMonth={selectedMonth}
+              selectedYear={selectedYear}
+              dispatch={dispatch}
+              handleDelete={handleDelete}
+              handleAddWalletDeposit={handleAddWalletDeposit}
+              handleAddWalletWithdrawal={handleAddWalletWithdrawal}
+              walletVisibility={walletVisibility}
+              liveBalances={liveBalances}
+              saveHistory={saveHistory}
+              addNotification={addNotification}
+              data={data}
+            />
+          )}
+
+          {activeTab === 'planning' && (
+            <MonthlyPlanningView
+              data={data}
+              monthlyPlans={data.monthlyPlans || {}}
+              dispatch={dispatch}
+              saveHistory={saveHistory}
+              addNotification={addNotification}
+            />
+          )}
+
+          {activeTab === 'planner' && (
+            <PlannerView
+              updatedLoans={updatedLoans}
+              cards={cards}
+              selectedMonth={selectedMonth}
+              selectedYear={selectedYear}
+              monthlyPlans={data.monthlyPlans || {}}
+              totalLiquidityNow={totalLiquidity}
+              data={data}
+              transactions={transactions}
+              recurringItems={recurringItems}
+            />
+          )}
+
+          {activeTab === 'forecast' && (
+            <LiquidityForecastView
+              transactions={transactions}
+              updatedLoans={updatedLoans}
+              recurringItems={recurringItems}
+              liveBalances={liveBalances}
+              selectedYear={selectedYear}
+              selectedMonth={selectedMonth}
+              monthlyPlans={data.monthlyPlans || {}}
+              cards={cards}
+              data={data}
+              liquidityMode={liquidityMode}
+            />
+          )}
+
+          {activeTab === 'financial-forecast' && (
+            <FinancialForecastView
+              data={data}
+              transactions={transactions}
+              cards={cards}
+              updatedLoans={updatedLoans}
+              recurringItems={recurringItems}
+              liveBalances={liveBalances}
+              monthlyPlans={data.monthlyPlans || {}}
+              selectedYear={selectedYear}
+              selectedMonth={selectedMonth}
+              liquidityMode={liquidityMode}
+            />
+          )}
+
+          {activeTab === 'comparison' && (
+            <MonthComparisonView
+              transactions={transactions}
+              selectedYear={selectedYear}
+              selectedMonth={selectedMonth}
+            />
+          )}
+
+          {activeTab === 'calendar' && (
+            <CalendarView
+              data={data}
+              getAgendaItems={getAgendaItems}
+              dispatch={dispatch}
+              saveHistory={saveHistory}
+              addNotification={addNotification}
+            />
+          )}
+
+          {activeTab === 'duplicates' && (
+            <DuplicateDetectionSystem
+              transactions={transactions}
+              data={data}
+              dispatch={dispatch}
+              addNotification={addNotification}
+              saveHistory={saveHistory}
+              onBulkDelete={handleBulkDelete}
+            />
+          )}
+
+          {activeTab === 'deleted' && (
+            <DeletedArchiveView
+              data={data}
+              dispatch={dispatch}
+              saveHistory={saveHistory}
+              addNotification={addNotification}
+              transactions={transactions}
+            />
+          )}
+
+          {activeTab === 'export' && (
+            <ExportView
+              data={data}
+              transactions={transactions}
+              cards={cards}
+              updatedLoans={updatedLoans}
+              selectedYear={selectedYear}
+              selectedMonth={selectedMonth}
+              addNotification={addNotification}
+            />
+          )}
+
+          {activeTab === 'ai-assistant' && (
+            <AiAssistantView
+              data={data}
+              transactions={transactions}
+              cards={cards}
+              updatedLoans={updatedLoans}
+              selectedYear={selectedYear}
+              selectedMonth={selectedMonth}
+              liveBalances={liveBalances}
+              liquidityMode={liquidityMode}
+              addNotification={addNotification}
+            />
+          )}
+
+          {activeTab === 'settings' && (
+            <SettingsView
+              data={data}
+              accountsData={data.accountsData || DEFAULT_ACCOUNTS}
+              cards={cards}
+              budgets={budgets}
+              dispatch={dispatch}
+              saveHistory={saveHistory}
+              addNotification={addNotification}
+              liquidityMode={liquidityMode}
+              onChangeLiquidityMode={onChangeLiquidityMode}
+            />
+          )}
+        </main>
+      </div>
+
+      <button
+        className="fab no-print"
+        onClick={() => {
+          dispatch({ type: 'SET_FORM_MODE', payload: 'add' });
+          dispatch({
+            type: 'SET_FORM_DATA',
+            payload: {
+              type: 'expense', subType: 'withdrawal', kind: KIND.OPERATIONAL,
+              category: '', amount: '', date: getLocalISODate(),
+              method: 'cash', status: 'pending',
+            },
+          });
+          dispatch({ type: 'SET_FORM_OPEN', payload: true });
+        }}
+        aria-label="إضافة معاملة"
+        title="إضافة معاملة"
+      >
+        <Plus size={24} />
+      </button>
+
+      <div className="bottom-nav-container lg:hidden no-print">
+        <div className="scrollable-nav">
+          {[
+            { id: 'dashboard', label: 'الرئيسية', icon: LayoutDashboard },
+            { id: 'transactions', label: 'المعاملات', icon: ArrowUpRight },
+            { id: 'categories', label: 'الفئات', icon: Layers },
+            { id: 'loans', label: 'الالتزامات', icon: Banknote },
+            { id: 'cards', label: 'الكروت', icon: CreditCard },
+            { id: 'calendar', label: 'الأجندة', icon: CalendarDays },
+            { id: 'ai-assistant', label: 'المساعد', icon: Bot },
+            { id: 'settings', label: 'الإعدادات', icon: Sliders },
+          ].map(item => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => dispatch({ type: 'SET_ACTIVE_TAB', payload: item.id })}
+              className={`nav-btn ${activeTab === item.id ? 'active' : ''}`}
+            >
+              <item.icon size={18} />
+              <span>{item.label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* ═══════ MODALS ═══════ */}
+      <TransactionFormModal
+        isOpen={isFormOpen}
+        onClose={() => dispatch({ type: 'SET_FORM_OPEN', payload: false })}
+        dispatch={dispatch}
+        data={data}
+        addNotification={addNotification}
+        saveHistory={saveHistory}
+        formMode={formMode}
+        formData={formData}
+      />
+
+      <RecurringModal
+        isOpen={recurringModalOpen}
+        onClose={() => dispatch({ type: 'SET_RECURRING_MODAL_OPEN', payload: false })}
+        dispatch={dispatch}
+        data={data}
+        addNotification={addNotification}
+        saveHistory={saveHistory}
+        formData={recurringFormData}
+      />
+
+      <QuickTransferModal
+        isOpen={quickTransferModalOpen}
+        onClose={() => dispatch({ type: 'SET_QUICK_TRANSFER_MODAL_OPEN', payload: false })}
+        dispatch={dispatch}
+        data={data}
+        addNotification={addNotification}
+        saveHistory={saveHistory}
+      />
+
+      {smsModalOpen && (
+        <SmsParserModal
+          isOpen={smsModalOpen}
+          onClose={() => dispatch({ type: 'SET_SMS_MODAL_OPEN', payload: false })}
+          dispatch={dispatch}
+          addNotification={addNotification}
+          saveHistory={saveHistory}
+          data={data}
+        />
+      )}
+
+      {viewingCardStatement && (
+        <CardStatementModal
+          card={viewingCardStatement}
+          data={data}
+          transactions={transactions}
+          onClose={() => dispatch({ type: 'SET_VIEWING_CARD_STATEMENT', payload: null })}
+          addNotification={addNotification}
+        />
+      )}
+
+      {activeCategoryDetail && (
+        <CategoryDetailModal
+          category={activeCategoryDetail}
+          transactions={transactions}
+          selectedMonth={selectedMonth}
+          selectedYear={selectedYear}
+          dispatch={dispatch}
+          addNotification={addNotification}
+        />
+      )}
+
+      {pendingCloseModal?.isOpen && (
+        <PendingCloseModal
+          data={pendingCloseModal}
+          onClose={() => dispatch({ type: 'SET_PENDING_CLOSE_MODAL', payload: { isOpen: false } })}
+          onAction={(action) => {
+            saveHistory();
+            const pending = pendingCloseModal.pending || [];
+            const ids = new Set(pending.map(t => t.id));
+
+            if (action === 'approve') {
+              const updated = transactions.map(t => ids.has(t.id) ? { ...t, status: 'paid' } : t);
+              dispatch({ type: 'UPDATE_TRANSACTIONS', payload: updated });
+            } else if (action === 'delete') {
+              const updated = transactions.filter(t => !ids.has(t.id));
+              dispatch({ type: 'UPDATE_TRANSACTIONS', payload: updated });
+            }
+
+            dispatch({
+              type: 'CLOSE_MONTH',
+              payload: { year: pendingCloseModal.year, month: pendingCloseModal.month }
+            });
+            dispatch({ type: 'SET_PENDING_CLOSE_MODAL', payload: { isOpen: false } });
+            addNotification({ type: 'success', title: 'تم الإقفال' });
+          }}
+        />
+      )}
+
+      {editingCard && (
+        <EditCardModal
+          card={editingCard}
+          onClose={() => dispatch({ type: 'SET_EDITING_CARD', payload: null })}
+          dispatch={dispatch}
+          data={data}
+          saveHistory={saveHistory}
+          addNotification={addNotification}
+        />
+      )}
+
+      {editingLoan && (
+        <EditLoanModal
+          loan={editingLoan}
+          onClose={() => dispatch({ type: 'SET_EDITING_LOAN', payload: null })}
+          dispatch={dispatch}
+          data={data}
+          saveHistory={saveHistory}
+          addNotification={addNotification}
+        />
+      )}
+
+      {editingBudgetCategory && (
+        <Modal
+          isOpen={true}
+          onClose={() => dispatch({ type: 'SET_EDITING_BUDGET_CATEGORY', payload: null })}
+          title={`ميزانية: ${editingBudgetCategory}`}
+          icon="🎯"
+        >
+          <div className="space-y-3">
+            <div>
+              <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>المبلغ المخصص</label>
+              <input
+                type="text"
+                inputMode="decimal"
+                className="input-field text-2xl font-black text-center py-3"
+                style={{ color: 'var(--brand)' }}
+                value={budgetAmount}
+                onChange={e => dispatch({ type: 'SET_BUDGET_AMOUNT', payload: e.target.value })}
+                placeholder="0.00"
+                autoFocus
+              />
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  saveHistory();
+                  const newBudgets = { ...budgets };
+                  delete newBudgets[editingBudgetCategory];
+                  dispatch({ type: 'SET_BUDGETS', payload: newBudgets });
+                  dispatch({ type: 'SET_EDITING_BUDGET_CATEGORY', payload: null });
+                  addNotification({ type: 'success', title: 'تم الحذف' });
+                }}
+                className="btn text-xs"
+                style={{ background: 'var(--danger-soft)', color: 'var(--danger)' }}
+              >
+                <Trash2 size={14} /> حذف
+              </button>
+              <button
+                onClick={() => {
+                  const value = parseNumberInput(budgetAmount);
+                  saveHistory();
+                  const newBudgets = { ...budgets, [editingBudgetCategory]: value };
+                  dispatch({ type: 'SET_BUDGETS', payload: newBudgets });
+                  dispatch({ type: 'SET_EDITING_BUDGET_CATEGORY', payload: null });
+                  addNotification({ type: 'success', title: 'تم الحفظ' });
+                }}
+                className="btn btn-primary flex-1 text-xs"
+              >
+                <Save size={14} /> حفظ
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {pinChangeOpen && (
+        <PinChangeModal
+          onClose={() => dispatch({ type: 'SET_PIN_CHANGE_OPEN', payload: false })}
+          addNotification={addNotification}
+        />
+      )}
+
+      {confirmDialog.isOpen && (
+        <ConfirmDialog confirmDialog={confirmDialog} dispatch={dispatch} />
+      )}
+
+      <ToastContainer notifications={notifications} removeNotification={removeNotification} />
+    </React.Fragment>
+  );
+};
+
+/* ═══════════════════════════════════════════════════════════════
+   RENDER ROOT
+   ═══════════════════════════════════════════════════════════════ */
+const container = document.getElementById('root');
+const loadingEl = document.getElementById('loading');
+
+if (container && !window.__APP_ROOT__) {
+  window.__APP_ROOT__ = createRoot(container);
+
+  const renderApp = () => {
+    try {
+      window.__APP_ROOT__.render(
+        <ErrorBoundary>
+          <PromiseModalProvider>
+            <App />
+          </PromiseModalProvider>
+        </ErrorBoundary>
+      );
+
+      setTimeout(() => {
+        if (loadingEl) {
+          loadingEl.style.transition = 'opacity 0.4s ease';
+          loadingEl.style.opacity = '0';
+          setTimeout(() => { loadingEl.style.display = 'none'; }, 400);
+        }
+      }, 500);
+    } catch (err) {
+      console.error('❌ Root render failed:', err);
+      if (loadingEl) {
+        loadingEl.innerHTML = `
+          <div style="color: white; text-align: center; padding: 20px; font-family: Cairo, sans-serif;">
+            <p style="font-size: 18px; font-weight: 700; margin-bottom: 12px;">⚠️ فشل التحميل</p>
+            <p style="font-size: 12px; opacity: 0.7; max-width: 300px; margin: 0 auto 16px;">${String(err?.message || err)}</p>
+            <button onclick="location.reload()" style="padding: 10px 20px; border-radius: 8px; background: #3B82F6; color: white; border: none; font-weight: 700; cursor: pointer; font-family: inherit;">إعادة المحاولة</button>
+          </div>
+        `;
+      }
+    }
+  };
+
+  renderApp();
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   GLOBAL ERROR HANDLERS
+   ═══════════════════════════════════════════════════════════════ */
+window.addEventListener('unhandledrejection', (e) => {
+  console.error('Unhandled Rejection:', e.reason);
+});
+
+window.addEventListener('error', (e) => {
+  console.error('Global Error:', e.error || e.message);
+});
+
+/* ═══════════════════════════════════════════════════════════════
+   PREVENT DOUBLE-TAP ZOOM
+   ═══════════════════════════════════════════════════════════════ */
+let lastTouchEnd = 0;
+document.addEventListener('touchend', (e) => {
+  const now = Date.now();
+  if (now - lastTouchEnd <= 300) { e.preventDefault(); }
+  lastTouchEnd = now;
+}, { passive: false });
+
+/* ═══════════════════════════════════════════════════════════════
+   KEYBOARD SHORTCUTS
+   ═══════════════════════════════════════════════════════════════ */
+document.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+    e.preventDefault();
+    const searchInput = document.querySelector('input[type="text"][placeholder*="ابحث"]');
+    if (searchInput) searchInput.focus();
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
+    e.preventDefault();
+    const fab = document.querySelector('.fab');
+    if (fab) fab.click();
+  }
 });
   
