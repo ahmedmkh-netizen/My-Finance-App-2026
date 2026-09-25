@@ -327,7 +327,6 @@ body.light .item { background: linear-gradient(180deg, var(--surface-2) 0%, rgba
 .auto-badge { position: absolute; top: 8px; right: 10px; background: var(--warning); color: #08080B; font-size: 9.5px; font-weight: 700; padding: 3px 8px; border-radius: 999px; display: none; align-items: center; gap: 4px; letter-spacing: 0.02em; box-shadow: 0 4px 12px rgba(245,184,87,0.3); }
 .auto-badge.show { display: inline-flex; }
 .auto-badge .ico svg { width: 9px; height: 9px; }
-/* ✅ NEW: Clear button */
 .amount-clear {
   position: absolute;
   top: 8px;
@@ -612,7 +611,6 @@ body.light .period.on { box-shadow: 0 2px 8px rgba(31,26,20,0.06), inset 0 0 0 1
         <input type="text" class="search-input" id="searchInput" placeholder="ابحث في كل الفئات أو قول بصوتك" autocomplete="off">
         <button class="voice-btn" id="voiceBtn" title="إدخال صوتي" data-ico="mic"></button>
       </div>
-      <!-- ✅ NEW: Search mode hint -->
       <div class="search-mode-hint" id="searchModeHint">
         <span data-ico="search" style="width:11px;height:11px"></span>
         <span>نتائج البحث من كل الفئات</span>
@@ -631,7 +629,6 @@ body.light .period.on { box-shadow: 0 2px 8px rgba(31,26,20,0.06), inset 0 0 0 1
       <div class="card-title"><span data-ico="wallet" style="width:14px;height:14px"></span> بكام وفي إمتى؟</div>
       <div class="amount-box" id="amountBox">
         <div class="auto-badge" id="autoBadge"><span data-ico="star" style="width:9px;height:9px"></span> سعر تلقائي</div>
-        <!-- ✅ NEW: Clear button -->
         <button class="amount-clear" id="amountClear" type="button" title="مسح المبلغ" aria-label="مسح">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
         </button>
@@ -968,7 +965,6 @@ function clearAutoPrice() {
   if (autoBadge) autoBadge.classList.remove('show');
 }
 
-/* ✅ NEW: Show/hide clear button based on value */
 function updateAmountClearBtn() {
   var amountInput = document.getElementById('amount');
   var amountBox = document.getElementById('amountBox');
@@ -993,7 +989,7 @@ var USERS = {
 var FIREBASE_PROJECT = 'finance-app-2026-3e318';
 var CATEGORY_NAME = 'مسحوبات محل هاني';
 var AUTO_LOCK_MS = 4 * 60 * 1000;
-var DUPLICATE_WINDOW_MS = 5000; /* ✅ NEW: نافذة منع التكرار (5 ثواني) */
+var DUPLICATE_WINDOW_MS = 5000;
 
 var AZKAR = [
   { text: 'سُبْحَانَ اللَّهِ وَبِحَمْدِهِ، سُبْحَانَ اللَّهِ الْعَظِيمِ', icon: '📿' },
@@ -1090,9 +1086,8 @@ var selectedDateMode = 'today';
 var customDate = '';
 var amountAutoFilled = false;
 var isFirstLoad = true;
-/* ✅ NEW: تتبع آخر عملية محفوظة لمنع التكرار */
 var lastSaveInfo = { item: '', amount: 0, time: 0 };
-var isSaving = false; /* منع الضغط المتكرر على الزر */
+var isSaving = false;
 
 function sendTelegram(text) {
   if (!TELEGRAM_ENABLED) return;
@@ -1356,7 +1351,6 @@ function init() {
       renderItems();
       renderFavs();
       updateDateQuickButtons();
-      /* ✅ NEW: ضبط max attribute لتاريخ اليوم */
       var ci = document.getElementById('customDateInput');
       if (ci) ci.max = isoDate();
       resetLock();
@@ -1410,7 +1404,6 @@ function renderCats() {
   }).join('');
 }
 
-/* ✅ NEW: زر البند مع دعم عرض اسم الفئة في وضع البحث */
 function renderItemBtn(item, catKey, catLabel) {
   var isFav = favorites.indexOf(item) >= 0;
   var price = getItemPrice(item);
@@ -1422,14 +1415,12 @@ function renderItemBtn(item, catKey, catLabel) {
     '<span class="item-name">' + esc(item) + '</span>' + priceHtml + catHtml + '</button>';
 }
 
-/* ✅ UPDATED: البحث يعمل عبر كل الفئات */
 function renderItems(filter) {
   filter = (filter || '').trim();
   var box = document.getElementById('items');
   var hint = document.getElementById('searchModeHint');
 
   if (filter) {
-    /* وضع البحث: ابحث في كل الفئات */
     if (hint) hint.classList.add('show');
     var results = [];
     var seen = {};
@@ -1451,7 +1442,6 @@ function renderItems(filter) {
     return;
   }
 
-  /* وضع عادي: الفئة المختارة فقط */
   if (hint) hint.classList.remove('show');
   var cat = CATEGORIES[selectedCategory];
   var items = cat.items;
@@ -1483,7 +1473,6 @@ function updateDateQuickButtons() {
     wrapper.classList.add('show');
     var inp = document.getElementById('customDateInput');
     if (inp) {
-      /* ✅ NEW: تأكد أن max دائماً اليوم */
       inp.max = isoDate();
       if (!inp.value) { inp.value = customDate || yesterdayISO(); customDate = inp.value; }
     }
@@ -1575,7 +1564,6 @@ function bindEvents() {
     var star = e.target.closest('.star'); if (star) { e.stopPropagation(); toggleFav(star.dataset.f); return; }
     var btn = e.target.closest('.item'); if (!btn) return;
     selectedItem = btn.dataset.i;
-    /* ✅ NEW: لو اختار من نتيجة بحث، انتقل لفئة الصنف */
     if (btn.dataset.c && CATEGORIES[btn.dataset.c]) {
       selectedCategory = btn.dataset.c;
       renderCats();
@@ -1613,7 +1601,6 @@ function bindEvents() {
   });
   document.getElementById('amount').addEventListener('keydown', function(e) { if (e.key === 'Enter') saveTx(); });
 
-  /* ✅ NEW: زر مسح المبلغ */
   document.getElementById('amountClear').addEventListener('click', function(e) {
     e.preventDefault();
     e.stopPropagation();
@@ -1660,11 +1647,9 @@ function bindEvents() {
   });
   var customInput = document.getElementById('customDateInput');
   if (customInput) {
-    /* ✅ NEW: منع التواريخ المستقبلية */
     customInput.max = isoDate();
     customInput.addEventListener('change', function(e) {
       customDate = e.target.value;
-      /* ✅ NEW: تحقق إضافي */
       if (customDate && customDate > isoDate()) {
         toast('التاريخ المستقبلي غير مسموح', 'err');
         customDate = '';
@@ -1687,10 +1672,13 @@ function switchTab(t) {
   if (t === 'profile') updateBudgetDesc();
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   ✅ V83.5 — SAVE TX (معدّل — status: 'paid' مباشرة)
+   ═══════════════════════════════════════════════════════════════ */
 function saveTx() {
   if (!selectedItem) { toast('اختر صنفاً أولاً', 'err'); return; }
   if (!isAuthReady || !docRef) { toast('التطبيق غير متصل — تحقق من الإنترنت', 'err'); return; }
-  if (isSaving) { return; } /* ✅ منع ضغط مزدوج */
+  if (isSaving) { return; }
 
   var amount = parseFloat(document.getElementById('amount').value);
   if (!amount || amount <= 0) { toast('أدخل المبلغ', 'err'); return; }
@@ -1699,7 +1687,7 @@ function saveTx() {
 
   if (txDateISO > isoDate()) { toast('تاريخ مستقبلي غير مسموح', 'err'); return; }
 
-  /* ✅ NEW: منع التكرار خلال 5 ثواني */
+  // منع التكرار خلال 5 ثواني
   var now = Date.now();
   if (lastSaveInfo.item === selectedItem &&
       Number(lastSaveInfo.amount) === Number(amount) &&
@@ -1712,21 +1700,51 @@ function saveTx() {
 
   isSaving = true;
   var txDateObj = new Date(txDateISO + 'T12:00:00');
+
+  /* ═══════════════════════════════════════════════════════════
+     ✅ V83.5 — التعديل الرئيسي:
+     - status: 'paid' بدل 'pending'  ← المعاملة تظهر فوراً في المحفظة
+     - sourceLabel: 'محل هاني'       ← badge أوضح في المحفظة
+     - familySource: 'hany-shop'     ← للتمييز
+     - itemName + originalCategory    ← للرجوع
+     - updatedAt + receipts           ← للتوافق
+     ═══════════════════════════════════════════════════════════ */
   var tx = {
     id: 'fam-' + Date.now() + '-' + Math.random().toString(36).slice(2,9),
-    type: 'expense', kind: 'operational', category: CATEGORY_NAME,
-    subCategory: CATEGORIES[selectedCategory].label, amount: amount,
+    type: 'expense',
+    kind: 'operational',
+    category: CATEGORY_NAME,
+    subCategory: CATEGORIES[selectedCategory].label,
+    amount: amount,
     description: note ? selectedItem + ' — ' + note : selectedItem,
-    method: 'cash', date: txDateISO, month: MONTHS_AR[txDateObj.getMonth()],
-    year: txDateObj.getFullYear(), monthIndex: txDateObj.getMonth(),
-    subType: 'withdrawal', status: 'pending', source: 'family-app',
-    createdBy: currentUser.id, createdByName: currentUser.name,
-    createdAt: Date.now(), txDateMode: selectedDateMode, autoPriced: amountAutoFilled
+    method: 'cash',
+    date: txDateISO,
+    month: MONTHS_AR[txDateObj.getMonth()],
+    year: txDateObj.getFullYear(),
+    monthIndex: txDateObj.getMonth(),
+    subType: 'withdrawal',
+    status: 'paid',                    // ✅ معدّل: 'paid' بدل 'pending'
+    source: 'family-app',
+    sourceLabel: 'محل هاني',           // ✅ جديد: للعرض في المحفظة
+    familySource: 'hany-shop',         // ✅ جديد: للتمييز
+    createdBy: currentUser.id,
+    createdByName: currentUser.name,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),             // ✅ جديد: للتوافق
+    txDateMode: selectedDateMode,
+    autoPriced: amountAutoFilled,
+    receipts: [],                      // ✅ جديد: للتوافق
+    itemName: selectedItem,            // ✅ جديد: للرجوع
+    originalCategory: CATEGORIES[selectedCategory].label  // ✅ جديد
   };
+
   var btn = document.getElementById('saveBtn');
   btn.disabled = true;
   btn.innerHTML = 'جارٍ الحفظ...';
-  docRef.set({ transactions: firebase.firestore.FieldValue.arrayUnion(tx) }, { merge: true })
+
+  docRef.set({
+    transactions: firebase.firestore.FieldValue.arrayUnion(tx)
+  }, { merge: true })
     .then(function() {
       trackRecent(selectedItem);
       var itemName = selectedItem;
@@ -1736,10 +1754,10 @@ function saveTx() {
                   '📦 الصنف: <b>' + itemName + '</b>\n' +
                   '💰 المبلغ: <b>' + fmt(amount) + ' ج.م</b>' + dateInfo + '\n' +
                   (note ? '📝 ملاحظة: ' + note + '\n' : '') +
+                  '☁️ <i>متزامن مع المحفظة تلقائياً</i>\n' +
                   '🕐 ' + new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
       sendTelegram(tgMsg);
 
-      /* ✅ سجّل آخر عملية لمنع التكرار */
       lastSaveInfo = { item: itemName, amount: Number(amount), time: Date.now() };
 
       document.getElementById('amount').value = '';
@@ -1747,14 +1765,16 @@ function saveTx() {
       selectedItem = '';
       clearAutoPrice();
       updateAmountClearBtn();
-      /* ✅ امسح البحث والـ hint بعد الحفظ */
       document.getElementById('searchInput').value = '';
       var hint = document.getElementById('searchModeHint');
       if (hint) hint.classList.remove('show');
       if (selectedDateMode !== 'today') { selectedDateMode = 'today'; updateDateQuickButtons(); }
       renderItems();
-      toast('تم الحفظ — ' + itemName + ' · ' + fmt(amount) + ' ج.م' + dateInfo);
+
+      // ✅ رسالة أوضح — تشير للتزامن مع المحفظة
+      toast('✅ ' + itemName + ' · ' + fmt(amount) + ' ج.م' + dateInfo + ' (متزامن مع المحفظة)');
       if (navigator.vibrate) navigator.vibrate([20,40,20]);
+
       if (budget > 0) {
         var monthPfx = txDateISO.slice(0, 7);
         var spent = cachedTx.filter(function(t) { return t._isoDate && t._isoDate.indexOf(monthPfx) === 0 && t.createdBy === currentUser.id; }).reduce(function(s, t) { return s + Number(t.amount || 0); }, 0) + amount;
@@ -1812,11 +1832,17 @@ function doDelete(id) {
 
 function submitDeleteRequest(tx, reason) {
   if (!isAuthReady || !docRef) { toast('التطبيق غير متصل', 'err'); return; }
+  // ✅ ضمان وجود status: 'paid' في txSnapshot
+  var txSnapshot = Object.assign({}, tx, { status: tx.status || 'paid' });
   var request = {
     id: 'delreq-' + Date.now() + '-' + Math.random().toString(36).slice(2, 9),
-    txId: tx.id, txSnapshot: tx, reason: reason,
-    requestedBy: currentUser.id, requestedByName: currentUser.name,
-    requestedAt: Date.now(), status: 'pending'
+    txId: tx.id, 
+    txSnapshot: txSnapshot, 
+    reason: reason,
+    requestedBy: currentUser.id, 
+    requestedByName: currentUser.name,
+    requestedAt: Date.now(), 
+    status: 'pending'
   };
   docRef.set({ deleteRequests: firebase.firestore.FieldValue.arrayUnion(request) }, { merge: true })
     .then(function() {
@@ -1949,6 +1975,10 @@ function submitEdit(tx, newAmount, newNote, oldNote, reason) {
           txs[i].originalAmount = txs[i].originalAmount || original.amount;
           txs[i].originalDescription = txs[i].originalDescription || original.description;
           txs[i].lastEditedAt = Date.now();
+          // ✅ ضمان status: 'paid' حتى بعد التعديل
+          if (!txs[i].status || txs[i].status === 'pending') {
+            txs[i].status = 'paid';
+          }
           found = true;
           break;
         }
@@ -1974,6 +2004,7 @@ function submitEdit(tx, newAmount, newNote, oldNote, reason) {
                 '🔴 قبل: ' + fmt(oldAmount) + ' ج.م' + (oldDesc.indexOf(' — ') >= 0 ? ' (' + oldDesc.split(' — ').slice(1).join(' — ') + ')' : '') + '\n' +
                 '🟢 بعد: <b>' + fmt(newAmount) + ' ج.م</b>' + (newNote ? ' (' + newNote + ')' : '') + '\n\n' +
                 '📝 السبب: ' + reason + '\n' +
+                '☁️ <i>متزامن مع المحفظة</i>\n' +
                 '🕐 ' + time;
 
     sendTelegram(tgMsg);
