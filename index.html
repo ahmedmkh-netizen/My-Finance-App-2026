@@ -175,6 +175,8 @@ const ALLOWED_EMAIL = "ahmedmkh@gmail.com";
 const CURRENT_ENGINE_VERSION = 19;
 const DEFAULT_PIN = '1033';
 const PIN_HASH_KEY = 'finance_pin_hash_v1';
+const PIN_SALT_LS_KEY = 'finance_pin_salt_v1';
+const PIN_LEGACY_SALT = 'fintracker_salt_v2_2026';
 const CUTOFF_DATE_2026_09_30 = '2026-09-30';
 
 const KIND = { OPERATIONAL: 'operational', FINANCIAL: 'financial', ADJUSTMENT: 'adjustment' };
@@ -805,7 +807,7 @@ const clearAllModals = () => {
 /* ═══════════════════════════════════════════════════════════════
    PIN — PBKDF2  ✅ V83: Self-Healing + Fallback
    ═══════════════════════════════════════════════════════════════ */
-const hashPin = async (pin) => {
+const hashPinWithSalt = async (pin, salt) => {
   if (!crypto?.subtle?.importKey || !crypto?.subtle?.deriveBits) {
     throw new Error('هذا المتصفح لا يدعم التشفير الآمن. حدّث المتصفح.');
   }
@@ -814,9 +816,8 @@ const hashPin = async (pin) => {
     const keyMaterial = await crypto.subtle.importKey(
       'raw', encoder.encode(String(pin)), 'PBKDF2', false, ['deriveBits']
     );
-    const salt = encoder.encode('fintracker_salt_v2_2026');
     const bits = await crypto.subtle.deriveBits(
-      { name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' },
+      { name: 'PBKDF2', salt: encoder.encode(salt), iterations: 100000, hash: 'SHA-256' },
       keyMaterial, 256
     );
     return 'pbkdf2_' + Array.from(new Uint8Array(bits)).map(b => b.toString(16).padStart(2, '0')).join('');
@@ -825,6 +826,16 @@ const hashPin = async (pin) => {
     throw new Error('فشل تشفير الرمز');
   }
 };
+
+const getPinSalt = () => {
+  try {
+    let s = localStorage.getItem(PIN_SALT_LS_KEY);
+    if (!s) { s = 'salt_' + getSafeId(); localStorage.setItem(PIN_SALT_LS_KEY, s); }
+    return s;
+  } catch (e) { return PIN_LEGACY_SALT; }
+};
+
+const hashPin = (pin) => hashPinWithSalt(pin, getPinSalt());
 
 const getStoredPinHash = () => {
   try { return localStorage.getItem(PIN_HASH_KEY); } catch { return null; }
@@ -835,7 +846,7 @@ const savePinHash = async (pin) => {
   localStorage.setItem(PIN_HASH_KEY, hash); 
 };
 
-/* ✅ V83: verifyPin — يداوي نفسه تلقائياً لو الـ hash تالف */
+/* ✅ V83.1: verifyPin — بدون أي fallback للرمز الافتراضي عند وجود hash مخصص */
 const verifyPin = async (pin) => { 
   const stored = getStoredPinHash(); 
   
@@ -859,21 +870,18 @@ const verifyPin = async (pin) => {
     return false;
   }
   
-  // حالة 3: التحقق العادي
+  // حالة 3: التحقق العادي — salt الجديد ثم القديم (ترقية صامتة)
   try {
     const current = await hashPin(pin);
     if (current === stored) return true;
+    const legacy = await hashPinWithSalt(pin, PIN_LEGACY_SALT);
+    if (legacy === stored) {
+      try { await savePinHash(pin); } catch(e) {}
+      return true;
+    }
     return false;
   } catch (e) {
     console.error('verifyPin error:', e);
-    // لو التشفير فشل، اسمح بالـ default كـ fallback آمن
-    if (pin === DEFAULT_PIN) {
-      try { 
-        localStorage.removeItem(PIN_HASH_KEY);
-        await savePinHash(pin); 
-      } catch(e2) {}
-      return true;
-    }
     return false;
   }
 };
@@ -10171,6 +10179,4 @@ if (rootElement) {
 }
 </script>
 </body>
-</html>
-
-  
+</html>  
