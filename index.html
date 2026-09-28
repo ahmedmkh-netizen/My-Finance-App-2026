@@ -2289,15 +2289,27 @@ const Sidebar = memo(({
           </div>
 
           {/* Quick actions row */}
-          <div className="flex items-center gap-1.5">
-            <button
-              onClick={onOpenSms}
-              title="تحليل SMS"
-              className="flex-1 flex items-center justify-center gap-1 py-2 rounded-lg text-[10px] font-bold transition-colors"
-              style={{ background: 'var(--bg-muted)', color: 'var(--text-secondary)' }}
-            >
-              <MessageSquare size={12} /> SMS
-            </button>
+    <div className="flex items-center gap-1.5">
+      <button 
+        type="button" 
+        onClick={onOpenSms} 
+        title="تحليل رسالة بنك" 
+        className="w-9 h-9 rounded-xl flex items-center justify-center transition-colors" 
+        style={{ background: 'var(--bg-muted)', color: 'var(--text-secondary)' }}
+      >
+        <MessageSquare size={15} />
+      </button>
+      {/* ⭐ زر المزامنة اليدوية */}
+      <button 
+        type="button" 
+        onClick={onForceSync} 
+        title="مزامنة يدوية — اسحب آخر نسخة من السحابة" 
+        className="w-9 h-9 rounded-xl flex items-center justify-center transition-colors" 
+        style={{ background: 'var(--bg-muted)', color: 'var(--text-secondary)' }}
+        disabled={isSaving}
+      >
+        <RefreshCcw size={15} className={isSaving ? 'animate-spin' : ''} />
+      </button>
             <button
               onClick={onToggleTheme}
               title="الوضع الليلي"
@@ -10252,7 +10264,66 @@ const queueCloudSave = useCallback((newData, options = {}) => {
       onCancel: () => dispatch({ type: 'HIDE_CONFIRM' })
     });
   }, [recurringItems, data, saveHistory, addNotification]);
-
+/* ⭐ مزامنة يدوية — اسحب آخر نسخة من Firestore */
+const forcePullFromCloud = useCallback(async () => {
+  if (!isAuthenticated) { addNotification({ type: 'error', title: 'غير مصرح' }); return; }
+  if (!isOnline) { addNotification({ type: 'error', title: 'لا يوجد اتصال' }); return; }
+  
+  dispatch({ type: 'SET_IS_PROCESSING', payload: true });
+  addNotification({ type: 'info', title: 'جاري المزامنة...', duration: 2000 });
+  
+  try {
+    const docRef = db.collection(FIREBASE_DOC_PATH.collection).doc(FIREBASE_DOC_PATH.doc);
+    const doc = await docRef.get({ source: 'server' });
+    
+    if (!doc.exists) {
+      addNotification({ type: 'warning', title: 'مفيش بيانات على السحابة' });
+      return;
+    }
+    
+    const remote = doc.data();
+    const migratedRemote = migrateData(remote);
+    
+    // ⭐ احسب الفروقات
+    const localTxIds = new Set((data.transactions || []).map(t => t.id));
+    const remoteTxIds = new Set((migratedRemote.transactions || []).map(t => t.id));
+    
+    const onlyLocal = (data.transactions || []).filter(t => !remoteTxIds.has(t.id));
+    const onlyRemote = (migratedRemote.transactions || []).filter(t => !localTxIds.has(t.id));
+    
+    // لو فيه معاملات محلية مش على السحابة، ارفعها الأول
+    if (onlyLocal.length > 0) {
+      console.log(`📤 رفع ${onlyLocal.length} معاملة محلية للسحابة أولاً`);
+      const merged = {
+        ...migratedRemote,
+        transactions: [...(migratedRemote.transactions || []), ...onlyLocal]
+          .sort((a, b) => (parseISODate(b.date) || 0) - (parseISODate(a.date) || 0))
+      };
+      await docRef.set(merged, { merge: false });
+      dispatch({ type: 'SET_DATA', payload: merged });
+      addNotification({
+        type: 'success',
+        title: `✅ تمت المزامنة (رفعت ${onlyLocal.length} وحمّلت ${onlyRemote.length})`
+      });
+    } else {
+      // مفيش محلي جديد — استبدل بالكامل بالسحابة
+      dispatch({ type: 'SET_DATA', payload: migratedRemote });
+      if (remote.budgets) dispatch({ type: 'SET_BUDGETS', payload: remote.budgets });
+      addNotification({
+        type: 'success',
+        title: `✅ تم التحديث (${onlyRemote.length} معاملة جديدة)`
+      });
+    }
+    
+    lastRemoteRef.current = JSON.stringify(migratedRemote);
+    localStorage.setItem(LAST_SYNC_LS_KEY, String(Date.now()));
+  } catch (err) {
+    console.error('Force pull failed:', err);
+    addNotification({ type: 'error', title: 'فشلت المزامنة', message: err.message });
+  } finally {
+    dispatch({ type: 'SET_IS_PROCESSING', payload: false });
+  }
+}, [isAuthenticated, isOnline, data, addNotification]);
   const handleExport = useCallback(() => {
     const blob = new Blob([JSON.stringify({ data, budgets, exportedAt: new Date().toISOString(), version: 'V85' })], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -10759,16 +10830,17 @@ const queueCloudSave = useCallback((newData, options = {}) => {
         <main className="p-3 lg:p-5 w-full">
           <div className="max-w-5xl mx-auto space-y-4 animate-fadeIn pb-24">
             {activeTab !== 'more' && (
-              <ProfessionalHeader
-                isDarkMode={isDarkMode}
-                dispatch={dispatch}
-                onOpenSms={() => dispatch({ type: 'SET_SMS_MODAL_OPEN', payload: true })}
-                isOnline={isOnline}
-                syncStatus={cloudSyncStatus}
-                isSaving={isSaving}
-                custodyBalance={custodySummary.balance}
-                onOpenSidebar={() => dispatch({ type: 'SET_SIDEBAR_OPEN', payload: true })}
-              />
+<ProfessionalHeader
+  isDarkMode={isDarkMode}
+  dispatch={dispatch}
+  onOpenSms={() => dispatch({ type: 'SET_SMS_MODAL_OPEN', payload: true })}
+  isOnline={isOnline}
+  syncStatus={cloudSyncStatus}
+  isSaving={isSaving}
+  custodyBalance={custodySummary.balance}
+  onOpenSidebar={() => dispatch({ type: 'SET_SIDEBAR_OPEN', payload: true })}
+  onForceSync={forcePullFromCloud}
+/>
             )}
             {activeTab !== 'more' && renderActiveView()}
           </div>
