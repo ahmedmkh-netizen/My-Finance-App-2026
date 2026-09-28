@@ -2149,20 +2149,49 @@ const AnimatedNumber = memo(({ value, duration = 600, decimals = 2, prefix = '',
   );
 });
 
-/* ═══════════════ STATUS BAR ═══════════════ */
+/* ═══════════════ ⭐ STATUS BAR — لمبتين (نت + مزامنة) ═══════════════ */
 const StatusBar = memo(({ isOnline, syncStatus, isSaving, custodyBalance }) => {
-  let dot = 'online';
-  let text = 'متزامن';
-  if (isSaving) { dot = 'syncing'; text = 'جاري الحفظ...'; }
-  else if (!isOnline) { dot = 'offline'; text = 'بدون اتصال'; }
-  else if (syncStatus === 'offline') { dot = 'error'; text = 'محلي فقط'; }
-  else if (syncStatus === 'pending') { dot = 'syncing'; text = 'جاري المزامنة...'; }
-  else if (syncStatus === 'ready') { dot = 'online'; text = 'متزامن'; }
+  // 🌐 لمبة النت
+  const netDot = isOnline ? 'online' : 'offline';
+  const netLabel = isOnline ? 'نت' : 'بدون نت';
+  const netTitle = isOnline ? 'متصل بالإنترنت' : 'لا يوجد اتصال بالإنترنت';
+
+  // ☁️ لمبة المزامنة
+  let syncDot = 'online';
+  let syncLabel = 'متزامن';
+  let syncTitle = 'البيانات متزامنة مع السحابة';
+
+  if (!isOnline || syncStatus === 'offline') {
+    syncDot = 'offline';
+    syncLabel = 'محلي';
+    syncTitle = 'التغييرات محفوظة محلياً فقط';
+  } else if (syncStatus === 'error') {
+    syncDot = 'error';
+    syncLabel = 'خطأ';
+    syncTitle = 'فشل المزامنة — أعد المحاولة';
+  } else if (isSaving || syncStatus === 'syncing' || syncStatus === 'pending') {
+    syncDot = 'syncing';
+    syncLabel = 'حفظ...';
+    syncTitle = 'جاري الحفظ والمزامنة';
+  } else if (syncStatus === 'ready') {
+    syncDot = 'online';
+    syncLabel = 'متزامن';
+    syncTitle = 'البيانات متزامنة بنجاح';
+  }
 
   return (
     <div className="status-bar no-print">
-      <div className={`status-dot ${dot}`}></div>
-      <span>{text}</span>
+      {/* 🌐 لمبة النت */}
+      <div className={`status-dot ${netDot}`} title={netTitle}></div>
+      <span>{netLabel}</span>
+
+      {/* فاصل */}
+      <span style={{ color: 'var(--border-strong)' }}>•</span>
+
+      {/* ☁️ لمبة المزامنة */}
+      <div className={`status-dot ${syncDot}`} title={syncTitle}></div>
+      <span>{syncLabel}</span>
+
       {custodyBalance > 0 && (
         <React.Fragment>
           <span style={{ color: 'var(--border-strong)' }}>•</span>
