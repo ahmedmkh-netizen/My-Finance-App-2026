@@ -4793,17 +4793,19 @@ const HanyShopLedger = memo(({ loan, prevMonthLoan, addNotification }) => {
     return arr.sort((a, b) => (parseISODate(b.date) || 0) - (parseISODate(a.date) || 0));
   }, [filteredItems, sortBy]);
 
-  const groupedItems = useMemo(() => {
-    const map = {};
-    filteredItems.forEach(item => {
-      const key = (item.description || 'بدون وصف').trim();
-      if (!map[key]) map[key] = { name: key, count: 0, total: 0, items: [] };
-      map[key].count += 1;
-      map[key].total += safeNumber(item.amount);
-      map[key].items.push(item);
-    });
-    return Object.values(map).sort((a, b) => b.total - a.total);
-  }, [filteredItems]);
+const groupedItems = useMemo(() => {
+  const map = {};
+  filteredItems.forEach(item => {
+    const key = (item.description || 'بدون وصف').trim();
+    if (!map[key]) map[key] = { name: key, count: 0, total: 0, items: [], subCategory: item.subCategory || null };
+    map[key].count += 1;
+    map[key].total += safeNumber(item.amount);
+    map[key].items.push(item);
+    // ⭐ NEW: احتفظ بالفئة الفرعية إن وُجدت
+    if (!map[key].subCategory && item.subCategory) map[key].subCategory = item.subCategory;
+  });
+  return Object.values(map).sort((a, b) => b.total - a.total);
+}, [filteredItems]);
 
   const comparison = useMemo(() => {
     if (!prevMonthLoan) return null;
@@ -4814,6 +4816,19 @@ const HanyShopLedger = memo(({ loan, prevMonthLoan, addNotification }) => {
     return { cur, prev, change, direction: change > 0.5 ? 'up' : change < -0.5 ? 'down' : 'same', diff: cur - prev };
   }, [loan.totalPaid, prevMonthLoan]);
 
+  /* ⭐ NEW: إحصائيات بالفئة الفرعية */
+const bySubCategory = useMemo(() => {
+  const map = {};
+  paidItems.forEach(item => {
+    const sub = item.subCategory || 'غير مصنف';
+    if (!map[sub]) map[sub] = { label: sub, count: 0, total: 0 };
+    map[sub].count += 1;
+    map[sub].total += safeNumber(item.amount);
+  });
+  return Object.values(map).sort((a, b) => b.total - a.total);
+}, [paidItems]);
+
+const top3 = useMemo(() => groupedItems.slice(0, 3), [groupedItems]);
   const top3 = useMemo(() => groupedItems.slice(0, 3), [groupedItems]);
   const totalFiltered = filteredItems.reduce((s, i) => s + safeNumber(i.amount), 0);
 
@@ -5031,16 +5046,71 @@ const HanyShopLedger = memo(({ loan, prevMonthLoan, addNotification }) => {
             <span className="font-black text-red-600 text-[13px] money tabular">{fmt(totalFiltered)}</span>
           </div>
 
-          {items.length > paidItems.length && (
-            <div className="flex justify-between items-center p-2 rounded-lg" style={{ background: 'rgba(245, 158, 11, 0.08)' }}>
-              <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400">⏳ معلق ({items.length - paidItems.length})</span>
-              <span className="font-black text-amber-600 text-[12px] money tabular">{fmt(totalAllAmount - totalFiltered)}</span>
-            </div>
-          )}
+{items.length > paidItems.length && (
+  <div className="flex justify-between items-center p-2 rounded-lg" style={{ background: 'rgba(245, 158, 11, 0.08)' }}>
+    <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400">⏳ معلق ({items.length - paidItems.length})</span>
+    <span className="font-black text-amber-600 text-[12px] money tabular">{fmt(totalAllAmount - totalFiltered)}</span>
+  </div>
+)}
 
-          <p className="text-[9px] text-center font-semibold" style={{ color: 'var(--text-muted)' }}>
-            تم التوليد بواسطة المحفظة الذكية — {new Date().toLocaleDateString('ar-EG')}
-          </p>
+{/* ⭐ NEW: التوزيع بالفئات الفرعية */}
+{bySubCategory.length > 0 && (
+  <div className="p-3 rounded-lg animate-fadeIn" style={{ background: 'var(--bg-muted)', border: '1px solid var(--border-subtle)' }}>
+    <div className="flex items-center justify-between mb-3">
+      <p className="text-[10px] font-black" style={{ color: 'var(--text-secondary)' }}>
+        📊 التوزيع بالفئات
+      </p>
+      <span className="text-[9px] font-bold" style={{ color: 'var(--text-muted)' }}>
+        {bySubCategory.length} فئة
+      </span>
+    </div>
+    <div className="space-y-2">
+      {bySubCategory.map((sub, i) => {
+        const pct = totalFiltered > 0 ? (sub.total / totalFiltered) * 100 : 0;
+        return (
+          <div key={sub.label}>
+            <div className="flex justify-between items-center text-[10px] mb-1">
+              <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                <span className="font-black text-[11px] flex-shrink-0" style={{ color: 'var(--accent)' }}>
+                  #{i + 1}
+                </span>
+                <span className="font-bold truncate">{sub.label}</span>
+                <span className="text-[9px] flex-shrink-0" style={{ color: 'var(--text-muted)' }}>
+                  ({sub.count})
+                </span>
+              </div>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <span className="font-black money tabular text-red-600">{fmt(sub.total)}</span>
+                <span className="text-[9px] font-bold tabular" style={{ color: 'var(--text-muted)' }}>
+                  {Math.round(pct)}%
+                </span>
+              </div>
+            </div>
+            <div className="w-full rounded-full h-1.5 overflow-hidden" style={{ background: 'var(--bg-card)' }}>
+              <div
+                className="h-full transition-all duration-500"
+                style={{
+                  width: pct + '%',
+                  background: i === 0 ? 'linear-gradient(90deg, #DC2626, #F87171)' :
+                              i === 1 ? 'linear-gradient(90deg, #F59E0B, #FBBF24)' :
+                              i === 2 ? 'linear-gradient(90deg, #635BFF, #8B84FF)' :
+                              'linear-gradient(90deg, #0EA5E9, #38BDF8)'
+                }}
+              />
+            </div>
+          </div>
+        );
+      })}
+    </div>
+    <p className="text-[9px] mt-3 pt-2 text-center font-bold" style={{ color: 'var(--text-muted)', borderTop: '1px dashed var(--border-default)' }}>
+      💡 {bySubCategory[0].label} = {Math.round((bySubCategory[0].total / totalFiltered) * 100)}% من مصروفاتك
+    </p>
+  </div>
+)}
+
+<p className="text-[9px] text-center font-semibold" style={{ color: 'var(--text-muted)' }}>
+  تم التوليد بواسطة المحفظة الذكية — {new Date().toLocaleDateString('ar-EG')}
+</p>
         </div>
       )}
     </div>
