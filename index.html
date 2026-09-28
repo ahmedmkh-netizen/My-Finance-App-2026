@@ -7181,22 +7181,30 @@ const SettingsView = memo(({
     dispatch({
       type: 'SHOW_CONFIRM', danger: true, title: '⚠️ بداية جديدة — تصفير شامل',
       message: 'سيتم مسح:\n• كل المعاملات\n• كل القروض\n• البنود المتكررة\n• العهد\n• خطط الشهرية\n\nلن تُمس:\n• أسماء الحسابات\n• أرقام البطاقات\n• الإعدادات',
-      onConfirm: () => {
+
+            onConfirm: () => {
         saveHistory();
         const zeroed = {};
         ACCOUNT_KEYS.forEach(k => { zeroed[k] = { ...(accountsData[k] || {}), balance: 0, lastUpdated: null }; });
-        dispatch({
-          type: 'SET_DATA',
-          payload: {
-            ...data, transactions: [], loans: [], closedMonths: [], monthlySnapshots: {},
-            accountsData: zeroed,
-            cards: (data.cards || []).map(c => ({ ...c, openingDebt: 0, availableBalance: safeNumber(c.limit), openingDate: null })),
-            recurringItems: [], materializedRecurring: {}, custodyEntries: [],
-            cashbackTrackers: [], monthlyPlans: {}, settledHanyMonths: [],
-            deletedTxIds: [], deletedTxArchive: [], deletedDefaultIds: [],
-            deleteRequests: [], auditLog: []
-          }
-        });
+
+        // ⭐ اجمع كل IDs اللي هتتشال
+        const allRemovedIds = [
+          ...(data.transactions || []).map(t => t.id).filter(Boolean)
+        ];
+
+        const fresh = {
+          ...data, transactions: [], loans: [], closedMonths: [], monthlySnapshots: {},
+          accountsData: zeroed,
+          cards: (data.cards || []).map(c => ({ ...c, openingDebt: 0, availableBalance: safeNumber(c.limit), openingDate: null })),
+          recurringItems: [], materializedRecurring: {}, custodyEntries: [],
+          cashbackTrackers: [], monthlyPlans: {}, settledHanyMonths: [],
+          deletedTxIds: allRemovedIds, // ⭐ عشان المزامنة ما ترجّعهمش
+          deletedTxArchive: [], deletedDefaultIds: [],
+          deleteRequests: [], auditLog: []
+        };
+
+        dispatch({ type: 'SET_DATA', payload: fresh });
+        queueCloudSave(fresh, { force: true }); // ⭐ force!
         addNotification({ type: 'success', title: 'تم التصفير الشامل', duration: 5000 });
         dispatch({ type: 'HIDE_CONFIRM' });
       },
@@ -9092,9 +9100,9 @@ function App() {
     }), [data, budgets]);
 
   /* ═══════════ Firestore Sync ═══════════ */
-  const queueCloudSave = useCallback((newData, options = {}) => {
+const queueCloudSave = useCallback((newData, options = {}) => {
     if (!isAuthenticated || !hasReceivedInitialSnapshot.current) return;
-    const { silent = false } = options;
+    const { silent = false, force = false } = options; // ⭐ force جديد
     const docRef = db.collection(FIREBASE_DOC_PATH.collection).doc(FIREBASE_DOC_PATH.doc);
 
     saveQueueRef.current = saveQueueRef.current.then(async () => {
@@ -9102,6 +9110,15 @@ function App() {
         if (!silent) setIsSaving(true);
         const payloadStr = JSON.stringify(newData);
         try { localStorage.setItem(STORAGE_KEY, JSON.stringify(newData)); } catch (e) {}
+
+        // ⭐ لو force، اكتب مباشرة بدون merge
+        if (force) {
+          await docRef.set({ ...newData, budgets: newData.budgets || budgetsRef.current }, { merge: false });
+          lastRemoteRef.current = payloadStr;
+          try { localStorage.setItem(LAST_SYNC_LS_KEY, String(Date.now())); } catch (e) {}
+          console.log('🔥 Force overwrite completed');
+          return;
+        }
 
         const doc = await docRef.get();
         let finalData = { ...newData };
@@ -9969,6 +9986,12 @@ function App() {
 
         const keptRecurring = keepRecurringItems ? (data.recurringItems || []) : [];
 
+        // ⭐ احسب كل المعاملات اللي هتتشال
+        const keptIds = new Set(hanyTxs.map(t => t.id).filter(Boolean));
+        const removedIds = (data.transactions || [])
+          .filter(t => t.id && !keptIds.has(t.id))
+          .map(t => t.id);
+
         const fresh = {
           ...data,
           engineVersion: CURRENT_ENGINE_VERSION,
@@ -9985,7 +10008,7 @@ function App() {
           materializedRecurring: {},
           reconciliations: [],
           settledHanyMonths: [],
-          deletedTxIds: [],
+          deletedTxIds: removedIds, // ⭐⭐⭐ ده المفتاح
           deletedTxArchive: [],
           deleteRequests: [],
           deletedDefaultIds: data.deletedDefaultIds || [],
@@ -10007,7 +10030,7 @@ function App() {
         }
 
         dispatch({ type: 'SET_DATA', payload: fresh });
-        queueCloudSave(fresh);
+        queueCloudSave(fresh, { force: true }); // ⭐ force!
         addNotification({
           type: 'success', title: '✅ تم تصفير البيانات الشخصية',
           message: `البطاقات${keepCards ? ' وإعدادات محل هاني' : ''} محفوظة. ابدأ تسجيل المعاملات الجديدة.`,
