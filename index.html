@@ -2250,7 +2250,7 @@ const SIDEBAR_GROUPS = [
 const Sidebar = memo(({
   isOpen, onClose, activeTab, onNavigate, isDarkMode, onToggleTheme,
   isOnline, syncStatus, isSaving, custodyBalance, data,
-  onOpenSms, onLogout, onLock
+  onOpenSms, onLogout, onLock, onForceSync
 }) => {
   const totals = useMemo(() => {
     const txs = data?.transactions || [];
@@ -2468,7 +2468,7 @@ const WelcomeHero = memo(({ netPosition, totalLiquidity, totalDebt, onTransfer, 
 });
 
 /* ═══════════════ PROFESSIONAL HEADER ═══════════════ */
-const ProfessionalHeader = memo(({ isDarkMode, dispatch, onOpenSms, isOnline, syncStatus, isSaving, custodyBalance, onOpenSidebar }) => (
+const ProfessionalHeader = memo(({ isDarkMode, dispatch, onOpenSms, isOnline, syncStatus, isSaving, custodyBalance, onOpenSidebar, onForceSync }) => (
   <header className="flex justify-between items-center gap-3 mb-4 flex-wrap">
     <div className="flex items-center gap-2.5">
       <button
@@ -2492,6 +2492,19 @@ const ProfessionalHeader = memo(({ isDarkMode, dispatch, onOpenSms, isOnline, sy
       <button type="button" onClick={onOpenSms} title="تحليل رسالة بنك" className="w-9 h-9 rounded-xl flex items-center justify-center transition-colors" style={{ background: 'var(--bg-muted)', color: 'var(--text-secondary)' }}>
         <MessageSquare size={15} />
       </button>
+      {/* ⭐ زر المزامنة اليدوية */}
+      {onForceSync && (
+        <button 
+          type="button" 
+          onClick={onForceSync} 
+          title="مزامنة يدوية — اسحب آخر نسخة من السحابة" 
+          className="w-9 h-9 rounded-xl flex items-center justify-center transition-colors" 
+          style={{ background: 'var(--bg-muted)', color: 'var(--text-secondary)' }}
+          disabled={isSaving}
+        >
+          <RefreshCcw size={15} className={isSaving ? 'animate-spin' : ''} />
+        </button>
+      )}
       <button type="button" onClick={() => dispatch({ type: 'TOGGLE_DARK_MODE', payload: !isDarkMode })} className="w-9 h-9 rounded-xl flex items-center justify-center transition-colors" style={{ background: 'var(--bg-muted)', color: 'var(--text-secondary)' }}>
         {isDarkMode ? <Sun size={15} /> : <Moon size={15} />}
       </button>
@@ -10637,6 +10650,7 @@ const forcePullFromCloud = useCallback(async () => {
           custodyBalance={custodySummary.balance}
           data={data}
           onOpenSms={() => dispatch({ type: 'SET_SMS_MODAL_OPEN', payload: true })}
+          onForceSync={forcePullFromCloud}
           onLogout={() => {
             firebase.auth().signOut();
             setIsAuthenticated(false);
