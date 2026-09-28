@@ -6552,17 +6552,41 @@ const DeletedArchiveView = memo(({ data, dispatch, saveHistory, addNotification,
     });
   };
 
-  const clearArchive = () => {
-    dispatch({
-      type: 'SHOW_CONFIRM', danger: true, title: 'تفريغ الأرشيف', message: `سيتم حذف ${archive.length} سجل نهائياً`,
-      onConfirm: () => {
-        saveHistory();
-        dispatch({ type: 'SET_DATA', payload: { ...data, deletedTxArchive: [], deletedTxIds: [] } });
-        addNotification({ type: 'success', title: 'تم التفريغ' });
-      },
-      onCancel: () => dispatch({ type: 'HIDE_CONFIRM' })
-    });
-  };
+const clearArchive = () => {
+  dispatch({
+    type: 'SHOW_CONFIRM', danger: true, title: 'تفريغ الأرشيف', message: `سيتم حذف ${archive.length} سجل نهائياً`,
+    onConfirm: () => {
+      saveHistory();
+      dispatch({ type: 'SET_DATA', payload: { ...data, deletedTxArchive: [], deletedTxIds: [] } });
+      addNotification({ type: 'success', title: 'تم التفريغ' });
+    },
+    onCancel: () => dispatch({ type: 'HIDE_CONFIRM' })
+  });
+};
+
+// ⭐ جديد: تنظيف السجلات القديمة فقط
+const clearLegacyOnly = () => {
+  const legacyCount = archive.filter(t => t._legacy).length;
+  if (legacyCount === 0) {
+    addNotification({ type: 'info', title: 'مفيش سجلات قديمة' });
+    return;
+  }
+  dispatch({
+    type: 'SHOW_CONFIRM', danger: true,
+    title: `تنظيف ${legacyCount} سجل قديم`,
+    message: 'هيتم حذف السجلات القديمة بدون بيانات (اللي فيها 0.00 بدون وصف/تاريخ).\n\n✅ السجلات الحقيقية هتفضل محفوظة.',
+    onConfirm: () => {
+      saveHistory();
+      const cleaned = archive.filter(t => !t._legacy);
+      dispatch({
+        type: 'SET_DATA',
+        payload: { ...data, deletedTxArchive: cleaned }
+      });
+      addNotification({ type: 'success', title: `تم مسح ${legacyCount} سجل قديم` });
+    },
+    onCancel: () => dispatch({ type: 'HIDE_CONFIRM' })
+  });
+};
 
   return (
     <>
@@ -6624,11 +6648,18 @@ const DeletedArchiveView = memo(({ data, dispatch, saveHistory, addNotification,
                 <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-muted)' }}>أرشيف كامل مع إمكانية الاسترجاع</p>
               </div>
             </div>
-            {archive.length > 0 && (
-              <button onClick={clearArchive} className="btn btn-secondary text-xs">
-                <Trash2 size={12} /> تفريغ
-              </button>
-            )}
+{archive.length > 0 && (
+  <div className="flex gap-1.5 flex-wrap">
+    {archive.some(t => t._legacy) && (
+      <button onClick={clearLegacyOnly} className="btn btn-secondary text-xs" style={{ color: 'var(--warning)' }}>
+        <RotateCcw size={12} /> نظّف القديمة ({archive.filter(t => t._legacy).length})
+      </button>
+    )}
+    <button onClick={clearArchive} className="btn btn-secondary text-xs text-red-600">
+      <Trash2 size={12} /> تفريغ الكل
+    </button>
+  </div>
+)}
           </div>
         </div>
 
