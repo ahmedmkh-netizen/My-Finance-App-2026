@@ -100,7 +100,7 @@ button, input, textarea { font-family: 'Cairo', system-ui, sans-serif; }
 
 /* PIN */
 .pin-screen {
-  position: fixed; inset: 0; z-index: 9500;
+  position: fixed; inset: 0; z-index: 99999;
   background: linear-gradient(135deg, #050A14 0%, #0A1628 50%, #1E2B4A 100%);
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   padding: 24px; overflow: hidden;
@@ -712,7 +712,7 @@ body.dark .bottom-nav { box-shadow: 0 -8px 32px rgba(0,0,0,0.5); }
 
 /* Voice */
 .voice-modal {
-  position: fixed; inset: 0; z-index: 9500;
+  position: fixed; inset: 0; z-index: 99999;
   background: rgba(5,10,20,0.94); backdrop-filter: blur(24px);
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   padding: 32px; color: white; text-align: center;
@@ -1611,7 +1611,24 @@ function checkPin() {
 }
 
 /* ⭐ Auto-restore session — بعد DOM ready */
+/* ⭐ Auto-restore session + إخفاء Splash في كل الحالات */
 document.addEventListener('DOMContentLoaded', function () {
+  // ✅ إخفاء Splash دايماً بعد 600ms (حتى لو مفيش session)
+  setTimeout(function () {
+    var s = document.getElementById('splash');
+    if (s && s.style.display !== 'none') {
+      s.style.opacity = '0';
+      setTimeout(function () { s.style.display = 'none'; }, 400);
+    }
+  }, 600);
+
+  // ✅ Fallback: إخفاء Splash بعد 3 ثواني كحد أقصى
+  setTimeout(function () {
+    var s = document.getElementById('splash');
+    if (s) s.style.display = 'none';
+  }, 3000);
+
+  // ✅ استعادة الجلسة إن وُجدت
   var uid = sessionStorage.getItem('hani_user_id');
   if (uid) {
     var found = null;
@@ -1619,8 +1636,7 @@ document.addEventListener('DOMContentLoaded', function () {
     if (found) {
       currentUser = found;
       pinScreen.style.display = 'none';
-      // استنى لحظة لضمان تحميل كل شيء
-      setTimeout(function () { init(); }, 50);
+      setTimeout(function () { init(); }, 100);
     }
   }
 });
