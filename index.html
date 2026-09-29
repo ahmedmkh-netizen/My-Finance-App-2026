@@ -7283,6 +7283,22 @@ const FinancialForecastView = memo(({
     let cardDebt = currentCardDebt;
     let loanDebt = currentLoanDebt;
 
+    // ⭐ البنود المتكررة النشطة (بدون فلترة القروض)
+    const activeRecurring = (recurringItems || []).filter(r => r.active !== false);
+    const recIncomeTotal = activeRecurring.filter(r => r.type === 'income')
+      .reduce((s, r) => s + safeNumber(r.amount), 0);
+    const recCashExpenseTotal = activeRecurring.filter(r => 
+      r.type === 'expense' && !CREDIT_CARD_METHOD_IDS.includes(r.method) && !r.linkedLoanSystemId
+    ).reduce((s, r) => s + safeNumber(r.amount), 0);
+    const recCardSpendTotal = activeRecurring.filter(r => 
+      r.type === 'expense' && CREDIT_CARD_METHOD_IDS.includes(r.method)
+    ).reduce((s, r) => s + safeNumber(r.amount), 0);
+
+    // ⭐ أقساط القروض النشطة (من البيانات مباشرة)
+    const activeLoanInstallments = (updatedLoans || [])
+      .filter(l => !l.isReceivable && safeNumber(l.monthlyInstallment) > 0 && l.remaining > 0)
+      .reduce((s, l) => s + safeNumber(l.monthlyInstallment), 0);
+
     for (let i = 0; i < 6; i++) {
       const { year, month } = addMonthsToYM(selectedYear, selectedMonth, i);
       if (getMonthIndex(month) < 0) continue;
@@ -7290,91 +7306,94 @@ const FinancialForecastView = memo(({
       const p = monthlyPlans?.[monthKey] || {};
       const flows = computeMonthlyFlows(transactions, year, month);
 
-      // ═══════════════════════════════════════════════════════════
-      // ⭐ 1. الفعلي (paid) — للشهر الحالي
-      // ═══════════════════════════════════════════════════════════
-      const paidIncome = flows.paidIncome;
-      const paidExpense = flows.paidExpense;
+      // ═══════════════════════════════════════════════════════
+      // ⭐ 1. تصنيف المعاملات (فعلي + معلق)
+      // ═══════════════════════════════════════════════════════
+      const paidInc = flows.paidIncome;
+      const paidExp = flows.paidExpense;
       const paidCardSpend = flows.paidCardSpend;
       const paidCardPay = flows.paidCardPay;
-      const paidLoanInst = flows.paidLoanInstallments;
+      const paidLoan = flows.paidLoanInstallments;
 
-      // ⭐ 2. المعلقات (pending) — V86.1 FIX: استخدام التفكيك الكامل
-      const pendingIncome = flows.pendingIncome;
-      const pendingCardSpend = flows.pendingCardSpend;
-      const pendingCardPay = flows.pendingCardPay;
-      const pendingLoanInst = flows.pendingLoanInstallments;
-      // المصروفات النقدية المعلقة = إجمالي المصروف المعلق − مشتريات البطاقة المعلقة − سداد البطاقة المعلق − أقساط القروض المعلقة
-      const pendingCashExpense = Math.max(0, flows.pendingExpense - pendingCardSpend - pendingCardPay - pendingLoanInst);
+      const pendInc = flows.pendingIncome;
+      const pendExp = flows.pendingExpense;
+      const pendCardSpend = flows.pendingCardSpend;
+      const pendCardPay = flows.pendingCardPay;
+      const pendLoan = flows.pendingLoanInstallments;
 
-      // ⭐ 3. المخطط/المتكرر للشهور المستقبلية
-      const plannedIncome = safeNumber(p.expectedSalary) + safeNumber(p.expectedRent) + safeNumber(p.expectedCashback) + safeNumber(p.expectedEmakWE) + safeNumber(p.expectedZakat) + safeNumber(p.expectedCash);
-      const plannedCashExpense = safeNumber(p.expectedCashExpenses);  // ⭐ لا نضيف plannedPayments هنا
-      const plannedLoanInst = safeNumber(p.plannedPayments);          // ⭐ أقساط القروض تُحسب منفصلة
+      // ⭐ المصروفات النقدية = كل مصروف مش على البطاقة ومش سداد ومش قسط
+      const cashExpPaid = Math.max(0, paidExp - paidCardSpend - paidCardPay - paidLoan);
+      const cashExpPend = Math.max(0, pendExp - pendCardSpend - pendCardPay - pendLoan);
 
-      const recIncome = recurringItems
-        .filter(r => r.active !== false && r.type === 'income' && !r.linkedLoanSystemId)
-        .reduce((s, r) => s + safeNumber(r.amount), 0);
-      const recCashExpense = recurringItems
-        .filter(r => r.active !== false && r.type === 'expense' && !r.linkedLoanSystemId
-          && !CREDIT_CARD_METHOD_IDS.includes(r.method))
-        .reduce((s, r) => s + safeNumber(r.amount), 0);
-
-      // ⭐ 4. تجميع حسب الشهر
+      // ═══════════════════════════════════════════════════════
+      // ⭐ 2. حساب الإجماليات لكل شهر
+      // ═══════════════════════════════════════════════════════
       let income, cashExpenses, cardSpending, cardPayment, loanInstallments;
 
       if (i === 0) {
-        // الشهر الحالي: الفعلي + المعلقات
-        income = paidIncome + (includePending ? pendingIncome : 0);
-        // ⭐ المصروفات النقدية الفعلية = إجمالي المدفوع − مشتريات البطاقة − سداد البطاقة − أقساط القروض
-        const paidCashExpense = Math.max(0, paidExpense - paidCardSpend - paidCardPay - paidLoanInst);
-        cashExpenses = paidCashExpense + (includePending ? pendingCashExpense : 0);
-        cardSpending = paidCardSpend + (includePending ? pendingCardSpend : 0);
-        cardPayment = paidCardPay + (includePending ? pendingCardPay : 0);
-        loanInstallments = paidLoanInst + (includePending ? pendingLoanInst : 0);
+        // ⭐ الشهر الحالي: كل المعلقات + الفعلي
+        income = paidInc + pendInc;
+        cashExpenses = cashExpPaid + cashExpPend;
+        cardSpending = paidCardSpend + pendCardSpend;
+        cardPayment = paidCardPay + pendCardPay;
+        loanInstallments = paidLoan + pendLoan;
+
+        // ⭐ متوسط ذكي لو مفيش سداد بطاقة مسجّل
+        if (cardPayment < 0.01 && cardDebt > 0) {
+          cardPayment = baseCardPayment || Math.round(cardDebt * 0.05);
+        }
+        // ⭐ متوسط ذكي لو مفيش مشتريات بطاقة مسجّلة
+        if (cardSpending < 0.01 && cardDebt > 0) {
+          cardSpending = baseCardSpending || Math.round(cardDebt * 0.04);
+        }
+        // ⭐ أقساط القروض النشطة لو مفيش مسجّل
+        if (loanInstallments < 0.01 && activeLoanInstallments > 0) {
+          loanInstallments = activeLoanInstallments;
+        }
       } else {
-        // الشهور المستقبلية
-        // ⭐ الدخل: الفعلي + الباقي من الخطة/المتكرر
-        const targetIncome = plannedIncome > 0 ? plannedIncome : recIncome;
-        const remainingIncome = Math.max(0, targetIncome - paidIncome);
-        income = paidIncome + remainingIncome;
+        // ⭐ الشهور المستقبلية: معلقات + متكرر + خطة
+        const pendCardSpendM = pendCardSpend;
+        const pendCardPayM = pendCardPay;
+        const pendLoanM = pendLoan;
 
-        // ⭐ المصروفات النقدية: الفعلي النقدي + الباقي من الخطة
-        const paidCashExpense = Math.max(0, paidExpense - paidCardSpend - paidCardPay - paidLoanInst);
-        const targetCashExpense = plannedCashExpense > 0 ? plannedCashExpense : recCashExpense;
-        const remainingCashExpense = Math.max(0, targetCashExpense - paidCashExpense);
-        cashExpenses = paidCashExpense + remainingCashExpense;
+        // الدخل: معلق + متكرر (أو خطة)
+        const plannedInc = safeNumber(p.expectedSalary) + safeNumber(p.expectedRent) 
+          + safeNumber(p.expectedCashback) + safeNumber(p.expectedEmakWE) 
+          + safeNumber(p.expectedZakat) + safeNumber(p.expectedCash);
+        income = pendInc + (plannedInc > 0 ? plannedInc : recIncomeTotal);
 
-        // ⭐ مشتريات البطاقة: الفعلي + المتوسط التلقائي
-        cardSpending = paidCardSpend + baseCardSpending;
+        // المصروفات النقدية: معلق + متكرر
+        const plannedCashExp = safeNumber(p.expectedCashExpenses);
+        cashExpenses = cashExpPend + (plannedCashExp > 0 ? plannedCashExp : recCashExpenseTotal);
 
-        // ⭐ سداد البطاقة: الفعلي + المتوسط التلقائي
-        cardPayment = paidCardPay + baseCardPayment;
+        // مشتريات البطاقة: معلق + متكرر
+        cardSpending = pendCardSpendM + recCardSpendTotal;
 
-        // ⭐ أقساط القروض: الفعلي + من قائمة القروض النشطة (لا من plannedPayments)
-        const activeLoanInstallments = updatedLoans
-          .filter(l => !l.isReceivable && !l.autoGenerated && safeNumber(l.monthlyInstallment) > 0 && l.remaining > 0)
-          .reduce((s, l) => s + safeNumber(l.monthlyInstallment), 0);
-        // ⭐ V86.1: نستخدم MAX بين الفعلي والنشط لتجنب الازدواج
-        loanInstallments = Math.max(paidLoanInst, activeLoanInstallments);
+        // سداد البطاقة: معلق + متوسط ذكي
+        cardPayment = pendCardPayM || baseCardPayment || Math.round(cardDebt * 0.05);
+
+        // أقساط القروض: معلق + قروض نشطة
+        loanInstallments = pendLoanM || activeLoanInstallments;
       }
 
-      // ═══════════════════════════════════════════════════════════
-      // ⭐ 5. تحديث الأرصدة
-      // ═══════════════════════════════════════════════════════════
+      // ═══════════════════════════════════════════════════════
+      // ⭐ 3. تحديث الأرصدة
+      // ═══════════════════════════════════════════════════════
       const newCardDebt = Math.max(0, cardDebt - cardPayment + cardSpending);
       const newLoanDebt = Math.max(0, loanDebt - loanInstallments);
-      // ⭐ السيولة: تنقص بالمصروفات النقدية + سداد البطاقة + أقساط القروض
       const newLiquidity = liq + income - cashExpenses - cardPayment - loanInstallments;
       const totalDebt = newCardDebt + newLoanDebt;
       const netPosition = newLiquidity - totalDebt;
+
+      const pendingCount = flows.monthTxs.filter(t => t.status !== 'paid').length;
 
       months.push({
         month, year, isCurrent: i === 0,
         startLiquidity: liq, startCardDebt: cardDebt, startLoanDebt: loanDebt,
         income, cashExpenses, cardSpending, cardPayment, loanInstallments,
-        pendingIncome, pendingCashExpense, pendingCardSpend, pendingCardPay, pendingLoanInst,
-        pendingCount: flows.monthTxs.filter(t => t.status !== 'paid').length,
+        pendingIncome: pendInc, pendingCashExpense: cashExpPend, pendingCardSpend: pendCardSpend,
+        pendingCardPay: pendCardPay, pendingLoanInst: pendLoan,
+        pendingCount,
         endLiquidity: newLiquidity, endCardDebt: newCardDebt, endLoanDebt: newLoanDebt,
         totalDebt, netPosition
       });
@@ -7384,8 +7403,7 @@ const FinancialForecastView = memo(({
       loanDebt = newLoanDebt;
     }
     return months;
-  }, [transactions, selectedMonth, selectedYear, monthlyPlans, currentLiquidity, currentCardDebt, currentLoanDebt, baseCardPayment, baseCardSpending, recurringItems, updatedLoans, data, includePending]);
-
+  }, [transactions, selectedMonth, selectedYear, monthlyPlans, currentLiquidity, currentCardDebt, currentLoanDebt, baseCardPayment, baseCardSpending, recurringItems, updatedLoans, includePending]);
   const chartData = forecast.map(f => ({
     name: f.month.slice(0, 3),
     'السيولة': Math.round(f.endLiquidity),
