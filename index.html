@@ -1789,42 +1789,86 @@ const computeMonthlyFlows = (transactions, year, month) => {
 
   const sumBy = (predicate) => monthTxs.filter(predicate).reduce((s, t) => s + safeNumber(t.amount), 0);
 
-  const isCardSpending = (t) => t.type === 'expense' && (CREDIT_CARD_METHOD_IDS.includes(t.method) || t.linkedCardId);
-  const isCardPayment = (t) => {
-    if (t.type !== 'expense') return false;
-    if (CREDIT_CARD_METHOD_IDS.includes(t.method)) return false;
-    if (t.linkedCardId) return false;
-    const cat = t.category || '';
-    const desc = t.description || '';
-    return (cat === 'الالتزامات البنكية والتمويلية' || cat === 'بنوك / فيزا / تمويل عقاري'
-      || cat === 'مصاريف وسلف شخصية' || desc.includes('سداد') || desc.includes('بطاقة'));
+  // ═══════════════════════════════════════════════════════════
+  // ⭐ تصنيف دقيق لكل معاملة
+  // ═══════════════════════════════════════════════════════════
+  const classifyTx = (t) => {
+    if (!t) return 'unknown';
+
+    // ⭐ قيود الكونسول (بطاقات + قروض)
+    if (t.source === 'payment-console' || t.source === 'setup-v1-final') {
+      if (t.linkedCardId) return 'cardPayment';   // سداد بطاقة
+      return 'loanInstallment';                    // قسط قرض
+    }
+
+    // ⭐ القيود العادية
+    if (t.type === 'income') return 'income';
+
+    if (t.type === 'expense') {
+      // مشتريات بطاقة
+      if (CREDIT_CARD_METHOD_IDS.includes(t.method) || t.linkedCardId) return 'cardSpending';
+      // قسط قرض مرتبط
+      if (t.linkedLoanId) return 'loanInstallment';
+      // سداد قرض/بطاقة (فئة قديمة)
+      const cat = t.category || '';
+      const desc = t.description || '';
+      if (cat === 'الالتزامات البنكية والتمويلية'
+        || cat === 'بنوك / فيزا / تمويل عقاري'
+        || cat === 'مصاريف وسلف شخصية'
+        || desc.includes('سداد')
+        || desc.includes('بطاقة')) {
+        return 'cardPayment';
+      }
+      // مصروف نقدي عادي
+      return 'cashExpense';
+    }
+
+    return 'unknown';
   };
-  const isLoanInstallment = (t) => t.type === 'expense' && t.linkedLoanId && !isCardPayment(t);
 
   const isPaid = (t) => t.status === 'paid';
   const isPending = (t) => t.status !== 'paid';
 
+  // ═══ تجميع حسب التصنيف والحالة ═══
+  const acc = {
+    paid:    { income: 0, cashExpense: 0, cardSpending: 0, cardPayment: 0, loanInstallment: 0 },
+    pending: { income: 0, cashExpense: 0, cardSpending: 0, cardPayment: 0, loanInstallment: 0 }
+  };
+
+  monthTxs.forEach(t => {
+    const cls = classifyTx(t);
+    if (cls === 'unknown') return;
+    const bucket = isPaid(t) ? acc.paid : acc.pending;
+    bucket[cls] += safeNumber(t.amount);
+  });
+
+  const p = acc.paid;
+  const q = acc.pending;
+
   return {
     // ── Paid ──
-    paidIncome: sumBy(t => t.type === 'income' && isPaid(t)),
-    paidExpense: sumBy(t => t.type === 'expense' && isPaid(t)),
-    paidCardSpend: sumBy(t => isCardSpending(t) && isPaid(t)),
-    paidCardPay: sumBy(t => isCardPayment(t) && isPaid(t)),
-    paidLoanInstallments: sumBy(t => isLoanInstallment(t) && isPaid(t)),
-    // ── Pending (⭐ NEW) ──
-    pendingIncome: sumBy(t => t.type === 'income' && isPending(t)),
-    pendingExpense: sumBy(t => t.type === 'expense' && isPending(t)),
-    pendingCardSpend: sumBy(t => isCardSpending(t) && isPending(t)),
-    pendingCardPay: sumBy(t => isCardPayment(t) && isPending(t)),
-    pendingLoanInstallments: sumBy(t => isLoanInstallment(t) && isPending(t)),
-    // ── Derived ──
-    pendingTotal: sumBy(t => isPending(t)),
+    paidIncome: p.income,
+    paidExpense: p.cashExpense + p.cardSpending + p.cardPayment + p.loanInstallment,
+    paidCashExpense: p.cashExpense,
+    paidCardSpend: p.cardSpending,
+    paidCardPay: p.cardPayment,
+    paidLoanInstallments: p.loanInstallment,
+
+    // ── Pending ──
+    pendingIncome: q.income,
+    pendingExpense: q.cashExpense + q.cardSpending + q.cardPayment + q.loanInstallment,
+    pendingCashExpense: q.cashExpense,
+    pendingCardSpend: q.cardSpending,
+    pendingCardPay: q.cardPayment,
+    pendingLoanInstallments: q.loanInstallment,
+
+    // ── Meta ──
+    pendingTotal: sumBy(isPending),
     txCount: monthTxs.length,
     monthTxs,
-    helpers: { isCardSpending, isCardPayment, isLoanInstallment }
+    classifyTx
   };
 };
-
 const computeMonthlyAverage = (transactions, endYear, endMonth, monthsBack, filterFn) => {
   let total = 0, count = 0;
   for (let i = 1; i <= monthsBack; i++) {
@@ -7310,20 +7354,16 @@ const FinancialForecastView = memo(({
       // ⭐ 1. تصنيف المعاملات (فعلي + معلق)
       // ═══════════════════════════════════════════════════════
       const paidInc = flows.paidIncome;
-      const paidExp = flows.paidExpense;
       const paidCardSpend = flows.paidCardSpend;
       const paidCardPay = flows.paidCardPay;
       const paidLoan = flows.paidLoanInstallments;
+      const cashExpPaid = flows.paidCashExpense;
 
       const pendInc = flows.pendingIncome;
-      const pendExp = flows.pendingExpense;
       const pendCardSpend = flows.pendingCardSpend;
       const pendCardPay = flows.pendingCardPay;
       const pendLoan = flows.pendingLoanInstallments;
-
-      // ⭐ المصروفات النقدية = كل مصروف مش على البطاقة ومش سداد ومش قسط
-      const cashExpPaid = Math.max(0, paidExp - paidCardSpend - paidCardPay - paidLoan);
-      const cashExpPend = Math.max(0, pendExp - pendCardSpend - pendCardPay - pendLoan);
+      const cashExpPend = flows.pendingCashExpense;
 
       // ═══════════════════════════════════════════════════════
       // ⭐ 2. حساب الإجماليات لكل شهر
