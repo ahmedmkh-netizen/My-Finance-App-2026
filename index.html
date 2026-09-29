@@ -5579,7 +5579,6 @@ const LoansView = memo(({
     if (idx <= 0) return { month: 'ديسمبر', year: year - 1 };
     return { month: ALL_MONTHS[idx - 1], year };
   }, []);
-
   const settleHany = async (loan) => {
     if (settlingRef.current) { addNotification({ type: 'info', title: 'العملية جارية...' }); return; }
     settlingRef.current = true;
@@ -5598,10 +5597,11 @@ const LoansView = memo(({
       const alreadySettled = Array.isArray(data.settledHanyMonths) && data.settledHanyMonths.includes(monthKey);
       if (alreadySettled) { addNotification({ type: 'info', title: 'تمت التسوية مسبقاً' }); return; }
 
+      // ─── 1️⃣ خطوة 1: اسأل عن المبلغ ───
       const input = await showInputModal({
         title: 'تسوية مسحوبات محل هاني', icon: '💰',
         message: `الإجمالي: ${fmt(total)}\nمدفوع: ${fmt(paidAlready)}\nالمتبقي: ${fmt(remaining)}\n\nالمبلغ المدفوع الآن:`,
-        inputValue: String(remaining), numeric: true, confirmText: 'تسوية'
+        inputValue: String(remaining), numeric: true, confirmText: 'التالي'
       });
       if (input === null) return;
 
@@ -5609,6 +5609,48 @@ const LoansView = memo(({
       if (paidNow <= 0) { addNotification({ type: 'error', title: 'مبلغ غير صحيح' }); return; }
       if (paidNow > remaining + 0.005) { addNotification({ type: 'error', title: `الحد الأقصى ${fmt(remaining)}` }); return; }
 
+      // ─── 2️⃣ خطوة 2: اسأل من أي حساب تدفع ───
+      const liveBalances = computeBalancesAsOf(data);
+      const accountOptions = [
+        { id: 'cash',         label: 'Cash (كاش)',           bal: safeNumber(liveBalances.cash) },
+        { id: 'cib_savings',  label: 'CIB Savings',          bal: safeNumber(liveBalances.cib_savings) },
+        { id: 'aaib_savings', label: 'AAIB Savings',         bal: safeNumber(liveBalances.aaib_savings) },
+        { id: 'fawry',        label: 'Fawry (محفظة)',        bal: safeNumber(liveBalances.fawry) },
+        { id: 'etisalat',     label: 'Etisalat (محفظة)',     bal: safeNumber(liveBalances.etisalat) }
+      ];
+      const accountMessage = accountOptions.map((acc, i) => 
+        `${i + 1} = ${acc.label}  →  ${fmt(acc.bal)} ج.م`
+      ).join('\n') + '\n\nاكتب رقم الحساب:';
+
+      const accountChoice = await showInputModal({
+        title: 'من أي حساب تدفع؟',
+        icon: '🏦',
+        message: `المبلغ: ${fmt(paidNow)} ج.م\n\n${accountMessage}`,
+        inputValue: '2',  // افتراضي: CIB Savings
+        numeric: true,
+        confirmText: 'تسوية'
+      });
+      if (accountChoice === null) return;
+
+      const accIdx = parseInt(accountChoice, 10) - 1;
+      if (accIdx < 0 || accIdx >= accountOptions.length) {
+        addNotification({ type: 'error', title: 'اختيار غير صحيح' });
+        return;
+      }
+      const chosenAccount = accountOptions[accIdx];
+
+      // ─── 3️⃣ التحقق من كفاية الرصيد ───
+      if (chosenAccount.bal < paidNow - 0.005) {
+        addNotification({
+          type: 'error',
+          title: '⚠️ رصيد غير كافٍ',
+          message: `${chosenAccount.label}: ${fmt(chosenAccount.bal)} ج.م — المطلوب ${fmt(paidNow)} ج.م`,
+          duration: 8000
+        });
+        return;
+      }
+
+      // ─── 4️⃣ حساب الترحيل ───
       const newRemaining = remaining - paidNow;
       const willCarry = newRemaining > 0.005;
       let nextMIdx = 0, nextY = loan.year, nextMonthName = '';
@@ -5626,6 +5668,7 @@ const LoansView = memo(({
         }
       }
 
+      // ─── 5️⃣ تنفيذ العملية ───
       saveHistory();
       const loanMonthIdx = getMonthIndex(loan.month);
       const nowDate = new Date();
@@ -5634,40 +5677,79 @@ const LoansView = memo(({
       const paymentDate = `${loan.year}-${String(loanMonthIdx + 1).padStart(2, '0')}-${String(actualPayDay).padStart(2, '0')}`;
       const newTxs = [];
 
+      // ⭐ معاملة السداد (بالحساب المختار)
       newTxs.push({
-        id: 'hany-pay-' + getSafeId(), type: 'expense', kind: 'financial',
-        category: 'الالتزامات البنكية والتمويلية', amount: paidNow,
+        id: 'hany-pay-' + getSafeId(),
+        type: 'expense',
+        kind: 'financial',
+        category: 'الالتزامات البنكية والتمويلية',
+        amount: paidNow,
         description: `سداد مسحوبات هاني — ${loan.month} ${loan.year}`,
-        method: 'cash', date: paymentDate, month: loan.month, year: loan.year, monthIndex: loanMonthIdx,
-        subType: 'withdrawal', status: 'paid', linkedLoanId: loan.id, settledHanyMonth: monthKey,
+        method: chosenAccount.id,     // ← الحساب المختار
+        date: paymentDate,
+        month: loan.month, year: loan.year, monthIndex: loanMonthIdx,
+        subType: 'withdrawal',
+        status: 'paid',
+        linkedLoanId: loan.id,
+        settledHanyMonth: monthKey,
         createdAt: new Date().toISOString()
       });
 
+      // ⭐ رصيد مرحّل للشهر التالي (لو فيه باقي)
       if (willCarry) {
         const nextMonthMaxDay = new Date(nextY, nextMIdx + 1, 0).getDate();
         const nextActualDay = Math.min(nowDate.getDate(), nextMonthMaxDay);
         const nextMonthDate = `${nextY}-${String(nextMIdx + 1).padStart(2, '0')}-${String(nextActualDay).padStart(2, '0')}`;
         newTxs.push({
-          id: 'hany-carry-' + getSafeId(), type: 'expense', kind: 'operational',
-          category: 'مسحوبات محل هاني', subCategory: 'رصيد مرحل', amount: newRemaining,
+          id: 'hany-carry-' + getSafeId(),
+          type: 'expense',
+          kind: 'operational',
+          category: 'مسحوبات محل هاني',
+          subCategory: 'رصيد مرحل',
+          amount: newRemaining,
           description: `رصيد مرحل من ${loan.month} ${loan.year}`,
-          method: 'cash', date: nextMonthDate, month: nextMonthName, year: nextY, monthIndex: nextMIdx,
-          subType: 'withdrawal', status: 'pending', source: 'carryover',
-          carriedFromSource: 'hany-auto', carryoverFrom: monthLabel, carryCount: 1,
+          method: 'cash',                     // ← الرصيد المرحل مش مربوط بحساب (مؤجل)
+          date: nextMonthDate,
+          month: nextMonthName, year: nextY, monthIndex: nextMIdx,
+          subType: 'withdrawal',
+          status: 'pending',                  // ← pending (مؤجل)
+          source: 'carryover',
+          carriedFromSource: 'hany-auto',
+          carryoverFrom: monthLabel,
+          carryCount: 1,
           createdAt: new Date().toISOString()
         });
       }
 
-      const newSettled = Array.isArray(data.settledHanyMonths) ? [...data.settledHanyMonths, monthKey] : [monthKey];
+      const newSettled = Array.isArray(data.settledHanyMonths)
+        ? [...data.settledHanyMonths, monthKey]
+        : [monthKey];
 
       dispatch({
         type: 'SET_DATA',
-        payload: { ...data, settledHanyMonths: newSettled, transactions: sortTransactions([...newTxs, ...transactions]) }
+        payload: {
+          ...data,
+          settledHanyMonths: newSettled,
+          transactions: sortTransactions([...newTxs, ...(data.transactions || [])])
+        }
       });
-      addNotification({ type: 'success', title: 'تمت التسوية', duration: 7000 });
-    } finally { settlingRef.current = false; }
-  };
 
+      // ─── 6️⃣ إشعارات ───
+      const successMsg = willCarry
+        ? `دفعت ${fmt(paidNow)} من ${chosenAccount.label} • المتبقي ${fmt(newRemaining)} رُحّل لشهر ${nextMonthName}`
+        : `دفعت ${fmt(paidNow)} من ${chosenAccount.label} • تم السداد بالكامل`;
+      addNotification({
+        type: 'success',
+        title: `✅ تمت التسوية بنجاح`,
+        message: successMsg,
+        duration: 8000
+      });
+
+    } finally {
+      settlingRef.current = false;
+    }
+  };
+  
   const totalLoans = useMemo(() => updatedLoans.filter(l => !l.isReceivable).reduce((s, l) => s + l.remaining, 0), [updatedLoans]);
   const totalReceivable = useMemo(() => updatedLoans.filter(l => l.isReceivable).reduce((s, l) => s + l.remaining, 0), [updatedLoans]);
   const payables = useMemo(() => updatedLoans.filter(l => !l.isReceivable), [updatedLoans]);
