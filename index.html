@@ -721,9 +721,14 @@ const isCashAccount = (key) => CASH_METHOD_IDS.has(key);
 const isWalletAccount = (key) => WALLET_METHOD_IDS.has(key);
 const isBankAccount = (key) => BANK_METHOD_IDS.has(key);
 
-const HANY_SHOP_CATEGORIES = new Set(['مسحوبات محل هاني', 'مشتريات بقالة هاني']);
-const isHanyShopCategory = (cat) => typeof cat === 'string' && HANY_SHOP_CATEGORIES.has(cat);
-
+const HANY_SHOP_CATEGORIES = new Set(['مسحوبات محل هاني']);
+const HANY_CATEGORY_ALIASES = { 'مشتريات بقالة هاني': 'مسحوبات محل هاني' };
+const normalizeHanyCategory = (cat) => (typeof cat === 'string' && HANY_CATEGORY_ALIASES[cat]) ? HANY_CATEGORY_ALIASES[cat] : cat;
+const isHanyShopCategory = (cat) => {
+  const normalized = normalizeHanyCategory(cat);
+  return typeof normalized === 'string' && HANY_SHOP_CATEGORIES.has(normalized);
+};
+  
 const WALLET_CONFIGS = {
   cash: { id:'cash', title:'Cash', subtitle:'كاش في اليد', icon: Wallet, csvName:'Cash', group: 'cash' },
   fawry: { id:'fawry', title:'Fawry Wallet', subtitle:'محفظة إلكترونية', icon: StoreIcon, csvName:'Fawry', group: 'wallet' },
@@ -1344,6 +1349,7 @@ const migrateSnapshotsAndClosed = (snapshots, closedMonths) => {
 const migrateTransaction = (t) => {
   if (!t) return t;
   const kind = inferKind(t);
+  const category = normalizeHanyCategory(t.category);
   let year = t.year, month = t.month, monthIndex = t.monthIndex;
   if (t.date && (!month || !year)) {
     const d = parseISODate(t.date);
@@ -1358,8 +1364,8 @@ const migrateTransaction = (t) => {
   let subType = t.subType;
   if (!subType) subType = t.type === 'income' ? 'deposit' : 'withdrawal';
   const createdAt = t.createdAt || (t.date ? `${t.date}T12:00:00.000Z` : new Date().toISOString());
-  return { ...t, kind, year, month, monthIndex, subType, createdAt };
-};
+  return { ...t, category, kind, year, month, monthIndex, subType, createdAt };
+  };
 
 const migrateRecurringItems = (items) => {
   if (!Array.isArray(items)) return [];
@@ -1409,7 +1415,7 @@ const migrateData = (parsed) => {
     if (isHanyLoan(l) && !l.autoMonthly) return {
       ...l, systemId: SYSTEM_LOAN_IDS.HANY, autoMonthly: true, dueNextMonth: true,
       mergeIntoNextCycle: l.mergeIntoNextCycle || [],
-      category: l.category || 'مسحوبات محل هاني', totalAmount: 0, prePaidAmount: 0,
+      category: 'مسحوبات محل هاني', totalAmount: 0, prePaidAmount: 0,
       monthlyInstallment: 0, dueDay: 5, interest: 'مستحق شهري',
       description: 'مسحوبات يومية', type: 'debt'
     };
@@ -1635,8 +1641,8 @@ const dedupeRecurringTransactions = (transactions) => {
       seenRecurringKey.set(rKey, t.id);
     }
 
-    if (t.createdAt && t.source !== 'sms' && !t.linkedTransferId && safeNumber(t.amount) > 0) {
-      const FUZZY_WINDOW_MS = 10000;
+if (t.createdAt && t.source !== 'sms' && !t.linkedTransferId && safeNumber(t.amount) > 0 && !isHanyShopCategory(t.category)) {
+  const FUZZY_WINDOW_MS = 10000;
       const tTime = new Date(t.createdAt).getTime();
       if (!isNaN(tTime)) {
         const descKey = normalizeText(t.description || '').slice(0, 30);
@@ -2033,7 +2039,11 @@ function dataReducer(state, action) {
 
     case 'SET_DATA': {
       const incoming = { ...action.payload };
-      if (!Array.isArray(incoming.deletedTxArchive)) incoming.deletedTxArchive = [...(state.data.deletedTxArchive || [])];
+      if (Array.isArray(incoming.transactions)) {
+        incoming.transactions = incoming.transactions.map(t => 
+          t ? { ...t, category: normalizeHanyCategory(t.category) } : t
+        );
+      }
       if (!Array.isArray(incoming.deletedTxIds)) incoming.deletedTxIds = [...(state.data.deletedTxIds || [])];
       if (!Array.isArray(incoming.deletedDefaultIds)) incoming.deletedDefaultIds = [...(state.data.deletedDefaultIds || [])];
       if (!Array.isArray(incoming.reconciliations)) incoming.reconciliations = [...(state.data.reconciliations || [])];
@@ -9307,12 +9317,11 @@ queueCloudSave(data, { silent: false }).finally(() => {
   }, [transactions, selectedYear]);
 
   const loansHash = useMemo(() => {
-    const txSig = transactions.filter(t => 
-      t.linkedLoanId || 
-      t.sourceReceivableId || 
-      t.category === 'مسحوبات محل هاني' || 
-      t.category === 'مشتريات بقالة هاني'
-    ).map(t => `${t.id}:${t.status}:${t.amount}:${t.category}`).join('|');
+const txSig = transactions.filter(t => 
+  t.linkedLoanId || 
+  t.sourceReceivableId || 
+  isHanyShopCategory(t.category)
+).map(t => `${t.id}:${t.status}:${t.amount}:${t.category}`).join('|');
     const loansSig = loans.map(l => `${l.id}:${l.totalAmount}:${l.prePaidAmount}:${l.autoMonthly ? 1 : 0}`).join('|');
     const deletedSig = (data?.deletedTxIds || []).slice(-100).join(',');
     return `${txSig}#${loansSig}#${deletedSig}`;
@@ -10303,7 +10312,7 @@ queueCloudSave(data, { silent: false }).finally(() => {
     }
   };
 
-  const isHanyShopCat = formData.category === 'مسحوبات محل هاني' || formData.category === 'مشتريات بقالة هاني';
+  const isHanyShopCat = isHanyShopCategory(formData.category);
   const appendQuickItem = (item) => {
     const current = formData.description || '';
     const sep = current && !current.endsWith(' ') && !current.endsWith(',') ? ' + ' : '';
