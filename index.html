@@ -1790,36 +1790,41 @@ const computeMonthlyFlows = (transactions, year, month) => {
   const sumBy = (predicate) => monthTxs.filter(predicate).reduce((s, t) => s + safeNumber(t.amount), 0);
 
   // ═══════════════════════════════════════════════════════════
-  // ⭐ تصنيف دقيق لكل معاملة
+  // ⭐ تصنيف دقيق لكل معاملة — V86.2
   // ═══════════════════════════════════════════════════════════
   const classifyTx = (t) => {
     if (!t) return 'unknown';
+    const desc = t.description || '';
+    const cat = t.category || '';
 
-    // ⭐ قيود الكونسول (بطاقات + قروض)
-    if (t.source === 'payment-console' || t.source === 'setup-v1-final') {
-      if (t.linkedCardId) return 'cardPayment';   // سداد بطاقة
-      return 'loanInstallment';                    // قسط قرض
+    // ⭐ قيود الكونسول فقط (من وحدة السداد)
+    if (t.source === 'payment-console') {
+      if (t.linkedCardId) return 'cardPayment';
+      return 'loanInstallment';
     }
 
-    // ⭐ القيود العادية
+    // ⭐ القروض العقارية/التمويلية — تحديد بالوصف
+    if (desc.includes('قرض التمويل') || desc.includes('شقة العبور')
+        || desc.includes('تمويل عقاري') || desc.includes('تمويل عقارى')
+        || desc.includes('قرض عقاري')) {
+      return 'loanInstallment';
+    }
+
+    // ⭐ الدخل الحقيقي
     if (t.type === 'income') return 'income';
 
+    // ⭐ المصروفات
     if (t.type === 'expense') {
-      // مشتريات بطاقة
+      // مشتريات بطاقة (valU وأمثاله)
       if (CREDIT_CARD_METHOD_IDS.includes(t.method) || t.linkedCardId) return 'cardSpending';
       // قسط قرض مرتبط
       if (t.linkedLoanId) return 'loanInstallment';
-      // سداد قرض/بطاقة (فئة قديمة)
-      const cat = t.category || '';
-      const desc = t.description || '';
-      if (cat === 'الالتزامات البنكية والتمويلية'
-        || cat === 'بنوك / فيزا / تمويل عقاري'
-        || cat === 'مصاريف وسلف شخصية'
-        || desc.includes('سداد')
-        || desc.includes('بطاقة')) {
+      // سداد قديم بالفئة
+      if (cat === 'الالتزامات البنكية والتمويلية' || cat === 'بنوك / فيزا / تمويل عقاري'
+        || cat === 'مصاريف وسلف شخصية' || desc.includes('سداد') || desc.includes('بطاقة')) {
         return 'cardPayment';
       }
-      // مصروف نقدي عادي
+      // مصروف نقدي
       return 'cashExpense';
     }
 
