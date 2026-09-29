@@ -630,16 +630,9 @@ const firebaseConfig = {
 if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 db.settings({ ignoreUndefinedProperties: true, merge: true });
-// V86: استخدام cache settings الجديدة بدل enablePersistence (deprecated)
-try {
-  db.settings({
-    ignoreUndefinedProperties: true,
-    merge: true,
-    cache: firebase.firestore.persistentLocalCache({ tabManager: firebase.firestore.persistentMultipleTabManager() })
-  });
-} catch (e) {
-  console.warn('Firestore cache setup failed:', e);
-}
+db.enablePersistence({ synchronizeTabs: true }).catch((err) => {
+  console.warn('Firestore persistence failed:', err.code);
+});
   
 const FIREBASE_DOC_PATH = { collection: 'finance_2026', doc: 'user_ahmed_data' };
 
@@ -2374,9 +2367,6 @@ const computeMonthlyAverage = (transactions, endYear, endMonth, monthsBack, filt
    EXPORTS → continues in Part 2/6
    ═══════════════════════════════════════════════════════════════ */
 
-</script>
-</body>
-</html>
 /* ═══════════════════════════════════════════════════════════════
    PART 2/6 — Reducer + Drive + Cloud Sync + Force Save (V86)
    ═══════════════════════════════════════════════════════════════ */
