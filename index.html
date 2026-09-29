@@ -64,8 +64,14 @@ tailwind.config = {
     const link = document.createElement('link'); link.rel = 'manifest'; link.href = manifestUrl; document.head.appendChild(link);
     const appleIcon = document.createElement('link'); appleIcon.rel = 'apple-touch-icon'; appleIcon.href = iconUrl; document.head.appendChild(appleIcon);
     const favicon = document.createElement('link'); favicon.rel = 'icon'; favicon.href = iconUrl; document.head.appendChild(favicon);
-    if ('serviceWorker' in navigator) { window.addEventListener('load', () => { navigator.serviceWorker.register('./sw.js').catch(() => {}); }); }
-  } catch(e) { console.warn('PWA setup:', e); }
+// V86: Service Worker disabled (single-file app — no sw.js)
+// To enable PWA offline: create a separate sw.js file and uncomment below
+// if ('serviceWorker' in navigator) {
+//   window.addEventListener('load', () => {
+//     navigator.serviceWorker.register('./sw.js').catch(() => {});
+//   });
+// }
+      } catch(e) { console.warn('PWA setup:', e); }
 })();
 </script>
 
@@ -623,9 +629,18 @@ const firebaseConfig = {
 };
 if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
-db.settings({ ignoreUndefinedProperties: true });
-db.enablePersistence({ synchronizeTabs: true }).catch((err) => { console.warn('Firestore persistence failed:', err.code); });
-
+db.settings({ ignoreUndefinedProperties: true, merge: true });
+// V86: استخدام cache settings الجديدة بدل enablePersistence (deprecated)
+try {
+  db.settings({
+    ignoreUndefinedProperties: true,
+    merge: true,
+    cache: firebase.firestore.persistentLocalCache({ tabManager: firebase.firestore.persistentMultipleTabManager() })
+  });
+} catch (e) {
+  console.warn('Firestore cache setup failed:', e);
+}
+  
 const FIREBASE_DOC_PATH = { collection: 'finance_2026', doc: 'user_ahmed_data' };
 
 /* ═══════════════ TELEGRAM — Smart Notifications (unchanged) ═══════════════ */
