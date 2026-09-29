@@ -7711,7 +7711,6 @@ const CalendarView = memo(({ data, getAgendaItems, dispatch, saveHistory, addNot
     </div>
   );
 });
-
 const DuplicateDetectionSystem = ({ transactions, data, dispatch, addNotification, saveHistory, onBulkDelete }) => {
   const [threshold, setThreshold] = useState(2);
   const [selectedMonth, setSelectedMonth] = useState('all');
@@ -7729,17 +7728,30 @@ const DuplicateDetectionSystem = ({ transactions, data, dispatch, addNotificatio
       if (!map[key]) map[key] = [];
       map[key].push(t);
     });
-    return Object.entries(map).filter(([_, items]) => items.length >= threshold).map(([key, items]) => {
-      const sortedItems = [...items].sort(compareTransactions);
-      return { key, amount: items[0].amount, count: items.length, items: sortedItems, category: items[0].category, risk: items.length >= 5 ? 'high' : items.length >= 3 ? 'medium' : 'low' };
-    });
+    return Object.entries(map)
+      .filter(([_, items]) => items.length >= threshold)
+      .map(([key, items]) => {
+        const sortedItems = [...items].sort(compareTransactions);
+        return {
+          key,
+          amount: items[0].amount,
+          count: items.length,
+          items: sortedItems,
+          category: items[0].category,
+          risk: items.length >= 5 ? 'high' : items.length >= 3 ? 'medium' : 'low'
+        };
+      });
   }, [transactions, threshold, selectedMonth]);
 
   const doDelete = (ids) => {
-    if (!onBulkDelete) { addNotification({ type: 'error', title: 'خطأ: handler الحذف مفقود' }); return; }
+    if (!onBulkDelete) {
+      addNotification({ type: 'error', title: 'خطأ: handler الحذف مفقود' });
+      return;
+    }
     if (!Array.isArray(ids) || ids.length === 0) return;
     dispatch({
-      type: 'SHOW_CONFIRM', danger: true,
+      type: 'SHOW_CONFIRM',
+      danger: true,
       title: 'تأكيد الحذف',
       message: `سيتم نقل ${ids.length} عملية للأرشيف مع إمكانية الاسترجاع من صفحة المحذوفات.`,
       onConfirm: () => onBulkDelete(ids),
@@ -7750,14 +7762,22 @@ const DuplicateDetectionSystem = ({ transactions, data, dispatch, addNotificatio
   const handleDeleteAll = () => {
     let idsToDelete = [];
     duplicates.forEach(d => {
-      d.items.slice(1).forEach(item => { if (!isMonthClosed(data, item.year || 2026, item.month)) idsToDelete.push(item.id); });
+      d.items.slice(1).forEach(item => {
+        if (!isMonthClosed(data, item.year || 2026, item.month)) idsToDelete.push(item.id);
+      });
     });
-    if (idsToDelete.length === 0) { addNotification({ type: 'info', title: 'لا يوجد' }); return; }
+    if (idsToDelete.length === 0) {
+      addNotification({ type: 'info', title: 'لا يوجد' });
+      return;
+    }
     doDelete(idsToDelete);
   };
 
   const deleteSingle = (item) => {
-    if (isMonthClosed(data, item.year || 2026, item.month)) { addNotification({ type: 'error', title: 'محظور', message: 'الشهر مغلق' }); return; }
+    if (isMonthClosed(data, item.year || 2026, item.month)) {
+      addNotification({ type: 'error', title: 'محظور', message: 'الشهر مغلق' });
+      return;
+    }
     doDelete([item.id]);
   };
 
@@ -7766,65 +7786,105 @@ const DuplicateDetectionSystem = ({ transactions, data, dispatch, addNotificatio
       <div className="card">
         <div className="flex items-start justify-between gap-3 flex-wrap">
           <div>
-            <h2 className="text-lg font-black flex items-center gap-2"><Filter className="text-[color:var(--accent)]" size={18} /> كاشف التكرار</h2>
-            <p className="text-[11px] mt-1" style={{ color: 'var(--text-muted)' }}>{threshold}+ تكرار بنفس المبلغ والطريقة والتاريخ</p>
+            <h2 className="text-lg font-black flex items-center gap-2">
+              <Filter className="text-[color:var(--accent)]" size={18} /> كاشف التكرار
+            </h2>
+            <p className="text-[11px] mt-1" style={{ color: 'var(--text-muted)' }}>
+              {threshold}+ تكرار بنفس المبلغ والطريقة والتاريخ
+            </p>
           </div>
-          <button onClick={handleDeleteAll} disabled={duplicates.length === 0} className={`btn ${duplicates.length === 0 ? 'btn-secondary' : 'btn-primary'} text-xs`}>
+          <button
+            onClick={handleDeleteAll}
+            disabled={duplicates.length === 0}
+            className={`btn ${duplicates.length === 0 ? 'btn-secondary' : 'btn-primary'} text-xs`}
+          >
             <Trash2 size={14} /> تنظيف
           </button>
         </div>
       </div>
+
       <div className="card grid grid-cols-2 gap-4">
         <div>
           <label className="block text-[11px] font-bold mb-2" style={{ color: 'var(--text-muted)' }}>نطاق البحث</label>
           <select className="input-field text-sm" value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)}>
             <option value="all">جميع الشهور</option>
-            {YEARS_LIST.flatMap(y => getMonthsForYear(y).map(m => (<option key={makeMonthKey(y, m)} value={makeMonthKey(y, m)}>{m} {y}</option>)))}
+            {YEARS_LIST.flatMap(y => getMonthsForYear(y).map(m => (
+              <option key={makeMonthKey(y, m)} value={makeMonthKey(y, m)}>{m} {y}</option>
+            )))}
           </select>
         </div>
         <div>
-          <label className="block text-[11px] font-bold mb-2" style={{ color: 'var(--text-muted)' }}>الحساسية ({threshold})</label>
-          <input type="range" min="2" max="10" className="w-full mt-3 accent-[color:var(--accent)]" value={threshold} onChange={e => setThreshold(Number(e.target.value))} />
+          <label className="block text-[11px] font-bold mb-2" style={{ color: 'var(--text-muted)' }}>
+            الحساسية ({threshold})
+          </label>
+          <input
+            type="range" min="2" max="10"
+            className="w-full mt-3 accent-[color:var(--accent)]"
+            value={threshold}
+            onChange={e => setThreshold(Number(e.target.value))}
+          />
         </div>
       </div>
+
       {duplicates.length === 0 ? (
         <div className="card text-center p-12">
           <CheckCircle2 size={40} className="text-emerald-500 mx-auto mb-3" />
           <h3 className="text-base font-black">ممتاز! لا توجد تكرارات</h3>
         </div>
-      ) : duplicates.map(dup => (
-        <div key={dup.key} className="card">
-          <div className="flex justify-between items-center cursor-pointer -m-[18px] p-[18px]" onClick={() => setExpandedGroups(p => ({ ...p, [dup.key]: !p[dup.key] }))}>
-            <div className="flex items-center gap-3">
-              <div className={`p-2 rounded-lg ${dup.risk === 'high' ? 'bg-red-50 text-red-500 dark:bg-red-950/30' : 'bg-amber-50 text-amber-500 dark:bg-amber-950/30'}`}>
-                <Repeat size={16} />
-              </div>
-              <div>
-                <h4 className="font-black text-sm money tabular">{fmt(dup.amount)} ج.م</h4>
-                <span className="text-[10px] font-semibold" style={{ color: 'var(--text-muted)' }}>{dup.category} - {dup.count} مرات</span>
-              </div>
-            </div>
-            <ChevronDown className={`transition-transform ${expandedGroups[dup.key] ? 'rotate-180' : ''}`} style={{ color: 'var(--text-muted)' }} size={16} />
-          </div>
-          {expandedGroups[dup.key] && (
-            <div className="mt-3 pt-3 space-y-2" style={{ borderTop: '1px solid var(--border-subtle)' }}>
-              {dup.items.map((item, idx) => (
-                <div key={item.id} className="flex justify-between items-center p-2.5 rounded-lg" style={{ background: 'var(--bg-muted)' }}>
-                  <div className="text-xs font-medium flex items-center gap-2 flex-wrap">
-                    {item.date}
-                    {item.createdAt && <TxTimeChip createdAt={item.createdAt} />}
-                    • {item.description || 'بدون وصف'}
-                    {idx === 0 && <span className="badge badge-success text-[9px]">الأحدث — محفوظ</span>}
-                  </div>
-                  {idx !== 0 && (
-                    <button onClick={() => deleteSingle(item)} aria-label="حذف" className="text-red-500 p-1.5 rounded-lg"><Trash2 size={12} /></button>
-                  )}
+      ) : (
+        duplicates.map(dup => (
+          <div key={dup.key} className="card">
+            <div
+              className="flex justify-between items-center cursor-pointer -m-[18px] p-[18px]"
+              onClick={() => setExpandedGroups(p => ({ ...p, [dup.key]: !p[dup.key] }))}
+            >
+              <div className="flex items-center gap-3">
+                <div className={`p-2 rounded-lg ${dup.risk === 'high' ? 'bg-red-50 text-red-500 dark:bg-red-950/30' : 'bg-amber-50 text-amber-500 dark:bg-amber-950/30'}`}>
+                  <Repeat size={16} />
                 </div>
-              ))}
+                <div>
+                  <h4 className="font-black text-sm money tabular">{fmt(dup.amount)} ج.م</h4>
+                  <span className="text-[10px] font-semibold" style={{ color: 'var(--text-muted)' }}>
+                    {dup.category} - {dup.count} مرات
+                  </span>
+                </div>
+              </div>
+              <ChevronDown
+                className={`transition-transform ${expandedGroups[dup.key] ? 'rotate-180' : ''}`}
+                style={{ color: 'var(--text-muted)' }}
+                size={16}
+              />
             </div>
-          )}
-        </div>
-      ))}
+            {expandedGroups[dup.key] && (
+              <div className="mt-3 pt-3 space-y-2" style={{ borderTop: '1px solid var(--border-subtle)' }}>
+                {dup.items.map((item, idx) => (
+                  <div
+                    key={item.id}
+                    className="flex justify-between items-center p-2.5 rounded-lg"
+                    style={{ background: 'var(--bg-muted)' }}
+                  >
+                    <div className="text-xs font-medium flex items-center gap-2 flex-wrap">
+                      {item.date}
+                      {item.createdAt && <TxTimeChip createdAt={item.createdAt} />}
+                      • {item.description || 'بدون وصف'}
+                      {idx === 0 && <span className="badge badge-success text-[9px]">الأحدث — محفوظ</span>}
+                    </div>
+                    {idx !== 0 && (
+                      <button
+                        onClick={() => deleteSingle(item)}
+                        aria-label="حذف"
+                        className="text-red-500 p-1.5 rounded-lg"
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ))
+      )}
     </div>
   );
 });
