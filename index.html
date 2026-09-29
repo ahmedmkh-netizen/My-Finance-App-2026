@@ -569,6 +569,180 @@ db.settings({ ignoreUndefinedProperties: true });
 db.enablePersistence({ synchronizeTabs: true }).catch((err) => { console.warn('Firestore persistence failed:', err.code); });
 
 const FIREBASE_DOC_PATH = { collection: 'finance_2026', doc: 'user_ahmed_data' };
+  /* ═══════════════ TELEGRAM — Smart Notifications ═══════════════ */
+const TELEGRAM_PROXY_URL = 'https://curly-sea-90cftelegram-proxy.ahmedmkh.workers.dev';
+const TELEGRAM_ENABLED = !!TELEGRAM_PROXY_URL;
+const TELEGRAM_SETTINGS_LS = 'v85_telegram_settings';
+
+const DEFAULT_TELEGRAM_SETTINGS = {
+  enabled: true,
+  bigAmountThreshold: 5000,
+  budgetAlerts: true,
+  negativeBalanceAlerts: true,
+  monthCloseAlerts: true,
+  deleteRequestAlerts: true,
+  dailySummary: true,
+  weeklySummary: true,
+  lastDailySummary: '',
+  lastWeeklySummary: ''
+};
+
+const getTelegramSettings = () => {
+  try {
+    const raw = localStorage.getItem(TELEGRAM_SETTINGS_LS);
+    if (!raw) return { ...DEFAULT_TELEGRAM_SETTINGS };
+    return { ...DEFAULT_TELEGRAM_SETTINGS, ...JSON.parse(raw) };
+  } catch (e) {
+    return { ...DEFAULT_TELEGRAM_SETTINGS };
+  }
+};
+
+const saveTelegramSettings = (settings) => {
+  try { localStorage.setItem(TELEGRAM_SETTINGS_LS, JSON.stringify(settings)); } catch (e) {}
+};
+
+const sendTelegram = async (text, options = {}) => {
+  if (!TELEGRAM_ENABLED) return;
+  const settings = getTelegramSettings();
+  if (!settings.enabled) return;
+  if (options.skipCheck) {} else if (!settings.enabled) return;
+  
+  try {
+    const res = await fetch(TELEGRAM_PROXY_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, source: 'wallet-v85' })
+    });
+    return await res.json();
+  } catch (e) {
+    console.warn('Telegram send failed:', e);
+  }
+};
+
+// ⭐ الدالة الذكية — تحدد إذا الإشعار يستاهل
+const notifySmart = (type, data = {}) => {
+  const s = getTelegramSettings();
+  if (!s.enabled) return;
+  
+  switch (type) {
+    case 'BIG_AMOUNT':
+      if (Number(data.amount) >= Number(s.bigAmountThreshold)) {
+        sendTelegram(
+          `💸 <b>دفعة كبيرة</b>\n` +
+          `━━━━━━━━━━━━━━━\n` +
+          `📦 ${data.description || data.category}\n` +
+          `💰 <b>${Number(data.amount).toLocaleString('en-US')} ج.م</b>\n` +
+          `📂 ${data.category || '—'}\n` +
+          `📅 ${data.date || '—'}\n` +
+          `💳 ${data.method || '—'}`
+        );
+      }
+      break;
+    
+    case 'BUDGET_EXCEEDED':
+      if (s.budgetAlerts) {
+        sendTelegram(
+          `🚨 <b>تجاوز الميزانية</b>\n` +
+          `━━━━━━━━━━━━━━━\n` +
+          `📂 ${data.category}\n` +
+          `💰 الميزانية: ${Number(data.budget).toLocaleString('en-US')} ج.م\n` +
+          `📊 المصروف: <b>${Number(data.spent).toLocaleString('en-US')} ج.م</b>\n` +
+          `⚠️ التجاوز: ${Number(data.overBy).toLocaleString('en-US')} ج.م`
+        );
+      }
+      break;
+    
+    case 'NEGATIVE_BALANCE':
+      if (s.negativeBalanceAlerts) {
+        sendTelegram(
+          `⚠️ <b>رصيد سالب</b>\n` +
+          `━━━━━━━━━━━━━━━\n` +
+          `🏦 الحساب: ${data.accountName}\n` +
+          `💰 الرصيد: <b>${Number(data.balance).toLocaleString('en-US')} ج.م</b>`
+        );
+      }
+      break;
+    
+    case 'MONTH_CLOSED':
+      if (s.monthCloseAlerts) {
+        sendTelegram(
+          `🔒 <b>إقفال شهر ${data.month} ${data.year}</b>\n` +
+          `━━━━━━━━━━━━━━━\n` +
+          `💰 إجمالي الدخل: ${Number(data.income || 0).toLocaleString('en-US')} ج.م\n` +
+          `💸 إجمالي المصروف: ${Number(data.expense || 0).toLocaleString('en-US')} ج.م\n` +
+          `📊 الصافي: <b>${Number((data.income || 0) - (data.expense || 0)).toLocaleString('en-US')} ج.م</b>`
+        );
+      }
+      break;
+    
+    case 'DELETE_REQUEST':
+      if (s.deleteRequestAlerts) {
+        sendTelegram(
+          `🗑️ <b>طلب حذف</b>\n` +
+          `━━━━━━━━━━━━━━━\n` +
+          `👤 من: ${data.requestedBy || '—'}\n` +
+          `📦 ${data.description || '—'}\n` +
+          `💰 ${Number(data.amount || 0).toLocaleString('en-US')} ج.م\n` +
+          `📝 ${data.reason || '—'}`
+        );
+      }
+      break;
+  }
+};
+
+// ⭐ الملخصات الدورية
+const checkPeriodicSummaries = (transactions, accountsData) => {
+  const s = getTelegramSettings();
+  if (!s.enabled) return;
+  
+  const now = new Date();
+  const todayISO = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+  
+  // يومي — 9 مساءً
+  if (s.dailySummary && now.getHours() >= 21 && s.lastDailySummary !== todayISO) {
+    const todayTxs = (transactions || []).filter(t => (t._isoDate || t.date) === todayISO && t.status === 'paid');
+    if (todayTxs.length > 0) {
+      const income = todayTxs.filter(t => t.type === 'income').reduce((sum, t) => sum + Number(t.amount || 0), 0);
+      const expense = todayTxs.filter(t => t.type === 'expense').reduce((sum, t) => sum + Number(t.amount || 0), 0);
+      sendTelegram(
+        `📊 <b>ملخص اليوم</b>\n` +
+        `━━━━━━━━━━━━━━━\n` +
+        `📅 ${now.toLocaleDateString('ar-EG')}\n` +
+        `💰 الدخل: ${income.toLocaleString('en-US')} ج.م\n` +
+        `💸 المصروف: ${expense.toLocaleString('en-US')} ج.م\n` +
+        `📈 الصافي: <b>${(income - expense).toLocaleString('en-US')} ج.م</b>\n` +
+        `📋 عدد العمليات: ${todayTxs.length}`
+      );
+      s.lastDailySummary = todayISO;
+      saveTelegramSettings(s);
+    }
+  }
+  
+  // أسبوعي — الجمعة 9 مساءً
+  const weekKey = `${now.getFullYear()}-W${Math.floor(now.getTime() / 604800000)}`;
+  if (s.weeklySummary && now.getDay() === 5 && now.getHours() >= 21 && s.lastWeeklySummary !== weekKey) {
+    const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const weekTxs = (transactions || []).filter(t => {
+      const d = new Date(t._isoDate || t.date);
+      return d >= weekAgo && d <= now && t.status === 'paid';
+    });
+    if (weekTxs.length > 0) {
+      const income = weekTxs.filter(t => t.type === 'income').reduce((sum, t) => sum + Number(t.amount || 0), 0);
+      const expense = weekTxs.filter(t => t.type === 'expense').reduce((sum, t) => sum + Number(t.amount || 0), 0);
+      sendTelegram(
+        `📅 <b>ملخص الأسبوع</b>\n` +
+        `━━━━━━━━━━━━━━━\n` +
+        `💰 الدخل: ${income.toLocaleString('en-US')} ج.م\n` +
+        `💸 المصروف: ${expense.toLocaleString('en-US')} ج.م\n` +
+        `📈 الصافي: <b>${(income - expense).toLocaleString('en-US')} ج.م</b>\n` +
+        `📋 عدد العمليات: ${weekTxs.length}\n` +
+        `🕐 آخر 7 أيام`
+      );
+      s.lastWeeklySummary = weekKey;
+      saveTelegramSettings(s);
+    }
+  }
+};
 const LAST_SYNC_LS_KEY = 'v85_last_sync_ts';
 const ALLOWED_EMAIL = "ahmedmkh@gmail.com";
 const CURRENT_ENGINE_VERSION = 21;
@@ -7267,6 +7441,43 @@ const SettingsView = memo(({
       });
     }
   };
+  /* ⭐ Telegram Settings Handlers */
+  useEffect(() => {
+    const toggleBtn = document.getElementById('telegramToggleBtn');
+    const thresholdInput = document.getElementById('telegramThresholdInput');
+    const testBtn = document.getElementById('testTelegramBtn');
+    
+    if (toggleBtn) {
+      toggleBtn.onclick = () => {
+        const s = getTelegramSettings();
+        s.enabled = !s.enabled;
+        saveTelegramSettings(s);
+        toggleBtn.textContent = s.enabled ? 'إيقاف' : 'تفعيل';
+        const desc = document.getElementById('telegramStatusDesc');
+        if (desc) desc.textContent = s.enabled ? '✅ مفعّلة' : '❌ معطلة';
+        addNotification({
+          type: s.enabled ? 'success' : 'info',
+          title: s.enabled ? 'تم تفعيل التنبيهات' : 'تم إيقاف التنبيهات'
+        });
+      };
+    }
+    
+    if (thresholdInput) {
+      thresholdInput.onchange = (e) => {
+        const s = getTelegramSettings();
+        s.bigAmountThreshold = Number(e.target.value) || 5000;
+        saveTelegramSettings(s);
+        addNotification({ type: 'success', title: 'تم الحفظ: ' + s.bigAmountThreshold + ' ج.م' });
+      };
+    }
+    
+    if (testBtn) {
+      testBtn.onclick = () => {
+        sendTelegram('✅ اختبار من محفظتي V85\nالتنبيهات تعمل بنجاح');
+        addNotification({ type: 'success', title: 'تم إرسال اختبار على Telegram' });
+      };
+    }
+  }, [activeSection]);
 
   const handleFreshStart = () => {
     dispatch({
@@ -7459,6 +7670,50 @@ const SettingsView = memo(({
         <button onClick={() => dispatch({ type: 'SET_PIN_CHANGE_OPEN', payload: true })} className="btn btn-secondary text-xs w-full">
           <Lock size={12} /> تغيير الرمز
         </button>
+      </div>
+            {/* ⭐ قسم تنبيهات Telegram الذكية */}
+      <div className="card">
+        <div className="flex items-center gap-2 mb-3">
+          <div className="p-2 rounded-lg bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400">
+            <Send size={14} />
+          </div>
+          <h3 className="font-black text-sm">تنبيهات Telegram الذكية</h3>
+        </div>
+        <p className="text-[11px] mb-3" style={{ color: 'var(--text-muted)' }}>
+          إشعارات مهمة فقط — دفعات كبيرة، تجاوز الميزانية، رصيد سالب، إقفال شهر، ملخصات يومية/أسبوعية
+        </p>
+        <div className="setting-row">
+          <div>
+            <div className="setting-label">حالة التنبيهات</div>
+            <div className="setting-desc" id="telegramStatusDesc">
+              {getTelegramSettings().enabled ? '✅ مفعّلة' : '❌ معطلة'}
+            </div>
+          </div>
+          <button className="setting-btn primary" id="telegramToggleBtn">
+            {getTelegramSettings().enabled ? 'إيقاف' : 'تفعيل'}
+          </button>
+        </div>
+        <div className="setting-row">
+          <div>
+            <div className="setting-label">الحد الأدنى للدفعات الكبيرة</div>
+            <div className="setting-desc">إشعار فقط لو أكبر من</div>
+          </div>
+          <input
+            type="number"
+            id="telegramThresholdInput"
+            defaultValue={getTelegramSettings().bigAmountThreshold}
+            style={{
+              width: '100px', padding: '8px', borderRadius: '8px',
+              border: '1px solid var(--border-default)',
+              background: 'var(--bg-muted)', color: 'var(--text-primary)',
+              textAlign: 'center', fontFamily: 'inherit', fontWeight: 'bold'
+            }}
+          />
+        </div>
+        <div className="setting-row">
+          <div className="setting-label">اختبار الإشعارات</div>
+          <button className="setting-btn primary" id="testTelegramBtn">إرسال اختبار</button>
+        </div>
       </div>
 
       <details className="card p-0 overflow-hidden">
@@ -8909,6 +9164,15 @@ function dataReducer(state, action) {
           ].slice(0, 1000)
         }
       };
+      // ⭐ إشعار إقفال الشهر
+setTimeout(() => {
+  const monthTxs = (state.data.transactions || []).filter(t =>
+    t.month === month && (t.year || 2026) === year && t.status === 'paid'
+  );
+  const income = monthTxs.filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount || 0), 0);
+  const expense = monthTxs.filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount || 0), 0);
+  notifySmart('MONTH_CLOSED', { month, year, income, expense });
+}, 1000);
     }
 
     /* ⭐ CLOSE_MONTH_AFTER_RESOLVE — مع carryCount */
@@ -9184,6 +9448,44 @@ formData: { type: 'expense', subType: 'withdrawal', status: 'pending', quantity:
 
   const isOnline = useOnlineStatus();
   const prevOnlineRef = useRef(isOnline);
+    /* ⭐ V85 Smart Telegram Notifications */
+  useEffect(() => {
+    if (!isAuthenticated || !data) return;
+    const interval = setInterval(() => {
+      try {
+        const balances = computeAllBalances(data);
+        ACCOUNT_KEYS.forEach(k => {
+          if (Number(balances[k]) < 0) {
+            notifySmart('NEGATIVE_BALANCE', {
+              accountName: ACCOUNT_SHORT_NAMES[k] || k,
+              balance: balances[k]
+            });
+          }
+        });
+        checkPeriodicSummaries(data.transactions, data.accountsData);
+      } catch (e) { console.warn('Notification check:', e); }
+    }, 30 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [isAuthenticated, data]);
+
+  useEffect(() => {
+    if (!isAuthenticated || !data?.deleteRequests) return;
+    try {
+      const pendingReqs = (data.deleteRequests || []).filter(r => r.status === 'pending');
+      pendingReqs.forEach(req => {
+        const key = 'v85_notified_' + req.id;
+        if (!localStorage.getItem(key)) {
+          notifySmart('DELETE_REQUEST', {
+            requestedBy: req.requestedByName || 'مستخدم',
+            description: (req.txSnapshot || {}).description || '—',
+            amount: (req.txSnapshot || {}).amount || 0,
+            reason: req.reason || '—'
+          });
+          localStorage.setItem(key, '1');
+        }
+      });
+    } catch (e) {}
+  }, [isAuthenticated, data?.deleteRequests]);
 
   useEffect(() => {
     currentTxRef.current = data?.transactions || [];
@@ -9900,6 +10202,16 @@ const queueCloudSave = useCallback((newData, options = {}) => {
 
         dispatch({ type: 'UPDATE_TRANSACTIONS', payload: next });
         dispatch({ type: 'SET_FORM_OPEN', payload: false });
+        // ⭐ إشعار للدفعات الكبيرة فقط
+if (Number(amount) >= 5000) {
+  notifySmart('BIG_AMOUNT', {
+    amount: amount,
+    description: newTx.description,
+    category: newTx.category,
+    date: newTx.date,
+    method: newTx.method
+  });
+}
         addNotification({
           type: 'success',
           title: status === 'paid' ? 'تم الحفظ والاعتماد' : 'تم الحفظ كمعلق'
