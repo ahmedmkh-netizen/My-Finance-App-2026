@@ -57,12 +57,11 @@ body{font-family:'Cairo',system-ui,sans-serif;font-weight:500;color:var(--text-p
 h1,h2,h3,h4{font-weight:800;letter-spacing:-.02em}
 button,input,textarea,select{font-family:'Cairo',system-ui,sans-serif}
 
-/* ⭐ Z-INDEX HIERARCHY (FIXED) */
-/* splash: 9989 | azkar: 9990 | pin: 9995 | modals: 5000 | toasts: 10000 */
+/* Z-INDEX: splash 9989 | azkar 9990 | pin 9995 | modals 5000 | toasts 10000 */
 
 /* SPLASH */
 .splash{position:fixed;inset:0;z-index:9989;background:linear-gradient(135deg,#050A14 0%,#0A1628 50%,#1E2B4A 100%);
-  display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff;transition:opacity .4s}
+  display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff;transition:opacity .3s}
 .splash-logo{width:88px;height:88px;border-radius:28px;background:linear-gradient(135deg,#635BFF,#4A42E5);
   display:flex;align-items:center;justify-content:center;box-shadow:0 24px 48px -12px rgba(99,91,255,.5);
   margin-bottom:24px;animation:splashPulse 1.5s ease-in-out infinite}
@@ -381,13 +380,16 @@ body.dark .bottom-nav{box-shadow:0 -8px 32px rgba(0,0,0,.5)}
 @keyframes slideUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
 
-/* PERIODS */
-.periods{display:flex;gap:3px;padding:4px;background:var(--bg-muted);border-radius:var(--r-md);
-  margin-bottom:14px;overflow-x:auto;scrollbar-width:none}
-.periods::-webkit-scrollbar{display:none}
-.period{flex:1 0 auto;padding:10px 14px;border-radius:10px;color:var(--text-muted);background:transparent;
-  border:none;font-size:12px;font-weight:700;cursor:pointer;transition:all .2s;white-space:nowrap;min-width:66px}
-.period.on{background:var(--bg-card);color:var(--accent);box-shadow:0 2px 8px rgba(10,22,40,.08);font-weight:800}
+/* PERIODS — 3 tabs only, better styling */
+.periods{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding:6px;background:var(--bg-muted);border-radius:var(--r-md);
+  margin-bottom:14px}
+.period{padding:12px 10px;border-radius:10px;color:var(--text-muted);background:transparent;
+  border:none;font-size:12px;font-weight:800;cursor:pointer;transition:all .2s;white-space:nowrap;
+  display:flex;align-items:center;justify-content:center;gap:4px}
+.period .period-count{font-size:10px;opacity:.7;font-weight:700;font-variant-numeric:tabular-nums}
+.period.on{background:var(--bg-card);color:var(--accent);box-shadow:0 2px 8px rgba(10,22,40,.08);font-weight:900}
+.period.on .period-count{opacity:.9;color:var(--accent)}
+.period:active{transform:scale(.97)}
 
 /* DAY GROUP */
 .day-group{margin-bottom:20px}
@@ -812,11 +814,9 @@ body.dark .bottom-nav{box-shadow:0 -8px 32px rgba(0,0,0,.5)}
     <div class="card">
       <div class="card-title">الفترة</div>
       <div class="periods" id="periods">
-        <button class="period on" data-p="today">النهاردة</button>
-        <button class="period" data-p="yesterday">امبارح</button>
-        <button class="period" data-p="week">الأسبوع</button>
-        <button class="period" data-p="month">الشهر</button>
-        <button class="period" data-p="all">الكل</button>
+        <button class="period" data-p="today">النهاردة <span class="period-count" id="cnt-today">0</span></button>
+        <button class="period" data-p="yesterday">امبارح <span class="period-count" id="cnt-yesterday">0</span></button>
+        <button class="period on" data-p="all">الكل <span class="period-count" id="cnt-all">0</span></button>
       </div>
     </div>
     <div class="card">
@@ -985,8 +985,8 @@ body.dark .bottom-nav{box-shadow:0 -8px 32px rgba(0,0,0,.5)}
       </div>
       <div class="setting-row">
         <div>
-          <div class="setting-label">تنبيهات Telegram</div>
-          <div class="setting-desc">مفعّلة — تصلك فوراً</div>
+          <div class="setting-label">تنبيهات Telegram الذكية</div>
+          <div class="setting-desc" id="telegramStatusDesc">✅ مفعّلة — تصلك فوراً</div>
         </div>
         <button class="setting-btn primary" id="testTelegramBtn">اختبار</button>
       </div>
@@ -1014,7 +1014,7 @@ body.dark .bottom-nav{box-shadow:0 -8px 32px rgba(0,0,0,.5)}
     </div>
 
     <div class="card" style="text-align:center;padding:16px;color:var(--text-muted);font-size:11px;font-weight:600;line-height:1.8">
-      محل هاني · نسخة العيلة · V5.0<br>
+      محل هاني · نسخة العيلة · V5.2<br>
       مرتبط بمحفظتي V85 · الجنيه المصري فقط
     </div>
   </div>
@@ -1071,7 +1071,7 @@ var FIREBASE_CONFIG = {
 };
 var FIREBASE_DOC_PATH = { collection: 'finance_2026', doc: 'user_ahmed_data' };
 
-/* ⭐ Telegram — متروك كما هو (بتوجيه من المستخدم) */
+/* ⭐ Telegram — عبر Worker آمن */
 var TELEGRAM_PROXY_URL = 'https://curly-sea-90cftelegram-proxy.ahmedmkh.workers.dev';
 var TELEGRAM_ENABLED = !!TELEGRAM_PROXY_URL;
 
@@ -1088,7 +1088,7 @@ var SHOPPING_CATEGORIES = [
   'خضروات','بقالة / فاكهة','مستلزمات منزلية'
 ];
 var AUTO_LOCK_MS = 4 * 60 * 1000;
-var DUPLICATE_WINDOW_MS = 60000; // ⭐ رُفع من 5000 إلى 60000
+var DUPLICATE_WINDOW_MS = 60000;
 var CLOUD_TIMEOUT_MS = 12000;
 var OPENAI_MODEL = 'gpt-4o-mini';
 var WHISPER_MODEL = 'whisper-1';
@@ -1097,6 +1097,7 @@ var INSIGHTS_CACHE_LS = 'hani_insights_cache';
 var REMINDERS_LAST_CHECK = 'hani_reminders_last';
 var THEME_LS_KEY = 'theme';
 var SHARED_V85_PREFIX = 'v85_';
+var NOTIF_REQUESTED_KEY = 'hani_notif_requested';
 
 /* ═══════════════ AZKAR ═══════════════ */
 var AZKAR = [
@@ -1290,7 +1291,7 @@ var currentPin = '';
 var cachedTx = [];
 var cachedDeleteRequests = [];
 var allDeleteRequests = [];
-var currentPeriod = 'today';
+var currentPeriod = 'all'; // ⭐ DEFAULT = الكل
 var currentTab = 'home';
 var favorites = [];
 var recentItems = [];
@@ -1341,7 +1342,6 @@ function esc(s) {
 }
 function initials(name) { if (!name) return '؟'; return name.trim().charAt(0); }
 
-/* ⭐ UUID موحّد مع Shopping/V85 */
 function getSafeId(prefix) {
   try {
     if (crypto && crypto.randomUUID) return (prefix || '') + crypto.randomUUID();
@@ -1523,7 +1523,6 @@ var auth = null;
 try {
   if (!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
   db = firebase.firestore();
-  // ⭐ FIX: use merge:true to avoid "overriding host" warning
   try { db.settings({ ignoreUndefinedProperties: true }, { merge: true }); } catch (e) { console.warn('settings merge warn:', e); }
   auth = firebase.auth();
   console.log('✅ Firebase initialized (shared doc with V85)');
@@ -1599,6 +1598,32 @@ function modal(opt) {
       if (opt.onConfirm) opt.onConfirm(val);
     }
   });
+}
+
+/* ═══════════════ NOTIFICATIONS — Auto Request ═══════════════ */
+function autoRequestNotifications() {
+  // ⭐ لا تطلب لو اتعملت من قبل
+  if (localStorage.getItem(NOTIF_REQUESTED_KEY) === 'yes') return;
+  if (!('Notification' in window)) return;
+  if (Notification.permission !== 'default') return;
+  
+  // ⭐ طلب الإذن بعد أول تفاعل حقيقي من المستخدم
+  var handler = function() {
+    document.removeEventListener('click', handler);
+    document.removeEventListener('touchstart', handler);
+    Notification.requestPermission().then(function(perm) {
+      localStorage.setItem(NOTIF_REQUESTED_KEY, 'yes');
+      updateNotifStatus();
+      if (perm === 'granted') {
+        setTimeout(function() {
+          notifyReminder('🌸 أهلاً بيك', 'التنبيهات الذكية اتفعلت — هتصلك إشعارات مهمة');
+        }, 1500);
+      }
+    }).catch(function() {});
+  };
+  
+  document.addEventListener('click', handler, { once: true, passive: true });
+  document.addEventListener('touchstart', handler, { once: true, passive: true });
 }
 
 /* ═══════════════ PIN ═══════════════ */
@@ -1713,12 +1738,13 @@ function showAzkar() {
       screen.removeEventListener('click', finish);
       resolve();
     }
-    setTimeout(finish, 4000);
+    // ⭐ FIX: من 4000 إلى 2500 (أسرع)
+    setTimeout(finish, 2500);
     screen.addEventListener('click', finish);
   });
 }
 
-/* ═══════════════ INIT ═══════════════ */
+/* ═══════════════ INIT — Optimized Parallel ═══════════════ */
 function init() {
   if (!currentUser) return;
   var itemsBox = document.getElementById('items');
@@ -1728,13 +1754,17 @@ function init() {
     return;
   }
   hideSplash();
-  initFirebaseAuth().then(function () {
-    showAzkar().then(function () {
-      showMainApp();
-      setupSync();
-      subscribe();
-      startSmartReminders();
-    });
+  
+  // ⭐ FIX: تحميل متوازي — Auth + Azkar مع بعض
+  var authPromise = initFirebaseAuth();
+  var azkarPromise = showAzkar();
+  
+  Promise.all([authPromise, azkarPromise]).then(function () {
+    showMainApp();
+    setupSync();
+    subscribe();
+    startSmartReminders();
+    autoRequestNotifications(); // ⭐ طلب الإشعارات تلقائياً
   }).catch(function (err) {
     console.warn('بدون Firebase:', err);
     showMainApp();
@@ -1751,7 +1781,7 @@ function hideSplash() {
   var s = document.getElementById('splash');
   if (!s) return;
   s.style.opacity = '0';
-  setTimeout(function () { s.style.display = 'none'; }, 400);
+  setTimeout(function () { s.style.display = 'none'; }, 300);
 }
 
 function showMainApp() {
@@ -1999,7 +2029,6 @@ function buildFeedItem(t) {
   var pendingReq = getDeleteRequestForTx(t.id);
   var editedBadge = t.editedAt ? '<span class="edited-badge">✏️ معدّلة</span>' : '';
 
-  // ⭐ Transfer badge
   var transferBadge = '';
   if (t.linkedTransferId) {
     if (t.transferDirection === 'out') transferBadge = '<span class="transfer-badge out">خروج ↗</span>';
@@ -2008,7 +2037,6 @@ function buildFeedItem(t) {
     else transferBadge = '<span class="transfer-badge out">تحويل</span>';
   }
 
-  // ⭐ Pending delete badge with reason
   var pendingBadge = '';
   if (hasPending && pendingReq) {
     var reqTime = new Date(pendingReq.requestedAt).toLocaleDateString('ar-EG', { day: 'numeric', month: 'short' });
@@ -2248,7 +2276,7 @@ function saveTx() {
   isSaving = true;
   var txDateObj = new Date(txDateISO + 'T12:00:00');
   var tx = {
-    id: getSafeId('fam-'), // ⭐ UUID موحّد
+    id: getSafeId('fam-'),
     type: 'expense', kind: 'operational',
     category: CATEGORY_NAME, subCategory: CATEGORIES[selectedCategory].label,
     amount: amount,
@@ -2327,7 +2355,7 @@ function saveTx() {
   });
 }
 
-/* ═══════════════ DELETE REQUEST (FIXED) ═══════════════ */
+/* ═══════════════ DELETE REQUEST ═══════════════ */
 function doDelete(id) {
   if (deleteModalOpen || editModalOpen) return;
   if (!isAuthReady || !docRef) { toast('التطبيق غير متصل', 'err'); return; }
@@ -2367,7 +2395,6 @@ function doDelete(id) {
   });
 }
 
-/* ⭐ FIXED: validation inside transaction */
 function submitDeleteRequest(tx, reason) {
   if (!isAuthReady || !docRef) return;
   var request = {
@@ -2381,7 +2408,6 @@ function submitDeleteRequest(tx, reason) {
     return transaction.get(docRef).then(function (snap) {
       var d = snap.exists ? (snap.data() || {}) : {};
       var existing = Array.isArray(d.deleteRequests) ? d.deleteRequests : [];
-      // ⭐ FIX: validation INSIDE transaction for atomicity
       if (existing.some(function (r) { return r && r.txId === tx.id && r.status === 'pending'; })) {
         throw new Error('ALREADY_REQUESTED');
       }
@@ -2397,7 +2423,7 @@ function submitDeleteRequest(tx, reason) {
   });
 }
 
-/* ═══════════════ EDIT (FIXED) ═══════════════ */
+/* ═══════════════ EDIT ═══════════════ */
 function doEdit(id) {
   if (deleteModalOpen || editModalOpen) return;
   if (!isAuthReady || !docRef) { toast('التطبيق غير متصل', 'err'); return; }
@@ -2461,7 +2487,6 @@ function doEdit(id) {
   });
 }
 
-/* ⭐ FIXED: null check on original */
 function submitEdit(tx, newAmount, newNote, oldNote, reason) {
   if (!isAuthReady || !docRef) return;
   var descParts = (tx.description || '').split(' — ');
@@ -2489,7 +2514,7 @@ function submitEdit(tx, newAmount, newNote, oldNote, reason) {
           break;
         }
       }
-      if (!found || !original) throw new Error('tx_not_found'); // ⭐ null check
+      if (!found || !original) throw new Error('tx_not_found');
       transaction.set(docRef, { transactions: txs }, { merge: true });
       return { original: original };
     });
@@ -2502,35 +2527,54 @@ function submitEdit(tx, newAmount, newNote, oldNote, reason) {
   });
 }
 
-/* ═══════════════ HISTORY ═══════════════ */
+/* ═══════════════ HISTORY — Simplified filter ═══════════════ */
 function filterByPeriod(list, period) {
   var today = isoDate();
   var yesterday = yesterdayISO();
-  if (period === 'today') return list.filter(function (t) { return t._isoDate === today; });
-  if (period === 'yesterday') return list.filter(function (t) { return t._isoDate === yesterday; });
-  if (period === 'week') {
-    var d = new Date(); d.setDate(d.getDate() - 6); d.setHours(0, 0, 0, 0);
-    return list.filter(function (t) {
-      if (!t._isoDate) return false;
-      return new Date(t._isoDate + 'T00:00:00') >= d;
-    });
+  
+  if (period === 'today') {
+    return list.filter(function (t) { return t._isoDate === today; });
   }
-  if (period === 'month') {
-    var m = today.slice(0, 7);
-    return list.filter(function (t) { return t._isoDate && t._isoDate.indexOf(m) === 0; });
+  
+  if (period === 'yesterday') {
+    return list.filter(function (t) { return t._isoDate === yesterday; });
   }
+  
+  // 'all' أو أي حاجة تانية → كل البيانات
   return list;
 }
 
+function updatePeriodCounts() {
+  var today = isoDate();
+  var yesterday = yesterdayISO();
+  var todayCnt = cachedTx.filter(function (t) { return t._isoDate === today; }).length;
+  var yestCnt = cachedTx.filter(function (t) { return t._isoDate === yesterday; }).length;
+  var allCnt = cachedTx.length;
+  
+  var e1 = document.getElementById('cnt-today');
+  var e2 = document.getElementById('cnt-yesterday');
+  var e3 = document.getElementById('cnt-all');
+  if (e1) e1.textContent = '(' + todayCnt + ')';
+  if (e2) e2.textContent = '(' + yestCnt + ')';
+  if (e3) e3.textContent = '(' + allCnt + ')';
+}
+
 function renderHistory() {
-  var list = filterByPeriod(cachedTx, currentPeriod).slice(0, 200);
+  var list = filterByPeriod(cachedTx, currentPeriod).slice(0, 500);
   var histCount = document.getElementById('histCount');
   if (histCount) histCount.textContent = list.length + ' عملية';
+  
+  // ⭐ تحديث عدّاد التابات
+  updatePeriodCounts();
+  
   var box = document.getElementById('histList');
   var totalBox = document.getElementById('histTotal');
   if (!box) return;
   if (!list.length) {
-    box.innerHTML = '<div class="empty"><span class="empty-emoji"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 6h12M9 12h12M9 18h12"/></svg></span>لا توجد عمليات في هذه الفترة</div>';
+    var emptyMsg = currentPeriod === 'today' ? 'لا توجد عمليات النهاردة' :
+                   currentPeriod === 'yesterday' ? 'لا توجد عمليات امبارح' :
+                   'لا توجد عمليات';
+    box.innerHTML = '<div class="empty"><span class="empty-emoji"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 6h12M9 12h12M9 18h12"/></svg></span>' + emptyMsg + '</div>';
     if (totalBox) totalBox.style.display = 'none';
     return;
   }
@@ -2543,7 +2587,7 @@ function renderHistory() {
   var sortedDates = Object.keys(groups).sort(function (a, b) { return b.localeCompare(a); });
   var today = isoDate();
   var yesterdayISOVal = yesterdayISO();
-  box.innerHTML = sortedDates.slice(0, 60).map(function (date) {
+  box.innerHTML = sortedDates.slice(0, 100).map(function (date) {
     var dayTx = groups[date];
     var dayTotal = dayTx.reduce(function (s, t) { return s + Number(t.amount || 0); }, 0);
     var label;
@@ -2669,16 +2713,23 @@ function showInsightText(text) {
   if (btn) btn.addEventListener('click', generateInsights);
 }
 
+/* ⭐ AI — بدون إجبار على إدخال المفتاح */
 async function generateInsights() {
   var apiKey = getApiKey();
-  if (!apiKey) { setApiKeyModal(); return; }
+  if (!apiKey) {
+    toast('محتاج OpenAI API Key — اضغط "إعداد" في قسم الذكاء الاصطناعي', 'warn');
+    return;
+  }
   var content = document.getElementById('aiContent');
   content.innerHTML = '<div class="ai-loading"><div class="ai-spinner"></div><p style="color:var(--text-secondary);font-weight:600">جاري التحليل...</p></div>';
   var today = isoDate();
   var monthPfx = today.slice(0, 7);
   var monthList = cachedTx.filter(function (t) { return t._isoDate && t._isoDate.indexOf(monthPfx) === 0; });
   if (!monthList.length) {
-    content.innerHTML = '<div class="empty">لا توجد بيانات كافية للتحليل</div>';
+    content.innerHTML = '<div class="empty">لا توجد بيانات كافية للتحليل</div>' +
+      '<button class="ai-btn" id="aiGenerateBtn" style="margin-top:12px">إعادة المحاولة</button>';
+    var btn0 = document.getElementById('aiGenerateBtn');
+    if (btn0) btn0.addEventListener('click', generateInsights);
     return;
   }
   var total = monthList.reduce(function (s, t) { return s + Number(t.amount || 0); }, 0);
@@ -2733,8 +2784,7 @@ async function generateInsights() {
 function startVoice() {
   var apiKey = getApiKey();
   if (!apiKey) {
-    toast('يجب إعداد OpenAI API Key أولاً', 'warn');
-    setApiKeyModal();
+    toast('محتاج OpenAI API Key للإدخال الصوتي — اضغط "إعداد" في قسم الذكاء الاصطناعي', 'warn');
     return;
   }
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -2927,7 +2977,12 @@ function checkReminders() {
     }
   }
   if (now.getDay() === 5 && now.getHours() >= 20 && lastCheck !== 'week_' + today) {
-    var weekList = filterByPeriod(cachedTx, 'week');
+    var weekList = cachedTx.filter(function (t) {
+      if (!t._isoDate) return false;
+      var d = new Date(t._isoDate + 'T00:00:00');
+      var wAgo = new Date(); wAgo.setDate(wAgo.getDate() - 6); wAgo.setHours(0,0,0,0);
+      return d >= wAgo;
+    });
     var weekTotal = weekList.reduce(function (s, t) { return s + Number(t.amount || 0); }, 0);
     if (weekTotal > 0) {
       notifyReminder('ملخص الأسبوع', 'إجمالي ' + weekList.length + ' عملية بـ ' + fmt(weekTotal) + ' ج.م');
@@ -2953,6 +3008,7 @@ function notifyReminder(title, body) {
 function requestNotifPermission() {
   if (!('Notification' in window)) { toast('المتصفح لا يدعم الإشعارات', 'err'); return; }
   Notification.requestPermission().then(function (perm) {
+    localStorage.setItem(NOTIF_REQUESTED_KEY, 'yes');
     updateNotifStatus();
     if (perm === 'granted') {
       toast('تم تفعيل الإشعارات ✓');
@@ -2983,16 +3039,12 @@ function updateNotifStatus() {
   }
 }
 
-/* ⭐ FIXED: parseTransactions — يقبل shopping-app كذلك */
+/* ⭐ parseTransactions — يقبل كل المصادر */
 function parseTransactions(data) {
   var seen = {};
   var result = [];
   (data.transactions || []).forEach(function (t) {
     if (!t) return;
-    // ⭐ FIX: قبول المعاملات من:
-    // 1. محل هاني (family-app)
-    // 2. احتياجات البيت (shopping-app)
-    // 3. الفئات المشتركة (legacy)
     var isFamily = (t.category === CATEGORY_NAME);
     var isShopping = (t.source === 'shopping-app');
     var isLegacyShopping = SHOPPING_CATEGORIES.indexOf(t.category) >= 0;
@@ -3079,6 +3131,7 @@ function renderAll() {
   renderFamilyStrip();
   renderFeed();
   updateBudgetDesc();
+  updatePeriodCounts();
   if (currentTab === 'history') renderHistory();
   if (currentTab === 'family') renderFamilyTab();
   if (currentTab === 'insights') renderInsightsTab();
@@ -3175,33 +3228,30 @@ function setApiKeyModal() {
   });
 }
 
-/* ═══════════════ BOOTSTRAP ═══════════════ */
+/* ═══════════════ BOOTSTRAP — أسرع ═══════════════ */
 function bootstrap() {
   console.log('🚀 Bootstrap starting...');
 
-  // ⭐ أخفي الـ splash فوراً بعد 800ms دايمًا (FIX)
+  // ⭐ من 800ms إلى 300ms
   setTimeout(function () {
     var s = document.getElementById('splash');
     if (s && s.style.display !== 'none') {
-      console.log('ℹ️ Hiding splash (timeout)');
       s.style.display = 'none';
     }
-  }, 800);
+  }, 300);
 
-  // Safety net بعد 3 ثواني
+  // Safety net
   setTimeout(function () {
     var s = document.getElementById('splash');
     if (s) s.style.display = 'none';
     var p = document.getElementById('pinScreen');
     var m = document.getElementById('mainApp');
     if (!currentUser && p && p.style.display === 'none') {
-      console.log('⚠️ Safety: forcing PIN screen');
       p.style.display = 'flex';
       if (m) m.style.display = 'none';
     }
-  }, 3000);
+  }, 2000);
 
-  // استعادة الجلسة
   try {
     var uid = sessionStorage.getItem('hani_user_id');
     if (uid) {
@@ -3212,14 +3262,13 @@ function bootstrap() {
         currentUser = found;
         var pinScreenEl = document.getElementById('pinScreen');
         if (pinScreenEl) pinScreenEl.style.display = 'none';
-        setTimeout(function () { init(); }, 100);
+        setTimeout(function () { init(); }, 50);
         return;
       }
     }
-    // مفيش جلسة — اعرض الـ PIN
     var pinScreenEl2 = document.getElementById('pinScreen');
     if (pinScreenEl2) pinScreenEl2.style.display = 'flex';
-    console.log('ℹ️ شاشة PIN جاهزة — ادخل الرمز (1111 / 2222 / 3333 / 4444)');
+    console.log('ℹ️ شاشة PIN جاهزة — ادخل الرمز');
   } catch (e) {
     console.error('Bootstrap error:', e);
     var pinScreenEl3 = document.getElementById('pinScreen');
@@ -3227,18 +3276,16 @@ function bootstrap() {
   }
 }
 
-/* ⭐ DOM-ready bootstrap */
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', bootstrap);
 } else {
   bootstrap();
 }
 
-/* ⭐ Safety net إضافي بعد 5 ثواني */
 setTimeout(function () {
   var s = document.getElementById('splash');
   if (s) s.style.display = 'none';
-}, 5000);
+}, 3000);
 
 /* ⭐ قراءة إعدادات V85 المشتركة */
 (function preserveSharedSettings() {
@@ -3252,18 +3299,12 @@ setTimeout(function () {
 
 /* ⭐ Debug helper */
 window.__haniDebug = function () {
-  console.log('=== محل هاني V5.0 ===');
+  console.log('=== محل هاني V5.2 ===');
   console.log('currentUser:', currentUser ? currentUser.name : 'لا يوجد');
   console.log('isAuthReady:', isAuthReady);
   console.log('cachedTx:', cachedTx.length);
-  console.log('cachedDeleteRequests:', cachedDeleteRequests.length);
-  console.log('allDeleteRequests:', allDeleteRequests.length);
-  console.log('items html len:', document.getElementById('items') ? document.getElementById('items').innerHTML.length : 'N/A');
-  console.log('apiKey:', getApiKey() ? 'موجود' : 'غير موجود');
+  console.log('currentPeriod:', currentPeriod);
   console.log('Notif permission:', typeof Notification !== 'undefined' ? Notification.permission : 'N/A');
-  console.log('Splash display:', document.getElementById('splash') ? document.getElementById('splash').style.display : 'N/A');
-  console.log('PIN display:', document.getElementById('pinScreen') ? document.getElementById('pinScreen').style.display : 'N/A');
-  console.log('Main display:', document.getElementById('mainApp') ? document.getElementById('mainApp').classList.contains('show') : 'N/A');
 };
 </script>
 </body>
