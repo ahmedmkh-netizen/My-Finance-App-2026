@@ -9229,7 +9229,12 @@ function App() {
   }, [transactions, selectedYear]);
 
   const loansHash = useMemo(() => {
-    const txSig = transactions.filter(t => t.linkedLoanId || t.sourceReceivableId).map(t => `${t.id}:${t.linkedLoanId || ''}:${t.sourceReceivableId || ''}:${t.status}:${t.amount}`).join('|');
+    const txSig = transactions.filter(t => 
+      t.linkedLoanId || 
+      t.sourceReceivableId || 
+      t.category === 'مسحوبات محل هاني' || 
+      t.category === 'مشتريات بقالة هاني'
+    ).map(t => `${t.id}:${t.status}:${t.amount}:${t.category}`).join('|');
     const loansSig = loans.map(l => `${l.id}:${l.totalAmount}:${l.prePaidAmount}:${l.autoMonthly ? 1 : 0}`).join('|');
     const deletedSig = (data?.deletedTxIds || []).slice(-100).join(',');
     return `${txSig}#${loansSig}#${deletedSig}`;
