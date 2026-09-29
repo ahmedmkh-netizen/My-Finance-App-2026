@@ -3011,19 +3011,26 @@ function updateNotifStatus() {
   }
 }
 
+/* ⭐ FIX: عرض مشتريات محل هاني فقط (مش العثيم/كازيون) */
 function parseTransactions(data) {
   var seen = {};
   var result = [];
   (data.transactions || []).forEach(function (t) {
     if (!t) return;
-    var isFamily = (t.category === CATEGORY_NAME);
-    var isShopping = (t.source === 'shopping-app');
-    var isLegacyShopping = SHOPPING_CATEGORIES.indexOf(t.category) >= 0;
+    // ✅ نقبل فقط معاملات من:
+    // 1. محل هاني (family-app)
+    // 2. الفئة "مسحوبات محل هاني"
+    // 3. الفئة "مشتريات بقالة هاني"
+    var isFamilyApp = (t.source === 'family-app');
+    var isHanyCategory = (t.category === CATEGORY_NAME);
     var isHanyRelated = (t.category === 'مشتريات بقالة هاني');
-    if (!isFamily && !isShopping && !isLegacyShopping && !isHanyRelated) return;
+    
+    if (!isFamilyApp && !isHanyCategory && !isHanyRelated) return;
     if (!isActiveTx(t)) return;
+    
     var iso = getTxDate(t);
     if (!iso) return;
+    
     if (seen[t.id]) {
       var curTime = new Date(seen[t.id].createdAt || 0).getTime();
       var newTime = new Date(t.createdAt || 0).getTime();
@@ -3045,7 +3052,7 @@ function parseTransactions(data) {
     return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
   });
 }
-
+  
 function subscribe() {
   if (unsubscribe) unsubscribe();
   if (!docRef) return;
