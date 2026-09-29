@@ -1646,14 +1646,12 @@ const computeDualLiquidity = (balances) => {
   return { comprehensive, withoutWallets, walletsOnly };
 };
 
-/* ⭐ V86: computeCardDebt — يستخدم openingDebtDate منفصل */
 const computeCardDebt = (data, card, asOfDate) => {
   if (!card) return 0;
   const method = getCardMethod(card);
   const subCards = Array.isArray(card.subCardLast4) ? card.subCardLast4 : [];
   const upper = asOfDate ? new Date(asOfDate) : endOfToday();
 
-  // ⭐ V86: openingDebtDate له الأولوية، ثم openingDate
   const cutoffISO = card.openingDebtDate || card.openingDate;
   const cutoffDay = cutoffISO ? dayStart(parseISODate(cutoffISO) || new Date(0)) : null;
 
@@ -1669,19 +1667,33 @@ const computeCardDebt = (data, card, asOfDate) => {
     if (d > upper) return;
 
     const amt = safeNumber(t.amount);
-    let belongsToCard = false;
     const hasExplicitCardLink = (t.linkedCardId !== undefined && t.linkedCardId !== null && t.linkedCardId !== '');
-    if (hasExplicitCardLink) belongsToCard = (t.linkedCardId === card.id);
-    else if (t.cardLast4 && subCards.includes(t.cardLast4)) belongsToCard = true;
-    else belongsToCard = (t.method === method);
+
+    // ⭐ تحديد هل المعاملة تنتمي لهذه البطاقة
+    let belongsToCard = false;
+    if (hasExplicitCardLink) {
+      belongsToCard = (t.linkedCardId === card.id);
+    } else {
+      if (t.cardLast4 && subCards.includes(t.cardLast4)) belongsToCard = true;
+      else if (t.method === method) belongsToCard = true;
+    }
 
     if (!belongsToCard) return;
-    if (t.type === 'expense') debt += amt;
-    else if (t.type === 'income') debt -= amt;
+
+    // ⭐ هل هي شراء (method = بطاقة) أم سداد (method = حساب)؟
+    const isCardPurchase = CREDIT_CARD_METHOD_IDS.includes(t.method);
+
+    if (t.type === 'expense') {
+      if (isCardPurchase) debt += amt;   // شراء → زيادة المديونية
+      else debt -= amt;                   // سداد → تخفيض المديونية
+    } else if (t.type === 'income') {
+      if (hasExplicitCardLink || isCardPurchase) debt -= amt;
+    }
   });
 
-  return debt;
+  return Math.max(0, debt);  // ⭐ المديونية لا تكون سالبة
 };
+  
 
 const getClosingBalance = (data, key, year, month) => {
   const monthKey = makeMonthKey(year, month);
@@ -12080,16 +12092,22 @@ function App() {
         let syncLinkedCardId = formData.linkedCardId;
         let syncCardLast4 = formData.cardLast4;
 
-        if (CREDIT_CARD_METHOD_IDS.includes(formData.method)) {
-          const matchingCard = cards.find(c => getCardMethod(c) === formData.method);
-          if (matchingCard && syncLinkedCardId !== matchingCard.id) {
-            syncLinkedCardId = matchingCard.id;
-            syncCardLast4 = undefined;
-          }
-        } else {
-          syncLinkedCardId = undefined;
-          syncCardLast4 = undefined;
-        }
+if (CREDIT_CARD_METHOD_IDS.includes(formData.method)) {
+  // شراء على البطاقة → اربطها تلقائياً
+  const matchingCard = cards.find(c => getCardMethod(c) === formData.method);
+  if (matchingCard) {
+    syncLinkedCardId = matchingCard.id;
+    syncCardLast4 = undefined;
+  }
+}
+// ⭐ V86.1: لو method غير بطاقة + linkedCardId موجود = سداد بطاقة
+// لا نشيل الربط — computeCardDebt هيتعامل معاه كسداد
+else if (syncLinkedCardId) {
+  // Keep it — هذا سداد بطاقة
+  syncCardLast4 = undefined;
+} else {
+  syncCardLast4 = undefined;
+}
 
         const { __skipDupCheck, ...cleanFormData } = formData;
         const newTx = {
@@ -13535,7 +13553,33 @@ function App() {
                     </div>
                   </div>
                 </div>
-
+                {/* ⭐ V86.1: اختيار البطاقة المستهدفة عند السداد */}
+                {formData.type === 'expense' &&
+                  ['الالتزامات البنكية والتمويلية', 'بنوك / فيزا / تمويل عقاري', 'مصاريف وسلف شخصية'].includes(formData.category) && (
+                  <div className="form-section" style={{ background: 'var(--accent-soft)', borderColor: 'var(--accent)' }}>
+                    <div className="form-section-title">
+                      <span>💳</span> البطاقة المستهدفة
+                    </div>
+                    <select
+                      className="input-field text-sm"
+                      value={formData.linkedCardId || ''}
+                      onChange={e => dispatch({
+                        type: 'SET_FORM_DATA',
+                        payload: { ...formData, linkedCardId: e.target.value ? Number(e.target.value) : undefined }
+                      })}
+                    >
+                      <option value="">— ليست سداد بطاقة —</option>
+                      {cards.map(c => (
+                        <option key={c.id} value={c.id}>
+                          {c.bank} - {c.name} • ••••{c.last4}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-[9px] mt-1" style={{ color: 'var(--text-muted)' }}>
+                      💡 لو اخترت بطاقة، سيتم تخفيض مديونيتها بهذا المبلغ
+                    </p>
+                  </div>
+                )}
                 <div className="form-section">
                   <div className="form-section-title">
                     <span>📝</span> الوصف
