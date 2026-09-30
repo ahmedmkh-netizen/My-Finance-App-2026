@@ -2571,12 +2571,11 @@ const materializeRecurringItems = (data, asOfDateStr) => {
 
   const now = asOfDateStr ? new Date(asOfDateStr) : new Date();
 
-  /* ⭐ V87.4 FIX: نولّد القيود المستقبلية كمعلقة حتى 12 شهر قادم */
+  /* ⭐ V87.4 FIX: حدود التوليد */
   const futureCutoff = new Date(now);
   futureCutoff.setMonth(futureCutoff.getMonth() + 12);
   futureCutoff.setHours(23, 59, 59, 999);
 
-  /* ⭐ V87.4 FIX: نتجاهل الماضي البعيد (أكثر من 3 سنوات) */
   const pastCutoff = new Date(now);
   pastCutoff.setFullYear(pastCutoff.getFullYear() - 3);
   pastCutoff.setHours(0, 0, 0, 0);
@@ -2597,16 +2596,27 @@ const materializeRecurringItems = (data, asOfDateStr) => {
     const day = safeNumber(r.day, 1);
     if (day < 1 || day > 31) return;
 
+    /* ⭐ V87.4 FIX: startMonth — الافتراضي = الشهر الحالي */
     const startInput = r.startMonth || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
     const [sy, sm] = startInput.split('-').map(Number);
     if (isNaN(sy) || isNaN(sm)) return;
-
-    const endInput = r.endMonth || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    const [ey, em] = endInput.split('-').map(Number);
-    if (isNaN(ey) || isNaN(em)) return;
-
     const startYM = sy * 12 + (sm - 1);
-    const endYM = ey * 12 + (em - 1);
+
+    /* ⭐ V87.4 FIX: endMonth — الافتراضي = 12 شهر من الآن (وليس الشهر الحالي!) */
+    let endYM;
+    if (r.endMonth) {
+      const [ey, em] = r.endMonth.split('-').map(Number);
+      if (isNaN(ey) || isNaN(em)) return;
+      endYM = ey * 12 + (em - 1);
+    } else {
+      // الافتراضي: 12 شهر قادمة
+      const endDefault = new Date(now);
+      endDefault.setMonth(endDefault.getMonth() + 12);
+      endYM = endDefault.getFullYear() * 12 + endDefault.getMonth();
+    }
+
+    // ⭐ V87.4: لو startYM بعد endYM، تجاهل
+    if (startYM > endYM) return;
 
     for (let ym = startYM; ym <= endYM; ym++) {
       const y = Math.floor(ym / 12);
@@ -2616,7 +2626,7 @@ const materializeRecurringItems = (data, asOfDateStr) => {
       const safeDay = Math.min(day, maxDayInMonth);
       const targetDate = new Date(y, mIdx, safeDay);
 
-      /* ⭐ V87.4 FIX: توليد القيود المستقبلية كمعلقة (حتى 12 شهر) */
+      /* ⭐ V87.4 FIX: حدود التوليد */
       if (targetDate > futureCutoff) continue;
       if (targetDate < pastCutoff) continue;
 
@@ -2664,56 +2674,6 @@ const materializeRecurringItems = (data, asOfDateStr) => {
 
   if (newTxs.length === 0) return null;
   return { ...data, transactions: sortTransactions([...newTxs, ...existing]), materializedRecurring: materialized };
-};
-
-const dedupeRecurringTransactions = (transactions) => {
-  if (!Array.isArray(transactions) || transactions.length === 0) return { transactions: transactions || [], removed: [] };
-
-  const removed = [];
-  const seenById = new Set();
-  const seenRecurringKey = new Map();
-  const seenFuzzyKey = new Map();
-  const keep = [];
-
-  const sorted = [...transactions].sort((a, b) => {
-    const aTs = getTxTimestamp(a);
-    const bTs = getTxTimestamp(b);
-    if (aTs !== bTs) return bTs - aTs;
-    return String(b.id || '').localeCompare(String(a.id || ''));
-  });
-
-  sorted.forEach(t => {
-    if (!t || !t.id) { keep.push(t); return; }
-    if (seenById.has(t.id)) { removed.push({ reason: 'duplicate_id', id: t.id, tx: t }); return; }
-
-    if (t.sourceRecurringId && t.year && t.month) {
-      const rKey = `${t.sourceRecurringId}|${t.year}|${t.month}`;
-      if (seenRecurringKey.has(rKey)) {
-        removed.push({ reason: 'duplicate_recurring', key: rKey, id: t.id, existingId: seenRecurringKey.get(rKey), tx: t });
-        return;
-      }
-      seenRecurringKey.set(rKey, t.id);
-    }
-
-    if (t.createdAt && t.source !== 'sms' && !t.linkedTransferId && safeNumber(t.amount) > 0 && !isHanyShopCategory(t.category) && !isCarryoverMarker(t)) {
-      const FUZZY_WINDOW_MS = 10000;
-      const tTime = new Date(t.createdAt).getTime();
-      if (!isNaN(tTime)) {
-        const descKey = normalizeText(t.description || '').slice(0, 30);
-        const fKey = `${safeNumber(t.amount)}|${t.category}|${t.method}|${t.type}|${descKey}`;
-        const lastSeen = seenFuzzyKey.get(fKey);
-        if (lastSeen && (lastSeen.time - tTime) < FUZZY_WINDOW_MS) {
-          removed.push({ reason: 'fuzzy_duplicate', key: fKey, id: t.id, existingId: lastSeen.id, deltaMs: lastSeen.time - tTime, tx: t });
-          return;
-        }
-        seenFuzzyKey.set(fKey, { id: t.id, time: tTime });
-      }
-    }
-    seenById.add(t.id);
-    keep.push(t);
-  });
-
-  return { transactions: keep, removed };
 };
 
 /* ═══════════════ SHOPPING RECURRING ═══════════════ */
