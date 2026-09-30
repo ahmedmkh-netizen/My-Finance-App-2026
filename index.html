@@ -5674,9 +5674,145 @@ const CustodyView = memo(({ data, dispatch, saveHistory, addNotification }) => {
   );
 });
 
-/* ═══════════════ HANY LEDGER VIEW V87.2 — المحاسبة الصحيحة ═══════════════ */
-/* ═══════════════ HANY LEDGER VIEW V87.2 — نسخة مبسطة آمنة ═══════════════ */
-const HanyLedgerView = memo(({ data, dispatch, saveHistory, addNotification, selectedYear, selectedMonth }) => {
+
+  /* ═══════════════ RECURRING ITEMS LIST — مكوّن فرعي آمن ═══════════════ */
+const RecurringItemsList = memo(function RecurringItemsList(props) {
+  const items = props.recurringItems || [];
+  const dispatch = props.dispatch;
+  const saveHistory = props.saveHistory;
+  const addNotification = props.addNotification;
+  const deleteRecurring = props.deleteRecurring;
+
+  if (items.length === 0) return null;
+
+  const toggleActive = function (id) {
+    saveHistory();
+    const updated = items.map(function (r) {
+      if (r.id === id) return Object.assign({}, r, { active: r.active === false });
+      return r;
+    });
+    dispatch({ type: 'UPDATE_RECURRING_ITEMS', payload: updated });
+    addNotification({ type: 'success', title: 'تم التحديث' });
+  };
+
+  const openEdit = function (item) {
+    dispatch({
+      type: 'SET_RECURRING_FORM_DATA',
+      payload: {
+        id: item.id,
+        title: item.title,
+        amount: String(item.amount),
+        day: item.day,
+        category: item.category,
+        type: item.type,
+        startMonth: item.startMonth || '',
+        endMonth: item.endMonth || '',
+        active: item.active !== false,
+        kind: item.kind || null,
+        linkedLoanSystemId: item.linkedLoanSystemId || null,
+        linkedCardId: item.linkedCardId || null,
+        method: item.method || 'cash',
+        transferChannel: item.transferChannel || null
+      }
+    });
+    dispatch({ type: 'SET_RECURRING_MODAL_OPEN', payload: true });
+  };
+
+  const formatRange = function (v) {
+    if (!v) return '-';
+    const parts = String(v).split('-');
+    if (parts.length !== 2) return v;
+    const idx = parseInt(parts[1], 10) - 1;
+    const found = ALL_MONTHS[idx];
+    return parts[0] + '-' + (found ? found : parts[1]);
+  };
+
+  return (
+    <div className="card p-0 overflow-hidden">
+      <div className="p-4 flex items-center justify-between">
+        <h3 className="font-black text-sm flex items-center gap-2">
+          <Repeat size={14} className="text-blue-500" />
+          <span>البنود المتكررة ({items.length})</span>
+        </h3>
+      </div>
+      <div
+        className="px-4 pb-4 space-y-1.5"
+        style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '12px' }}
+      >
+        {items.map(function (r) {
+          const isFee = BANK_FEE_CATEGORIES.has(r.category);
+          const isMonthlyBen = isBeneficiaryCategorySafe(r.category);
+          const isInactive = r.active === false;
+          const hasRange = Boolean(r.startMonth || r.endMonth);
+          const foundMethod = PAYMENT_METHODS.find(function (p) { return p.id === r.method; });
+          const methodLabel = foundMethod ? foundMethod.label : (r.method || 'Cash');
+          let transferLabel = '';
+          if (r.transferChannel) {
+            const foundCh = PAYMENT_METHODS.find(function (p) { return p.id === r.transferChannel; });
+            transferLabel = ' عبر ' + (foundCh ? foundCh.label : r.transferChannel);
+          }
+          const amountClass = r.type === 'income' ? 'text-emerald-600' : 'text-red-500';
+          const toggleClass = isInactive ? 'text-emerald-500' : 'text-amber-500';
+          const rangeText = hasRange
+            ? ' - ' + formatRange(r.startMonth) + ' ← ' + formatRange(r.endMonth)
+            : '';
+          return (
+            <div
+              key={r.id}
+              onClick={function () { openEdit(r); }}
+              className="flex justify-between items-center p-2 rounded-lg cursor-pointer"
+              style={{ background: 'var(--bg-muted)', opacity: isInactive ? 0.5 : 1 }}
+            >
+              <div className="min-w-0 flex-1">
+                <p className="font-bold text-xs truncate">
+                  {r.title}
+                  {isFee ? ' [بنك]' : ''}
+                  {isMonthlyBen ? ' [عائلة]' : ''}
+                  {isInactive ? ' [موقوف]' : ''}
+                </p>
+                <p className="text-[10px] font-semibold" style={{ color: 'var(--text-muted)' }}>
+                  {'يوم ' + r.day + ' - ' + methodLabel + transferLabel + rangeText}
+                </p>
+              </div>
+              <div
+                className="flex items-center gap-1.5 flex-shrink-0"
+                onClick={function (e) { e.stopPropagation(); }}
+              >
+                <span className={'font-black text-xs money tabular ' + amountClass}>
+                  {fmt(r.amount)}
+                </span>
+                <button
+                  type="button"
+                  onClick={function () { toggleActive(r.id); }}
+                  className={'btn btn-ghost p-1 ' + toggleClass}
+                >
+                  {isInactive ? <CheckCircle2 size={12} /> : <Clock size={12} />}
+                </button>
+                <button
+                  type="button"
+                  onClick={function () { deleteRecurring(r.id); }}
+                  className="btn btn-ghost p-1 text-red-500"
+                >
+                  <Trash2 size={12} />
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+});
+
+/* ═══════════════ HANY LEDGER VIEW — نسخة آمنة ═══════════════ */
+const HanyLedgerView = memo(function HanyLedgerView(props) {
+  const data = props.data;
+  const dispatch = props.dispatch;
+  const saveHistory = props.saveHistory;
+  const addNotification = props.addNotification;
+  const selectedYear = props.selectedYear;
+  const selectedMonth = props.selectedMonth;
+
   const [searchTerm, setSearchTerm] = useState('');
   const [viewMode, setViewMode] = useState('list');
   const [sortBy, setSortBy] = useState('date');
@@ -5688,14 +5824,15 @@ const HanyLedgerView = memo(({ data, dispatch, saveHistory, addNotification, sel
   const settlingRef = useRef(false);
 
   const hanyPayable = useMemo(function () { return computeHanyPayable(data); }, [data]);
-
   const monthSummary = useMemo(function () {
     return computeHanySummaryForMonth(data, selectedYear, selectedMonth);
   }, [data, selectedYear, selectedMonth]);
 
   const purchases = useMemo(function () {
     return (data.transactions || [])
-      .filter(function (t) { return t.method === HANY_TAB_METHOD && isHanyShopCategory(t.category) && !isCarryoverMarker(t); })
+      .filter(function (t) {
+        return t.method === HANY_TAB_METHOD && isHanyShopCategory(t.category) && !isCarryoverMarker(t);
+      })
       .slice()
       .sort(compareTransactions);
   }, [data.transactions]);
@@ -5708,15 +5845,20 @@ const HanyLedgerView = memo(({ data, dispatch, saveHistory, addNotification, sel
   }, [data.transactions]);
 
   const filteredPurchases = useMemo(function () {
-    let arr = purchases;
+    let arr = purchases.slice();
     if (searchTerm.trim()) {
       const term = normalizeText(searchTerm);
       arr = arr.filter(function (t) { return normalizeText(t.description).includes(term); });
     }
-    const sorted = arr.slice();
-    if (sortBy === 'amount') return sorted.sort(function (a, b) { return safeNumber(b.amount) - safeNumber(a.amount); });
-    if (sortBy === 'name') return sorted.sort(function (a, b) { return normalizeText(a.description).localeCompare(normalizeText(b.description)); });
-    return sorted.sort(compareTransactions);
+    if (sortBy === 'amount') {
+      return arr.sort(function (a, b) { return safeNumber(b.amount) - safeNumber(a.amount); });
+    }
+    if (sortBy === 'name') {
+      return arr.sort(function (a, b) {
+        return normalizeText(a.description).localeCompare(normalizeText(b.description));
+      });
+    }
+    return arr.sort(compareTransactions);
   }, [purchases, searchTerm, sortBy]);
 
   const groupedPurchases = useMemo(function () {
@@ -5724,127 +5866,151 @@ const HanyLedgerView = memo(({ data, dispatch, saveHistory, addNotification, sel
     filteredPurchases.forEach(function (item) {
       const key = (item.description || 'بدون وصف').trim();
       if (!map[key]) map[key] = { name: key, count: 0, total: 0 };
-      map[key].count += 1;
-      map[key].total += safeNumber(item.amount);
+      map[key].count = map[key].count + 1;
+      map[key].total = map[key].total + safeNumber(item.amount);
     });
-    return Object.values(map).sort(function (a, b) { return b.total - a.total; });
+    const arr = Object.keys(map).map(function (k) { return map[k]; });
+    return arr.sort(function (a, b) { return b.total - a.total; });
   }, [filteredPurchases]);
 
   const totalPurchases = purchases.reduce(function (s, t) { return s + safeNumber(t.amount); }, 0);
   const totalSettlements = settlements.reduce(function (s, t) { return s + safeNumber(t.amount); }, 0);
 
-  const executeSettle = useCallback(async function () {
+  const executeSettle = useCallback(function () {
     if (settlingRef.current) return;
     settlingRef.current = true;
-    try {
-      const check = validateAmount(settleAmount, { min: 0.01, max: hanyPayable || 10000000, label: 'المبلغ' });
-      if (!check.valid) {
-        addNotification({ type: 'error', title: 'خطأ', message: check.error });
-        return;
-      }
-      const amount = roundMoney(check.value);
-      if (amount > hanyPayable + 0.005) {
-        addNotification({ type: 'error', title: 'المبلغ أكبر من المستحق' });
-        return;
-      }
 
-      const d = parseISODate(settleDate);
-      if (!d) {
-        addNotification({ type: 'error', title: 'تاريخ غير صحيح' });
-        return;
-      }
-      const txYear = d.getFullYear();
-      const txMonth = ALL_MONTHS[d.getMonth()];
-      if (isMonthClosed(data, txYear, txMonth)) {
-        addNotification({ type: 'error', title: 'شهر مغلق', message: txMonth + ' ' + txYear, duration: 6000 });
-        return;
-      }
-
-      const liveBalances = computeBalancesAsOf(data);
-      const available = safeNumber(liveBalances[settleMethod]);
-      if (!PAYMENT_METHODS_WITHOUT_ACCOUNT.has(settleMethod) && available < amount - 0.005) {
-        addNotification({
-          type: 'error', title: 'رصيد غير كافٍ',
-          message: (ACCOUNT_SHORT_NAMES[settleMethod] || settleMethod) + ': ' + fmt(available) + ' ج.م',
-          duration: 7000
+    const proceed = async function () {
+      try {
+        const check = validateAmount(settleAmount, {
+          min: 0.01,
+          max: hanyPayable || 10000000,
+          label: 'المبلغ'
         });
-        return;
+        if (!check.valid) {
+          addNotification({ type: 'error', title: 'خطأ', message: check.error });
+          return;
+        }
+        const amount = roundMoney(check.value);
+        if (amount > hanyPayable + 0.005) {
+          addNotification({ type: 'error', title: 'المبلغ أكبر من المستحق' });
+          return;
+        }
+
+        const d = parseISODate(settleDate);
+        if (!d) {
+          addNotification({ type: 'error', title: 'تاريخ غير صحيح' });
+          return;
+        }
+        const txYear = d.getFullYear();
+        const txMonth = ALL_MONTHS[d.getMonth()];
+        if (isMonthClosed(data, txYear, txMonth)) {
+          addNotification({
+            type: 'error',
+            title: 'شهر مغلق',
+            message: txMonth + ' ' + txYear,
+            duration: 6000
+          });
+          return;
+        }
+
+        const liveBalances = computeBalancesAsOf(data);
+        const available = safeNumber(liveBalances[settleMethod]);
+        if (!PAYMENT_METHODS_WITHOUT_ACCOUNT.has(settleMethod) && available < amount - 0.005) {
+          addNotification({
+            type: 'error',
+            title: 'رصيد غير كافٍ',
+            message: (ACCOUNT_SHORT_NAMES[settleMethod] || settleMethod) + ': ' + fmt(available) + ' ج.م',
+            duration: 7000
+          });
+          return;
+        }
+
+        saveHistory();
+        const now = new Date();
+        const newTx = {
+          id: 'hany-settle-' + getSafeId(),
+          type: 'expense',
+          kind: KIND.FINANCIAL,
+          category: 'الالتزامات البنكية والتمويلية',
+          amount: amount,
+          description: settleNote.trim() || 'سداد دفتر هاني',
+          method: settleMethod,
+          date: settleDate,
+          month: txMonth,
+          year: txYear,
+          monthIndex: d.getMonth(),
+          subType: 'withdrawal',
+          status: 'paid',
+          hanyEffect: 'settle',
+          affectsCash: true,
+          createdAt: now.toISOString()
+        };
+
+        const newTxs = sortTransactions([newTx].concat(data.transactions || []));
+        dispatch({ type: 'UPDATE_TRANSACTIONS', payload: newTxs });
+
+        const remainingAfter = computeHanyPayable(Object.assign({}, data, { transactions: newTxs }));
+        const wasPartial = remainingAfter > 0.01;
+        let msg = fmt(amount) + ' ج.م من ' + (ACCOUNT_SHORT_NAMES[settleMethod] || settleMethod);
+        if (wasPartial) {
+          msg = msg + '\nمتبقي ' + fmt(remainingAfter) + ' ج.م سيظهر كالتزام مرحل';
+        } else {
+          msg = msg + '\nتم سداد الرصيد كاملاً';
+        }
+
+        addNotification({
+          type: 'success',
+          title: 'تم تسجيل السداد',
+          message: msg,
+          duration: 8000
+        });
+
+        setShowSettle(false);
+        setSettleAmount('');
+        setSettleNote('');
+      } finally {
+        settlingRef.current = false;
       }
+    };
 
-      saveHistory();
-      const now = new Date();
-      const newTx = {
-        id: 'hany-settle-' + getSafeId(),
-        type: 'expense',
-        kind: KIND.FINANCIAL,
-        category: 'الالتزامات البنكية والتمويلية',
-        amount: amount,
-        description: settleNote.trim() || 'سداد دفتر هاني',
-        method: settleMethod,
-        date: settleDate,
-        month: txMonth,
-        year: txYear,
-        monthIndex: d.getMonth(),
-        subType: 'withdrawal',
-        status: 'paid',
-        hanyEffect: 'settle',
-        affectsCash: true,
-        createdAt: now.toISOString()
-      };
+    proceed();
+  }, [settleAmount, settleDate, settleMethod, settleNote, hanyPayable, data, saveHistory, addNotification]);
 
-      const newTxs = sortTransactions([newTx].concat(data.transactions || []));
-      dispatch({ type: 'UPDATE_TRANSACTIONS', payload: newTxs });
-
-      const remainingAfter = computeHanyPayable(Object.assign({}, data, { transactions: newTxs }));
-      const wasPartial = remainingAfter > 0.01;
-      let msg = fmt(amount) + ' ج.م من ' + (ACCOUNT_SHORT_NAMES[settleMethod] || settleMethod);
-      if (wasPartial) {
-        msg = msg + '\n متبقي ' + fmt(remainingAfter) + ' ج.م — سيظهر كالتزام مرحل لشهر ' + selectedMonth + ' القادم';
-      } else {
-        msg = msg + '\n تم سداد الرصيد كاملاً';
-      }
-
-      addNotification({
-        type: 'success',
-        title: 'تم تسجيل السداد',
-        message: msg,
-        duration: 8000
-      });
-
-      setShowSettle(false);
-      setSettleAmount('');
-      setSettleNote('');
-    } finally {
-      settlingRef.current = false;
-    }
-  }, [settleAmount, settleDate, settleMethod, settleNote, hanyPayable, data, selectedMonth, saveHistory, addNotification]);
-
-  const openSettleModal = useCallback(function () {
+  const openSettleModal = function () {
     setSettleAmount(String(hanyPayable));
     setShowSettle(true);
-  }, [hanyPayable]);
+  };
 
   const canSettle = hanyPayable > 0;
+  const payClass = hanyPayable > 0 ? 'text-orange-600' : 'text-emerald-600';
 
   return (
     <div className="space-y-4 animate-fadeIn">
-      <div className="card" style={{ background: 'linear-gradient(135deg, rgba(234,88,12,0.08), rgba(245,158,11,0.05))' }}>
+      <div
+        className="card"
+        style={{ background: 'linear-gradient(135deg, rgba(234,88,12,0.08), rgba(245,158,11,0.05))' }}
+      >
         <div className="flex justify-between items-start gap-3 flex-wrap">
           <div className="flex-1 min-w-[200px]">
             <p className="text-[11px] font-bold mb-1 flex items-center gap-1.5" style={{ color: 'var(--text-muted)' }}>
-              <StoreIcon size={12} className="text-orange-500" /> دفتر محل هاني — الرصيد التراكمي
+              <StoreIcon size={12} className="text-orange-500" />
+              <span>دفتر محل هاني - الرصيد التراكمي</span>
             </p>
-            <h2 className={'text-3xl font-black tracking-tight money tabular ' + (hanyPayable > 0 ? 'text-orange-600' : 'text-emerald-600')}>
-              {fmt(hanyPayable)}<span className="text-sm font-bold mr-2" style={{ color: 'var(--text-muted)' }}>ج.م</span>
+            <h2 className={'text-3xl font-black tracking-tight money tabular ' + payClass}>
+              {fmt(hanyPayable)}
+              <span className="text-sm font-bold mr-2" style={{ color: 'var(--text-muted)' }}>ج.م</span>
             </h2>
             <p className="text-[11px] font-semibold mt-1.5" style={{ color: 'var(--text-muted)' }}>
-              المشتريات لا تخصم نقدياً — السداد فقط يخصم
+              المشتريات لا تخصم نقدياً - السداد فقط يخصم
             </p>
           </div>
           <button onClick={openSettleModal} className="btn btn-primary text-xs" disabled={!canSettle}>
-            <Banknote size={14} /> سداد الآن
+            <Banknote size={14} />
+            <span>سداد الآن</span>
           </button>
         </div>
+
         <div className="grid grid-cols-3 gap-2 mt-4">
           <div className="p-2.5 rounded-xl bg-white/60 dark:bg-black/20 text-center">
             <p className="text-[10px] font-bold" style={{ color: 'var(--text-muted)' }}>إجمالي المشتريات</p>
@@ -5858,7 +6024,7 @@ const HanyLedgerView = memo(({ data, dispatch, saveHistory, addNotification, sel
           </div>
           <div className="p-2.5 rounded-xl bg-white/60 dark:bg-black/20 text-center">
             <p className="text-[10px] font-bold" style={{ color: 'var(--text-muted)' }}>الحالة</p>
-            <p className={'text-sm font-black mt-0.5 ' + (hanyPayable > 0 ? 'text-orange-600' : 'text-emerald-600')}>
+            <p className={'text-sm font-black mt-0.5 ' + payClass}>
               {hanyPayable > 0 ? 'مستحق' : 'مسدّد'}
             </p>
           </div>
@@ -5867,7 +6033,8 @@ const HanyLedgerView = memo(({ data, dispatch, saveHistory, addNotification, sel
 
       <div className="card">
         <h3 className="font-black text-sm mb-3 flex items-center gap-2">
-          <CalendarDays size={14} className="text-orange-500" /> ملخص محاسبي — {selectedMonth} {selectedYear}
+          <CalendarDays size={14} className="text-orange-500" />
+          <span>ملخص محاسبي - {selectedMonth} {selectedYear}</span>
         </h3>
         <div className="grid grid-cols-4 gap-2">
           <div className="p-2 rounded-lg text-center" style={{ background: 'var(--bg-muted)' }}>
@@ -5892,20 +6059,48 @@ const HanyLedgerView = memo(({ data, dispatch, saveHistory, addNotification, sel
       <div className="card py-3">
         <div className="flex gap-2 flex-wrap">
           <div className="relative flex-1 min-w-[140px]">
-            <Search className="absolute right-3 top-1/2 -translate-y-1/2" size={12} style={{ color: 'var(--text-muted)' }} />
-            <input type="text" placeholder="ابحث في المشتريات..." className="input-field pr-8 text-xs py-2" value={searchTerm} onChange={function (e) { setSearchTerm(e.target.value); }} />
+            <Search
+              className="absolute right-3 top-1/2 -translate-y-1/2"
+              size={12}
+              style={{ color: 'var(--text-muted)' }}
+            />
+            <input
+              type="text"
+              placeholder="ابحث في المشتريات..."
+              className="input-field pr-8 text-xs py-2"
+              value={searchTerm}
+              onChange={function (e) { setSearchTerm(e.target.value); }}
+            />
           </div>
           <div className="flex p-0.5 rounded-lg" style={{ background: 'var(--bg-muted)' }}>
-            <button type="button" onClick={function () { setViewMode('list'); }} className={'px-3 py-1.5 rounded-md text-[10px] font-bold ' + (viewMode === 'list' ? 'shadow-sm' : '')} style={viewMode === 'list' ? { background: 'var(--bg-card)', color: 'var(--accent)' } : { color: 'var(--text-muted)' }}>قائمة</button>
-            <button type="button" onClick={function () { setViewMode('grouped'); }} className={'px-3 py-1.5 rounded-md text-[10px] font-bold ' + (viewMode === 'grouped' ? 'shadow-sm' : '')} style={viewMode === 'grouped' ? { background: 'var(--bg-card)', color: 'var(--accent)' } : { color: 'var(--text-muted)' }}>مُجمّع</button>
+            <button
+              type="button"
+              onClick={function () { setViewMode('list'); }}
+              className={'px-3 py-1.5 rounded-md text-[10px] font-bold ' + (viewMode === 'list' ? 'shadow-sm' : '')}
+              style={viewMode === 'list' ? { background: 'var(--bg-card)', color: 'var(--accent)' } : { color: 'var(--text-muted)' }}
+            >
+              قائمة
+            </button>
+            <button
+              type="button"
+              onClick={function () { setViewMode('grouped'); }}
+              className={'px-3 py-1.5 rounded-md text-[10px] font-bold ' + (viewMode === 'grouped' ? 'shadow-sm' : '')}
+              style={viewMode === 'grouped' ? { background: 'var(--bg-card)', color: 'var(--accent)' } : { color: 'var(--text-muted)' }}
+            >
+              مُجمّع
+            </button>
           </div>
-          {viewMode === 'list' && (
-            <select className="input-field text-[10px] py-2 px-2 w-auto min-w-[90px]" value={sortBy} onChange={function (e) { setSortBy(e.target.value); }}>
+          {viewMode === 'list' ? (
+            <select
+              className="input-field text-[10px] py-2 px-2 w-auto min-w-[90px]"
+              value={sortBy}
+              onChange={function (e) { setSortBy(e.target.value); }}
+            >
               <option value="date">الأحدث</option>
               <option value="amount">الأعلى</option>
               <option value="name">أبجدي</option>
             </select>
-          )}
+          ) : null}
         </div>
       </div>
 
@@ -5922,14 +6117,20 @@ const HanyLedgerView = memo(({ data, dispatch, saveHistory, addNotification, sel
           <div className="space-y-1.5 max-h-[60vh] overflow-y-auto scroll-hide">
             {filteredPurchases.slice(0, 200).map(function (item) {
               return (
-                <div key={item.id} className="flex justify-between items-center gap-2 p-2.5 rounded-lg text-xs" style={{ background: 'var(--bg-muted)' }}>
+                <div
+                  key={item.id}
+                  className="flex justify-between items-center gap-2 p-2.5 rounded-lg text-xs"
+                  style={{ background: 'var(--bg-muted)' }}
+                >
                   <div className="min-w-0 flex-1">
                     <p className="font-bold truncate">{item.description || 'بدون وصف'}</p>
                     <p className="text-[9px] font-semibold mt-0.5" style={{ color: 'var(--text-muted)' }}>
-                      {item.date} • {item.month} {item.year}
+                      {item.date + ' - ' + item.month + ' ' + item.year}
                     </p>
                   </div>
-                  <span className="font-black text-red-600 flex-shrink-0 money tabular">{fmt(item.amount)}</span>
+                  <span className="font-black text-red-600 flex-shrink-0 money tabular">
+                    {fmt(item.amount)}
+                  </span>
                 </div>
               );
             })}
@@ -5938,14 +6139,21 @@ const HanyLedgerView = memo(({ data, dispatch, saveHistory, addNotification, sel
           <div className="space-y-1.5 max-h-[60vh] overflow-y-auto scroll-hide">
             {groupedPurchases.map(function (g) {
               return (
-                <div key={g.name} className="flex justify-between items-center gap-2 p-2.5 rounded-lg text-xs" style={{ background: 'var(--bg-muted)' }}>
+                <div
+                  key={g.name}
+                  className="flex justify-between items-center gap-2 p-2.5 rounded-lg text-xs"
+                  style={{ background: 'var(--bg-muted)' }}
+                >
                   <div className="min-w-0 flex-1">
                     <p className="font-bold truncate">{g.name}</p>
                     <p className="text-[9px] font-semibold mt-0.5" style={{ color: 'var(--text-muted)' }}>
-                      عدد: <span className="money tabular">{g.count}</span> • متوسط: <span className="money tabular">{fmt(g.total / g.count)}</span>
+                      عدد: <span className="money tabular">{g.count}</span> - متوسط:{' '}
+                      <span className="money tabular">{fmt(g.total / g.count)}</span>
                     </p>
                   </div>
-                  <span className="font-black text-red-600 flex-shrink-0 money tabular">{fmt(g.total)}</span>
+                  <span className="font-black text-red-600 flex-shrink-0 money tabular">
+                    {fmt(g.total)}
+                  </span>
                 </div>
               );
             })}
@@ -5953,67 +6161,744 @@ const HanyLedgerView = memo(({ data, dispatch, saveHistory, addNotification, sel
         )}
       </div>
 
-      {settlements.length > 0 && (
+      {settlements.length > 0 ? (
         <div className="card">
           <h3 className="font-black text-sm mb-3 flex items-center gap-2 text-emerald-600">
-            <Banknote size={14} /> سجل السداد ({settlements.length})
+            <Banknote size={14} />
+            <span>سجل السداد ({settlements.length})</span>
           </h3>
           <div className="space-y-1.5 max-h-72 overflow-y-auto scroll-hide">
             {settlements.slice(0, 50).map(function (s) {
+              const foundMethod = PAYMENT_METHODS.find(function (p) { return p.id === s.method; });
+              const methodLabel = foundMethod ? foundMethod.label : s.method;
               return (
-                <div key={s.id} className="flex justify-between items-center gap-2 p-2.5 rounded-lg text-xs" style={{ background: 'rgba(0,168,107,0.05)' }}>
+                <div
+                  key={s.id}
+                  className="flex justify-between items-center gap-2 p-2.5 rounded-lg text-xs"
+                  style={{ background: 'rgba(0,168,107,0.05)' }}
+                >
                   <div className="min-w-0 flex-1">
                     <p className="font-bold truncate">{s.description || 'سداد هاني'}</p>
                     <p className="text-[9px] font-semibold mt-0.5" style={{ color: 'var(--text-muted)' }}>
-                      {s.date} • {PAYMENT_METHODS.find(function (p) { return p.id === s.method; }) ? PAYMENT_METHODS.find(function (p) { return p.id === s.method; }).label : s.method}
+                      {s.date + ' - ' + methodLabel}
                     </p>
                   </div>
-                  <span className="font-black text-emerald-600 flex-shrink-0 money tabular">-{fmt(s.amount)}</span>
+                  <span className="font-black text-emerald-600 flex-shrink-0 money tabular">
+                    -{fmt(s.amount)}
+                  </span>
                 </div>
               );
             })}
           </div>
         </div>
-      )}
+      ) : null}
 
-      {showSettle && (
-        <Modal isOpen={true} onClose={function () { setShowSettle(false); }} title="سداد دفتر هاني" icon="💵">
+      {showSettle ? (
+        <Modal
+          isOpen={true}
+          onClose={function () { setShowSettle(false); }}
+          title="سداد دفتر هاني"
+          icon="💵"
+        >
           <div className="space-y-3">
             <div className="p-3 rounded-xl bg-orange-50 dark:bg-orange-950/30 text-center">
               <p className="text-[11px] font-bold text-orange-700 dark:text-orange-400 mb-1">المستحق حالياً</p>
               <p className="text-2xl font-black text-orange-600 money tabular">{fmt(hanyPayable)}</p>
             </div>
             <div>
-              <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>المبلغ المسدد *</label>
-              <input type="text" inputMode="decimal" autoFocus className="input-field input-num text-base text-center font-black" style={{ color: 'var(--accent)' }} value={settleAmount} onChange={function (e) { setSettleAmount(e.target.value); }} placeholder="0.00" />
+              <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>
+                المبلغ المسدد *
+              </label>
+              <input
+                type="text"
+                inputMode="decimal"
+                autoFocus
+                className="input-field input-num text-base text-center font-black"
+                style={{ color: 'var(--accent)' }}
+                value={settleAmount}
+                onChange={function (e) { setSettleAmount(e.target.value); }}
+                placeholder="0.00"
+              />
               <div className="flex gap-1.5 mt-2 flex-wrap">
-                <button type="button" onClick={function () { setSettleAmount(String(hanyPayable)); }} className="quick-chip">كامل ({fmtShort(hanyPayable)})</button>
-                <button type="button" onClick={function () { setSettleAmount(String(Math.round(hanyPayable / 2))); }} className="quick-chip">نصف</button>
-                <button type="button" onClick={function () { setSettleAmount(String(Math.round(hanyPayable / 4))); }} className="quick-chip">ربع</button>
+                <button
+                  type="button"
+                  onClick={function () { setSettleAmount(String(hanyPayable)); }}
+                  className="quick-chip"
+                >
+                  {'كامل (' + fmtShort(hanyPayable) + ')'}
+                </button>
+                <button
+                  type="button"
+                  onClick={function () { setSettleAmount(String(Math.round(hanyPayable / 2))); }}
+                  className="quick-chip"
+                >
+                  نصف
+                </button>
+                <button
+                  type="button"
+                  onClick={function () { setSettleAmount(String(Math.round(hanyPayable / 4))); }}
+                  className="quick-chip"
+                >
+                  ربع
+                </button>
               </div>
             </div>
             <div>
-              <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>من حساب</label>
-              <select className="input-field text-sm" value={settleMethod} onChange={function (e) { setSettleMethod(e.target.value); }}>
-                {PAYMENT_METHODS.filter(function (m) { return m.group === 'account' && m.id !== HANY_TAB_METHOD; }).map(function (m) {
+              <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>
+                من حساب
+              </label>
+              <select
+                className="input-field text-sm"
+                value={settleMethod}
+                onChange={function (e) { setSettleMethod(e.target.value); }}
+              >
+                {PAYMENT_METHODS.filter(function (m) {
+                  return m.group === 'account' && m.id !== HANY_TAB_METHOD;
+                }).map(function (m) {
                   return <option key={m.id} value={m.id}>{m.label}</option>;
                 })}
               </select>
             </div>
             <div>
-              <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>التاريخ</label>
-              <input type="date" className="input-field text-xs font-bold" value={settleDate} onChange={function (e) { setSettleDate(e.target.value); }} />
+              <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>
+                التاريخ
+              </label>
+              <input
+                type="date"
+                className="input-field text-xs font-bold"
+                value={settleDate}
+                onChange={function (e) { setSettleDate(e.target.value); }}
+              />
             </div>
             <div>
-              <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>ملاحظة (اختياري)</label>
-              <input type="text" className="input-field text-sm" value={settleNote} onChange={function (e) { setSettleNote(e.target.value); }} placeholder="سداد مسحوبات شهر..." />
+              <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>
+                ملاحظة (اختياري)
+              </label>
+              <input
+                type="text"
+                className="input-field text-sm"
+                value={settleNote}
+                onChange={function (e) { setSettleNote(e.target.value); }}
+                placeholder="سداد مسحوبات شهر..."
+              />
             </div>
             <button onClick={executeSettle} className="btn btn-primary w-full py-3 text-sm">
-              <CheckCircle2 size={16} /> تسجيل السداد
+              <CheckCircle2 size={16} />
+              <span>تسجيل السداد</span>
             </button>
           </div>
         </Modal>
+      ) : null}
+    </div>
+  );
+});
+
+/* ═══════════════ LOANS VIEW — مبسّط وآمن ═══════════════ */
+const LoansView = memo(function LoansView(props) {
+  const updatedLoans = props.updatedLoans || [];
+  const cards = props.cards || [];
+  const recurringItems = props.recurringItems || [];
+  const transactions = props.transactions || [];
+  const dispatch = props.dispatch;
+  const deleteRecurring = props.deleteRecurring;
+  const saveHistory = props.saveHistory;
+  const addNotification = props.addNotification;
+  const data = props.data;
+  const selectedMonth = props.selectedMonth;
+  const selectedYear = props.selectedYear;
+  const getLocalISODateFn = props.getLocalISODate || getLocalISODate;
+
+  const [showAdd, setShowAdd] = useState(false);
+  const [activeTab, setActiveTab] = useState('loans');
+  const [newLoan, setNewLoan] = useState({
+    name: '',
+    totalAmount: '',
+    monthlyInstallment: '',
+    dueDay: 1,
+    description: '',
+    isReceivable: false
+  });
+
+  const totalLoans = useMemo(function () {
+    return updatedLoans
+      .filter(function (l) { return !l.isReceivable && !l.autoGenerated; })
+      .reduce(function (s, l) { return s + l.remaining; }, 0);
+  }, [updatedLoans]);
+
+  const totalReceivable = useMemo(function () {
+    return updatedLoans
+      .filter(function (l) { return l.isReceivable; })
+      .reduce(function (s, l) { return s + l.remaining; }, 0);
+  }, [updatedLoans]);
+
+  const payables = useMemo(function () {
+    return updatedLoans.filter(function (l) { return !l.isReceivable && !l.autoGenerated; });
+  }, [updatedLoans]);
+
+  const receivables = useMemo(function () {
+    return updatedLoans.filter(function (l) { return l.isReceivable; });
+  }, [updatedLoans]);
+
+  const totalCards = useMemo(function () {
+    return cards.reduce(function (acc, c) {
+      return acc + Math.max(0, computeCardDebt(data, c));
+    }, 0);
+  }, [cards, data]);
+
+  const custodySummary = useMemo(function () {
+    return computeCustodyBalance(data && data.custodyEntries);
+  }, [data && data.custodyEntries]);
+
+  const hanyPayable = useMemo(function () {
+    return computeHanyPayable(data);
+  }, [data]);
+
+  const addLoan = function () {
+    const nameCheck = validateText(newLoan.name, { min: 2, max: 200, label: 'الاسم' });
+    if (!nameCheck.valid) {
+      addNotification({ type: 'error', title: 'خطأ', message: nameCheck.error });
+      return;
+    }
+    const amountCheck = validateAmount(newLoan.totalAmount, { min: 0.01, max: 10000000, label: 'المبلغ' });
+    if (!amountCheck.valid) {
+      addNotification({ type: 'error', title: 'خطأ', message: amountCheck.error });
+      return;
+    }
+    saveHistory();
+    const payload = (data.loans || []).concat([{
+      id: Date.now(),
+      name: nameCheck.value,
+      totalAmount: roundMoney(amountCheck.value),
+      prePaidAmount: 0,
+      monthlyInstallment: roundMoney(safeNumber(newLoan.monthlyInstallment)),
+      dueDay: safeNumber(newLoan.dueDay, 1),
+      interest: '',
+      description: newLoan.description || '',
+      type: newLoan.isReceivable ? 'receivable' : 'debt',
+      isReceivable: newLoan.isReceivable,
+      paused: false
+    }]);
+    dispatch({ type: 'UPDATE_LOANS', payload: payload });
+    setShowAdd(false);
+    setNewLoan({
+      name: '',
+      totalAmount: '',
+      monthlyInstallment: '',
+      dueDay: 1,
+      description: '',
+      isReceivable: false
+    });
+    addNotification({ type: 'success', title: 'تمت الإضافة' });
+  };
+
+  const handleCollectReceivable = function (loan, sourceTx) {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = ALL_MONTHS[d.getMonth()];
+    if (isMonthClosed(data, y, m)) {
+      addNotification({ type: 'error', title: 'الشهر مغلق' });
+      return;
+    }
+    const alreadyCollected = transactions.some(function (t) {
+      return t.sourceReceivableId === loan.id && t.month === m && (t.year || y) === y && t.status === 'paid';
+    });
+    if (alreadyCollected) {
+      addNotification({ type: 'warning', title: 'تم التحصيل مسبقاً هذا الشهر', duration: 6000 });
+      return;
+    }
+    saveHistory();
+    if (sourceTx) {
+      const updated = transactions.map(function (t) {
+        if (t.id === sourceTx.id) {
+          return Object.assign({}, t, {
+            status: 'paid',
+            date: getLocalISODateFn(d),
+            sourceReceivableId: loan.id
+          });
+        }
+        return t;
+      });
+      dispatch({ type: 'UPDATE_TRANSACTIONS', payload: updated });
+      addNotification({ type: 'success', title: 'تم اعتماد القسط', message: fmt(sourceTx.amount) + ' ج.م' });
+      return;
+    }
+    const orphanPending = transactions.find(function (t) {
+      return t.status !== 'paid'
+        && t.month === m
+        && (t.year || y) === y
+        && t.category === 'تكييف محمود'
+        && !t.sourceReceivableId
+        && safeNumber(t.amount) === safeNumber(loan.monthlyInstallment);
+    });
+    if (orphanPending) {
+      const updated = transactions.map(function (t) {
+        if (t.id === orphanPending.id) {
+          return Object.assign({}, t, {
+            status: 'paid',
+            date: getLocalISODateFn(d),
+            sourceReceivableId: loan.id
+          });
+        }
+        return t;
+      });
+      dispatch({ type: 'UPDATE_TRANSACTIONS', payload: updated });
+      addNotification({ type: 'success', title: 'تم اعتماد القيد المعلق', message: fmt(orphanPending.amount) + ' ج.م' });
+      return;
+    }
+    const newTx = {
+      id: 'recv-manual-' + getSafeId(),
+      type: 'income',
+      kind: KIND.OPERATIONAL,
+      category: 'تكييف محمود',
+      amount: safeNumber(loan.monthlyInstallment),
+      description: 'تحصيل قسط ' + loan.name + ' - ' + m + ' ' + y,
+      method: 'cash',
+      date: getLocalISODateFn(d),
+      month: m,
+      year: y,
+      monthIndex: d.getMonth(),
+      subType: 'deposit',
+      status: 'paid',
+      sourceReceivableId: loan.id,
+      createdAt: new Date().toISOString()
+    };
+    const merged = sortTransactions([newTx].concat(transactions));
+    dispatch({ type: 'UPDATE_TRANSACTIONS', payload: merged });
+    addNotification({ type: 'success', title: 'تم التحصيل', message: fmt(loan.monthlyInstallment) + ' ج.م' });
+  };
+
+  const handleTogglePause = function (loan) {
+    saveHistory();
+    const updated = (data.loans || []).map(function (l) {
+      if (l.id === loan.id) return Object.assign({}, l, { paused: !l.paused });
+      return l;
+    });
+    dispatch({ type: 'UPDATE_LOANS', payload: updated });
+    addNotification({
+      type: loan.paused ? 'success' : 'warning',
+      title: loan.paused ? 'تم التفعيل' : 'تم الإيقاف المؤقت'
+    });
+  };
+
+  const hasLoans = updatedLoans.length > 0;
+  const hasRecurring = recurringItems.length > 0;
+  const netDebt = totalLoans + totalCards - totalReceivable;
+
+  return (
+    <div className="space-y-4 animate-fadeIn pb-24">
+      <div className="sub-tab-switcher">
+        <button
+          onClick={function () { setActiveTab('loans'); }}
+          className={'sub-tab-btn ' + (activeTab === 'loans' ? 'active' : '')}
+        >
+          <Banknote size={14} />
+          <span>القروض والمستحقات</span>
+        </button>
+        <button
+          onClick={function () { setActiveTab('hany'); }}
+          className={'sub-tab-btn ' + (activeTab === 'hany' ? 'active' : '')}
+        >
+          <StoreIcon size={14} />
+          <span>دفتر هاني</span>
+          {hanyPayable > 0 ? (
+            <span className="badge badge-warning text-[9px] px-1.5 py-0 money tabular">
+              {fmtShort(hanyPayable)}
+            </span>
+          ) : null}
+        </button>
+        <button
+          onClick={function () { setActiveTab('custody'); }}
+          className={'sub-tab-btn ' + (activeTab === 'custody' ? 'active' : '')}
+        >
+          <Briefcase size={14} />
+          <span>العهدة</span>
+          {custodySummary.balance !== 0 ? (
+            <span className="badge badge-warning text-[9px] px-1.5 py-0 money tabular">
+              {fmtShort(custodySummary.balance)}
+            </span>
+          ) : null}
+        </button>
+      </div>
+
+      {activeTab === 'custody' ? (
+        <CustodyView
+          data={data}
+          dispatch={dispatch}
+          saveHistory={saveHistory}
+          addNotification={addNotification}
+        />
+      ) : activeTab === 'hany' ? (
+        <HanyLedgerView
+          data={data}
+          dispatch={dispatch}
+          saveHistory={saveHistory}
+          addNotification={addNotification}
+          selectedYear={selectedYear}
+          selectedMonth={selectedMonth}
+        />
+      ) : (
+        <div className="space-y-4">
+          <div className="card">
+            <p className="text-[11px] font-bold mb-1" style={{ color: 'var(--text-muted)' }}>
+              إجمالي المديونية الصافية
+            </p>
+            <h2 className="text-3xl font-black tracking-tight text-gradient money tabular">
+              {fmt(netDebt)}
+              <span className="text-sm font-bold mr-2" style={{ color: 'var(--text-muted)' }}>ج.م</span>
+            </h2>
+            <div className="grid grid-cols-3 gap-2 mt-3">
+              <div className="p-2 rounded-lg bg-red-50 dark:bg-red-950/30 text-center">
+                <p className="text-[10px] font-bold text-red-700 dark:text-red-400">القروض</p>
+                <p className="text-xs font-black text-red-600 money tabular">{fmt(totalLoans)}</p>
+              </div>
+              <div className="p-2 rounded-lg bg-red-50 dark:bg-red-950/30 text-center">
+                <p className="text-[10px] font-bold text-red-700 dark:text-red-400">البطاقات</p>
+                <p className="text-xs font-black text-red-600 money tabular">{fmt(totalCards)}</p>
+              </div>
+              <div className="p-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 text-center">
+                <p className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400">مستحقات لك</p>
+                <p className="text-xs font-black text-emerald-600 money tabular">{fmt(totalReceivable)}</p>
+              </div>
+            </div>
+            <div className="flex gap-2 mt-3 flex-wrap">
+              <button
+                onClick={function () { setShowAdd(true); }}
+                className="btn btn-primary text-xs flex-1"
+              >
+                <Plus size={14} />
+                <span>إضافة التزام</span>
+              </button>
+              <button
+                onClick={function () { dispatch({ type: 'SET_RECURRING_MODAL_OPEN', payload: true }); }}
+                className="btn btn-secondary text-xs flex-1"
+              >
+                <Repeat size={14} />
+                <span>متكرر</span>
+              </button>
+            </div>
+          </div>
+
+          {!hasLoans && !hasRecurring ? (
+            <div className="card text-center p-12">
+              <Banknote size={40} className="mx-auto mb-3 text-[color:var(--accent)]" />
+              <h3 className="text-base font-black mb-2">لا توجد التزامات بعد</h3>
+              <p className="text-xs mb-4" style={{ color: 'var(--text-muted)' }}>
+                أضف أول قرض أو بند متكرر لتبدأ المتابعة
+              </p>
+              <button
+                onClick={function () { setShowAdd(true); }}
+                className="btn btn-primary text-xs"
+              >
+                <Plus size={14} />
+                <span>إضافة أول التزام</span>
+              </button>
+            </div>
+          ) : null}
+
+          {receivables.length > 0 ? (
+            <div className="space-y-2">
+              <h3 className="font-black text-sm flex items-center gap-2 text-emerald-600">
+                <TrendingUp size={14} />
+                <span>مستحقات لك ({receivables.length})</span>
+              </h3>
+              {receivables.map(function (loan) {
+                const monthly = safeNumber(loan.monthlyInstallment);
+                const explicitTotal = safeNumber(loan.totalInstallments);
+                const explicitPaid = safeNumber(loan.paidInstallments);
+                const remainingMonths = monthly > 0
+                  ? Math.ceil(safeNumber(loan.remaining) / monthly)
+                  : 0;
+                const totalMonths = explicitTotal > 0
+                  ? explicitTotal
+                  : (explicitPaid + remainingMonths);
+                const paidMonths = explicitTotal > 0
+                  ? explicitPaid
+                  : Math.max(0, totalMonths - remainingMonths);
+                const pct = safeNumber(loan.totalAmount) > 0
+                  ? (safeNumber(loan.totalPaid) / safeNumber(loan.totalAmount)) * 100
+                  : 0;
+                const isComplete = loan.remaining <= 0.005;
+                const thisMonthCollected = transactions.some(function (t) {
+                  return t.sourceReceivableId === loan.id
+                    && t.month === selectedMonth
+                    && (t.year || 2026) === selectedYear
+                    && t.status === 'paid';
+                });
+                const thisMonthPending = transactions.find(function (t) {
+                  return t.sourceReceivableId === loan.id
+                    && t.month === selectedMonth
+                    && (t.year || 2026) === selectedYear
+                    && t.status !== 'paid';
+                });
+                return (
+                  <div key={loan.id} className="card">
+                    <div className="flex justify-between items-start gap-3 flex-wrap mb-3">
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                        <div className="p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 flex-shrink-0">
+                          <TrendingUp size={20} />
+                        </div>
+                        <div className="min-w-0">
+                          <h4 className="font-bold text-sm truncate flex items-center gap-2 flex-wrap">
+                            <span>{loan.name}</span>
+                            {loan.paused ? (
+                              <span className="badge badge-warning text-[10px]">موقوف</span>
+                            ) : null}
+                          </h4>
+                          <p className="text-[11px] text-emerald-600 font-semibold mt-0.5">
+                            {'يوم ' + loan.dueDay + ' - '}
+                            <span className="money tabular">{fmt(monthly)}</span>
+                            {' ج.م شهرياً'}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex gap-1">
+                        <button
+                          type="button"
+                          onClick={function () { handleTogglePause(loan); }}
+                          className={'btn btn-ghost p-2 ' + (loan.paused ? 'text-emerald-500' : 'text-amber-500')}
+                        >
+                          {loan.paused ? <CheckCircle2 size={16} /> : <Clock size={16} />}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={function () { dispatch({ type: 'SET_EDITING_LOAN', payload: loan }); }}
+                          className="btn btn-ghost p-2"
+                        >
+                          <Edit size={16} />
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-2 mb-3">
+                      <div className="p-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 text-center">
+                        <p className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400">محصّل</p>
+                        <p className="text-sm font-black text-emerald-600 mt-0.5 money tabular">{fmt(loan.totalPaid)}</p>
+                      </div>
+                      <div className="p-2.5 rounded-lg bg-blue-50 dark:bg-blue-950/30 text-center">
+                        <p className="text-[10px] font-bold text-blue-700 dark:text-blue-400">المتبقي</p>
+                        <p className="text-sm font-black text-blue-600 mt-0.5 money tabular">{fmt(loan.remaining)}</p>
+                      </div>
+                      <div className="p-2.5 rounded-lg bg-purple-50 dark:bg-purple-950/30 text-center">
+                        <p className="text-[10px] font-bold text-purple-700 dark:text-purple-400">الأقساط</p>
+                        <p className="text-sm font-black text-purple-600 mt-0.5 money tabular">
+                          {paidMonths + '/' + totalMonths}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="w-full rounded-full h-1.5 overflow-hidden mb-3" style={{ background: 'var(--bg-muted)' }}>
+                      <div
+                        className="bg-emerald-500 h-full rounded-full transition-all"
+                        style={{ width: Math.min(100, pct) + '%' }}
+                      />
+                    </div>
+
+                    <div className="flex justify-end gap-2 flex-wrap">
+                      {thisMonthCollected ? (
+                        <div className="badge badge-success px-3 py-1.5">
+                          <CheckCircle2 size={12} />
+                          <span>{'تم تحصيل ' + selectedMonth}</span>
+                        </div>
+                      ) : isComplete ? (
+                        <div className="badge badge-success px-3 py-1.5">
+                          <CheckCircle2 size={12} />
+                          <span>اكتمل التحصيل</span>
+                        </div>
+                      ) : loan.paused ? (
+                        <div className="badge badge-warning px-3 py-1.5">موقوف</div>
+                      ) : thisMonthPending ? (
+                        <button
+                          onClick={function () { handleCollectReceivable(loan, thisMonthPending); }}
+                          className="btn btn-primary text-xs"
+                        >
+                          <CheckCircle2 size={14} />
+                          <span>اعتماد</span>
+                          <span className="money tabular">{fmt(thisMonthPending.amount)}</span>
+                        </button>
+                      ) : (
+                        <button
+                          onClick={function () { handleCollectReceivable(loan, null); }}
+                          className="btn btn-primary text-xs"
+                        >
+                          <Banknote size={14} />
+                          <span>تحصيل</span>
+                          <span className="money tabular">{fmt(monthly)}</span>
+                          <span>الآن</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : null}
+
+          {payables.length > 0 ? (
+            <div className="space-y-2">
+              <h3 className="font-black text-sm flex items-center gap-2 text-red-600">
+                <TrendingDown size={14} />
+                <span>مديونيات ({payables.length})</span>
+              </h3>
+              {payables.map(function (loan) {
+                const isPaid = loan.remaining <= 0;
+                const pct = loan.totalAmount > 0
+                  ? (loan.totalPaid / loan.totalAmount) * 100
+                  : 0;
+                const debtClass = isPaid ? 'text-emerald-600' : 'text-red-600';
+                const iconBg = isPaid
+                  ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600'
+                  : 'bg-red-50 dark:bg-red-950/30 text-red-500';
+                return (
+                  <div key={loan.id} className="card py-3">
+                    <div className="flex justify-between items-start gap-2 mb-2">
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        <div className={'p-1.5 rounded-lg flex-shrink-0 ' + iconBg}>
+                          <Banknote size={14} />
+                        </div>
+                        <div className="min-w-0">
+                          <h4 className="font-bold text-xs truncate">{loan.name}</h4>
+                          <p className="text-[10px] font-semibold" style={{ color: 'var(--text-muted)' }}>
+                            {'يوم ' + loan.dueDay}
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={function () { dispatch({ type: 'SET_EDITING_LOAN', payload: loan }); }}
+                        className="btn btn-ghost p-1"
+                      >
+                        <Edit size={12} />
+                      </button>
+                    </div>
+                    <div className="flex justify-between items-center mb-2">
+                      <p className={'text-base font-black money tabular ' + debtClass}>
+                        {fmt(loan.remaining)}
+                      </p>
+                      <p className="text-xs font-bold money tabular" style={{ color: 'var(--text-muted)' }}>
+                        {'قسط: ' + fmt(loan.monthlyInstallment)}
+                      </p>
+                    </div>
+                    <div className="w-full rounded-full h-1 overflow-hidden" style={{ background: 'var(--bg-muted)' }}>
+                      <div
+                        className="bg-emerald-500 h-full rounded-full"
+                        style={{ width: Math.min(100, pct) + '%' }}
+                      />
+                    </div>
+                    {!isPaid && loan.monthlyInstallment > 0 ? (
+                      <div className="flex justify-end gap-1.5 mt-2">
+                        <button
+                          onClick={function () {
+                            dispatch({ type: 'SET_FORM_MODE', payload: 'add' });
+                            dispatch({
+                              type: 'SET_FORM_DATA',
+                              payload: {
+                                type: 'expense',
+                                category: 'الالتزامات البنكية والتمويلية',
+                                amount: loan.monthlyInstallment,
+                                description: 'قسط ' + loan.name,
+                                linkedLoanId: loan.id,
+                                method: 'instapay',
+                                date: getLocalISODateFn(),
+                                status: 'pending',
+                                subType: 'withdrawal'
+                              }
+                            });
+                            dispatch({ type: 'SET_FORM_OPEN', payload: true });
+                          }}
+                          className="btn btn-secondary text-[10px] py-1 px-2"
+                        >
+                          <CheckCircle2 size={10} />
+                          <span>سداد</span>
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+          ) : null}
+
+          {hasRecurring ? (
+            <RecurringItemsList
+              recurringItems={recurringItems}
+              dispatch={dispatch}
+              saveHistory={saveHistory}
+              addNotification={addNotification}
+              deleteRecurring={deleteRecurring}
+            />
+          ) : null}
+        </div>
       )}
+
+      {showAdd ? (
+        <Modal
+          isOpen={true}
+          onClose={function () { setShowAdd(false); }}
+          title="التزام جديد"
+          icon="📋"
+        >
+          <div className="space-y-3">
+            <div>
+              <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>
+                الاسم *
+              </label>
+              <input
+                className="input-field text-sm"
+                value={newLoan.name}
+                onChange={function (e) {
+                  setNewLoan(Object.assign({}, newLoan, { name: e.target.value }));
+                }}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>
+                  المبلغ *
+                </label>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  className="input-field input-num text-sm"
+                  value={newLoan.totalAmount}
+                  onChange={function (e) {
+                    setNewLoan(Object.assign({}, newLoan, { totalAmount: e.target.value }));
+                  }}
+                />
+              </div>
+              <div>
+                <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>
+                  القسط
+                </label>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  className="input-field input-num text-sm"
+                  value={newLoan.monthlyInstallment}
+                  onChange={function (e) {
+                    setNewLoan(Object.assign({}, newLoan, { monthlyInstallment: e.target.value }));
+                  }}
+                />
+              </div>
+            </div>
+            <label className="flex items-center gap-3 p-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={newLoan.isReceivable}
+                onChange={function (e) {
+                  setNewLoan(Object.assign({}, newLoan, { isReceivable: e.target.checked }));
+                }}
+                className="w-4 h-4 accent-emerald-600"
+              />
+              <span className="text-xs font-bold text-emerald-700 dark:text-emerald-400">
+                مستحق لي
+              </span>
+            </label>
+            <button onClick={addLoan} className="btn btn-primary w-full py-2.5 text-sm">
+              <span>إضافة</span>
+            </button>
+          </div>
+        </Modal>
+      ) : null}
     </div>
   );
 });
