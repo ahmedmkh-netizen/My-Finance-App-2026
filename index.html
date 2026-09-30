@@ -2570,6 +2570,17 @@ const materializeRecurringItems = (data, asOfDateStr) => {
   if (!data?.recurringItems?.length) return null;
 
   const now = asOfDateStr ? new Date(asOfDateStr) : new Date();
+
+  /* ⭐ V87.4 FIX: نولّد القيود المستقبلية كمعلقة حتى 12 شهر قادم */
+  const futureCutoff = new Date(now);
+  futureCutoff.setMonth(futureCutoff.getMonth() + 12);
+  futureCutoff.setHours(23, 59, 59, 999);
+
+  /* ⭐ V87.4 FIX: نتجاهل الماضي البعيد (أكثر من 3 سنوات) */
+  const pastCutoff = new Date(now);
+  pastCutoff.setFullYear(pastCutoff.getFullYear() - 3);
+  pastCutoff.setHours(0, 0, 0, 0);
+
   const permanentDeleted = new Set(data.deletedTxIds || []);
   const existing = (data.transactions || []).filter(t => !(permanentDeleted.has(t.id)));
   const materialized = { ...(data.materializedRecurring || {}) };
@@ -2604,7 +2615,10 @@ const materializeRecurringItems = (data, asOfDateStr) => {
       const maxDayInMonth = new Date(y, mIdx + 1, 0).getDate();
       const safeDay = Math.min(day, maxDayInMonth);
       const targetDate = new Date(y, mIdx, safeDay);
-      if (targetDate > now) continue;
+
+      /* ⭐ V87.4 FIX: توليد القيود المستقبلية كمعلقة (حتى 12 شهر) */
+      if (targetDate > futureCutoff) continue;
+      if (targetDate < pastCutoff) continue;
 
       const matKey = `${r.id}_${makeMonthKey(y, monthName)}`;
       if (materialized[matKey] === 'deleted') continue;
