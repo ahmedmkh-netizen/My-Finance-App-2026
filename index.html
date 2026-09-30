@@ -9770,18 +9770,19 @@ function App() {
         if (!silent) setTimeout(() => setIsSaving(false), 800);
       }
     }).catch(async (err) => {
-      console.error('❌ Queue save failed, will retry:', err);
-      const retries = cloudSaveRetriesRef.current + 1;
-      if (retries <= 3) {
-        cloudSaveRetriesRef.current = retries;
-        await new Promise(r => setTimeout(r, 3000));
-        saveQueueRef.current = Promise.resolve();
-        return queueCloudSave(newData, options);
-      }
-      cloudSaveRetriesRef.current = 0;
-      saveQueueRef.current = Promise.resolve();
-      setIsSaving(false);
-    });
+.catch(async (err) => {
+  console.error('❌ Queue save failed:', err);
+  const retries = cloudSaveRetriesRef.current + 1;
+  cloudSaveRetriesRef.current = retries;
+  if (retries <= 3) {
+    await new Promise(r => setTimeout(r, 3000));
+    setIsSaving(false);
+    return;
+  }
+  cloudSaveRetriesRef.current = 0;
+  saveQueueRef.current = Promise.resolve();
+  setIsSaving(false);
+});
 
     return saveQueueRef.current;
   }, [isAuthenticated]);
@@ -9853,7 +9854,7 @@ function App() {
         }
 
         dispatch({ type: 'SET_DATA', payload: migrated });
-        console.log('☁️ تم استقبال البيانات من Firestore');
+        if (isFirst) console.log('☁️ تم استقبال البيانات من Firestore (أول تحميل)');
       } else if (isFirst) {
         console.log('📤 Firestore فاضي — أول استخدام');
       }
@@ -9869,8 +9870,9 @@ function App() {
       unsub();
       if (initialSnapshotTimeoutRef.current) clearTimeout(initialSnapshotTimeoutRef.current);
     };
-  }, [isAuthenticated, queueCloudSave]);
-
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated]);
+  
   /* Auto-save */
   useEffect(() => {
     if (!isAuthenticated || !data?.transactions) return;
