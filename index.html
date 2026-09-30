@@ -5675,6 +5675,7 @@ const CustodyView = memo(({ data, dispatch, saveHistory, addNotification }) => {
 });
 
 /* ═══════════════ HANY LEDGER VIEW V87.2 — المحاسبة الصحيحة ═══════════════ */
+/* ═══════════════ HANY LEDGER VIEW V87.2 — نسخة مبسطة آمنة ═══════════════ */
 const HanyLedgerView = memo(({ data, dispatch, saveHistory, addNotification, selectedYear, selectedMonth }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [viewMode, setViewMode] = useState('list');
@@ -5686,69 +5687,87 @@ const HanyLedgerView = memo(({ data, dispatch, saveHistory, addNotification, sel
   const [settleNote, setSettleNote] = useState('');
   const settlingRef = useRef(false);
 
-  const hanyPayable = useMemo(() => computeHanyPayable(data), [data]);
+  const hanyPayable = useMemo(function () { return computeHanyPayable(data); }, [data]);
 
-  const monthSummary = useMemo(() =>
-    computeHanySummaryForMonth(data, selectedYear, selectedMonth),
-    [data, selectedYear, selectedMonth]
-  );
+  const monthSummary = useMemo(function () {
+    return computeHanySummaryForMonth(data, selectedYear, selectedMonth);
+  }, [data, selectedYear, selectedMonth]);
 
-  const purchases = useMemo(() => {
+  const purchases = useMemo(function () {
     return (data.transactions || [])
-      .filter(t => t.method === HANY_TAB_METHOD && isHanyShopCategory(t.category) && !isCarryoverMarker(t))
-      .slice().sort(compareTransactions);
+      .filter(function (t) { return t.method === HANY_TAB_METHOD && isHanyShopCategory(t.category) && !isCarryoverMarker(t); })
+      .slice()
+      .sort(compareTransactions);
   }, [data.transactions]);
 
-  const settlements = useMemo(() => {
+  const settlements = useMemo(function () {
     return (data.transactions || [])
-      .filter(t => t.hanyEffect === 'settle' && t.status === 'paid')
-      .slice().sort(compareTransactions);
+      .filter(function (t) { return t.hanyEffect === 'settle' && t.status === 'paid'; })
+      .slice()
+      .sort(compareTransactions);
   }, [data.transactions]);
 
-  const filteredPurchases = useMemo(() => {
+  const filteredPurchases = useMemo(function () {
     let arr = purchases;
     if (searchTerm.trim()) {
       const term = normalizeText(searchTerm);
-      arr = arr.filter(t => normalizeText(t.description).includes(term));
+      arr = arr.filter(function (t) { return normalizeText(t.description).includes(term); });
     }
-    const sorted = [...arr];
-    if (sortBy === 'amount') return sorted.sort((a, b) => safeNumber(b.amount) - safeNumber(a.amount));
-    if (sortBy === 'name') return sorted.sort((a, b) => normalizeText(a.description).localeCompare(normalizeText(b.description)));
+    const sorted = arr.slice();
+    if (sortBy === 'amount') return sorted.sort(function (a, b) { return safeNumber(b.amount) - safeNumber(a.amount); });
+    if (sortBy === 'name') return sorted.sort(function (a, b) { return normalizeText(a.description).localeCompare(normalizeText(b.description)); });
     return sorted.sort(compareTransactions);
   }, [purchases, searchTerm, sortBy]);
 
-  const groupedPurchases = useMemo(() => {
+  const groupedPurchases = useMemo(function () {
     const map = {};
-    filteredPurchases.forEach(item => {
+    filteredPurchases.forEach(function (item) {
       const key = (item.description || 'بدون وصف').trim();
       if (!map[key]) map[key] = { name: key, count: 0, total: 0 };
       map[key].count += 1;
       map[key].total += safeNumber(item.amount);
     });
-    return Object.values(map).sort((a, b) => b.total - a.total);
+    return Object.values(map).sort(function (a, b) { return b.total - a.total; });
   }, [filteredPurchases]);
 
-  const totalPurchases = purchases.reduce((s, t) => s + safeNumber(t.amount), 0);
-  const totalSettlements = settlements.reduce((s, t) => s + safeNumber(t.amount), 0);
+  const totalPurchases = purchases.reduce(function (s, t) { return s + safeNumber(t.amount); }, 0);
+  const totalSettlements = settlements.reduce(function (s, t) { return s + safeNumber(t.amount); }, 0);
 
-  const executeSettle = async () => {
+  const executeSettle = useCallback(async function () {
     if (settlingRef.current) return;
     settlingRef.current = true;
     try {
       const check = validateAmount(settleAmount, { min: 0.01, max: hanyPayable || 10000000, label: 'المبلغ' });
-      if (!check.valid) { addNotification({ type: 'error', title: 'خطأ', message: check.error }); return; }
+      if (!check.valid) {
+        addNotification({ type: 'error', title: 'خطأ', message: check.error });
+        return;
+      }
       const amount = roundMoney(check.value);
-      if (amount > hanyPayable + 0.005) { addNotification({ type: 'error', title: 'المبلغ أكبر من المستحق' }); return; }
+      if (amount > hanyPayable + 0.005) {
+        addNotification({ type: 'error', title: 'المبلغ أكبر من المستحق' });
+        return;
+      }
 
       const d = parseISODate(settleDate);
-      if (!d) { addNotification({ type: 'error', title: 'تاريخ غير صحيح' }); return; }
-      const txYear = d.getFullYear(), txMonth = ALL_MONTHS[d.getMonth()];
-      if (isMonthClosed(data, txYear, txMonth)) { addNotification({ type: 'error', title: 'شهر مغلق', message: `${txMonth} ${txYear}`, duration: 6000 }); return; }
+      if (!d) {
+        addNotification({ type: 'error', title: 'تاريخ غير صحيح' });
+        return;
+      }
+      const txYear = d.getFullYear();
+      const txMonth = ALL_MONTHS[d.getMonth()];
+      if (isMonthClosed(data, txYear, txMonth)) {
+        addNotification({ type: 'error', title: 'شهر مغلق', message: txMonth + ' ' + txYear, duration: 6000 });
+        return;
+      }
 
       const liveBalances = computeBalancesAsOf(data);
       const available = safeNumber(liveBalances[settleMethod]);
       if (!PAYMENT_METHODS_WITHOUT_ACCOUNT.has(settleMethod) && available < amount - 0.005) {
-        addNotification({ type: 'error', title: 'رصيد غير كافٍ', message: `${ACCOUNT_SHORT_NAMES[settleMethod] || settleMethod}: ${fmt(available)} ج.م`, duration: 7000 });
+        addNotification({
+          type: 'error', title: 'رصيد غير كافٍ',
+          message: (ACCOUNT_SHORT_NAMES[settleMethod] || settleMethod) + ': ' + fmt(available) + ' ج.م',
+          duration: 7000
+        });
         return;
       }
 
@@ -5759,11 +5778,13 @@ const HanyLedgerView = memo(({ data, dispatch, saveHistory, addNotification, sel
         type: 'expense',
         kind: KIND.FINANCIAL,
         category: 'الالتزامات البنكية والتمويلية',
-        amount,
-        description: settleNote.trim() || `سداد دفتر هاني`,
+        amount: amount,
+        description: settleNote.trim() || 'سداد دفتر هاني',
         method: settleMethod,
         date: settleDate,
-        month: txMonth, year: txYear, monthIndex: d.getMonth(),
+        month: txMonth,
+        year: txYear,
+        monthIndex: d.getMonth(),
         subType: 'withdrawal',
         status: 'paid',
         hanyEffect: 'settle',
@@ -5771,21 +5792,21 @@ const HanyLedgerView = memo(({ data, dispatch, saveHistory, addNotification, sel
         createdAt: now.toISOString()
       };
 
-      const newTxs = sortTransactions([newTx, ...(data.transactions || [])]);
+      const newTxs = sortTransactions([newTx].concat(data.transactions || []));
       dispatch({ type: 'UPDATE_TRANSACTIONS', payload: newTxs });
 
-      const remainingAfter = computeHanyPayable({ ...data, transactions: newTxs });
+      const remainingAfter = computeHanyPayable(Object.assign({}, data, { transactions: newTxs }));
       const wasPartial = remainingAfter > 0.01;
-      let msg = `${fmt(amount)} ج.م من ${ACCOUNT_SHORT_NAMES[settleMethod] || settleMethod}`;
+      let msg = fmt(amount) + ' ج.م من ' + (ACCOUNT_SHORT_NAMES[settleMethod] || settleMethod);
       if (wasPartial) {
-        msg += `\n📌 متبقي ${fmt(remainingAfter)} ج.م — سيظهر كالتزام مرحل لشهر ${selectedMonth} القادم`;
+        msg = msg + '\n متبقي ' + fmt(remainingAfter) + ' ج.م — سيظهر كالتزام مرحل لشهر ' + selectedMonth + ' القادم';
       } else {
-        msg += `\n✅ تم سداد الرصيد كاملاً`;
+        msg = msg + '\n تم سداد الرصيد كاملاً';
       }
 
       addNotification({
         type: 'success',
-        title: '✅ تم تسجيل السداد',
+        title: 'تم تسجيل السداد',
         message: msg,
         duration: 8000
       });
@@ -5796,166 +5817,167 @@ const HanyLedgerView = memo(({ data, dispatch, saveHistory, addNotification, sel
     } finally {
       settlingRef.current = false;
     }
-  };
+  }, [settleAmount, settleDate, settleMethod, settleNote, hanyPayable, data, selectedMonth, saveHistory, addNotification]);
+
+  const openSettleModal = useCallback(function () {
+    setSettleAmount(String(hanyPayable));
+    setShowSettle(true);
+  }, [hanyPayable]);
+
+  const canSettle = hanyPayable > 0;
 
   return (
     <div className="space-y-4 animate-fadeIn">
-      {/* Header card */}
       <div className="card" style={{ background: 'linear-gradient(135deg, rgba(234,88,12,0.08), rgba(245,158,11,0.05))' }}>
         <div className="flex justify-between items-start gap-3 flex-wrap">
           <div className="flex-1 min-w-[200px]">
             <p className="text-[11px] font-bold mb-1 flex items-center gap-1.5" style={{ color: 'var(--text-muted)' }}>
               <StoreIcon size={12} className="text-orange-500" /> دفتر محل هاني — الرصيد التراكمي
             </p>
-            <h2 className={`text-3xl font-black tracking-tight money tabular ${hanyPayable > 0 ? 'text-orange-600' : 'text-emerald-600'}`}>
+            <h2 className={'text-3xl font-black tracking-tight money tabular ' + (hanyPayable > 0 ? 'text-orange-600' : 'text-emerald-600')}>
               {fmt(hanyPayable)}<span className="text-sm font-bold mr-2" style={{ color: 'var(--text-muted)' }}>ج.م</span>
             </h2>
             <p className="text-[11px] font-semibold mt-1.5" style={{ color: 'var(--text-muted)' }}>
-              💡 المشتريات لا تخصم نقدياً — السداد فقط يخصم
+              المشتريات لا تخصم نقدياً — السداد فقط يخصم
             </p>
           </div>
-          <button onClick={() => { setSettleAmount(String(hanyPayable)); setShowSettle(true); }}
-            className="btn btn-primary text-xs" disabled={hanyPayable <= 0}>
+          <button onClick={openSettleModal} className="btn btn-primary text-xs" disabled={!canSettle}>
             <Banknote size={14} /> سداد الآن
           </button>
         </div>
         <div className="grid grid-cols-3 gap-2 mt-4">
           <div className="p-2.5 rounded-xl bg-white/60 dark:bg-black/20 text-center">
-            <p className="text-[10px] font-bold" style={{ color: 'var(--text-muted)' }}>🛒 إجمالي المشتريات</p>
+            <p className="text-[10px] font-bold" style={{ color: 'var(--text-muted)' }}>إجمالي المشتريات</p>
             <p className="text-sm font-black text-red-600 mt-0.5 money tabular">{fmt(totalPurchases)}</p>
             <p className="text-[9px] mt-0.5" style={{ color: 'var(--text-muted)' }}>{purchases.length} عملية</p>
           </div>
           <div className="p-2.5 rounded-xl bg-white/60 dark:bg-black/20 text-center">
-            <p className="text-[10px] font-bold" style={{ color: 'var(--text-muted)' }}>💵 إجمالي السداد</p>
+            <p className="text-[10px] font-bold" style={{ color: 'var(--text-muted)' }}>إجمالي السداد</p>
             <p className="text-sm font-black text-emerald-600 mt-0.5 money tabular">{fmt(totalSettlements)}</p>
             <p className="text-[9px] mt-0.5" style={{ color: 'var(--text-muted)' }}>{settlements.length} دفعة</p>
           </div>
           <div className="p-2.5 rounded-xl bg-white/60 dark:bg-black/20 text-center">
-            <p className="text-[10px] font-bold" style={{ color: 'var(--text-muted)' }}>📊 الحالة</p>
-            <p className={`text-sm font-black mt-0.5 ${hanyPayable > 0 ? 'text-orange-600' : 'text-emerald-600'}`}>
-              {hanyPayable > 0 ? 'مستحق' : 'مسدّد ✓'}
+            <p className="text-[10px] font-bold" style={{ color: 'var(--text-muted)' }}>الحالة</p>
+            <p className={'text-sm font-black mt-0.5 ' + (hanyPayable > 0 ? 'text-orange-600' : 'text-emerald-600')}>
+              {hanyPayable > 0 ? 'مستحق' : 'مسدّد'}
             </p>
           </div>
         </div>
       </div>
 
-      {/* Month summary — الأهم محاسبيًا */}
       <div className="card">
         <h3 className="font-black text-sm mb-3 flex items-center gap-2">
           <CalendarDays size={14} className="text-orange-500" /> ملخص محاسبي — {selectedMonth} {selectedYear}
         </h3>
         <div className="grid grid-cols-4 gap-2">
           <div className="p-2 rounded-lg text-center" style={{ background: 'var(--bg-muted)' }}>
-            <p className="text-[9px] font-bold" style={{ color: 'var(--text-muted)' }}>📌 افتتاحي مرحل</p>
+            <p className="text-[9px] font-bold" style={{ color: 'var(--text-muted)' }}>افتتاحي مرحل</p>
             <p className="text-xs font-black money tabular">{fmtShort(monthSummary.opening)}</p>
           </div>
           <div className="p-2 rounded-lg bg-red-50 dark:bg-red-950/30 text-center">
-            <p className="text-[9px] font-bold text-red-700 dark:text-red-400">🛒 مشتريات</p>
+            <p className="text-[9px] font-bold text-red-700 dark:text-red-400">مشتريات</p>
             <p className="text-xs font-black text-red-600 money tabular">+{fmtShort(monthSummary.purchases)}</p>
           </div>
           <div className="p-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 text-center">
-            <p className="text-[9px] font-bold text-emerald-700 dark:text-emerald-400">💵 سداد</p>
-            <p className="text-xs font-black text-emerald-600 money tabular">−{fmtShort(monthSummary.settlements)}</p>
+            <p className="text-[9px] font-bold text-emerald-700 dark:text-emerald-400">سداد</p>
+            <p className="text-xs font-black text-emerald-600 money tabular">-{fmtShort(monthSummary.settlements)}</p>
           </div>
           <div className="p-2 rounded-lg bg-orange-50 dark:bg-orange-950/30 text-center">
-            <p className="text-[9px] font-bold text-orange-700 dark:text-orange-400">📊 إقفال الشهر</p>
+            <p className="text-[9px] font-bold text-orange-700 dark:text-orange-400">إقفال الشهر</p>
             <p className="text-xs font-black text-orange-600 money tabular">{fmtShort(monthSummary.closing)}</p>
           </div>
         </div>
-        {monthSummary.closing > 0.01 && (
-          <div className="mt-3 p-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/30 flex items-center gap-2">
-            <Info size={14} className="text-amber-600 flex-shrink-0" />
-            <p className="text-[10px] font-semibold text-amber-800 dark:text-amber-400 leading-relaxed">
-              الرصيد المتبقي <strong className="money tabular">{fmt(monthSummary.closing)}</strong> ج.م سيُرحَّل تلقائياً كـ<strong>قيد ترحيل</strong> عند إقفال الشهر ليظهر كالتزام في قيود الشهر التالي.
-            </p>
-          </div>
-        )}
       </div>
 
-      {/* Filters */}
       <div className="card py-3">
         <div className="flex gap-2 flex-wrap">
           <div className="relative flex-1 min-w-[140px]">
             <Search className="absolute right-3 top-1/2 -translate-y-1/2" size={12} style={{ color: 'var(--text-muted)' }} />
-            <input type="text" placeholder="ابحث في المشتريات..." className="input-field pr-8 text-xs py-2" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+            <input type="text" placeholder="ابحث في المشتريات..." className="input-field pr-8 text-xs py-2" value={searchTerm} onChange={function (e) { setSearchTerm(e.target.value); }} />
           </div>
           <div className="flex p-0.5 rounded-lg" style={{ background: 'var(--bg-muted)' }}>
-            <button type="button" onClick={() => setViewMode('list')} className={`px-3 py-1.5 rounded-md text-[10px] font-bold ${viewMode === 'list' ? 'shadow-sm' : ''}`} style={viewMode === 'list' ? { background: 'var(--bg-card)', color: 'var(--accent)' } : { color: 'var(--text-muted)' }}>قائمة</button>
-            <button type="button" onClick={() => setViewMode('grouped')} className={`px-3 py-1.5 rounded-md text-[10px] font-bold ${viewMode === 'grouped' ? 'shadow-sm' : ''}`} style={viewMode === 'grouped' ? { background: 'var(--bg-card)', color: 'var(--accent)' } : { color: 'var(--text-muted)' }}>مُجمّع</button>
+            <button type="button" onClick={function () { setViewMode('list'); }} className={'px-3 py-1.5 rounded-md text-[10px] font-bold ' + (viewMode === 'list' ? 'shadow-sm' : '')} style={viewMode === 'list' ? { background: 'var(--bg-card)', color: 'var(--accent)' } : { color: 'var(--text-muted)' }}>قائمة</button>
+            <button type="button" onClick={function () { setViewMode('grouped'); }} className={'px-3 py-1.5 rounded-md text-[10px] font-bold ' + (viewMode === 'grouped' ? 'shadow-sm' : '')} style={viewMode === 'grouped' ? { background: 'var(--bg-card)', color: 'var(--accent)' } : { color: 'var(--text-muted)' }}>مُجمّع</button>
           </div>
           {viewMode === 'list' && (
-            <select className="input-field text-[10px] py-2 px-2 w-auto min-w-[90px]" value={sortBy} onChange={e => setSortBy(e.target.value)}>
-              <option value="date">📅 الأحدث</option>
-              <option value="amount">💰 الأعلى</option>
-              <option value="name">🔤 أبجدي</option>
+            <select className="input-field text-[10px] py-2 px-2 w-auto min-w-[90px]" value={sortBy} onChange={function (e) { setSortBy(e.target.value); }}>
+              <option value="date">الأحدث</option>
+              <option value="amount">الأعلى</option>
+              <option value="name">أبجدي</option>
             </select>
           )}
         </div>
       </div>
 
-      {/* Purchases list */}
       <div className="card">
-        <h3 className="font-black text-sm mb-3">🛒 سجل المشتريات ({filteredPurchases.length})</h3>
+        <h3 className="font-black text-sm mb-3">سجل المشتريات ({filteredPurchases.length})</h3>
         {filteredPurchases.length === 0 ? (
           <div className="text-center py-8">
             <StoreIcon size={32} className="mx-auto mb-2 text-orange-400" />
-            <p className="font-semibold text-xs" style={{ color: 'var(--text-muted)' }}>{searchTerm ? 'لا نتائج' : 'لا توجد مشتريات مسجّلة بعد'}</p>
+            <p className="font-semibold text-xs" style={{ color: 'var(--text-muted)' }}>
+              {searchTerm ? 'لا نتائج' : 'لا توجد مشتريات مسجّلة بعد'}
+            </p>
           </div>
         ) : viewMode === 'list' ? (
           <div className="space-y-1.5 max-h-[60vh] overflow-y-auto scroll-hide">
-            {filteredPurchases.slice(0, 200).map(item => (
-              <div key={item.id} className="flex justify-between items-center gap-2 p-2.5 rounded-lg text-xs" style={{ background: 'var(--bg-muted)' }}>
-                <div className="min-w-0 flex-1">
-                  <p className="font-bold truncate flex items-center gap-1.5">
-                    <span className="truncate">{item.description || 'بدون وصف'}</span>
-                  </p>
-                  <p className="text-[9px] font-semibold mt-0.5" style={{ color: 'var(--text-muted)' }}>{item.date} • {item.month} {item.year}</p>
+            {filteredPurchases.slice(0, 200).map(function (item) {
+              return (
+                <div key={item.id} className="flex justify-between items-center gap-2 p-2.5 rounded-lg text-xs" style={{ background: 'var(--bg-muted)' }}>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-bold truncate">{item.description || 'بدون وصف'}</p>
+                    <p className="text-[9px] font-semibold mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                      {item.date} • {item.month} {item.year}
+                    </p>
+                  </div>
+                  <span className="font-black text-red-600 flex-shrink-0 money tabular">{fmt(item.amount)}</span>
                 </div>
-                <span className="font-black text-red-600 flex-shrink-0 money tabular">{fmt(item.amount)}</span>
-              </div>
-            ))}
-            {filteredPurchases.length > 200 && <p className="text-center text-[10px] font-bold py-2" style={{ color: 'var(--text-muted)' }}>يظهر آخر 200 من {filteredPurchases.length}</p>}
+              );
+            })}
           </div>
         ) : (
           <div className="space-y-1.5 max-h-[60vh] overflow-y-auto scroll-hide">
-            {groupedPurchases.map(g => (
-              <div key={g.name} className="flex justify-between items-center gap-2 p-2.5 rounded-lg text-xs" style={{ background: 'var(--bg-muted)' }}>
-                <div className="min-w-0 flex-1">
-                  <p className="font-bold truncate">{g.name}</p>
-                  <p className="text-[9px] font-semibold mt-0.5" style={{ color: 'var(--text-muted)' }}>عدد: <span className="money tabular">{g.count}</span> • متوسط: <span className="money tabular">{fmt(g.total / g.count)}</span></p>
+            {groupedPurchases.map(function (g) {
+              return (
+                <div key={g.name} className="flex justify-between items-center gap-2 p-2.5 rounded-lg text-xs" style={{ background: 'var(--bg-muted)' }}>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-bold truncate">{g.name}</p>
+                    <p className="text-[9px] font-semibold mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                      عدد: <span className="money tabular">{g.count}</span> • متوسط: <span className="money tabular">{fmt(g.total / g.count)}</span>
+                    </p>
+                  </div>
+                  <span className="font-black text-red-600 flex-shrink-0 money tabular">{fmt(g.total)}</span>
                 </div>
-                <span className="font-black text-red-600 flex-shrink-0 money tabular">{fmt(g.total)}</span>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
 
-      {/* Settlements history */}
       {settlements.length > 0 && (
         <div className="card">
           <h3 className="font-black text-sm mb-3 flex items-center gap-2 text-emerald-600">
             <Banknote size={14} /> سجل السداد ({settlements.length})
           </h3>
           <div className="space-y-1.5 max-h-72 overflow-y-auto scroll-hide">
-            {settlements.slice(0, 50).map(s => (
-              <div key={s.id} className="flex justify-between items-center gap-2 p-2.5 rounded-lg text-xs" style={{ background: 'rgba(0,168,107,0.05)' }}>
-                <div className="min-w-0 flex-1">
-                  <p className="font-bold truncate">{s.description || 'سداد هاني'}</p>
-                  <p className="text-[9px] font-semibold mt-0.5" style={{ color: 'var(--text-muted)' }}>
-                    {s.date} • {PAYMENT_METHODS.find(p => p.id === s.method)?.label || s.method}
-                  </p>
+            {settlements.slice(0, 50).map(function (s) {
+              return (
+                <div key={s.id} className="flex justify-between items-center gap-2 p-2.5 rounded-lg text-xs" style={{ background: 'rgba(0,168,107,0.05)' }}>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-bold truncate">{s.description || 'سداد هاني'}</p>
+                    <p className="text-[9px] font-semibold mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                      {s.date} • {PAYMENT_METHODS.find(function (p) { return p.id === s.method; }) ? PAYMENT_METHODS.find(function (p) { return p.id === s.method; }).label : s.method}
+                    </p>
+                  </div>
+                  <span className="font-black text-emerald-600 flex-shrink-0 money tabular">-{fmt(s.amount)}</span>
                 </div>
-                <span className="font-black text-emerald-600 flex-shrink-0 money tabular">−{fmt(s.amount)}</span>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
 
-      {/* Settle modal */}
       {showSettle && (
-        <Modal isOpen={true} onClose={() => setShowSettle(false)} title="سداد دفتر هاني" icon="💵">
+        <Modal isOpen={true} onClose={function () { setShowSettle(false); }} title="سداد دفتر هاني" icon="💵">
           <div className="space-y-3">
             <div className="p-3 rounded-xl bg-orange-50 dark:bg-orange-950/30 text-center">
               <p className="text-[11px] font-bold text-orange-700 dark:text-orange-400 mb-1">المستحق حالياً</p>
@@ -5963,31 +5985,28 @@ const HanyLedgerView = memo(({ data, dispatch, saveHistory, addNotification, sel
             </div>
             <div>
               <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>المبلغ المسدد *</label>
-              <input type="text" inputMode="decimal" autoFocus className="input-field input-num text-base text-center font-black" style={{ color: 'var(--accent)' }} value={settleAmount} onChange={e => setSettleAmount(e.target.value)} placeholder="0.00" />
+              <input type="text" inputMode="decimal" autoFocus className="input-field input-num text-base text-center font-black" style={{ color: 'var(--accent)' }} value={settleAmount} onChange={function (e) { setSettleAmount(e.target.value); }} placeholder="0.00" />
               <div className="flex gap-1.5 mt-2 flex-wrap">
-                <button type="button" onClick={() => setSettleAmount(String(hanyPayable))} className="quick-chip">كامل ({fmtShort(hanyPayable)})</button>
-                <button type="button" onClick={() => setSettleAmount(String(Math.round(hanyPayable / 2)))} className="quick-chip">نصف</button>
-                <button type="button" onClick={() => setSettleAmount(String(Math.round(hanyPayable / 4)))} className="quick-chip">ربع</button>
+                <button type="button" onClick={function () { setSettleAmount(String(hanyPayable)); }} className="quick-chip">كامل ({fmtShort(hanyPayable)})</button>
+                <button type="button" onClick={function () { setSettleAmount(String(Math.round(hanyPayable / 2))); }} className="quick-chip">نصف</button>
+                <button type="button" onClick={function () { setSettleAmount(String(Math.round(hanyPayable / 4))); }} className="quick-chip">ربع</button>
               </div>
-              {settleAmount && parseNumberInput(settleAmount) < hanyPayable && parseNumberInput(settleAmount) > 0 && (
-                <p className="text-[10px] font-bold mt-2 p-2 rounded-lg bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400">
-                  💡 سداد جزئي — سيتبقى <strong className="money tabular">{fmt(hanyPayable - parseNumberInput(settleAmount))}</strong> ج.م كقيد ترحيل تلقائي
-                </p>
-              )}
             </div>
             <div>
               <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>من حساب</label>
-              <select className="input-field text-sm" value={settleMethod} onChange={e => setSettleMethod(e.target.value)}>
-                {PAYMENT_METHODS.filter(m => m.group === 'account' && m.id !== HANY_TAB_METHOD).map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+              <select className="input-field text-sm" value={settleMethod} onChange={function (e) { setSettleMethod(e.target.value); }}>
+                {PAYMENT_METHODS.filter(function (m) { return m.group === 'account' && m.id !== HANY_TAB_METHOD; }).map(function (m) {
+                  return <option key={m.id} value={m.id}>{m.label}</option>;
+                })}
               </select>
             </div>
             <div>
               <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>التاريخ</label>
-              <input type="date" className="input-field text-xs font-bold" value={settleDate} onChange={e => setSettleDate(e.target.value)} />
+              <input type="date" className="input-field text-xs font-bold" value={settleDate} onChange={function (e) { setSettleDate(e.target.value); }} />
             </div>
             <div>
               <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>ملاحظة (اختياري)</label>
-              <input type="text" className="input-field text-sm" value={settleNote} onChange={e => setSettleNote(e.target.value)} placeholder="سداد مسحوبات شهر..." />
+              <input type="text" className="input-field text-sm" value={settleNote} onChange={function (e) { setSettleNote(e.target.value); }} placeholder="سداد مسحوبات شهر..." />
             </div>
             <button onClick={executeSettle} className="btn btn-primary w-full py-3 text-sm">
               <CheckCircle2 size={16} /> تسجيل السداد
