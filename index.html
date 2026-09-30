@@ -2678,47 +2678,23 @@ const materializeRecurringItems = (data, asOfDateStr) => {
 
 /* ═══════════════ SHOPPING RECURRING ═══════════════ */
 const dedupeRecurringTransactions = (transactions) => {
-  if (!Array.isArray(transactions) || transactions.length === 0) return { transactions: transactions || [], removed: [] };
+  // ⭐ V87.4 SAFE FINAL: تعطيل الحذف التلقائي تماماً
+  // السبب: النسخ السابقة حذفت قيوداً حقيقية بسبب fuzzy matching
+  // نكتفي فقط بحذف نفس الـ id بالضبط (تكرار حرفي)
+  
+  if (!Array.isArray(transactions) || transactions.length === 0) {
+    return { transactions: transactions || [], removed: [] };
+  }
 
   const removed = [];
   const seenById = new Set();
-  const seenRecurringKey = new Map();
-  const seenFuzzyKey = new Map();
   const keep = [];
 
-  const sorted = [...transactions].sort((a, b) => {
-    const aTs = getTxTimestamp(a);
-    const bTs = getTxTimestamp(b);
-    if (aTs !== bTs) return bTs - aTs;
-    return String(b.id || '').localeCompare(String(a.id || ''));
-  });
-
-  sorted.forEach(t => {
+  transactions.forEach(t => {
     if (!t || !t.id) { keep.push(t); return; }
-    if (seenById.has(t.id)) { removed.push({ reason: 'duplicate_id', id: t.id, tx: t }); return; }
-
-    if (t.sourceRecurringId && t.year && t.month) {
-      const rKey = `${t.sourceRecurringId}|${t.year}|${t.month}`;
-      if (seenRecurringKey.has(rKey)) {
-        removed.push({ reason: 'duplicate_recurring', key: rKey, id: t.id, existingId: seenRecurringKey.get(rKey), tx: t });
-        return;
-      }
-      seenRecurringKey.set(rKey, t.id);
-    }
-
-    if (t.createdAt && t.source !== 'sms' && !t.linkedTransferId && safeNumber(t.amount) > 0 && !isHanyShopCategory(t.category) && !isCarryoverMarker(t)) {
-      const FUZZY_WINDOW_MS = 10000;
-      const tTime = new Date(t.createdAt).getTime();
-      if (!isNaN(tTime)) {
-        const descKey = normalizeText(t.description || '').slice(0, 30);
-        const fKey = `${safeNumber(t.amount)}|${t.category}|${t.method}|${t.type}|${descKey}`;
-        const lastSeen = seenFuzzyKey.get(fKey);
-        if (lastSeen && (lastSeen.time - tTime) < FUZZY_WINDOW_MS) {
-          removed.push({ reason: 'fuzzy_duplicate', key: fKey, id: t.id, existingId: lastSeen.id, deltaMs: lastSeen.time - tTime, tx: t });
-          return;
-        }
-        seenFuzzyKey.set(fKey, { id: t.id, time: tTime });
-      }
+    if (seenById.has(t.id)) {
+      removed.push({ reason: 'duplicate_id_exact', id: t.id, tx: t });
+      return;
     }
     seenById.add(t.id);
     keep.push(t);
@@ -2726,67 +2702,6 @@ const dedupeRecurringTransactions = (transactions) => {
 
   return { transactions: keep, removed };
 };
-  const addMonthsWithDaySafe = (isoStr, monthsToAdd, day) => {
-  const dt = new Date(isoStr + 'T12:00:00');
-  dt.setMonth(dt.getMonth() + monthsToAdd);
-  const maxDay = new Date(dt.getFullYear(), dt.getMonth() + 1, 0).getDate();
-  dt.setDate(Math.min(Math.max(1, parseInt(day) || 10), maxDay));
-  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
-};
-
-const materializeShoppingRecurring = async () => {
-  try {
-    const docRef = db.collection(FIREBASE_DOC_PATH.collection).doc(FIREBASE_DOC_PATH.doc);
-    await db.runTransaction(async (fireTx) => {
-      const snap = await fireTx.get(docRef);
-      if (!snap.exists) return;
-      const d = snap.data() || {};
-      const rules = d.shoppingRecurring || [];
-      if (!rules.length) return;
-
-      const today = new Date().toISOString().slice(0, 10);
-      const due = rules.filter(r => r.active && r.nextDue && r.nextDue <= today);
-      if (!due.length) return;
-
-      const existingTx = d.transactions || [];
-      const existingIds = new Set(existingTx.map(x => x?.id).filter(Boolean));
-      const newTxs = [];
-      const updatedRules = rules.map(r => ({ ...r }));
-
-      due.forEach(r => {
-        const t = r.template;
-        const tObj = new Date(r.nextDue + 'T12:00:00');
-        const txId = `rec-tx-${r.id}-${r.nextDue}`;
-        const ruleIdx = updatedRules.findIndex(x => x.id === r.id);
-        if (ruleIdx < 0) return;
-
-        if (!existingIds.has(txId)) {
-          newTxs.push({
-            id: txId, type: 'expense', kind: 'operational',
-            category: normalizeCategory(t.category), subCategory: t.subCategory,
-            amount: t.amount, quantity: t.quantity, unitPrice: t.unitPrice,
-            description: t.description, source: 'shopping-app', sourceLabel: t.sourceLabel,
-            method: t.method, linkedCardId: t.linkedCardId || undefined,
-            date: r.nextDue, month: ALL_MONTHS[tObj.getMonth()],
-            year: tObj.getFullYear(), monthIndex: tObj.getMonth(),
-            subType: 'withdrawal', status: 'pending', recurringId: r.id,
-            createdAt: new Date().toISOString()
-          });
-        }
-
-        const freq = r.frequency === 'bimonthly' ? 2 : 1;
-        const nextDue = addMonthsWithDaySafe(r.nextDue, freq, r.preferredDay || 10);
-        updatedRules[ruleIdx] = { ...updatedRules[ruleIdx], nextDue, lastRun: today };
-      });
-
-      const updates = {};
-      if (newTxs.length > 0) updates.transactions = [...existingTx, ...newTxs];
-      if (due.length > 0) updates.shoppingRecurring = updatedRules;
-      if (Object.keys(updates).length > 0) fireTx.update(docRef, updates);
-    });
-  } catch (e) { console.warn('Shopping recurring:', e); }
-};
-
 /* ═══════════════ DRIVE OPERATIONS ═══════════════ */
 const getOrCreateBackupFolder = async () => {
   const token = await ensureDriveToken();
