@@ -7655,19 +7655,31 @@ const FinancialForecastView = memo(({
         if (loanInst < 0.01 && activeLoanInstallments > 0) loanInst = Math.min(activeLoanInstallments, loanDebt);
         if (hanyPurchase < 0.01 && baseHanyPurchase > 0) hanyPurchase = baseHanyPurchase;
         if (hanySettle < 0.01 && hanyPayable > 0 && autoAverages.hanySettle > 0) hanySettle = Math.min(autoAverages.hanySettle, hanyPayable);
-      } else {
+            } else {
         const plannedIncome = safeNumber(p.expectedSalary) + safeNumber(p.expectedRent) + safeNumber(p.expectedCashback) + safeNumber(p.expectedEmakWE) + safeNumber(p.expectedZakat) + safeNumber(p.expectedCash);
         const plannedCashExp = safeNumber(p.expectedCashExpenses);
 
-        inc = flows.pendingIncome + (includePlanned ? (plannedIncome > 0 ? plannedIncome : recurringAgg.income) : recurringAgg.income);
-        cashExp = flows.pendingCashExpense + (includePlanned ? (plannedCashExp > 0 ? plannedCashExp : recurringAgg.cashExpense) : recurringAgg.cashExpense);
-        cardSpend = flows.pendingCardSpending + recurringAgg.cardSpend;
+        // ⭐ V87.4 FIX: pending له الأولوية، وإلا fallback
+        const pendingInc = flows.pendingIncome;
+        const fallbackInc = includePlanned ? (plannedIncome > 0 ? plannedIncome : recurringAgg.income) : recurringAgg.income;
+        inc = pendingInc > 0.01 ? pendingInc : fallbackInc;
+
+        const pendingCash = flows.pendingCashExpense;
+        const fallbackCash = includePlanned ? (plannedCashExp > 0 ? plannedCashExp : recurringAgg.cashExpense) : recurringAgg.cashExpense;
+        cashExp = pendingCash > 0.01 ? pendingCash : fallbackCash;
+
+        const pendingCardSpend = flows.pendingCardSpending;
+        cardSpend = pendingCardSpend > 0.01 ? pendingCardSpend : recurringAgg.cardSpend;
+
         cardPay = flows.pendingCardPayment || baseCardPayment;
         loanInst = flows.pendingLoanInstallment || activeLoanInstallments;
 
         const plannedHanyP = safeNumber(p.expectedHanyPurchases);
-        hanyPurchase = flows.pendingHanyPurchase + (plannedHanyP > 0 ? plannedHanyP : baseHanyPurchase);
-        hanySettle = flows.pendingHanySettle || (autoAverages.hanySettle > 0 ? Math.min(autoAverages.hanySettle, hanyPayable + hanyPurchase) : 0);
+        const pendingHanyP = flows.pendingHanyPurchase;
+        hanyPurchase = pendingHanyP > 0.01 ? pendingHanyP : (plannedHanyP > 0 ? plannedHanyP : baseHanyPurchase);
+        
+        const pendingHanyS = flows.pendingHanySettle;
+        hanySettle = pendingHanyS > 0.01 ? pendingHanyS : (autoAverages.hanySettle > 0 ? Math.min(autoAverages.hanySettle, hanyPayable + hanyPurchase) : 0);
       }
 
       const effCardPay = Math.min(Math.max(0, cardPay), Math.max(0, cardDebt));
