@@ -1683,6 +1683,14 @@ const computeCardDebt = (data, card, asOfDate = null) => {
     else belongsToCard = (t.method === method);
 
     if (!belongsToCard) return;
+
+    // ⭐ V87.4 FIX: قيود سداد البطاقات تُقلل المديونية (مش تزيدها)
+    if (t.source === 'card-payment-plan') {
+      debt -= amt;
+      return;
+    }
+
+    // معاملات البطاقة العادية (مشتريات / استرداد)
     if (t.type === 'expense') debt += amt;
     else if (t.type === 'income') debt -= amt;
   });
