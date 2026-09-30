@@ -2677,7 +2677,56 @@ const materializeRecurringItems = (data, asOfDateStr) => {
 };
 
 /* ═══════════════ SHOPPING RECURRING ═══════════════ */
-const addMonthsWithDaySafe = (isoStr, monthsToAdd, day) => {
+const dedupeRecurringTransactions = (transactions) => {
+  if (!Array.isArray(transactions) || transactions.length === 0) return { transactions: transactions || [], removed: [] };
+
+  const removed = [];
+  const seenById = new Set();
+  const seenRecurringKey = new Map();
+  const seenFuzzyKey = new Map();
+  const keep = [];
+
+  const sorted = [...transactions].sort((a, b) => {
+    const aTs = getTxTimestamp(a);
+    const bTs = getTxTimestamp(b);
+    if (aTs !== bTs) return bTs - aTs;
+    return String(b.id || '').localeCompare(String(a.id || ''));
+  });
+
+  sorted.forEach(t => {
+    if (!t || !t.id) { keep.push(t); return; }
+    if (seenById.has(t.id)) { removed.push({ reason: 'duplicate_id', id: t.id, tx: t }); return; }
+
+    if (t.sourceRecurringId && t.year && t.month) {
+      const rKey = `${t.sourceRecurringId}|${t.year}|${t.month}`;
+      if (seenRecurringKey.has(rKey)) {
+        removed.push({ reason: 'duplicate_recurring', key: rKey, id: t.id, existingId: seenRecurringKey.get(rKey), tx: t });
+        return;
+      }
+      seenRecurringKey.set(rKey, t.id);
+    }
+
+    if (t.createdAt && t.source !== 'sms' && !t.linkedTransferId && safeNumber(t.amount) > 0 && !isHanyShopCategory(t.category) && !isCarryoverMarker(t)) {
+      const FUZZY_WINDOW_MS = 10000;
+      const tTime = new Date(t.createdAt).getTime();
+      if (!isNaN(tTime)) {
+        const descKey = normalizeText(t.description || '').slice(0, 30);
+        const fKey = `${safeNumber(t.amount)}|${t.category}|${t.method}|${t.type}|${descKey}`;
+        const lastSeen = seenFuzzyKey.get(fKey);
+        if (lastSeen && (lastSeen.time - tTime) < FUZZY_WINDOW_MS) {
+          removed.push({ reason: 'fuzzy_duplicate', key: fKey, id: t.id, existingId: lastSeen.id, deltaMs: lastSeen.time - tTime, tx: t });
+          return;
+        }
+        seenFuzzyKey.set(fKey, { id: t.id, time: tTime });
+      }
+    }
+    seenById.add(t.id);
+    keep.push(t);
+  });
+
+  return { transactions: keep, removed };
+};
+  const addMonthsWithDaySafe = (isoStr, monthsToAdd, day) => {
   const dt = new Date(isoStr + 'T12:00:00');
   dt.setMonth(dt.getMonth() + monthsToAdd);
   const maxDay = new Date(dt.getFullYear(), dt.getMonth() + 1, 0).getDate();
