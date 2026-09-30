@@ -1835,11 +1835,17 @@ const classifyFlow = (t) => {
   if (!t) return FLOW.VOID;
   if (t.status === 'void' || t.source === 'void') return FLOW.VOID;
   if (isCarryoverMarker(t)) return FLOW.CARRYOVER_MARKER;  
-  // ⭐ V87.3 FIX: سداد البطاقات — قبل كل الفحوصات
+  // ⭐ V87.4 FIX: قسط القرض العقاري — قبل السداد
+  if (t.sourceRecurringId && t.sourceRecurringId.indexOf('r-mortgage') === 0) {
+    return FLOW.LOAN_INSTALLMENT;
+  }
+  
+  // ⭐ V87.4 FIX: سداد البطاقات — دفعات يدوية فقط
   if (t.source === 'card-payment-plan') return FLOW.CARD_PAYMENT;
   if (t.category === 'الالتزامات البنكية والتمويلية' 
       && t.type === 'expense' 
-      && !t.linkedLoanId) return FLOW.CARD_PAYMENT;  
+      && !t.linkedLoanId
+      && !t.sourceRecurringId) return FLOW.CARD_PAYMENT;
   if (t.source === 'reconciliation') return FLOW.RECONCILIATION;  
   if (t.hanyEffect === 'purchase' || t.method === HANY_TAB_METHOD) return FLOW.HANY_PURCHASE;
   if (t.hanyEffect === 'settle' || t.settledHanyMonth) return FLOW.HANY_SETTLE;
