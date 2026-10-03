@@ -3188,6 +3188,223 @@ const SIDEBAR_GROUPS = [
     { id: 'settings', label: 'الإعدادات', icon: Sliders }
   ]}
 ];
+/* ═══════════════ SIDEBAR GROUPS (V88) ═══════════════ */
+const SIDEBAR_GROUPS = [
+  { group: 'الرئيسية', items: [
+    { id: 'dashboard', label: 'لوحة التحكم', icon: Home },
+    { id: 'transactions', label: 'المعاملات', icon: Receipt },
+    { id: 'categories', label: 'الفئات والميزانية', icon: Layers },
+    { id: 'calendar', label: 'الأجندة', icon: CalendarDays }
+  ]},
+  { group: 'المالية', items: [
+    { id: 'cards', label: 'البطاقات والمحافظ', icon: CreditCard },
+    { id: 'loans', label: 'الالتزامات والعهد', icon: Banknote }
+  ]},
+  { group: 'التحليل', items: [
+    { id: 'financial-forecast', label: 'التنبؤ الشامل', icon: TrendingUp }
+  ]},
+  { group: 'التقارير', items: [
+    { id: 'reports', label: 'مركز التقارير', icon: FileText, badge: 'NEW' }
+  ]},
+  { group: 'الأدوات', items: [
+    { id: 'duplicates', label: 'كاشف التكرار', icon: Filter },
+    { id: 'data-health', label: 'صحة البيانات', icon: ShieldCheck },
+    { id: 'deleted', label: 'سجل المحذوفات', icon: Trash2 },
+    { id: 'audit', label: 'سجل التدقيق', icon: History }
+  ]},
+  { group: 'الإعدادات', items: [
+    { id: 'settings', label: 'الإعدادات', icon: Sliders }
+  ]}
+];
+
+/* ═══════════════ SIDEBAR COMPONENT (V88) ═══════════════ */
+const Sidebar = memo(({
+  isOpen, onClose, activeTab, onNavigate, isDarkMode, onToggleTheme,
+  isOnline, syncStatus, isSaving, custodyBalance, hanyPayable, data,
+  onOpenSms, onLogout, onLock, onForceSync, forceSaveState, onForceSave
+}) => {
+  const totals = useMemo(() => {
+    const txs = data?.transactions || [];
+    const pendingCount = txs.filter(t => t.status !== 'paid' && !isCarryoverMarker(t)).length;
+    const archiveCount = (data?.deletedTxArchive || []).length;
+    const auditCount = (data?.auditLog || []).length;
+    const pendingDeleteRequests = (data?.deleteRequests || []).filter(r => r && r.status === 'pending').length;
+    return { pendingCount, archiveCount, auditCount, pendingDeleteRequests };
+  }, [data]);
+
+  const badges = {
+    transactions: totals.pendingCount > 0 ? String(totals.pendingCount) : null,
+    deleted: totals.archiveCount > 0 ? String(totals.archiveCount) : (totals.pendingDeleteRequests > 0 ? String(totals.pendingDeleteRequests) : null),
+    audit: totals.auditCount > 0 ? String(Math.min(totals.auditCount, 999)) : null
+  };
+
+  return (
+    <React.Fragment>
+      <div className={`sidebar-overlay ${isOpen ? 'open' : ''} no-print`} onClick={onClose} />
+      <aside className={`sidebar ${isOpen ? 'open' : ''} no-print`}>
+        <div className="sidebar-header">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-10 h-10 rounded-2xl flex items-center justify-center text-white shadow-md" style={{ background: 'linear-gradient(135deg, #635BFF 0%, #4A42E5 100%)' }}>
+                <Wallet size={18} />
+              </div>
+              <div>
+                <h1 className="text-sm font-black">محفظتي</h1>
+                <p className="text-[9px] font-semibold" style={{ color: 'var(--text-muted)' }}>Personal Banking · V88.0</p>
+              </div>
+            </div>
+            <button onClick={onClose} className="btn btn-ghost p-1.5 lg:hidden"><X size={16} /></button>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <button type="button" onClick={onOpenSms} title="تحليل رسالة بنك" className="w-9 h-9 rounded-xl flex items-center justify-center transition-colors" style={{ background: 'var(--bg-muted)', color: 'var(--text-secondary)' }}>
+              <MessageSquare size={15} />
+            </button>
+            <button type="button" onClick={onForceSync} title="اسحب آخر نسخة من السحابة" className="w-9 h-9 rounded-xl flex items-center justify-center transition-colors" style={{ background: 'var(--bg-muted)', color: 'var(--text-secondary)' }} disabled={isSaving}>
+              <Download size={15} className={isSaving ? 'animate-pulse' : ''} />
+            </button>
+            <button onClick={onToggleTheme} title="الوضع الليلي" className="flex-1 flex items-center justify-center gap-1 py-2 rounded-lg text-[10px] font-bold transition-colors" style={{ background: 'var(--bg-muted)', color: 'var(--text-secondary)' }}>
+              {isDarkMode ? <Sun size={12} /> : <Moon size={12} />}
+              <span>{isDarkMode ? 'نهاري' : 'ليلي'}</span>
+            </button>
+          </div>
+          <div className="mt-2 flex gap-1.5">
+            <div className="flex-1"><ForceSaveButton onForceSave={onForceSave} state={forceSaveState} isSaving={isSaving} /></div>
+          </div>
+          <div className="mt-2">
+            <StatusBar isOnline={isOnline} syncStatus={syncStatus} isSaving={isSaving} custodyBalance={custodyBalance} hanyPayable={hanyPayable} />
+          </div>
+        </div>
+        <div className="sidebar-content">
+          {SIDEBAR_GROUPS.map(group => (
+            <div key={group.group} className="sidebar-group">
+              <p className="sidebar-group-title">{group.group}</p>
+              {group.items.map(item => {
+                const Icon = item.icon;
+                const isActive = activeTab === item.id;
+                const badge = badges[item.id] || item.badge;
+                return (
+                  <button key={item.id} onClick={() => { onNavigate(item.id); onClose(); }} className={`sidebar-item ${isActive ? 'active' : ''}`}>
+                    <span className="sidebar-icon"><Icon size={14} /></span>
+                    <span className="flex-1 truncate text-right">{item.label}</span>
+                    {badge && <span className="sidebar-badge money tabular">{badge}</span>}
+                  </button>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+        <div className="p-3 border-t" style={{ borderColor: 'var(--border-subtle)' }}>
+          <div className="flex items-center gap-2 mb-2 p-2 rounded-xl" style={{ background: 'var(--bg-muted)' }}>
+            <div className="w-8 h-8 rounded-xl flex items-center justify-center text-white flex-shrink-0" style={{ background: 'linear-gradient(135deg, #635BFF 0%, #4A42E5 100%)' }}>
+              <UserIcon size={14} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[11px] font-black truncate">Ahmed M. Khalil</p>
+              <p className="text-[9px] truncate" style={{ color: 'var(--text-muted)' }}>ahmedmkh@gmail.com</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-1.5">
+            <button onClick={onLock} className="flex items-center justify-center gap-1 py-2 rounded-lg text-[10px] font-bold" style={{ background: 'var(--bg-muted)', color: 'var(--text-secondary)' }}>
+              <Lock size={11} /> قفل
+            </button>
+            <button onClick={onLogout} className="flex items-center justify-center gap-1 py-2 rounded-lg text-[10px] font-bold text-red-600" style={{ background: 'var(--bg-muted)' }}>
+              <LogOut size={11} /> خروج
+            </button>
+          </div>
+        </div>
+      </aside>
+    </React.Fragment>
+  );
+});
+
+/* ═══════════════ PROFESSIONAL HEADER (V88) ═══════════════ */
+const ProfessionalHeader = memo(({
+  isDarkMode, dispatch, onOpenSms, isOnline, syncStatus, isSaving,
+  custodyBalance, hanyPayable, onOpenSidebar, onForceSync, forceSaveState, onForceSave,
+  onOpenPrintCenter, lastSyncAt, pendingCount, onOpenSyncMenu, isSyncMenuOpen, onOpenDebug
+}) => {
+  const wrapperRef = useRef(null);
+
+  useEffect(() => {
+    if (!isSyncMenuOpen) return;
+    const handleClickOutside = (e) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target)) {
+        dispatch({ type: 'SET_SYNC_MENU_OPEN', payload: false });
+      }
+    };
+    const handleEsc = (e) => {
+      if (e.key === 'Escape') dispatch({ type: 'SET_SYNC_MENU_OPEN', payload: false });
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleEsc);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEsc);
+    };
+  }, [isSyncMenuOpen, dispatch]);
+
+  return (
+    <header className="flex justify-between items-center gap-3 mb-4 flex-wrap">
+      <div className="flex items-center gap-2.5">
+        <button onClick={onOpenSidebar} className="lg:hidden w-10 h-10 rounded-2xl flex items-center justify-center transition-colors" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)' }} aria-label="فتح القائمة">
+          <Menu size={18} />
+        </button>
+        <div className="hidden lg:flex w-10 h-10 rounded-2xl items-center justify-center text-white shadow-md" style={{ background: 'linear-gradient(135deg, #635BFF 0%, #4A42E5 100%)' }}>
+          <Wallet size={18} />
+        </div>
+        <div>
+          <h1 className="text-base font-black">محفظتي</h1>
+          <p className="text-[9px] font-semibold" style={{ color: 'var(--text-muted)' }}>Personal Banking · V88.0</p>
+        </div>
+      </div>
+      <div className="flex items-center gap-1.5">
+        {onOpenPrintCenter && (
+          <button type="button" onClick={onOpenPrintCenter} title="مركز الطباعة والتقارير"
+            className="h-9 px-3 rounded-xl flex items-center justify-center gap-1.5 text-white text-xs font-black transition-all hover:scale-105"
+            style={{ background: 'linear-gradient(135deg, #0A1628 0%, #635BFF 100%)', boxShadow: '0 6px 16px -4px rgba(99,91,255,0.5)' }}>
+            <PrinterIcon size={14} /> <span className="hidden sm:inline">تقارير</span>
+          </button>
+        )}
+        <ForceSaveButton onForceSave={onForceSave} state={forceSaveState} isSaving={isSaving} />
+        <div ref={wrapperRef} className="relative hidden md:block">
+          <CloudSyncIndicator
+            lastSyncAt={lastSyncAt}
+            isSaving={isSaving}
+            isOnline={isOnline}
+            syncStatus={syncStatus}
+            pendingCount={pendingCount || 0}
+            onForceSync={onForceSync}
+            onOpenMenu={onOpenSyncMenu}
+          />
+          <SyncMenu
+            isOpen={isSyncMenuOpen}
+            onClose={() => dispatch({ type: 'SET_SYNC_MENU_OPEN', payload: false })}
+            onPush={onForceSave}
+            onPull={onForceSync}
+            onForceSync={onForceSync}
+            isSaving={isSaving}
+            isOnline={isOnline}
+            pendingCount={pendingCount || 0}
+            lastSyncAt={lastSyncAt}
+            onOpenDebug={onOpenDebug}
+          />
+        </div>
+        <button type="button" onClick={onOpenSms} title="تحليل رسالة بنك" className="w-9 h-9 rounded-xl flex items-center justify-center transition-colors" style={{ background: 'var(--bg-muted)', color: 'var(--text-secondary)' }}>
+          <MessageSquare size={15} />
+        </button>
+        <button type="button" onClick={onForceSync} title="اسحب آخر نسخة" className="w-9 h-9 rounded-xl flex items-center justify-center transition-colors" style={{ background: 'var(--bg-muted)', color: 'var(--text-secondary)' }} disabled={isSaving}>
+          <Download size={15} />
+        </button>
+        <button type="button" onClick={() => dispatch({ type: 'TOGGLE_DARK_MODE', payload: !isDarkMode })} className="w-9 h-9 rounded-xl flex items-center justify-center transition-colors" style={{ background: 'var(--bg-muted)', color: 'var(--text-secondary)' }}>
+          {isDarkMode ? <Sun size={15} /> : <Moon size={15} />}
+        </button>
+        <div className="hidden md:block">
+          <StatusBar isOnline={isOnline} syncStatus={syncStatus} isSaving={isSaving} custodyBalance={custodyBalance} hanyPayable={hanyPayable} pendingCount={pendingCount || 0} />
+        </div>
+      </div>
+    </header>
+  );
+});
 
 /* ═══════════════ BASE UI COMPONENTS ═══════════════ */
 const Modal = memo(({ isOpen, onClose, title, icon, size = 'md', children, footer, className = '' }) => {
