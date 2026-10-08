@@ -549,6 +549,13 @@ h1,h2,h3,h4 { font-weight: 800; letter-spacing: -0.02em; color: var(--text-prima
 .print-fab:hover { transform: translateY(-3px) scale(1.05); box-shadow: 0 16px 32px -4px rgba(99,91,255,0.6); }
 .print-fab:active { transform: scale(.94); }
 @media (min-width: 1024px) { .print-fab { bottom: 24px; left: 24px; } }
+
+/* ⭐ V88.0 — Bank-Grade Statement Cycle Visualization */
+.cycle-timeline { display: flex; align-items: center; gap: 4px; padding: 8px; border-radius: 12px; background: var(--bg-muted); font-size: 9px; font-weight: 800; }
+.cycle-timeline .cycle-node { flex: 1; text-align: center; padding: 4px; border-radius: 6px; }
+.cycle-timeline .cycle-node.start { background: rgba(100,116,139,0.15); color: #64748B; }
+.cycle-timeline .cycle-node.statement { background: rgba(99,91,255,0.15); color: #635BFF; }
+.cycle-timeline .cycle-node.due { background: rgba(220,38,38,0.15); color: #DC2626; }
 </style>
 </head>
 <body>
@@ -560,21 +567,7 @@ h1,h2,h3,h4 { font-weight: 800; letter-spacing: -0.02em; color: var(--text-prima
 
 <script type="text/babel" data-type="module">
 /* ═══════════════════════════════════════════════════════════════
-   V88.0 — FILE UNIFIED
-   التغييرات عن V87.8:
-   + بداية المشروع: أكتوبر 2026 فقط
-   + DEFAULT_PIN = 8686
-   + بطاقة Tainum محدثة (9982, 09/28, 25 من كل شهر, theme tainum_gray)
-   + Titanium subcards: [9360, 9352, 2014]
-   + Signature subcards: [3557]
-   + SWYPE: 6015, limit 49500, linkedAccount 1809
-   + CARD_LAST4_MAP محدث بالكامل
-   + Toast محسن (progress bar + swipe + grabber)
-   + Tainum gray card CSS مع كرة أرضية
-   + Cache للأرصدة (LRU 20)
-   + cleanupOldMaterialized
-   + SMS Parser كامل (4 أنماط)
-   + Form modal محسن (Header/Body/Footer)
+   V88.0 — FILE UNIFIED + Bank-Grade Card Engine (Part 8)
    ═══════════════════════════════════════════════════════════════ */
 
 import React, { useState, useMemo, useEffect, useCallback, useReducer, useRef, memo } from 'react';
@@ -783,8 +776,8 @@ const getCategoryMeta = (cat) => CATEGORY_META[normalizeCategory(cat)] || CATEGO
 /* ═══════════════ CONSTANTS ═══════════════ */
 const LAST_SYNC_LS_KEY = 'v88_last_sync_ts';
 const ALLOWED_EMAIL = "ahmedmkh@gmail.com";
-const CURRENT_ENGINE_VERSION = 31; // ⭐ رُفع لـ V88.0
-const DEFAULT_PIN = '8686'; // ⭐ V88.0
+const CURRENT_ENGINE_VERSION = 31;
+const DEFAULT_PIN = '8686';
 const PIN_HASH_KEY = 'finance_pin_hash_v88';
 const STORAGE_KEY = 'finance_tracker_V88_0';
 const LEGACY_KEYS = [
@@ -821,7 +814,7 @@ const DAILY_DHIKR = [
   "اللَّهُمَّ اكْفِنِي بِحَلَالِكَ عَنْ حَرَامِكَ، وَأَغْنِنِي بِفَضْلِكَ عَمَّنْ سِوَاكَ",
   "أَسْتَغْفِرُ اللَّهَ الْعَظِيمَ، وَأَتُوبُ إِلَيْهِ",
   "اللَّهُمَّ بَارِكْ لَنَا فِيمَا رَزَقْتَنَا وَقِنَا عَذَابَ النَّارِ",
-  "لَا إِلَهَ إِلَّا أَنْتَ سُبْحَانَكَ إِنِّي كُنْتُ مِنَ الظَّالِمِينَ",
+  "لَا إِلَهَ إِلَّا أَنْتَ سُبْحَانَكَ إِنِّي كُنتُ مِنَ الظَّالِمِينَ",
   "اللَّهُمَّ بِكَ أَصْبَحْنَا وَبِكَ أَمْسَيْنَا وَبِكَ نَحْيَا وَبِكَ نَمُوتُ",
   "رَضِيتُ بِاللَّهِ رَبًّا وَبِالإِسْلَامِ دِينًا وَبِمُحَمَّدٍ نَبِيًّا",
   "يَا حَيُّ يَا قَيُّومُ بِرَحْمَتِكَ أَسْتَغِيثُ أَصْلِحْ لِي شَأْنِي كُلُّهُ",
@@ -982,7 +975,6 @@ const addMonthsToYM = (year, month, offset) => {
   return { year: y, month: ALL_MONTHS[idx] };
 };
 
-/* ⭐ V88.0 — fallback أكتوبر 2026 */
 const getDefaultMonthYear = () => {
   const now = new Date();
   const y = now.getFullYear();
@@ -1013,7 +1005,7 @@ const validateAmount = (raw, opts = {}) => {
   const n = parseFloat(cleaned);
   if (isNaN(n) || !isFinite(n)) return { valid: false, error: 'اكتب رقم صحيح', value: 0 };
   if (n < cfg.min) return { valid: false, error: `الحد الأدنى ${fmt(cfg.min)} ج.م`, value: 0 };
-  if (n > cfg.max) return { valid: false, error: `الحد الأقصى ${fmt(cfg.max)} ج.م`, value: 0 };
+  if (n > cfg.max) return { valid: false, error: `الحد الأدنى ${fmt(cfg.max)} ج.م`, value: 0 };
   return { valid: true, value: n };
 };
 
@@ -1072,34 +1064,24 @@ const verifyPinSession = async (pin) => {
   return stored === expected;
 };
 
-/* ═══════════════ DEFAULT CARDS — V88.0 محدثة ⭐ ═══════════════ */
+/* ═══════════════ DEFAULT CARDS — V88.0 ⭐ + statementDay ⭐ NEW ═══════════════ */
 const DEFAULT_CARDS = [
-  /* ⭐ CIB Titanium — subcards محدثة (9380 → 9360) */
-  { id:1, name:'Titanium', bank:'CIB', limit:100500, availableBalance:100500, openingDebt:0, openingDebtDate: null, openingDate: null, expiry:'01/29', holderName:'AHMED M. KHALIL', last4:'1016', subCardLast4: ['9360', '9352', '2014'], dueDate:'05 من كل شهر', type:'mastercard', theme:'silver', cashbackRate:0 },
-  /* ⭐ AAIB Signature — subcard 3557 مضافة */
-  { id:2, name:'Signature', bank:'AAIB', limit:100000, availableBalance:100000, openingDebt:0, openingDebtDate: null, openingDate: null, expiry:'10/26', holderName:'AHMED M. KHALIL', last4:'3391', subCardLast4: ['3557'], dueDate:'25 من كل شهر', type:'visa', theme:'black', cashbackRate:0 },
-  /* ⭐ CIB SWYPE — 6015 بدلاً من 2017 + ربط بـ CIB Savings 1809 */
-  { id:3, name:'SWYPE', bank:'CIB', limit:49500, availableBalance:49500, openingDebt:0, openingDebtDate: null, openingDate: null, expiry:'01/29', holderName:'AHMED M. KHALIL', last4:'6015', subCardLast4: [], dueDate:'05 من كل شهر', type:'mastercard', theme:'blue', cashbackRate:0, linkedAccountKey: 'cib_savings', linkedAccountLast4: '1809' },
-  /* ⭐ ADIB Tainum — محدثة بالكامل */
-  { id:4, name:'Tainum', bank:'ADIB Egypt', limit:99000, availableBalance:99000, openingDebt:0, openingDebtDate: null, openingDate: null, expiry:'09/28', holderName:'AHMED M. KHALIL', last4:'9982', subCardLast4: [], dueDate:'25 من كل شهر', type:'mastercard', theme:'tainum_gray', cashbackRate:1 }
+  { id:1, name:'Titanium', bank:'CIB', limit:100500, availableBalance:100500, openingDebt:0, openingDebtDate: null, openingDate: null, expiry:'01/29', holderName:'AHMED M. KHALIL', last4:'1016', subCardLast4: ['9360', '9352', '2014'], dueDate:'05 من كل شهر', statementDay: 15, type:'mastercard', theme:'silver', cashbackRate:0 },
+  { id:2, name:'Signature', bank:'AAIB', limit:100000, availableBalance:100000, openingDebt:0, openingDebtDate: null, openingDate: null, expiry:'10/26', holderName:'AHMED M. KHALIL', last4:'3391', subCardLast4: ['3557'], dueDate:'25 من كل شهر', statementDay: 5, type:'visa', theme:'black', cashbackRate:0 },
+  { id:3, name:'SWYPE', bank:'CIB', limit:49500, availableBalance:49500, openingDebt:0, openingDebtDate: null, openingDate: null, expiry:'01/29', holderName:'AHMED M. KHALIL', last4:'6015', subCardLast4: [], dueDate:'05 من كل شهر', statementDay: 15, type:'mastercard', theme:'blue', cashbackRate:0, linkedAccountKey: 'cib_savings', linkedAccountLast4: '1809' },
+  { id:4, name:'Tainum', bank:'ADIB Egypt', limit:99000, availableBalance:99000, openingDebt:0, openingDebtDate: null, openingDate: null, expiry:'09/28', holderName:'AHMED M. KHALIL', last4:'9982', subCardLast4: [], dueDate:'25 من كل شهر', statementDay: 5, type:'mastercard', theme:'tainum_gray', cashbackRate:1 }
 ];
 
-/* ⭐ V88.0 — CARD_LAST4_MAP محدث بالكامل */
 const CARD_LAST4_MAP = {
-  // Accounts
   '1809': { method: 'cib_savings', linkedCardId: null, bank: 'CIB', kind: 'account', label: 'CIB Savings' },
   '2106': { method: 'aaib_savings', linkedCardId: null, bank: 'AAIB', kind: 'account', label: 'AAIB Savings' },
-  // CIB Titanium
   '1016': { method: 'cib_card', linkedCardId: 1, bank: 'CIB', kind: 'card', label: 'Titanium' },
   '9360': { method: 'cib_card', linkedCardId: 1, bank: 'CIB', kind: 'subcard', label: 'Titanium فرعية 9360' },
   '9352': { method: 'cib_card', linkedCardId: 1, bank: 'CIB', kind: 'subcard', label: 'Titanium فرعية 9352' },
   '2014': { method: 'cib_card', linkedCardId: 1, bank: 'CIB', kind: 'subcard', label: 'Titanium فرعية 2014' },
-  // AAIB Signature
   '3391': { method: 'aaib_card', linkedCardId: 2, bank: 'AAIB', kind: 'card', label: 'Signature' },
   '3557': { method: 'aaib_card', linkedCardId: 2, bank: 'AAIB', kind: 'subcard', label: 'Signature فرعية 3557' },
-  // CIB SWYPE
   '6015': { method: 'cib_swype', linkedCardId: 3, bank: 'CIB', kind: 'card', label: 'SWYPE' },
-  // ADIB Tainum
   '9982': { method: 'adib_card', linkedCardId: 4, bank: 'ADIB', kind: 'card', label: 'Tainum' }
 };
 
@@ -1123,23 +1105,17 @@ const WALLET_CONFIGS = {
   aaib_savings: { id:'aaib_savings', title:'AAIB Savings Account', subtitle:'حساب بنكي', icon: PiggyBank, csvName:'AAIB_Savings', group: 'bank' }
 };
 
-/* ⭐ طرق الدفع — V88.0 محدثة */
 const PAYMENT_METHODS = [
-  // الحسابات
   { id:'cib_savings',     label:'حساب CIB التوفيري',    shortLabel:'CIB حساب',   icon:'🏦', bg:'linear-gradient(135deg,#1E40AF,#3B82F6)',   group:'account', subtitle:'حساب بنكي' },
   { id:'aaib_savings',    label:'حساب AAIB التوفيري',   shortLabel:'AAIB حساب',  icon:'🏛️', bg:'linear-gradient(135deg,#065F46,#10B981)',   group:'account', subtitle:'حساب بنكي' },
   { id:'cash',            label:'نقدي (كاش)',           shortLabel:'Cash',       icon:'💵', bg:'linear-gradient(135deg,#059669,#00A86B)',   group:'account', subtitle:'كاش في اليد' },
   { id:'fawry',           label:'محفظة فوري',           shortLabel:'Fawry',      icon:'📱', bg:'linear-gradient(135deg,#CA8A04,#F59E0B)',   group:'account', subtitle:'محفظة إلكترونية' },
   { id:'etisalat',        label:'محفظة اتصالات',        shortLabel:'Etisalat',   icon:'📡', bg:'linear-gradient(135deg,#BE185D,#EC4899)',   group:'account', subtitle:'محفظة إلكترونية' },
   { id: HANY_TAB_METHOD,  label:'دفتر هاني',            shortLabel:'هاني',       icon:'🛒', bg:'linear-gradient(135deg,#EA580C,#F97316)',   group:'account', subtitle:'بدون تأثير نقدي' },
-
-  // البطاقات الائتمانية (V88.0 محدثة)
   { id:'cib_card',        label:'بطاقة CIB Master',     shortLabel:'CIB Master', icon:'💳', bg:'linear-gradient(135deg,#0A1628,#1E2B4A)',   group:'card', subtitle:'Titanium •••• 1016' },
   { id:'cib_swype',       label:'بطاقة CIB SWYPE',      shortLabel:'SWYPE',      icon:'💳', bg:'linear-gradient(135deg,#3B6FD4,#6B8FDC)',   group:'card', subtitle:'SWYPE •••• 6015' },
   { id:'aaib_card',       label:'بطاقة AAIB Visa',      shortLabel:'AAIB Visa',  icon:'💳', bg:'linear-gradient(135deg,#1E2B4A,#000000)',   group:'card', subtitle:'Signature •••• 3391' },
   { id:'adib_card',       label:'بطاقة Tainum ADIB',    shortLabel:'Tainum',     icon:'💳', bg:'linear-gradient(135deg,#4A5568,#2D3748)',   group:'card', subtitle:'ADIB Egypt •••• 9982' },
-
-  // قنوات التحويل الخارجي
   { id:'telda_shaimaa',   label:'Telda شيماء',          shortLabel:'Telda شيماء', icon:'📲', bg:'linear-gradient(135deg,#7C3AED,#A78BFA)',   group:'channel', subtitle:'بدون تأثير نقدي' },
   { id:'telda_salma',     label:'Telda سلمى',           shortLabel:'Telda سلمى',  icon:'📲', bg:'linear-gradient(135deg,#DB2777,#F472B6)',   group:'channel', subtitle:'بدون تأثير نقدي' },
   { id:'telda_abdelrahman',label:'Telda عبد الرحمن',    shortLabel:'Telda عبد الرحمن', icon:'📲', bg:'linear-gradient(135deg,#059669,#34D399)', group:'channel', subtitle:'بدون تأثير نقدي' }
@@ -1196,8 +1172,9 @@ const REPORT_METHOD_LABELS = {
 
 const getMethodLabel = (id) => REPORT_METHOD_LABELS[id] || id || '—';
 /* ═══════════════════════════════════════════════════════════════
-   V88.0 — PART 2/8
+   V88.0 — PART 2/6
    Print Engine + Report Generators + Accounting Core + Migration
+   + Recurring Engine + Drive Operations + Integrity Checks
    ═══════════════════════════════════════════════════════════════ */
 
 /* ═══════════════ PRINT ENGINE ═══════════════ */
@@ -2010,7 +1987,6 @@ const computeBalancesAsOf = (data, asOfDate = null) => {
 
   ACCOUNT_KEYS.forEach(k => { result[k] = fromPiasters(result[k]); });
 
-  // LRU: احتفظ بـ 20 نتيجة فقط
   if (_balanceCache.size > 20) {
     const firstKey = _balanceCache.keys().next().value;
     _balanceCache.delete(firstKey);
@@ -2046,6 +2022,7 @@ const isCardPaymentTx = (t, cardId) => {
   return false;
 };
 
+/* ⭐ V88.0 Bank-Grade — computeCardDebt محدثة (تعديل 4) */
 const computeCardDebt = (data, card, asOfDate = null) => {
   if (!card) return 0;
   const method = getCardMethod(card);
@@ -2066,6 +2043,8 @@ const computeCardDebt = (data, card, asOfDate = null) => {
     if (isCarryoverMarker(t)) return;
     if (isHanyPurchaseTx(t) || isHanySettleTx(t)) return;
     if (t.method === HANY_TAB_METHOD) return;
+    // ⭐ V88.0 — استثناء المعاملات المربوطة بخطة تقسيط
+    if (t.installmentPlanId) return;
 
     const d = parseISODate(t.date);
     if (!d) return;
@@ -2088,6 +2067,12 @@ const computeCardDebt = (data, card, asOfDate = null) => {
     if (t.type === 'expense') debt += amt;
     else if (t.type === 'income') debt -= amt;
   });
+
+  // ⭐ V88.0 — إضافة الأقساط المستحقة من خطط التقسيط
+  try {
+    const instInfo = computeCardInstallmentsInfo(data, card, upper);
+    debt += instInfo.totalDueSoFar;
+  } catch (e) { /* silent — function قد لا تكون معرّفة عند التحميل الأول */ }
 
   return debt;
 };
@@ -2549,7 +2534,7 @@ const migrateSnapshotsAndClosed = (snapshots, closedMonths) => {
   return { snapshots: snaps, closedMonths: closed };
 };
 
-/* ⭐ V88.0 — migrateCards محدثة بالبطاقات الجديدة */
+/* ⭐ V88.0 — migrateCards محدثة + statementDay */
 const migrateCards = (cards) => {
   if (!Array.isArray(cards)) return JSON.parse(JSON.stringify(DEFAULT_CARDS));
   const migrated = cards.map(c => {
@@ -2557,17 +2542,14 @@ const migrateCards = (cards) => {
     if (!Array.isArray(result.subCardLast4)) result.subCardLast4 = [];
     if (result.id === 2 && String(result.last4) === '0391') result.last4 = '3391';
     if (result.id === 1 && result.name === 'Titanium') {
-      // V88.0: subcards جديدة مع 9360
       result.subCardLast4 = ['9360', '9352', '2014'];
       if (!result.limit || result.limit === 0) result.limit = 100500;
     }
     if (result.id === 2 && result.name === 'Signature') {
-      // V88.0: subcard 3557
       result.subCardLast4 = ['3557'];
       if (!result.limit || result.limit === 0) result.limit = 100000;
     }
     if (result.id === 3 && result.name === 'SWYPE') {
-      // V88.0: last4 6015 + limit + linkedAccount
       result.last4 = '6015';
       if (!result.limit || result.limit === 0) result.limit = 49500;
       result.subCardLast4 = [];
@@ -2575,7 +2557,6 @@ const migrateCards = (cards) => {
       if (!result.linkedAccountLast4) result.linkedAccountLast4 = '1809';
     }
     if (result.id === 4 || result.name === 'Tainum' || result.bank === 'ADIB Egypt') {
-      // V88.0: Tainum محدثة
       result.name = 'Tainum';
       result.bank = 'ADIB Egypt';
       result.limit = 99000;
@@ -2587,12 +2568,18 @@ const migrateCards = (cards) => {
       result.cashbackRate = result.cashbackRate !== undefined ? result.cashbackRate : 1;
       result.type = 'mastercard';
     }
+    // ⭐ statementDay — default from dueDay
+    if (result.statementDay === undefined || result.statementDay === null || result.statementDay === '') {
+      const dueMatch = String(result.dueDate || '25').match(/(\d{1,2})/);
+      const dueD = dueMatch ? parseInt(dueMatch[1], 10) : 25;
+      result.statementDay = dueD > 20 ? dueD - 20 : Math.min(28, dueD + 10);
+    }
+    result.statementDay = Math.min(28, Math.max(1, safeNumber(result.statementDay, 5)));
     if (!result.openingDate) result.openingDate = null;
     if (!result.openingDebtDate) result.openingDebtDate = result.openingDate || null;
     if (result.cashbackRate === undefined) result.cashbackRate = 0;
     return result;
   });
-  // ⭐ Tainum (id=4) لا يمكن حذفها
   const hasTainum = migrated.some(c => c.id === 4 || c.name === 'Tainum' || c.bank === 'ADIB Egypt');
   if (!hasTainum) {
     const tainum = DEFAULT_CARDS.find(c => c.id === 4);
@@ -2665,7 +2652,6 @@ const migrateData = (parsed) => {
   const deletedSet = new Set(deletedDefaultIds);
 
   const incomingCards = Array.isArray(parsed.cards) ? parsed.cards : [];
-  // ⭐ Tainum (id=4) لا يمكن حذفها
   const cardsFilteredDefaults = DEFAULT_CARDS.filter(c => !deletedSet.has(c.id) || c.id === 4);
   const mergedCards = mergeById(migrateCards(incomingCards), cardsFilteredDefaults);
 
@@ -2752,6 +2738,11 @@ const migrateData = (parsed) => {
 
   const { openingBalance2026: _drop, ...rest } = parsed;
 
+  // ⭐ V88.0 — cardInstallments filter (تعديل 3)
+  const cardInstallments = Array.isArray(parsed.cardInstallments)
+    ? parsed.cardInstallments.filter(p => p && p.cardId && p.totalAmount && p.months && p.months > 0)
+    : [];
+
   const base = {
     ...rest,
     engineVersion: CURRENT_ENGINE_VERSION,
@@ -2763,6 +2754,7 @@ const migrateData = (parsed) => {
     custodyEntries: Array.isArray(parsed.custodyEntries) ? parsed.custodyEntries : [],
     cashbackTrackers: Array.isArray(parsed.cashbackTrackers) ? parsed.cashbackTrackers : [],
     reconciliations: Array.isArray(parsed.reconciliations) ? parsed.reconciliations : [],
+    cardInstallments, // ⭐ NEW
     settledHanyMonths, deletedTxIds, deletedTxArchive: migratedArchive.slice(-500),
     legacyArchiveMigrated: true, deletedDefaultIds, auditLog, defaultsSeeded: true,
     shoppingRecurring: Array.isArray(parsed.shoppingRecurring) ? parsed.shoppingRecurring : [],
@@ -2792,6 +2784,7 @@ const getInitialData = () => {
     accountsData: JSON.parse(JSON.stringify(DEFAULT_ACCOUNTS)),
     monthlyPlans: {}, recurringItems: [], closedMonths: [], monthlySnapshots: {},
     materializedRecurring: {}, custodyEntries: [], cashbackTrackers: [], reconciliations: [],
+    cardInstallments: [], // ⭐ NEW — تعديل 2
     settledHanyMonths: [], deletedTxIds: [], deletedTxArchive: [],
     deletedDefaultIds: [], auditLog: [], shoppingRecurring: [], deleteRequests: [],
     hanyPayableCache: 0,
@@ -2799,7 +2792,6 @@ const getInitialData = () => {
 };
 
 /* ═══════════════ RECURRING ENGINE ═══════════════ */
-/* ⭐ V88.0 — تنظيف materializedRecurring القديمة */
 const cleanupOldMaterialized = (materialized) => {
   if (!materialized || typeof materialized !== 'object') return {};
   const now = new Date();
@@ -2829,14 +2821,12 @@ const materializeRecurringItems = (data, asOfDateStr) => {
   futureCutoff.setMonth(futureCutoff.getMonth() + 12);
   futureCutoff.setHours(23, 59, 59, 999);
 
-  /* ⭐ V88.0 — pastCutoff سنة واحدة بدلاً من 3 */
   const pastCutoff = new Date(now);
   pastCutoff.setFullYear(pastCutoff.getFullYear() - 1);
   pastCutoff.setHours(0, 0, 0, 0);
 
   const permanentDeleted = new Set(data.deletedTxIds || []);
   const existing = (data.transactions || []).filter(t => !(permanentDeleted.has(t.id)));
-  /* ⭐ V88.0 — تنظيف materialized */
   const materialized = cleanupOldMaterialized(data.materializedRecurring);
   const newTxs = [];
 
@@ -3074,8 +3064,11 @@ const applyMaterialization = (data, asOfDateStr) => {
   return updated;
 };
 /* ═══════════════════════════════════════════════════════════════
-   V88.0 — PART 3/8
-   UI Base Components + PromiseModalProvider + Toast محسن + Reducer
+   V88.0 — PART 3/6
+   Modal Resolvers + ErrorBoundary + PromiseModalProvider + Toast
+   + Base Components + Sidebar + Login + PIN + SMS Parser
+   + Reducer + ReportsHub + HanyLedger + Dashboard + Transactions
+   + Categories + CategoryDetail + Reconciliation
    ═══════════════════════════════════════════════════════════════ */
 
 /* ═══════════════ MODAL RESOLVERS ═══════════════ */
@@ -3151,7 +3144,6 @@ const PromiseModalProvider = ({ children }) => {
     };
   }, []);
 
-  /* ⭐ FIX: تنظيف عند unmount */
   useEffect(() => {
     return () => { clearAllModals(); };
   }, []);
@@ -3500,7 +3492,7 @@ const ProfessionalHeader = memo(({
 ));
 
 /* ═══════════════════════════════════════════════════════════════
-   ⭐ V88.0 ENHANCED TOAST — Progress + Swipe + Grabber + Exit animation
+   ⭐ V88.0 ENHANCED TOAST — Progress + Swipe + Grabber + Exit
    ═══════════════════════════════════════════════════════════════ */
 const Toast = ({ notification, onClose }) => {
   const [exiting, setExiting] = useState(false);
@@ -3796,19 +3788,16 @@ const PinChangeModal = ({ onClose, addNotification }) => {
 };
 
 /* ═══════════════ SMS PARSER MODAL ═══════════════ */
-/* ⭐ V88.0 — parseBankSms كامل (4 أنماط) */
 const parseBankSms = (rawText) => {
   const text = String(rawText || '').trim();
   const result = { ok: false, amount: 0, type: 'expense', subType: 'withdrawal',
     date: getLocalISODate(), description: '', notes: [], rawText, bank: null, last4: null, merchant: '' };
 
-  // ═══ رفض OTP ═══
   if (/OTP\s+\d+/i.test(text) || /Use OTP/i.test(text)) {
     result.notes.push('❌ رسالة OTP — مرفوضة');
     return result;
   }
 
-  // ═══ النمط 1: CIB Mastercard — "charged for EGP X at Y on DD/MM/YY" ═══
   let m = text.match(/credit card ending with#(\d{4})\s+was charged for EGP\s+([\d,]+\.?\d*)\s+at\s+(.+?)\s+on\s+(\d{2}\/\d{2}\/\d{2})(?:\s+at\s+(\d{2}:\d{2}))?/i);
   if (m) {
     result.ok = true;
@@ -3831,7 +3820,6 @@ const parseBankSms = (rawText) => {
     return result;
   }
 
-  // ═══ النمط 2: CIB — "**NNNN was debited by X EGP at Y" ═══
   m = text.match(/credit card \*\*(\d{4})\s+was debited by\s+([\d,]+\.?\d*)EGP\s+at\s+(.+?)\.\s+Available limit is\s+([\d ,]+\.?\d*)/i);
   if (m) {
     result.ok = true;
@@ -3850,7 +3838,6 @@ const parseBankSms = (rawText) => {
     return result;
   }
 
-  // ═══ النمط 3: ADIB Tainum — "Covered Card *NNNN was charged for EGP X at Y on DD/MM/YY at HH:MM" ═══
   m = text.match(/Covered Card\s+\*(\d{4})\s+was charged for EGP\s*([\d,]+\.?\d*)\s+at\s+(.+?)\s+on\s+(\d{2}\/\d{2}\/\d{2})(?:\s+at\s+(\d{2}:\d{2}))?/i);
   if (m) {
     result.ok = true;
@@ -3873,7 +3860,6 @@ const parseBankSms = (rawText) => {
     return result;
   }
 
-  // ═══ النمط 4: AAIB — "card ending with *NNNN was debited" ═══
   m = text.match(/card ending with \*(\d{4})\s+was debited/i);
   if (m) {
     result.last4 = m[1];
@@ -4110,6 +4096,7 @@ function dataReducer(state, action) {
       if (!Array.isArray(incoming.reconciliations)) incoming.reconciliations = [...(state.data.reconciliations || [])];
       if (!Array.isArray(incoming.auditLog)) incoming.auditLog = [...(state.data.auditLog || [])];
       if (!Array.isArray(incoming.deleteRequests)) incoming.deleteRequests = [...(state.data.deleteRequests || [])];
+      if (!Array.isArray(incoming.cardInstallments)) incoming.cardInstallments = [...(state.data.cardInstallments || [])];
       if (!Array.isArray(incoming.transactions)) incoming.transactions = [];
       incoming.transactions = sortTransactions(incoming.transactions);
       incoming.hanyPayableCache = computeHanyPayable(incoming);
@@ -4217,6 +4204,7 @@ function dataReducer(state, action) {
     case 'UPDATE_CASHBACK_TRACKERS': return { ...state, data: { ...state.data, cashbackTrackers: action.payload } };
     case 'UPDATE_MONTHLY_PLANS': return { ...state, data: { ...state.data, monthlyPlans: action.payload } };
     case 'UPDATE_DELETE_REQUESTS': return { ...state, data: { ...state.data, deleteRequests: action.payload } };
+    case 'UPDATE_CARD_INSTALLMENTS': return { ...state, data: { ...state.data, cardInstallments: action.payload } };
 
     case 'UPDATE_ACCOUNTS': {
       const oldA = state.data.accountsData || {};
@@ -4756,11 +4744,6 @@ function dataReducer(state, action) {
     default: return state;
   }
 }
-/* ═══════════════════════════════════════════════════════════════
-   V88.0 — PART 4/8
-   ReportsHub + PrintPreview + HanyLedger + Dashboard + Transactions
-   + Categories + CategoryDetail + Reconciliation
-   ═══════════════════════════════════════════════════════════════ */
 
 /* ═══════════════ REPORTS HUB VIEW ═══════════════ */
 const ReportsHubView = memo(({ data, liveBalances, updatedLoans, selectedMonth, selectedYear, dispatch, addNotification }) => {
@@ -5949,6 +5932,9 @@ const DashboardView = memo(({
         <CardsMiniPanel cards={cards} data={data} dispatch={dispatch} />
       )}
 
+      {/* ⭐ NEW V88.0 — CardsPaymentPredictions Widget (تعديل 5) */}
+      <CardsPaymentPredictions data={data} dispatch={dispatch} />
+
       <div className="grid grid-cols-3 gap-2">
         <button onClick={() => dispatch({ type: 'SET_ACTIVE_TAB', payload: 'loans' })} className="card card-hover py-3 text-center active:scale-95">
           <div className="flex items-center justify-center gap-1 mb-1.5">
@@ -6097,6 +6083,10 @@ const CardPaymentBadge = memo(({ tx, cardId }) => {
   }
   return null;
 });
+const InstallmentBadge = memo(({ tx }) => {
+  if (!tx?.installmentPlanId) return null;
+  return <span className="badge badge-accent" title="مربوط بخطة تقسيط">📅 تقسيط</span>;
+});
 const PendingDeleteBadge = memo(({ tx, pendingDeleteIds }) => {
   if (!tx || !pendingDeleteIds || !pendingDeleteIds.has(tx.id)) return null;
   return <span className="badge badge-warning text-[9px]" title="طلب مسح من تطبيق العائلة — بانتظار قرارك">🗑️ طلب مسح</span>;
@@ -6189,6 +6179,7 @@ const TransactionsView = memo(({
   const [showBeneficiariesOnly, setShowBeneficiariesOnly] = useState(false);
   const [showHanyOnly, setShowHanyOnly] = useState(false);
   const [showCardPaymentsOnly, setShowCardPaymentsOnly] = useState(false);
+  const [showInstallmentsOnly, setShowInstallmentsOnly] = useState(false);
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [dateFrom, setDateFrom] = useState('');
@@ -6226,10 +6217,11 @@ const TransactionsView = memo(({
   const filterByBeneficiaries = useCallback((list) => showBeneficiariesOnly ? list.filter(t => isBeneficiaryCategorySafe(t.category)) : list, [showBeneficiariesOnly]);
   const filterByHany = useCallback((list) => showHanyOnly ? list.filter(t => isHanyPurchaseTx(t) || isHanySettleTx(t)) : list, [showHanyOnly]);
   const filterByCardPayments = useCallback((list) => showCardPaymentsOnly ? list.filter(t => t.source === 'card-payment-plan' || (t.linkedCardId && isCardPaymentTx(t, t.linkedCardId))) : list, [showCardPaymentsOnly]);
+  const filterByInstallments = useCallback((list) => showInstallmentsOnly ? list.filter(t => !!t.installmentPlanId) : list, [showInstallmentsOnly]);
   const filterByType = useCallback((list) => transViewMode === 'all' ? list : list.filter(t => t.type === transViewMode), [transViewMode]);
 
-  const combinedFilters = useCallback((list) => filterByAmount(filterByDate(filterByCardPayments(filterByHany(filterByBeneficiaries(filterBySms(filterByBankFees(filterBySource(list)))))))),
-    [filterBySource, filterByBankFees, filterBySms, filterByBeneficiaries, filterByHany, filterByCardPayments, filterByDate, filterByAmount]);
+  const combinedFilters = useCallback((list) => filterByAmount(filterByDate(filterByInstallments(filterByCardPayments(filterByHany(filterByBeneficiaries(filterBySms(filterByBankFees(filterBySource(list))))))))),
+    [filterBySource, filterByBankFees, filterBySms, filterByBeneficiaries, filterByHany, filterByCardPayments, filterByInstallments, filterByDate, filterByAmount]);
 
   const pendingGroups = useMemo(() => groupedTransactions.map(g => ({
     ...g,
@@ -6326,12 +6318,14 @@ const TransactionsView = memo(({
 
   const activeFiltersCount =
     (sourceFilter !== 'all' ? 1 : 0) + (statusFilter !== 'all' ? 1 : 0) +
-    (showBankFeesOnly ? 1 : 0) + (showSmsOnly ? 1 : 0) + (showBeneficiariesOnly ? 1 : 0) + (showHanyOnly ? 1 : 0) + (showCardPaymentsOnly ? 1 : 0) +
+    (showBankFeesOnly ? 1 : 0) + (showSmsOnly ? 1 : 0) + (showBeneficiariesOnly ? 1 : 0) +
+    (showHanyOnly ? 1 : 0) + (showCardPaymentsOnly ? 1 : 0) + (showInstallmentsOnly ? 1 : 0) +
     (dateFrom ? 1 : 0) + (dateTo ? 1 : 0) + (amountMin ? 1 : 0) + (amountMax ? 1 : 0);
 
   const clearAllFilters = () => {
     setSourceFilter('all'); setShowBankFeesOnly(false); setShowSmsOnly(false);
     setShowBeneficiariesOnly(false); setShowHanyOnly(false); setShowCardPaymentsOnly(false);
+    setShowInstallmentsOnly(false);
     setDateFrom(''); setDateTo(''); setAmountMin(''); setAmountMax('');
     dispatch({ type: 'SET_STATUS_FILTER', payload: 'all' });
   };
@@ -6412,6 +6406,9 @@ const TransactionsView = memo(({
           </button>
           <button onClick={() => setShowCardPaymentsOnly(v => !v)} className={`btn text-[11px] px-2.5 py-1.5 ${showCardPaymentsOnly ? 'btn-primary' : 'btn-secondary'}`}>
             💳 سداد بطاقات
+          </button>
+          <button onClick={() => setShowInstallmentsOnly(v => !v)} className={`btn text-[11px] px-2.5 py-1.5 ${showInstallmentsOnly ? 'btn-primary' : 'btn-secondary'}`}>
+            📅 تقسيط
           </button>
           {isClosed ? (
             <React.Fragment>
@@ -6543,7 +6540,7 @@ const TransactionsView = memo(({
                               <FamilyBadge tx={t} /> <SmsBadge tx={t} /> <TeldaBadge tx={t} />
                               <TransferBadge tx={t} /> <RecurringBadge tx={t} /> <CarryoverBadge tx={t} />
                               <HanyPurchaseBadge tx={t} /> <HanySettleBadge tx={t} />
-                              <CardPaymentBadge tx={t} />
+                              <CardPaymentBadge tx={t} /> <InstallmentBadge tx={t} />
                             </p>
                             <p className="text-[10px] font-semibold mt-0.5" style={{ color: 'var(--text-muted)' }}>
                               {t.date} • {getPaymentMethodShort(t.method)}
@@ -6597,7 +6594,7 @@ const TransactionsView = memo(({
                           <TransferBadge tx={t} /> <RecurringBadge tx={t} />
                           <CarryoverBadge tx={t} /> <CreditBadge tx={t} /> <ReconciliationBadge tx={t} />
                           <HanyPurchaseBadge tx={t} /> <HanySettleBadge tx={t} />
-                          <CardPaymentBadge tx={t} />
+                          <CardPaymentBadge tx={t} /> <InstallmentBadge tx={t} />
                         </p>
                         <p className="text-[10px] font-semibold" style={{ color: 'var(--text-muted)' }}>
                           {getPaymentMethodShort(t.method)}
@@ -6762,7 +6759,7 @@ const CategoryDetailModal = memo(({ category, transactions, selectedMonth, selec
                             <SmsBadge tx={t} /> <TeldaBadge tx={t} /> <TransferBadge tx={t} />
                             <RecurringBadge tx={t} /> <CarryoverBadge tx={t} /> <ReconciliationBadge tx={t} />
                             <HanyPurchaseBadge tx={t} /> <HanySettleBadge tx={t} /> <HanyMarkerBadge tx={t} />
-                            <CardPaymentBadge tx={t} />
+                            <CardPaymentBadge tx={t} /> <InstallmentBadge tx={t} />
                           </p>
                           <p className="text-[10px] font-semibold mt-0.5" style={{ color: 'var(--text-muted)' }}>
                             {getPaymentMethodShort(t.method)}
@@ -6944,10 +6941,10 @@ const ReconciliationModal = memo(({ accountKey, computedBalance, onClose, onReco
   );
 });
 /* ═══════════════════════════════════════════════════════════════
-   V88.0 — PART 5/8
-   LoansView + CustodyView + RecurringList + WalletsAndCardsView
-   + CardStatement + Forecast + Calendar + GenericLedger + Cashback
-   + BankCard3D + ExternalTransferModal
+   V88.0 — PART 4/6
+   RecurringList + Custody + Loans + GenericLedger + Cashback
+   + BankCard3D + WalletsAndCards (with Installments Panel)
+   + CardStatement + Forecast + Calendar + ExternalTransfer
    ═══════════════════════════════════════════════════════════════ */
 
 /* ═══════════════ RECURRING ITEMS LIST ═══════════════ */
@@ -7231,7 +7228,7 @@ const CustodyView = memo(({ data, dispatch, saveHistory, addNotification }) => {
                   const color = CUSTODY_TYPE_COLORS[type];
                   const selected = newEntry.type === type;
                   return (
-                    <button key={type} type="button" onClick={() => setNewEntry({ ...newEntry, type })}  // eslint-disable-line
+                    <button key={type} type="button" onClick={() => setNewEntry({ ...newEntry, type })}
                       className="p-2.5 rounded-lg text-[11px] font-bold transition-all border-2 flex items-center gap-2"
                       style={selected ? { borderColor: color, background: `${color}15`, color } : { borderColor: 'var(--border-default)' }}>
                       <Icon size={14} /><span>{label}</span>
@@ -8091,7 +8088,7 @@ const WalletsAndCardsView = memo(({
 }) => {
   const [activeTab, setActiveTab] = useState('wallets');
   const [showAddCard, setShowAddCard] = useState(false);
-  const [newCard, setNewCard] = useState({ name: '', bank: '', limit: '', last4: '', expiry: '', holderName: '', dueDate: '05 من كل شهر', theme: 'silver', cashbackRate: 1 });
+  const [newCard, setNewCard] = useState({ name: '', bank: '', limit: '', last4: '', expiry: '', holderName: '', dueDate: '05 من كل شهر', statementDay: 15, theme: 'silver', cashbackRate: 1 });
 
   const cashbackSummary = useMemo(() => {
     const trackers = (data?.cashbackTrackers || []).filter(t => t.month === selectedMonth && (t.year || 2026) === selectedYear);
@@ -8116,11 +8113,12 @@ const WalletsAndCardsView = memo(({
         availableBalance: roundMoney(limitCheck.value), openingDebt: 0,
         openingDebtDate: getLocalISODate(), openingDate: getLocalISODate(),
         cashbackRate: safeNumber(newCard.cashbackRate, 1),
+        statementDay: Math.min(28, Math.max(1, safeNumber(newCard.statementDay, 5))),
         subCardLast4: Array.isArray(newCard.subCardLast4) ? newCard.subCardLast4 : []
       }]
     });
     setShowAddCard(false);
-    setNewCard({ name: '', bank: '', limit: '', last4: '', expiry: '', holderName: '', dueDate: '05 من كل شهر', theme: 'silver', cashbackRate: 1 });
+    setNewCard({ name: '', bank: '', limit: '', last4: '', expiry: '', holderName: '', dueDate: '05 من كل شهر', statementDay: 15, theme: 'silver', cashbackRate: 1 });
     addNotification({ type: 'success', title: 'تمت الإضافة' });
   };
 
@@ -8202,11 +8200,26 @@ const WalletsAndCardsView = memo(({
                 {cards.map(card => {
                   const liveDebt = computeCardDebt(data, card);
                   const liveAvailable = Math.max(0, safeNumber(card.limit) - Math.max(0, liveDebt));
+                  // ⭐ V88.0 تعديل 6 — إضافة CardInstallmentsPanel
                   return (
-                    <BankCard3D key={card.id} card={card} liveDebt={liveDebt} liveAvailable={liveAvailable}
-                      onStatement={() => dispatch({ type: 'SET_VIEWING_CARD_STATEMENT', payload: card })}
-                      onEdit={() => dispatch({ type: 'SET_EDITING_CARD', payload: card })}
-                      onPay={() => dispatch({ type: 'SET_CARD_PAYMENT_MODAL', payload: { cardId: card.id } })} />
+                    <React.Fragment key={card.id}>
+                      <BankCard3D card={card} liveDebt={liveDebt} liveAvailable={liveAvailable}
+                        onStatement={() => dispatch({ type: 'SET_VIEWING_CARD_STATEMENT', payload: card })}
+                        onEdit={() => dispatch({ type: 'SET_EDITING_CARD', payload: card })}
+                        onPay={() => dispatch({ type: 'SET_CARD_PAYMENT_MODAL', payload: { cardId: card.id } })} />
+                      <details className="p-3 rounded-xl mt-2" style={{ background: 'var(--bg-muted)' }}>
+                        <summary className="cursor-pointer list-none flex items-center justify-between">
+                          <span className="flex items-center gap-1.5 text-[11px] font-black">
+                            <Repeat size={12} className="text-[color:var(--accent)]" /> خطط التقسيط
+                          </span>
+                          <ChevronDown size={12} style={{ color: 'var(--text-muted)' }} />
+                        </summary>
+                        <div className="mt-3">
+                          <CardInstallmentsPanel card={card} data={data} dispatch={dispatch}
+                            saveHistory={saveHistory} addNotification={addNotification} />
+                        </div>
+                      </details>
+                    </React.Fragment>
                   );
                 })}
               </div>
@@ -8256,7 +8269,10 @@ const WalletsAndCardsView = memo(({
               <div><label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>الحد *</label><input type="text" inputMode="decimal" className="input-field input-num text-sm" value={newCard.limit} onChange={e => setNewCard({ ...newCard, limit: e.target.value })} /></div>
               <div><label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>آخر 4</label><input maxLength="4" className="input-field mono text-center text-sm" value={newCard.last4} onChange={e => setNewCard({ ...newCard, last4: e.target.value })} /></div>
             </div>
-            <div><label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>نسبة الكاش باك %</label><input type="text" inputMode="decimal" className="input-field input-num text-center font-black text-amber-600 text-sm" value={newCard.cashbackRate} onChange={e => setNewCard({ ...newCard, cashbackRate: e.target.value })} /></div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>نسبة الكاش باك %</label><input type="text" inputMode="decimal" className="input-field input-num text-center font-black text-amber-600 text-sm" value={newCard.cashbackRate} onChange={e => setNewCard({ ...newCard, cashbackRate: e.target.value })} /></div>
+              <div><label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>يوم إصدار الكشف</label><input type="number" min="1" max="28" className="input-field input-num text-center text-sm" value={newCard.statementDay} onChange={e => setNewCard({ ...newCard, statementDay: e.target.value })} /></div>
+            </div>
             <button onClick={addCard} className="btn btn-primary w-full py-2.5 text-sm">إضافة</button>
           </div>
         </Modal>
@@ -8420,6 +8436,7 @@ const CardStatementModal = memo(({ card, data, transactions, onClose, addNotific
                             {getTxDisplay(t)} <TxTimeChip createdAt={t.createdAt} />
                             <CardPaymentBadge tx={t} />
                             <SmsBadge tx={t} /> <TeldaBadge tx={t} /> <RecurringBadge tx={t} /> <ReconciliationBadge tx={t} />
+                            <InstallmentBadge tx={t} />
                           </p>
                           <p className="text-[10px] font-semibold mt-0.5" style={{ color: 'var(--text-muted)' }}>
                             {t.category}{t.cardLast4 && <span className="font-mono"> • ••••{t.cardLast4}</span>}
@@ -9079,9 +9096,9 @@ const ExternalTransferModal = memo(({ data, dispatch, saveHistory, addNotificati
   );
 });
 /* ═══════════════════════════════════════════════════════════════
-   V88.0 — PART 6/8
+   V88.0 — PART 5/6
    DuplicateDetection + DeletedArchive + DataHealth + AuditLog
-   + CardPaymentModal + SettingsView
+   + CardPaymentModal + SettingsView (with statementDay field)
    ═══════════════════════════════════════════════════════════════ */
 
 /* ═══════════════ DUPLICATE DETECTION ═══════════════ */
@@ -9892,7 +9909,7 @@ const CardPaymentModal = memo(({ cardId, data, dispatch, saveHistory, addNotific
   );
 });
 
-/* ═══════════════ SETTINGS VIEW ═══════════════ */
+/* ═══════════════ SETTINGS VIEW (with statementDay — تعديل 7) ═══════════════ */
 const SettingsView = memo(({
   data, accountsData, cards, budgets, dispatch, saveHistory, addNotification,
   onResetPersonalData, onForceSave, forceSaveState
@@ -9951,7 +9968,10 @@ const SettingsView = memo(({
     dispatch({
       type: 'UPDATE_CARDS',
       payload: localCards.map(c => ({
-        ...c, limit: safeNumber(c.limit), openingDebt: safeNumber(c.openingDebt),
+        ...c,
+        limit: safeNumber(c.limit),
+        openingDebt: safeNumber(c.openingDebt),
+        statementDay: Math.min(28, Math.max(1, safeNumber(c.statementDay, 5))),
         openingDebtDate: c.openingDebtDate || getLocalISODate(),
         openingDate: c.openingDate || getLocalISODate(),
         cashbackRate: safeNumber(c.cashbackRate, 0),
@@ -10067,6 +10087,7 @@ const SettingsView = memo(({
           accountsData: zeroed,
           cards: (data.cards || []).map(c => ({ ...c, openingDebt: 0, availableBalance: safeNumber(c.limit), openingDebtDate: null, openingDate: null })),
           recurringItems: [], materializedRecurring: {}, custodyEntries: [], cashbackTrackers: [], monthlyPlans: {},
+          cardInstallments: [],
           settledHanyMonths: [], deletedTxIds: allRemovedIds, deletedTxArchive: [], deletedDefaultIds: [], deleteRequests: [], auditLog: [],
           hanyPayableCache: 0
         };
@@ -10175,10 +10196,16 @@ const SettingsView = memo(({
                   <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full" style={{ background: 'var(--bg-muted)', color: 'var(--text-secondary)' }}>•••• {card.last4}</span>
                   {subCards.map(s => (<span key={s} className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full" style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}>•••• {s}</span>))}
                 </div>
-                <div className="grid grid-cols-3 gap-2 mb-3">
+                {/* ⭐ V88.0 تعديل 7 — grid-cols-2 بدلاً من 3 + statementDay */}
+                <div className="grid grid-cols-2 gap-2 mb-3">
                   <div><label className="block text-[10px] font-bold mb-1" style={{ color: 'var(--text-muted)' }}>الحد</label><input type="text" inputMode="decimal" value={card.limit} onChange={e => handleCardChange(card.id, 'limit', e.target.value)} className="input-field input-num font-black text-blue-600 text-center text-xs py-2" /></div>
                   <div><label className="block text-[10px] font-bold mb-1" style={{ color: 'var(--text-muted)' }}>مديونية أساسية</label><input type="text" inputMode="decimal" value={card.openingDebt} onChange={e => handleCardChange(card.id, 'openingDebt', e.target.value)} className="input-field input-num font-black text-red-600 text-center text-xs py-2" /></div>
                   <div><label className="block text-[10px] font-bold mb-1" style={{ color: 'var(--text-muted)' }}>كاش باك %</label><input type="text" inputMode="decimal" value={card.cashbackRate || 0} onChange={e => handleCardChange(card.id, 'cashbackRate', e.target.value)} className="input-field input-num font-black text-amber-600 text-center text-xs py-2" /></div>
+                  <div><label className="block text-[10px] font-bold mb-1" style={{ color: 'var(--text-muted)' }}>يوم إصدار الكشف</label>
+                    <input type="number" min="1" max="28" value={card.statementDay || ''}
+                      onChange={e => handleCardChange(card.id, 'statementDay', e.target.value)}
+                      className="input-field input-num text-center text-xs py-2" />
+                  </div>
                 </div>
                 <div className="grid grid-cols-2 gap-2 mb-3">
                   <div><label className="block text-[10px] font-bold mb-1" style={{ color: 'var(--text-muted)' }}>تاريخ المديونية</label><input type="date" value={card.openingDebtDate || ''} onChange={e => handleCardChange(card.id, 'openingDebtDate', e.target.value)} className="input-field text-center font-bold text-xs py-2" /></div>
@@ -10214,8 +10241,9 @@ const SettingsView = memo(({
           <div className="flex-1">
             <p className="text-[11px] font-black mb-1">ℹ️ معلومات الإصدار</p>
             <p className="text-[10px] font-semibold" style={{ color: 'var(--text-muted)' }}>
-              محفظتي V88.0 · Engine v{CURRENT_ENGINE_VERSION}
-              <br />🆕 بطاقة Tainum ADIB محدثة (9982) · Titanium 9360 · Signature 3557 · SWYPE 6015 · Toast محسن · PIN 8686.
+              محفظتي V88.0 + Bank-Grade · Engine v{CURRENT_ENGINE_VERSION}
+              <br />🆕 Statement Cycle Engine · Installments Plans · Smart Prediction
+              <br />Tainum ADIB (9982) · Titanium 9360 · Signature 3557 · SWYPE 6015 · PIN 8686
               <br />بداية المشروع: أكتوبر 2026 فقط.
             </p>
           </div>
@@ -10266,7 +10294,7 @@ const SettingsView = memo(({
         </div>
         <p className="text-[11px] mb-3 leading-relaxed" style={{ color: 'var(--text-secondary)' }}>يمسح <strong>المعاملات الشخصية والعهد والخطط</strong>، ويحفظ:</p>
         <ul className="text-[11px] mb-3 space-y-1 pr-4" style={{ color: 'var(--text-secondary)' }}>
-          <li className="flex items-center gap-1.5"><CheckCircle2 size={11} className="text-emerald-500" /> بيانات الكروت الائتمانية</li>
+          <li className="flex items-center gap-1.5"><CheckCircle2 size={11} className="text-emerald-500" /> بيانات الكروت الائتمانية (مع خطط التقسيط)</li>
           <li className="flex items-center gap-1.5"><CheckCircle2 size={11} className="text-emerald-500" /> مشتريات محل هاني + قالبها + سداداتها</li>
           <li className="flex items-center gap-1.5"><CheckCircle2 size={11} className="text-emerald-500" /> البنود المتكررة</li>
           <li className="flex items-center gap-1.5"><CheckCircle2 size={11} className="text-emerald-500" /> ربط Google Drive و Firebase والإعدادات ورمز PIN</li>
@@ -10290,9 +10318,764 @@ const SettingsView = memo(({
   );
 });
 /* ═══════════════════════════════════════════════════════════════
-   V88.0 — PART 7/8 FINAL
-   useForceSave + App() + All Handlers + Form Modal + Root Render
+   V88.0 — PART 8/8 (Professional Bank-Grade Edition)
+   Statement Cycle Engine + Installments + Prediction
    ═══════════════════════════════════════════════════════════════ */
+
+/* ═══════════════ 1. CYCLE PARAMETERS ═══════════════ */
+const getCardCycleParams = (card) => {
+  const dueDayMatch = String(card?.dueDate || '25').match(/(\d{1,2})/);
+  const dueDay = Math.min(28, Math.max(1, dueDayMatch ? parseInt(dueDayMatch[1], 10) : 25));
+  let statementDay = safeNumber(card?.statementDay, 0);
+  if (statementDay < 1 || statementDay > 28) {
+    statementDay = dueDay > 20 ? dueDay - 20 : dueDay + 10;
+    statementDay = Math.min(28, Math.max(1, statementDay));
+  }
+  return { dueDay, statementDay };
+};
+
+const getCycleKeyForDate = (card, dateISO) => {
+  const d = parseISODate(dateISO);
+  if (!d) return null;
+  const { statementDay } = getCardCycleParams(card);
+  let endMonth = d.getMonth();
+  let endYear = d.getFullYear();
+  if (d.getDate() > statementDay) {
+    endMonth++;
+    if (endMonth > 11) { endMonth = 0; endYear++; }
+  }
+  return `${endYear}-${String(endMonth + 1).padStart(2, '0')}`;
+};
+
+const getCycleRange = (card, cycleKey) => {
+  const parts = String(cycleKey).split('-');
+  if (parts.length !== 2) return null;
+  const y = Number(parts[0]);
+  const m = Number(parts[1]);
+  if (isNaN(y) || isNaN(m) || m < 1 || m > 12) return null;
+
+  const { dueDay, statementDay } = getCardCycleParams(card);
+
+  const cycleEnd = new Date(y, m - 1, statementDay);
+  let sm = m - 2, sy = y;
+  if (sm < 0) { sm = 11; sy--; }
+  const cycleStart = new Date(sy, sm, statementDay + 1);
+
+  let dm = m - 1, dy = y;
+  if (dueDay < statementDay) {
+    dm++;
+    if (dm > 11) { dm = 0; dy++; }
+  }
+  const dueDate = new Date(dy, dm, dueDay);
+
+  return {
+    cycleStart, cycleEnd, dueDate, statementDate: cycleEnd,
+    cycleStartISO: getLocalISODate(cycleStart),
+    cycleEndISO: getLocalISODate(cycleEnd),
+    statementDateISO: getLocalISODate(cycleEnd),
+    dueDateISO: getLocalISODate(dueDate)
+  };
+};
+
+/* ═══════════════ 2. INSTALLMENTS ENGINE ═══════════════ */
+const computeInstallmentProgress = (plan, asOfDate = new Date()) => {
+  if (!plan || !plan.months || plan.months <= 0) {
+    return { monthsElapsed: 0, dueAmount: 0, remainingAmount: 0, remainingMonths: 0, completed: false, monthlyAmount: 0, progressPct: 0 };
+  }
+  const startMonthIdx = getMonthIndex(plan.startMonth);
+  const startYM = safeNumber(plan.startYear, 2026) * 12 + (startMonthIdx >= 0 ? startMonthIdx : 0);
+  const nowYM = asOfDate.getFullYear() * 12 + asOfDate.getMonth();
+
+  let monthsElapsed = Math.max(0, nowYM - startYM + 1);
+  monthsElapsed = Math.min(monthsElapsed, plan.months);
+
+  const monthlyAmount = safeNumber(plan.monthlyAmount, safeNumber(plan.totalAmount) / plan.months);
+  const dueAmount = monthsElapsed * monthlyAmount;
+  const remainingAmount = Math.max(0, safeNumber(plan.totalAmount) - dueAmount);
+  const remainingMonths = Math.max(0, plan.months - monthsElapsed);
+  const progressPct = plan.months > 0 ? (monthsElapsed / plan.months) * 100 : 0;
+
+  return { monthsElapsed, dueAmount, remainingAmount, remainingMonths, monthlyAmount, completed: monthsElapsed >= plan.months, progressPct };
+};
+
+const computeCardInstallmentsInfo = (data, card, asOfDate = new Date()) => {
+  if (!card) return { plans: [], activeCount: 0, totalDueSoFar: 0, totalRemaining: 0, currentMonthly: 0 };
+  const plans = (data?.cardInstallments || []).filter(p => p && p.cardId === card.id && p.status !== 'cancelled');
+  let totalDueSoFar = 0, totalRemaining = 0, currentMonthly = 0;
+  const enriched = plans.map(p => {
+    const prog = computeInstallmentProgress(p, asOfDate);
+    totalDueSoFar += prog.dueAmount;
+    totalRemaining += prog.remainingAmount;
+    if (!prog.completed) currentMonthly += prog.monthlyAmount;
+    return { ...p, ...prog };
+  });
+  return { plans: enriched, activeCount: enriched.filter(p => !p.completed).length, totalDueSoFar, totalRemaining, currentMonthly };
+};
+
+/* ═══════════════ 3. STATEMENT CYCLE ENGINE ═══════════════ */
+const buildCardStatementEngine = (card, data, asOfDate = new Date()) => {
+  if (!card) return { cycles: [], currentStatement: null, openCycle: null, totalDebt: 0, installmentsInfo: null };
+
+  const openingDebt = safeNumber(card.openingDebt);
+  const openingDate = parseISODate(card.openingDebtDate || card.openingDate);
+  const now = new Date(asOfDate);
+  const upperTime = now.getTime();
+
+  const method = getCardMethod(card);
+  const subCards = Array.isArray(card.subCardLast4) ? card.subCardLast4 : [];
+  const allTxs = (data?.transactions || []).filter(t => {
+    if (!t || t.status !== 'paid') return false;
+    if (t.source === 'void' || t.source === 'carryover' || isCarryoverMarker(t)) return false;
+    if (isHanyPurchaseTx(t) || isHanySettleTx(t)) return false;
+    if (t.method === HANY_TAB_METHOD) return false;
+    const hasExplicitLink = t.linkedCardId !== undefined && t.linkedCardId !== null && t.linkedCardId !== '';
+    if (hasExplicitLink) return t.linkedCardId === card.id;
+    if (t.cardLast4 && subCards.includes(t.cardLast4)) return true;
+    return t.method === method;
+  }).sort((a, b) => {
+    const da = parseISODate(a.date)?.getTime() ?? 0;
+    const db = parseISODate(b.date)?.getTime() ?? 0;
+    if (da !== db) return da - db;
+    return (getTxTimestamp(a) || 0) - (getTxTimestamp(b) || 0);
+  });
+
+  const instInfo = computeCardInstallmentsInfo(data, card, now);
+
+  const cycleKeysSet = new Set();
+  allTxs.forEach(t => {
+    const d = parseISODate(t.date);
+    if (!d) return;
+    if (openingDate && d < openingDate) return;
+    if (d > now) return;
+    const k = getCycleKeyForDate(card, t.date);
+    if (k) cycleKeysSet.add(k);
+  });
+
+  if (openingDate) {
+    const k = getCycleKeyForDate(card, getLocalISODate(openingDate));
+    if (k) cycleKeysSet.add(k);
+  }
+
+  instInfo.plans.forEach(plan => {
+    if (plan.status === 'cancelled') return;
+    const startIdx = getMonthIndex(plan.startMonth);
+    if (startIdx < 0) return;
+    for (let i = 0; i < plan.months; i++) {
+      const totalIdx = startIdx + i;
+      const m = totalIdx % 12;
+      const y = safeNumber(plan.startYear, 2026) + Math.floor(totalIdx / 12);
+      cycleKeysSet.add(`${y}-${String(m + 1).padStart(2, '0')}`);
+    }
+  });
+
+  const sortedKeys = Array.from(cycleKeysSet).sort();
+  if (sortedKeys.length === 0) {
+    return {
+      cycles: [], currentStatement: null, openCycle: null,
+      totalDebt: openingDebt, installmentsInfo: instInfo,
+      cycleParams: getCardCycleParams(card),
+      openingDebt, openingDate
+    };
+  }
+
+  let runningBalance = openingDebt;
+  const cycles = [];
+
+  sortedKeys.forEach((cycleKey) => {
+    const range = getCycleRange(card, cycleKey);
+    if (!range) return;
+
+    const { cycleStart, cycleEnd, dueDate, statementDate } = range;
+    const cycleStartTs = cycleStart.getTime();
+    const cycleEndTs = cycleEnd.getTime();
+    const statementTs = statementDate.getTime();
+    const dueTs = dueDate.getTime();
+
+    if (cycleStartTs > upperTime) return;
+
+    const cycleTxs = allTxs.filter(t => {
+      const d = parseISODate(t.date);
+      if (!d) return false;
+      const ts = d.getTime();
+      if (openingDate && d < openingDate) return false;
+      return ts >= cycleStartTs && ts <= cycleEndTs;
+    });
+
+    const purchases = cycleTxs
+      .filter(t => t.type === 'expense' && !isCardPaymentTx(t, card.id))
+      .reduce((s, t) => s + safeNumber(t.amount), 0);
+    const refunds = cycleTxs
+      .filter(t => t.type === 'income' && !isCardPaymentTx(t, card.id))
+      .reduce((s, t) => s + safeNumber(t.amount), 0);
+    const paymentsInCycle = cycleTxs
+      .filter(t => isCardPaymentTx(t, card.id))
+      .reduce((s, t) => s + safeNumber(t.amount), 0);
+
+    let installmentsDueThisCycle = 0;
+    const dueMonthIdx = dueDate.getMonth();
+    const dueYM = dueDate.getFullYear() * 12 + dueMonthIdx;
+    instInfo.plans.forEach(plan => {
+      if (plan.status === 'cancelled') return;
+      const pStartIdx = getMonthIndex(plan.startMonth);
+      if (pStartIdx < 0) return;
+      const pStartYM = safeNumber(plan.startYear, 2026) * 12 + pStartIdx;
+      const diff = dueYM - pStartYM;
+      if (diff >= 0 && diff < plan.months) {
+        installmentsDueThisCycle += plan.monthlyAmount;
+      }
+    });
+
+    const openingBalance = runningBalance;
+    const closingBalance = openingBalance + purchases - refunds - paymentsInCycle;
+    runningBalance = closingBalance;
+
+    const minBase = closingBalance > 0
+      ? Math.max(100, Math.round(closingBalance * 0.05 * 100) / 100)
+      : 0;
+    const minDue = minBase + installmentsDueThisCycle;
+    const totalDue = Math.max(0, closingBalance) + installmentsDueThisCycle;
+
+    let status = 'open';
+    if (upperTime > cycleEndTs && upperTime > statementTs) status = 'closed';
+    if (upperTime > dueTs && closingBalance > 0.01) status = 'overdue';
+    if (closingBalance <= 0.01 && upperTime > cycleEndTs) status = 'paid';
+
+    const daysUntilDue = Math.ceil((dueTs - upperTime) / 86400000);
+
+    cycles.push({
+      cycleKey,
+      cycleStartISO: range.cycleStartISO,
+      cycleEndISO: range.cycleEndISO,
+      statementDateISO: range.statementDateISO,
+      dueDateISO: range.dueDateISO,
+      cycleStart, cycleEnd, statementDate, dueDate,
+      openingBalance, purchases, refunds, paymentsInCycle,
+      closingBalance, installmentsDueThisCycle, minDue, totalDue, minBase,
+      status, daysUntilDue, txCount: cycleTxs.length, transactions: cycleTxs,
+      isPaid: closingBalance <= 0.01
+    });
+  });
+
+  const closedWithBalance = cycles.filter(c => c.status === 'closed' || c.status === 'overdue');
+  const openCycles = cycles.filter(c => c.status === 'open');
+
+  const currentStatement = closedWithBalance.length > 0
+    ? closedWithBalance[closedWithBalance.length - 1]
+    : null;
+  const openCycle = openCycles.length > 0
+    ? openCycles[openCycles.length - 1]
+    : null;
+
+  return {
+    cycles, currentStatement, openCycle,
+    totalDebt: runningBalance,
+    installmentsInfo: instInfo,
+    cycleParams: getCardCycleParams(card),
+    openingDebt, openingDate
+  };
+};
+
+/* ═══════════════ 4. SMART PREDICTION ═══════════════ */
+const computeCardPaymentPrediction = (data, card, asOfDate = new Date()) => {
+  if (!card) return null;
+  const engine = buildCardStatementEngine(card, data, asOfDate);
+  const now = new Date(asOfDate);
+
+  const currentDebt = Math.max(0, computeCardDebt(data, card, asOfDate));
+  const instInfo = engine.installmentsInfo || { currentMonthly: 0, totalRemaining: 0, activeCount: 0, plans: [] };
+
+  const currentStatement = engine.currentStatement;
+  const openCycle = engine.openCycle;
+
+  const statementBalance = currentStatement ? Math.max(0, currentStatement.closingBalance) : 0;
+  const installmentsThisMonth = currentStatement ? currentStatement.installmentsDueThisCycle : 0;
+  const minBase = currentStatement ? currentStatement.minBase : 0;
+  const minPayment = currentStatement ? currentStatement.minDue : 0;
+  const totalMandatory = currentStatement ? currentStatement.totalDue : 0;
+
+  const nextCycleEstimate = openCycle
+    ? Math.max(0, openCycle.closingBalance) + openCycle.installmentsDueThisCycle
+    : 0;
+  const nextCycleDueDate = openCycle ? openCycle.dueDate : null;
+
+  const dueDate = currentStatement ? currentStatement.dueDate : (openCycle ? openCycle.dueDate : null);
+  const daysUntilDue = dueDate ? Math.ceil((dueDate.getTime() - now.getTime()) / 86400000) : null;
+
+  const limit = safeNumber(card.limit);
+  const availableLimit = Math.max(0, limit - currentDebt - instInfo.totalRemaining);
+
+  return {
+    cardId: card.id,
+    cardName: `${card.bank} - ${card.name}`,
+    last4: card.last4,
+    currentDebt, statementBalance, installmentsThisMonth,
+    minBase, minPayment, totalMandatory,
+    nextCycleEstimate, nextCycleDueDate,
+    fullPayment: currentDebt,
+    nextDueDate: dueDate,
+    nextDueDateISO: dueDate ? getLocalISODate(dueDate) : null,
+    daysUntilDue,
+    urgency: daysUntilDue === null ? 'normal'
+      : daysUntilDue <= 0 ? 'overdue'
+      : daysUntilDue <= 3 ? 'urgent'
+      : daysUntilDue <= 7 ? 'soon'
+      : 'normal',
+    activeInstallments: instInfo.activeCount,
+    installmentsRemainingTotal: instInfo.totalRemaining,
+    availableLimit, limit, plans: instInfo.plans,
+    cycles: engine.cycles,
+    currentStatement, openCycle,
+    cycleParams: engine.cycleParams
+  };
+};
+
+const computeAllCardsPredictions = (data, asOfDate = new Date()) =>
+  (data?.cards || []).map(c => computeCardPaymentPrediction(data, c, asOfDate)).filter(Boolean);
+
+const computeTotalMonthlyObligation = (data, asOfDate = new Date()) => {
+  const preds = computeAllCardsPredictions(data, asOfDate);
+  return {
+    totalDebt: preds.reduce((s, p) => s + p.currentDebt, 0),
+    totalMinPayment: preds.reduce((s, p) => s + p.minPayment, 0),
+    totalInstallments: preds.reduce((s, p) => s + p.installmentsThisMonth, 0),
+    totalMandatory: preds.reduce((s, p) => s + p.totalMandatory, 0),
+    totalNextCycle: preds.reduce((s, p) => s + p.nextCycleEstimate, 0),
+    totalFullPayment: preds.reduce((s, p) => s + p.fullPayment, 0),
+    predictions: preds
+  };
+};
+
+/* ═══════════════ 5. INSTALLMENT PLAN MODAL ═══════════════ */
+const InstallmentPlanModal = memo(({ card, data, onClose, dispatch, saveHistory, addNotification }) => {
+  const [totalAmount, setTotalAmount] = useState('');
+  const [months, setMonths] = useState('12');
+  const [startMonth, setStartMonth] = useState(getDefaultMonthYear().month);
+  const [startYear, setStartYear] = useState(getDefaultMonthYear().year);
+  const [note, setNote] = useState('');
+  const [selectedTxIds, setSelectedTxIds] = useState(new Set());
+
+  const cardTxs = useMemo(() => {
+    if (!card) return [];
+    const method = getCardMethod(card);
+    const subCards = Array.isArray(card.subCardLast4) ? card.subCardLast4 : [];
+    return (data.transactions || [])
+      .filter(t => {
+        if (t.status !== 'paid' || t.type !== 'expense') return false;
+        if (t.installmentPlanId) return false;
+        if (isCardPaymentTx(t, card.id)) return false;
+        if (isHanyPurchaseTx(t) || isHanySettleTx(t)) return false;
+        if (t.method === HANY_TAB_METHOD) return false;
+        if (t.method !== method && t.linkedCardId !== card.id && !(t.cardLast4 && subCards.includes(t.cardLast4))) return false;
+        return true;
+      })
+      .sort(compareTransactions).slice(0, 50);
+  }, [data.transactions, card]);
+
+  const parsedTotal = parseNumberInput(totalAmount);
+  const parsedMonths = Math.max(1, Math.min(60, parseInt(months, 10) || 12));
+  const monthlyAmount = parsedTotal > 0 ? roundMoney(parsedTotal / parsedMonths) : 0;
+
+  const handleCreate = () => {
+    if (parsedTotal <= 0) { addNotification({ type: 'error', title: 'أدخل مبلغ صحيح' }); return; }
+    const startIdx = getMonthIndex(startMonth);
+    if (startIdx < 0) { addNotification({ type: 'error', title: 'شهر بداية غير صالح' }); return; }
+
+    const plan = {
+      id: getSafeId(), cardId: card.id,
+      totalAmount: roundMoney(parsedTotal), months: parsedMonths, monthlyAmount,
+      startMonth, startYear: safeNumber(startYear, 2026),
+      note: note.trim(), status: 'active',
+      linkedTxIds: Array.from(selectedTxIds),
+      createdAt: new Date().toISOString()
+    };
+
+    saveHistory();
+    const newPlans = [...(data.cardInstallments || []), plan];
+    const newTxs = selectedTxIds.size > 0
+      ? (data.transactions || []).map(t => selectedTxIds.has(t.id) ? { ...t, installmentPlanId: plan.id } : t)
+      : (data.transactions || []);
+
+    dispatch({ type: 'SET_DATA', payload: { ...data, cardInstallments: newPlans, transactions: newTxs } });
+    addNotification({
+      type: 'success', title: '✅ تم إنشاء خطة التقسيط',
+      message: `${fmt(parsedTotal)} ج.م على ${parsedMonths} شهر (${fmt(monthlyAmount)} ج.م/شهر)`,
+      duration: 6000
+    });
+    onClose();
+  };
+
+  const toggleTx = (id) => setSelectedTxIds(prev => {
+    const n = new Set(prev);
+    if (n.has(id)) n.delete(id); else n.add(id);
+    return n;
+  });
+
+  const autoFillFromSelected = () => {
+    const sum = cardTxs.filter(t => selectedTxIds.has(t.id)).reduce((s, t) => s + safeNumber(t.amount), 0);
+    if (sum > 0) setTotalAmount(String(roundMoney(sum)));
+  };
+
+  return (
+    <Modal isOpen={true} onClose={onClose} title="خطة تقسيط جديدة" icon="📅" size="lg">
+      <div className="space-y-4">
+        <div className="p-3 rounded-xl" style={{ background: 'var(--accent-soft)', border: '1px solid var(--accent)' }}>
+          <p className="text-[11px] font-bold" style={{ color: 'var(--accent)' }}>
+            💳 {card.bank} - {card.name} • ••••{card.last4}
+          </p>
+          <p className="text-[10px] mt-1" style={{ color: 'var(--text-secondary)' }}>
+            الحد: {fmt(card.limit)} ج.م • المديونية الحالية: {fmt(computeCardDebt(data, card))} ج.م
+          </p>
+        </div>
+
+        <div>
+          <label className="text-[11px] font-black block mb-2" style={{ color: 'var(--text-muted)' }}>اختر المعاملات لضمها (اختياري)</label>
+          {cardTxs.length === 0 ? (
+            <p className="text-[11px] p-2 rounded-lg" style={{ background: 'var(--bg-muted)', color: 'var(--text-muted)' }}>لا توجد معاملات مؤهلة</p>
+          ) : (
+            <div className="space-y-1.5 max-h-40 overflow-y-auto scroll-hide p-2 rounded-lg" style={{ background: 'var(--bg-muted)' }}>
+              {cardTxs.slice(0, 20).map(t => (
+                <label key={t.id} className="flex items-center gap-2 p-1.5 rounded cursor-pointer hover:bg-[color:var(--bg-card)]">
+                  <input type="checkbox" checked={selectedTxIds.has(t.id)} onChange={() => toggleTx(t.id)} className="w-3.5 h-3.5 accent-[color:var(--accent)]" />
+                  <span className="text-[10px] font-bold flex-1 truncate">{t.description || t.category}</span>
+                  <span className="text-[10px] font-black money tabular">{fmt(t.amount)}</span>
+                </label>
+              ))}
+              {selectedTxIds.size > 0 && (
+                <button type="button" onClick={autoFillFromSelected} className="btn btn-secondary w-full text-[10px] py-1.5 mt-1">
+                  <Sparkles size={11} /> استخدم مجموع المحدد ({fmt(cardTxs.filter(t => selectedTxIds.has(t.id)).reduce((s, t) => s + safeNumber(t.amount), 0))})
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="text-[11px] font-black block mb-2" style={{ color: 'var(--text-muted)' }}>إجمالي المبلغ *</label>
+            <input type="text" inputMode="decimal" className="input-field input-num text-base text-center font-black"
+              style={{ color: 'var(--accent)' }} value={totalAmount}
+              onChange={e => setTotalAmount(e.target.value)} placeholder="0.00" />
+          </div>
+          <div>
+            <label className="text-[11px] font-black block mb-2" style={{ color: 'var(--text-muted)' }}>عدد الأشهر *</label>
+            <input type="number" min="1" max="60" className="input-field text-base text-center font-black"
+              value={months} onChange={e => setMonths(e.target.value)} />
+            <div className="flex gap-1 mt-1.5">
+              {[3, 6, 12, 18, 24, 36].map(m => (
+                <button key={m} type="button" onClick={() => setMonths(String(m))}
+                  className={`quick-chip flex-1 text-[9px] py-1 ${months === String(m) ? 'bg-[color:var(--accent)] text-white' : ''}`}>
+                  {m}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="text-[11px] font-black block mb-2" style={{ color: 'var(--text-muted)' }}>شهر البداية</label>
+            <select className="input-field text-sm py-2" value={startMonth} onChange={e => setStartMonth(e.target.value)}>
+              {getMonthsForYear(startYear).map(m => <option key={m} value={m}>{m}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-[11px] font-black block mb-2" style={{ color: 'var(--text-muted)' }}>السنة</label>
+            <select className="input-field text-sm py-2" value={startYear} onChange={e => setStartYear(Number(e.target.value))}>
+              {YEARS_LIST.map(y => <option key={y} value={y}>{y}</option>)}
+            </select>
+          </div>
+        </div>
+
+        {parsedTotal > 0 && (
+          <div className="p-3 rounded-xl text-center" style={{ background: 'linear-gradient(135deg, rgba(99,91,255,0.12), rgba(74,66,229,0.08))', border: '1px solid var(--accent)' }}>
+            <p className="text-[11px] font-bold" style={{ color: 'var(--accent)' }}>القسط الشهري</p>
+            <p className="text-2xl font-black money tabular" style={{ color: 'var(--accent)' }}>{fmt(monthlyAmount)}</p>
+            <p className="text-[10px] mt-1" style={{ color: 'var(--text-secondary)' }}>ج.م/شهر × {parsedMonths} شهر = {fmt(parsedTotal)} ج.م</p>
+          </div>
+        )}
+
+        <div>
+          <label className="text-[11px] font-black block mb-2" style={{ color: 'var(--text-muted)' }}>ملاحظة (اختياري)</label>
+          <input type="text" className="input-field text-sm" value={note} onChange={e => setNote(e.target.value)} placeholder="مثال: تقسيط تلفزيون" />
+        </div>
+
+        <div className="p-2.5 rounded-lg flex items-start gap-2" style={{ background: 'var(--warning-soft)' }}>
+          <Info size={14} className="text-amber-600 mt-0.5 flex-shrink-0" />
+          <p className="text-[10px] font-bold text-amber-700 dark:text-amber-400 leading-relaxed">
+            💡 البنك يحجز {parsedTotal > 0 ? fmt(parsedTotal) : 'المبلغ'} من الحد المتاح، لكن المديونية تُحسب قسطاً بقسط في كل دورة.
+          </p>
+        </div>
+
+        <div className="flex gap-2 pt-1">
+          <button type="button" onClick={onClose} className="btn btn-secondary flex-1 py-3 text-sm">إلغاء</button>
+          <button type="button" onClick={handleCreate} disabled={parsedTotal <= 0}
+            className="btn flex-1 py-3 text-sm font-black"
+            style={{ background: parsedTotal > 0 ? 'linear-gradient(135deg, #635BFF 0%, #4A42E5 100%)' : 'var(--bg-muted)', color: parsedTotal > 0 ? 'white' : 'var(--text-muted)' }}>
+            <CheckCircle2 size={16} /> إنشاء الخطة
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+});
+
+/* ═══════════════ 6. INSTALLMENTS PANEL ═══════════════ */
+const CardInstallmentsPanel = memo(({ card, data, dispatch, saveHistory, addNotification }) => {
+  const [showCreate, setShowCreate] = useState(false);
+  const info = useMemo(() => computeCardInstallmentsInfo(data, card), [data, card]);
+
+  const cancelPlan = (plan) => {
+    dispatch({
+      type: 'SHOW_CONFIRM', danger: true,
+      title: 'إلغاء خطة التقسيط',
+      message: 'سيتم إلغاء الخطة فقط، المعاملات الأصلية لن تتأثر.',
+      onConfirm: () => {
+        saveHistory();
+        const newPlans = (data.cardInstallments || []).map(p => p.id === plan.id ? { ...p, status: 'cancelled', cancelledAt: new Date().toISOString() } : p);
+        dispatch({ type: 'SET_DATA', payload: { ...data, cardInstallments: newPlans } });
+        addNotification({ type: 'success', title: 'تم إلغاء الخطة' });
+      },
+      onCancel: () => dispatch({ type: 'HIDE_CONFIRM' })
+    });
+  };
+
+  const deletePlan = (plan) => {
+    dispatch({
+      type: 'SHOW_CONFIRM', danger: true,
+      title: 'حذف الخطة نهائياً',
+      message: 'سيتم حذف الخطة واستعادة المعاملات المرتبطة.',
+      onConfirm: () => {
+        saveHistory();
+        const newPlans = (data.cardInstallments || []).filter(p => p.id !== plan.id);
+        const newTxs = (data.transactions || []).map(t => t.installmentPlanId === plan.id ? { ...t, installmentPlanId: undefined } : t);
+        dispatch({ type: 'SET_DATA', payload: { ...data, cardInstallments: newPlans, transactions: newTxs } });
+        addNotification({ type: 'success', title: 'تم الحذف' });
+      },
+      onCancel: () => dispatch({ type: 'HIDE_CONFIRM' })
+    });
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="flex justify-between items-center flex-wrap gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="badge badge-accent text-[9px]">نشطة: {info.activeCount}</span>
+          <span className="badge badge-warning text-[9px] money tabular">شهري: {fmtShort(info.currentMonthly)}</span>
+          <span className="badge badge-danger text-[9px] money tabular">متبقي: {fmtShort(info.totalRemaining)}</span>
+        </div>
+        <button onClick={() => setShowCreate(true)} className="btn btn-primary text-[10px] py-1.5 px-2.5">
+          <Plus size={11} /> خطة جديدة
+        </button>
+      </div>
+
+      {info.plans.length === 0 ? (
+        <p className="text-[10px] text-center py-3" style={{ color: 'var(--text-muted)' }}>لا توجد خطط تقسيط على هذه البطاقة</p>
+      ) : (
+        <div className="space-y-1.5">
+          {info.plans.map(plan => {
+            const isCancelled = plan.status === 'cancelled';
+            return (
+              <div key={plan.id} className="p-2.5 rounded-lg"
+                style={{ background: isCancelled ? 'var(--bg-muted)' : 'var(--accent-soft)', opacity: isCancelled ? 0.5 : 1, border: '1px solid var(--border-subtle)' }}>
+                <div className="flex justify-between items-start gap-2 mb-1.5 flex-wrap">
+                  <div className="min-w-0 flex-1">
+                    <p className="font-black text-[11px] truncate">
+                      {plan.note || `خطة ${fmtShort(plan.totalAmount)}`}
+                      {isCancelled && <span className="badge badge-danger text-[8px] mr-1">ملغاة</span>}
+                      {plan.completed && !isCancelled && <span className="badge badge-success text-[8px] mr-1">مكتملة</span>}
+                    </p>
+                    <p className="text-[9px] mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                      {plan.startMonth} {plan.startYear} • {plan.months} شهر • {fmt(plan.monthlyAmount)} ج.م/شهر
+                    </p>
+                  </div>
+                  <div className="flex gap-1 flex-shrink-0">
+                    {!isCancelled && (
+                      <button onClick={() => cancelPlan(plan)} className="btn btn-ghost p-1 text-amber-500" title="إلغاء"><X size={11} /></button>
+                    )}
+                    <button onClick={() => deletePlan(plan)} className="btn btn-ghost p-1 text-red-500" title="حذف"><Trash2 size={11} /></button>
+                  </div>
+                </div>
+                <div className="w-full rounded-full h-1 overflow-hidden" style={{ background: 'var(--bg-card)' }}>
+                  <div className={`h-full ${plan.completed ? 'bg-emerald-500' : 'bg-[color:var(--accent)]'}`} style={{ width: `${Math.min(100, plan.progressPct)}%` }}></div>
+                </div>
+                <div className="flex justify-between text-[9px] mt-1" style={{ color: 'var(--text-muted)' }}>
+                  <span>متبقي: <strong className="money tabular">{fmt(plan.remainingAmount)}</strong> ج.م</span>
+                  <span><strong className="money tabular">{plan.monthsElapsed}/{plan.months}</strong> شهر</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {showCreate && (
+        <InstallmentPlanModal card={card} data={data} dispatch={dispatch}
+          saveHistory={saveHistory} addNotification={addNotification}
+          onClose={() => setShowCreate(false)} />
+      )}
+    </div>
+  );
+});
+
+/* ═══════════════ 7. CARDS PAYMENT PREDICTIONS ═══════════════ */
+const CardsPaymentPredictions = memo(({ data, dispatch }) => {
+  const summary = useMemo(() => computeTotalMonthlyObligation(data), [data]);
+  const [expandedCard, setExpandedCard] = useState(null);
+
+  if (summary.predictions.length === 0) return null;
+
+  const urgentCount = summary.predictions.filter(p => p.urgency === 'urgent' || p.urgency === 'overdue').length;
+
+  return (
+    <div className="card" style={{ background: 'linear-gradient(135deg, rgba(124,58,237,0.08), rgba(79,70,229,0.05))', borderColor: 'rgba(124,58,237,0.3)' }}>
+      <div className="flex items-start justify-between gap-3 mb-3 flex-wrap">
+        <div className="flex items-center gap-3">
+          <div className="p-2.5 rounded-xl text-white" style={{ background: 'linear-gradient(135deg, #7C3AED 0%, #4F46E5 100%)', boxShadow: '0 8px 20px -4px rgba(124,58,237,0.5)' }}>
+            <TrendingUp size={18} />
+          </div>
+          <div>
+            <h3 className="font-black text-sm">🔮 التنبؤ بسداد البطاقات</h3>
+            <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>
+              المطلوب الأدنى: <span className="money tabular font-black text-[color:var(--accent)]">{fmt(summary.totalMandatory)}</span> ج.م
+            </p>
+          </div>
+        </div>
+        {urgentCount > 0 && (
+          <span className="badge badge-danger text-[10px] animate-pulse">
+            <AlertTriangle size={11} /> {urgentCount} قريب الاستحقاق
+          </span>
+        )}
+      </div>
+
+      <div className="grid grid-cols-4 gap-2 mb-3">
+        <div className="p-2.5 rounded-xl bg-white/60 dark:bg-black/20 text-center">
+          <p className="text-[9px] font-bold" style={{ color: 'var(--text-muted)' }}>المديونية</p>
+          <p className="text-sm font-black text-red-600 mt-0.5 money tabular">{fmtShort(summary.totalDebt)}</p>
+        </div>
+        <div className="p-2.5 rounded-xl bg-white/60 dark:bg-black/20 text-center">
+          <p className="text-[9px] font-bold" style={{ color: 'var(--text-muted)' }}>أقساط إلزامية</p>
+          <p className="text-sm font-black text-purple-600 mt-0.5 money tabular">{fmtShort(summary.totalInstallments)}</p>
+        </div>
+        <div className="p-2.5 rounded-xl bg-white/60 dark:bg-black/20 text-center">
+          <p className="text-[9px] font-bold" style={{ color: 'var(--text-muted)' }}>حد أدنى 5%</p>
+          <p className="text-sm font-black text-amber-600 mt-0.5 money tabular">{fmtShort(summary.totalMinPayment)}</p>
+        </div>
+        <div className="p-2.5 rounded-xl" style={{ background: 'rgba(99,91,255,0.15)' }}>
+          <p className="text-[9px] font-bold" style={{ color: 'var(--accent)' }}>الدورة القادمة</p>
+          <p className="text-sm font-black text-[color:var(--accent)] mt-0.5 money tabular">{fmtShort(summary.totalNextCycle)}</p>
+        </div>
+      </div>
+
+      <div className="space-y-1.5">
+        {summary.predictions.map(p => {
+          const isExpanded = expandedCard === p.cardId;
+          const urgencyCls = p.urgency === 'overdue' ? 'border-red-500 bg-red-50 dark:bg-red-950/30'
+            : p.urgency === 'urgent' ? 'border-amber-500 bg-amber-50 dark:bg-amber-950/30'
+            : p.urgency === 'soon' ? 'border-blue-400 bg-blue-50 dark:bg-blue-950/30'
+            : 'border-transparent bg-white/60 dark:bg-black/20';
+          return (
+            <div key={p.cardId} className={`p-2.5 rounded-xl border ${urgencyCls} cursor-pointer transition-all`}
+              onClick={() => setExpandedCard(isExpanded ? null : p.cardId)}>
+              <div className="flex justify-between items-center gap-2">
+                <div className="min-w-0 flex-1">
+                  <p className="font-black text-[11px] truncate">{p.cardName} • ••••{p.last4}</p>
+                  <p className="text-[9px] mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                    {p.daysUntilDue === null ? '—'
+                      : p.daysUntilDue <= 0 ? '⚠️ متأخر!'
+                      : p.daysUntilDue === 0 ? 'اليوم!'
+                      : `بعد ${p.daysUntilDue} يوم`}
+                    {p.nextDueDate && ` • ${p.nextDueDate.toLocaleDateString('ar-EG', { day: 'numeric', month: 'short' })}`}
+                  </p>
+                </div>
+                <div className="text-left flex-shrink-0">
+                  <p className="text-[9px] font-bold" style={{ color: 'var(--text-muted)' }}>المطلوب</p>
+                  <p className="font-black text-xs money tabular">{fmt(p.totalMandatory)}</p>
+                </div>
+              </div>
+              {isExpanded && (
+                <div className="mt-2 pt-2 space-y-1 animate-fadeIn" style={{ borderTop: '1px dashed var(--border-default)' }}>
+                  {p.currentStatement ? (
+                    <React.Fragment>
+                      <div className="flex justify-between text-[10px]">
+                        <span style={{ color: 'var(--text-muted)' }}>📅 دورة الكشف</span>
+                        <span className="font-mono text-[9px]" dir="ltr">{p.currentStatement.cycleStartISO} → {p.currentStatement.cycleEndISO}</span>
+                      </div>
+                      <div className="flex justify-between text-[10px]">
+                        <span style={{ color: 'var(--text-muted)' }}>📄 إصدار الكشف</span>
+                        <span className="font-mono text-[9px]">{p.currentStatement.statementDateISO}</span>
+                      </div>
+                      <div className="flex justify-between text-[10px]">
+                        <span style={{ color: 'var(--text-muted)' }}>⏰ الاستحقاق</span>
+                        <span className="font-mono text-[9px] font-black">{p.currentStatement.dueDateISO}</span>
+                      </div>
+                      <div className="h-px my-1" style={{ background: 'var(--border-subtle)' }}></div>
+                      <div className="flex justify-between text-[10px]">
+                        <span style={{ color: 'var(--text-muted)' }}>رصيد افتتاحي الدورة</span>
+                        <span className="font-bold money tabular">{fmt(p.currentStatement.openingBalance)}</span>
+                      </div>
+                      <div className="flex justify-between text-[10px]">
+                        <span style={{ color: 'var(--text-muted)' }}>🛒 مشتريات الدورة</span>
+                        <span className="font-bold text-amber-600 money tabular">+{fmt(p.currentStatement.purchases)}</span>
+                      </div>
+                      <div className="flex justify-between text-[10px]">
+                        <span style={{ color: 'var(--text-muted)' }}>↩️ مرتجعات</span>
+                        <span className="font-bold text-emerald-600 money tabular">−{fmt(p.currentStatement.refunds)}</span>
+                      </div>
+                      <div className="flex justify-between text-[10px]">
+                        <span style={{ color: 'var(--text-muted)' }}>💵 دفعات خلال الدورة</span>
+                        <span className="font-bold text-emerald-600 money tabular">−{fmt(p.currentStatement.paymentsInCycle)}</span>
+                      </div>
+                      <div className="flex justify-between text-[10px] pt-1.5 mt-1" style={{ borderTop: '1px solid var(--border-subtle)' }}>
+                        <span className="font-black text-red-600">رصيد الكشف</span>
+                        <span className="font-black text-red-600 money tabular">{fmt(p.statementBalance)}</span>
+                      </div>
+                      {p.installmentsThisMonth > 0 && (
+                        <div className="flex justify-between text-[10px]">
+                          <span style={{ color: 'var(--text-muted)' }}>🔁 أقساط إلزامية</span>
+                          <span className="font-bold text-purple-600 money tabular">+{fmt(p.installmentsThisMonth)}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between text-[10px] pt-1.5 mt-1" style={{ borderTop: '1px dashed var(--border-default)' }}>
+                        <span className="font-bold" style={{ color: 'var(--text-muted)' }}>الحد الأدنى (5%)</span>
+                        <span className="font-bold money tabular">{fmt(p.minBase)}</span>
+                      </div>
+                      <div className="flex justify-between text-[10px] pt-1.5" style={{ borderTop: '1px solid var(--accent)' }}>
+                        <span className="font-black text-[color:var(--accent)]">💰 المطلوب فعلاً</span>
+                        <span className="font-black text-[color:var(--accent)] money tabular">{fmt(p.totalMandatory)}</span>
+                      </div>
+                    </React.Fragment>
+                  ) : (
+                    <p className="text-[10px] text-center py-2" style={{ color: 'var(--text-muted)' }}>
+                      لا يوجد كشف مستحق حالياً — الدورة المفتوحة ستُصدر لاحقاً
+                    </p>
+                  )}
+
+                  {p.nextCycleEstimate > 0 && p.nextCycleDueDate && (
+                    <div className="mt-2 pt-2" style={{ borderTop: '1px dashed var(--border-default)' }}>
+                      <div className="flex justify-between text-[10px]">
+                        <span style={{ color: 'var(--text-muted)' }}>🔮 الدورة القادمة</span>
+                        <span className="font-mono text-[9px]">{getLocalISODate(p.nextCycleDueDate)}</span>
+                      </div>
+                      <div className="flex justify-between text-[10px]">
+                        <span style={{ color: 'var(--text-muted)' }}>تقديري</span>
+                        <span className="font-black text-amber-600 money tabular">{fmt(p.nextCycleEstimate)}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  <button onClick={(e) => { e.stopPropagation(); dispatch({ type: 'SET_CARD_PAYMENT_MODAL', payload: { cardId: p.cardId } }); }}
+                    className="btn btn-primary w-full text-[10px] py-1.5 mt-2">
+                    <Banknote size={11} /> سداد الآن
+                  </button>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+});
 
 /* ═══════════════ FORCE SAVE HOOK ═══════════════ */
 const FORCE_SAVE_STATES = { IDLE: 'idle', SAVING: 'saving', SUCCESS: 'success', ERROR: 'error' };
@@ -10448,9 +11231,7 @@ function App() {
     printModal: null
   });
 
-  /* ⭐ V88.0 state جديد */
   const [showAllHanyItems, setShowAllHanyItems] = useState(false);
-
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
   const [pinVerified, setPinVerified] = useState(false);
@@ -10960,7 +11741,6 @@ function App() {
     }
   }, [cards, updatedLoans, recurringItems, data, isLoanActiveInMonth]);
 
-  /* ⭐ V88.0 openWalletForm */
   const openWalletForm = useCallback((walletKey, kind) => {
     const wallet = WALLET_CONFIGS[walletKey];
     const type = kind === 'deposit' ? 'income' : 'expense';
@@ -10982,7 +11762,6 @@ function App() {
   const handleAddWalletDeposit = useCallback((k) => openWalletForm(k, 'deposit'), [openWalletForm]);
   const handleAddWalletWithdrawal = useCallback((k) => openWalletForm(k, 'withdrawal'), [openWalletForm]);
 
-  /* ⭐ Save Transaction */
   const handleSaveTransaction = useCallback((e) => {
     if (e && e.preventDefault) e.preventDefault();
     if (isProcessing || saveLockRef.current) return;
@@ -11216,6 +11995,7 @@ function App() {
           custodyEntries: [], cashbackTrackers: [], monthlyPlans: {},
           closedMonths: [], monthlySnapshots: {}, materializedRecurring: {},
           reconciliations: [], settledHanyMonths: [],
+          cardInstallments: [],
           deletedTxIds: removedIds, deletedTxArchive: [], deleteRequests: [],
           deletedDefaultIds: data.deletedDefaultIds || [],
           auditLog: [
@@ -11423,6 +12203,7 @@ function App() {
         limit: safeNumber(editingCard.limit),
         availableBalance: Math.max(0, safeNumber(editingCard.limit) - safeNumber(editingCard.openingDebt)),
         openingDebt: safeNumber(editingCard.openingDebt),
+        statementDay: Math.min(28, Math.max(1, safeNumber(editingCard.statementDay, 5))),
         openingDebtDate: editingCard.openingDebtDate || getLocalISODate(),
         cashbackRate: safeNumber(editingCard.cashbackRate, 0),
         openingDate: editingCard.openingDate || getLocalISODate(),
@@ -11997,7 +12778,7 @@ function App() {
           </button>
         )}
 
-        {/* ⭐ V88.0 Form Modal — Header/Body/Footer structure محسّن */}
+        {/* Form Modal — Header/Body/Footer */}
         {isFormOpen && (
           <div className="modal-backdrop no-print" onClick={(e) => {
             if (e.target === e.currentTarget) dispatch({ type: 'SET_FORM_OPEN', payload: false });
@@ -12009,7 +12790,6 @@ function App() {
                 maxHeight: '92dvh',
                 height: 'auto'
               }}>
-              {/* Header ثابت */}
               <div className="p-4 flex justify-between items-center flex-shrink-0"
                 style={{ borderBottom: '1px solid var(--border-subtle)' }}>
                 <h3 className="text-base font-black">
@@ -12022,7 +12802,6 @@ function App() {
                 </button>
               </div>
 
-              {/* Body قابل للتمرير */}
               <form data-form="main" onSubmit={handleSaveTransaction}
                 className="flex-1 overflow-y-auto scroll-hide"
                 style={{ minHeight: 0 }}>
@@ -12159,7 +12938,6 @@ function App() {
                 </div>
               </form>
 
-              {/* Footer ثابت */}
               <div className="p-3 flex gap-2 flex-shrink-0"
                 style={{
                   borderTop: '1px solid var(--border-subtle)',
@@ -12192,7 +12970,6 @@ function App() {
           </div>
         )}
 
-        {/* Modal منفصل لعرض كل أصناف هاني */}
         {showAllHanyItems && (
           <div className="modal-backdrop no-print" style={{ zIndex: 5000 }}
             onClick={(e) => { if (e.target === e.currentTarget) setShowAllHanyItems(false); }}>
@@ -12217,7 +12994,6 @@ function App() {
           </div>
         )}
 
-        {/* Quick Transfer Modal — 3 modes */}
         {isQuickTransferModalOpen && (
           <div className="modal-backdrop no-print">
             <div className="w-full max-w-md rounded-2xl shadow-2xl animate-slideInBottom" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)' }}>
@@ -12408,7 +13184,6 @@ function App() {
           </div>
         )}
 
-        {/* Edit Card Modal */}
         {editingCard && (
           <div className="modal-backdrop no-print">
             <div className="w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden animate-slideInBottom" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)' }}>
@@ -12436,8 +13211,8 @@ function App() {
                     <input type="text" maxLength={4} className="input-field mono text-sm text-center" value={editingCard.last4 || ''} onChange={e => dispatch({ type: 'SET_EDITING_CARD', payload: { ...editingCard, last4: e.target.value } })} /></div>
                   <div><label className="text-[11px] font-bold" style={{ color: 'var(--text-muted)' }}>تاريخ المديونية</label>
                     <input type="date" className="input-field text-sm" value={editingCard.openingDebtDate || getLocalISODate()} onChange={e => dispatch({ type: 'SET_EDITING_CARD', payload: { ...editingCard, openingDebtDate: e.target.value } })} /></div>
-                  <div><label className="text-[11px] font-bold" style={{ color: 'var(--text-muted)' }}>تاريخ القطع</label>
-                    <input type="date" className="input-field text-sm" value={editingCard.openingDate || getLocalISODate()} onChange={e => dispatch({ type: 'SET_EDITING_CARD', payload: { ...editingCard, openingDate: e.target.value } })} /></div>
+                  <div><label className="text-[11px] font-bold" style={{ color: 'var(--text-muted)' }}>يوم إصدار الكشف</label>
+                    <input type="number" min="1" max="28" className="input-field text-sm text-center" value={editingCard.statementDay || ''} onChange={e => dispatch({ type: 'SET_EDITING_CARD', payload: { ...editingCard, statementDay: e.target.value } })} /></div>
                 </div>
                 <button type="submit" className="btn btn-primary w-full py-3 text-sm">حفظ</button>
               </form>
@@ -12445,7 +13220,6 @@ function App() {
           </div>
         )}
 
-        {/* Edit Loan Modal */}
         {editingLoan && (
           <div className="modal-backdrop no-print">
             <div className="w-full max-w-md rounded-2xl shadow-2xl animate-slideInBottom" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)' }}>
@@ -12476,7 +13250,6 @@ function App() {
           </div>
         )}
 
-        {/* Budget Modal */}
         {editingBudgetCategory && (
           <div className="modal-backdrop no-print">
             <div className="w-full max-w-sm rounded-2xl shadow-2xl p-5 animate-scaleIn" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)' }}>
@@ -12490,7 +13263,6 @@ function App() {
           </div>
         )}
 
-        {/* Recurring Modal */}
         {isRecurringModalOpen && (
           <div className="modal-backdrop no-print">
             <div className="w-full max-w-md rounded-2xl shadow-2xl animate-slideInBottom" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)' }}>
