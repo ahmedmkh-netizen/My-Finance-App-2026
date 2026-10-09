@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
-<title>محفظتي — Personal Banking V88.1</title>
+<title>محفظتي — Personal Banking V88.1.1</title>
 <meta name="theme-color" content="#0A1628">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -52,7 +52,7 @@ tailwind.config = {
     const toBase64 = (str) => { const bytes = new TextEncoder().encode(str); let bin = ''; bytes.forEach(b => bin += String.fromCharCode(b)); return btoa(bin); };
     const ICON_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0A1628"/><stop offset="1" stop-color="#635BFF"/></linearGradient></defs><rect width="192" height="192" rx="42" fill="url(#g)"/><path d="M48 78h96a14 14 0 0114 14v44a14 14 0 01-14 14H48a14 14 0 01-14-14V92a14 14 0 0114-14z" fill="white" opacity="0.96"/><circle cx="126" cy="114" r="7" fill="#0A1628"/><path d="M48 78V68a16 16 0 0116-16h72" stroke="white" stroke-width="8" fill="none" stroke-linecap="round"/></svg>';
     const iconUrl = 'data:image/svg+xml;base64,' + toBase64(ICON_SVG);
-    const manifest = { name:'محفظتي المالية', short_name:'محفظتي', description:'إدارة مالية احترافية V88.1', start_url:'./', scope:'./', display:'standalone', orientation:'portrait', background_color:'#0A1628', theme_color:'#0A1628', dir:'rtl', lang:'ar', icons:[{src:iconUrl,sizes:'192x192',type:'image/svg+xml',purpose:'any maskable'},{src:iconUrl,sizes:'512x512',type:'image/svg+xml',purpose:'any maskable'}] };
+    const manifest = { name:'محفظتي المالية', short_name:'محفظتي', description:'إدارة مالية احترافية V88.1.1', start_url:'./', scope:'./', display:'standalone', orientation:'portrait', background_color:'#0A1628', theme_color:'#0A1628', dir:'rtl', lang:'ar', icons:[{src:iconUrl,sizes:'192x192',type:'image/svg+xml',purpose:'any maskable'},{src:iconUrl,sizes:'512x512',type:'image/svg+xml',purpose:'any maskable'}] };
     const manifestUrl = 'data:application/manifest+json;base64,' + toBase64(JSON.stringify(manifest));
     const link = document.createElement('link'); link.rel = 'manifest'; link.href = manifestUrl; document.head.appendChild(link);
     const appleIcon = document.createElement('link'); appleIcon.rel = 'apple-touch-icon'; appleIcon.href = iconUrl; document.head.appendChild(appleIcon);
@@ -63,7 +63,7 @@ tailwind.config = {
 
 <style>
 /* ═══════════════════════════════════════════════════════════════
-   V88.1 DESIGN SYSTEM — Renaming + Grouping + Clean UI
+   V88.1.1 DESIGN SYSTEM — Fixes: Toast + Form Scroll + Hany Sync
    ═══════════════════════════════════════════════════════════════ */
 :root {
   --bg-app:#F4F7FB; --bg-app-end:#E4EBF5; --bg-card:#FFFFFF; --bg-card-alt:#F8FAFC;
@@ -229,7 +229,7 @@ h1,h2,h3,h4 { font-weight: 800; letter-spacing: -0.02em; color: var(--text-prima
 .toast-error { background: linear-gradient(135deg,#B91C1C 0%,#DC2626 100%); }
 .toast-warning { background: linear-gradient(135deg,#D97706 0%,#F59E0B 100%); }
 .toast-info { background: linear-gradient(135deg,#4A42E5 0%,#635BFF 100%); }
-.toast-progress-track { position: absolute; bottom: 0; left: 0; right: 0; height: 3px; background: rgba(255,255,255,0.25); }
+.toast-progress-track { position: absolute; bottom: 0; left: 0; right: 0; height: 3px; background: rgba(255,255,255,0.25); cursor: pointer; }
 .toast-progress-fill { height: 100%; background: rgba(255,255,255,0.85); transition: width 0.05s linear; }
 .toast-grabber { position: absolute; top: 6px; left: 50%; transform: translateX(-50%); width: 32px; height: 3px; border-radius: 999px; background: rgba(255,255,255,0.35); pointer-events: none; }
 .toast-close-btn { flex-shrink: 0; padding: 6px; border-radius: 999px; transition: all 0.18s ease; background: transparent; border: none; color: white; cursor: pointer; }
@@ -420,6 +420,31 @@ h1,h2,h3,h4 { font-weight: 800; letter-spacing: -0.02em; color: var(--text-prima
 .provider-body { padding: 8px; }
 .provider-item-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; border-radius: var(--r-lg); transition: all .18s var(--ease); cursor: pointer; text-align: right; width: 100%; background: transparent; border: none; font-family: inherit; }
 .provider-item-row:hover { background: var(--bg-muted); transform: translateX(-2px); }
+
+/* ═══════════════════════════════════════════════════════════════
+   V88.1.1 NEW FIXES
+   ═══════════════════════════════════════════════════════════════ */
+.form-scrollable {
+  overflow-y: auto !important;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: var(--accent) var(--bg-muted);
+}
+.form-scrollable::-webkit-scrollbar { width: 6px; }
+.form-scrollable::-webkit-scrollbar-track { background: var(--bg-muted); border-radius: 3px; }
+.form-scrollable::-webkit-scrollbar-thumb { background: var(--accent); border-radius: 3px; }
+.form-scrollable::-webkit-scrollbar-thumb:hover { background: var(--accent-dark); }
+
+.quick-items-grid {
+  max-height: 132px; overflow-y: auto; overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch; padding: 4px; border-radius: 10px;
+  scrollbar-width: thin;
+}
+.quick-items-grid::-webkit-scrollbar { width: 4px; }
+.quick-items-grid::-webkit-scrollbar-thumb { background: var(--warning); border-radius: 2px; }
+
+.form-section-compact { padding: 10px 12px !important; }
 </style>
 </head>
 <body>
@@ -431,7 +456,7 @@ h1,h2,h3,h4 { font-weight: 800; letter-spacing: -0.02em; color: var(--text-prima
 
 <script type="text/babel" data-type="module">
 /* ═══════════════════════════════════════════════════════════════
-   V88.1 — FILE UNIFIED (Renaming + Grouping + Clean UI)
+   V88.1.1 — FILE UNIFIED (Hany Fix + Toast Fix + Form Scroll)
    ═══════════════════════════════════════════════════════════════ */
 
 import React, { useState, useMemo, useEffect, useCallback, useReducer, useRef, memo } from 'react';
@@ -631,12 +656,12 @@ const getCategoryMeta = (cat) => CATEGORY_META[normalizeCategory(cat)] || CATEGO
 /* ═══════════════ CONSTANTS ═══════════════ */
 const LAST_SYNC_LS_KEY = 'v88_last_sync_ts';
 const ALLOWED_EMAIL = "ahmedmkh@gmail.com";
-const CURRENT_ENGINE_VERSION = 32;
+const CURRENT_ENGINE_VERSION = 33;  // ✅ رُفع من 32 → 33
 const DEFAULT_PIN = '8686';
 const PIN_HASH_KEY = 'finance_pin_hash_v88';
-const STORAGE_KEY = 'finance_tracker_V88_1';
+const STORAGE_KEY = 'finance_tracker_V88_1_1';  // ✅ مفتاح جديد
 const LEGACY_KEYS = [
-  'finance_tracker_V88_0','finance_tracker_V87_8','finance_tracker_V87_7','finance_tracker_V87_6',
+  'finance_tracker_V88_1','finance_tracker_V88_0','finance_tracker_V87_8','finance_tracker_V87_7','finance_tracker_V87_6',
   'finance_tracker_V87_5','finance_tracker_V87','finance_tracker_V86_1_BANK',
   'finance_tracker_V86_BANK','finance_tracker_V85_BANK','finance_tracker_V84_BANK',
   'finance_tracker_V83_CLEAN','finance_tracker_V82_SECURE'
@@ -664,7 +689,6 @@ const CORE_LIQUIDITY_KEYS = ['cash', 'cib_savings', 'aaib_savings'];
 const WALLET_ONLY_KEYS = ['fawry', 'etisalat'];
 const HANY_SETTLE_ALLOWED_METHODS = ['cash', 'cib_savings', 'aaib_savings', 'fawry', 'etisalat'];
 
-/* ⭐ V88.1 — PROVIDERS (Grouping Map) */
 const PROVIDERS = {
   cib:     { name: 'CIB',              icon: '🏦', color: '#1E40AF', order: 1 },
   aaib:    { name: 'AAIB',             icon: '🏦', color: '#065F46', order: 2 },
@@ -928,7 +952,7 @@ const verifyPinSession = async (pin) => {
   return stored === expected;
 };
 
-/* ⭐ V88.1 — DEFAULT CARDS with providerKey + displayName */
+/* ⭐ V88.1.1 — DEFAULT CARDS */
 const DEFAULT_CARDS = [
   { id:1, providerKey:'cib', name:'Titanium', bank:'CIB', displayName:'💳 CIB Titanium • 1016', limit:100500, availableBalance:100500, openingDebt:0, openingDebtDate: null, openingDate: null, expiry:'01/29', holderName:'AHMED M. KHALIL', last4:'1016', subCardLast4: ['9360', '9352', '2014'], dueDate:'05 من كل شهر', statementDay: 15, type:'mastercard', theme:'silver', cashbackRate:0 },
   { id:2, providerKey:'aaib', name:'Signature', bank:'AAIB', displayName:'💳 AAIB Signature • 3391', limit:100000, availableBalance:100000, openingDebt:0, openingDebtDate: null, openingDate: null, expiry:'10/26', holderName:'AHMED M. KHALIL', last4:'3391', subCardLast4: ['3557'], dueDate:'25 من كل شهر', statementDay: 5, type:'visa', theme:'black', cashbackRate:0 },
@@ -949,7 +973,6 @@ const CARD_LAST4_MAP = {
   '9982': { method: 'adib_card', linkedCardId: 4, bank: 'ADIB', kind: 'card', label: 'Tainum' }
 };
 
-/* ⭐ V88.1 — DEFAULT_ACCOUNTS with providerKey + type */
 const DEFAULT_ACCOUNTS = {
   cib_savings:  { initialBalance: 0, initialDate: null, balance: 0, label: '🏦 CIB توفير • 1809',  providerKey: 'cib',     type: 'account', lastUpdated: null, last4: '1809' },
   aaib_savings: { initialBalance: 0, initialDate: null, balance: 0, label: '🏦 AAIB توفير • 2106', providerKey: 'aaib',    type: 'account', lastUpdated: null, last4: '2106' },
@@ -960,7 +983,6 @@ const DEFAULT_ACCOUNTS = {
 
 const ACCOUNT_ICONS = { cib_savings: BuildingBank, aaib_savings: PiggyBank, cash: Wallet, fawry: StoreIcon, etisalat: Signal };
 
-/* ⭐ V88.1 — Arabic short/arabic names */
 const ACCOUNT_SHORT_NAMES = {
   cib_savings:  '🏦 CIB توفير',
   aaib_savings: '🏦 AAIB توفير',
@@ -976,7 +998,6 @@ const ACCOUNT_ARABIC_NAMES = {
   etisalat:     '📱 محفظة اتصالات'
 };
 
-/* ⭐ V88.1 — WALLET_CONFIGS with Arabic titles */
 const WALLET_CONFIGS = {
   cash:         { id:'cash',         title:'💵 الكاش',              subtitle:'كاش في اليد',        icon: Wallet,       csvName:'Cash',         group: 'cash' },
   fawry:        { id:'fawry',        title:'📱 محفظة فوري',         subtitle:'محفظة إلكترونية',    icon: StoreIcon,    csvName:'Fawry',        group: 'wallet' },
@@ -985,7 +1006,6 @@ const WALLET_CONFIGS = {
   aaib_savings: { id:'aaib_savings', title:'🏦 AAIB توفير • 2106',   subtitle:'حساب بنكي',          icon: PiggyBank,    csvName:'AAIB_Savings', group: 'bank' }
 };
 
-/* ⭐ V88.1 — PAYMENT_METHODS with new labels + order */
 const PAYMENT_METHODS = [
   { id:'cib_savings',     label:'🏦 CIB توفير • 1809',  shortLabel:'CIB توفير',   icon:'🏦', bg:'linear-gradient(135deg,#1E40AF,#3B82F6)',   group:'account', subtitle:'حساب بنكي',   order:1 },
   { id:'aaib_savings',    label:'🏦 AAIB توفير • 2106', shortLabel:'AAIB توفير',  icon:'🏛️', bg:'linear-gradient(135deg,#065F46,#10B981)',   group:'account', subtitle:'حساب بنكي',   order:2 },
@@ -1042,7 +1062,6 @@ const buildAuditEntry = (action, entity, entityId, { before = null, after = null
   ts: Date.now(), action, entity, entityId, before, after, note, by: 'ahmed'
 });
 
-/* ⭐ V88.1 — REPORT_METHOD_LABELS with new Arabic labels */
 const REPORT_METHOD_LABELS = {
   cib_savings: '🏦 CIB توفير • 1809', aaib_savings: '🏦 AAIB توفير • 2106',
   cash: '💵 الكاش', fawry: '📱 محفظة فوري', etisalat: '📱 محفظة اتصالات',
@@ -1054,7 +1073,6 @@ const REPORT_METHOD_LABELS = {
 
 const getMethodLabel = (id) => REPORT_METHOD_LABELS[id] || id || '—';
 
-/* ⭐ V88.1 — SIDEBAR_GROUPS (10 items في 6 مجموعات) */
 const SIDEBAR_GROUPS = [
   { group: '📊 العمليات اليومية', items: [
     { id: 'dashboard',    label: 'الرئيسية',  icon: Home },
@@ -1081,10 +1099,9 @@ const SIDEBAR_GROUPS = [
     { id: 'settings', label: 'الإعدادات', icon: Sliders }
   ]}
 ];
+
 /* ═══════════════════════════════════════════════════════════════
-   V88.1 — PART 2/6
-   Print Engine + Report Generators + Accounting Core + Migration
-   + Recurring Engine + Drive Operations + Integrity Checks
+   PART 3/6 — Print + Reports + Accounting + Migration + Recurring + Drive
    ═══════════════════════════════════════════════════════════════ */
 
 /* ═══════════════ PRINT ENGINE ═══════════════ */
@@ -1120,7 +1137,7 @@ const buildReportHeader = (reportTitle, meta = {}) => {
         <div class="report-logo-mark">م</div>
         <div class="report-logo-text">
           <h1>محفظتي المالية</h1>
-          <p>PERSONAL BANKING · V88.1</p>
+          <p>PERSONAL BANKING · V88.1.1</p>
         </div>
       </div>
       <div class="report-meta">
@@ -1140,7 +1157,7 @@ const buildReportHeader = (reportTitle, meta = {}) => {
 const buildReportFooter = (pageNote = '') => {
   return `
     <div class="report-footer">
-      <div class="footer-brand">محفظتي المالية · V88.1</div>
+      <div class="footer-brand">محفظتي المالية · V88.1.1</div>
       <div class="footer-note">${escapeHtml(pageNote || 'هذا التقرير صادر من نظام محفظتي المالية — جميع المبالغ بالجنيه المصري (ج.م)')}</div>
       <div class="footer-page">صفحة 1 من 1</div>
     </div>
@@ -1198,10 +1215,6 @@ const REPORT_CSS = `
   .report-footer .footer-note { text-align: center; flex: 1; font-style: italic; }
   .report-footer .footer-page { text-align: left; font-weight: 700; }
   .report-watermark { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-35deg); font-size: 80px; font-weight: 900; color: rgba(99,91,255,0.04); pointer-events: none; white-space: nowrap; z-index: 0; letter-spacing: 8px; }
-  .report-signature { margin-top: 24px; display: grid; grid-template-columns: 1fr 1fr; gap: 24px; padding-top: 16px; }
-  .report-signature .sig-box { text-align: center; }
-  .report-signature .sig-line { border-top: 1.5px dashed #94A3B8; margin-bottom: 6px; height: 30px; }
-  .report-signature .sig-label { font-size: 10px; font-weight: 800; color: #64748B; }
   .report-hero-strip { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 14px; }
   .report-hero-strip .hero-cell { padding: 12px 14px; border-radius: 12px; text-align: center; color: white; }
   .report-hero-strip .hero-cell.opening { background: linear-gradient(135deg, #64748B 0%, #475569 100%); }
@@ -1209,10 +1222,6 @@ const REPORT_CSS = `
   .report-hero-strip .hero-cell.settlements { background: linear-gradient(135deg, #059669 0%, #047857 100%); }
   .report-hero-strip .hero-cell .hero-label { font-size: 10px; font-weight: 800; opacity: 0.9; margin-bottom: 4px; letter-spacing: 0.5px; }
   .report-hero-strip .hero-cell .hero-value { font-size: 18px; font-weight: 900; font-variant-numeric: tabular-nums; letter-spacing: -0.5px; }
-  .report-summary-card { padding: 10px 12px; border-radius: 10px; background: #F8FAFC; border-right: 4px solid #635BFF; margin-bottom: 8px; }
-  .report-summary-card.success { border-color: #059669; background: #F0FDF4; }
-  .report-summary-card.danger { border-color: #DC2626; background: #FEF2F2; }
-  .report-summary-card.warning { border-color: #D97706; background: #FFFBEB; }
 `;
 
 const wrapReportHtml = (content, title = 'تقرير') => {
@@ -1245,13 +1254,11 @@ const wrapReportHtml = (content, title = 'تقرير') => {
 
 /* ═══════════════ REPORT GENERATORS ═══════════════ */
 const generateHanyLedgerReport = (data, options = {}) => {
-  const {
-    includePurchases = true, includeSettlements = true,
-    includeGrouped = true, monthFilter = null, includeWatermark = true
-  } = options;
+  const { includePurchases = true, includeSettlements = true, includeGrouped = true, monthFilter = null, includeWatermark = true } = options;
 
+  // ✅ V88.1.1 FIX — يقبل method أو hanyEffect
   const purchases = (data.transactions || [])
-    .filter(t => t.method === HANY_TAB_METHOD && isHanyShopCategory(t.category) && !isCarryoverMarker(t))
+    .filter(t => (t.method === HANY_TAB_METHOD || t.hanyEffect === 'purchase') && isHanyShopCategory(t.category) && !isCarryoverMarker(t))
     .sort(compareTransactions);
 
   const settlements = (data.transactions || [])
@@ -1731,12 +1738,12 @@ const shareReport = async (reportTitle, htmlContent, fileName) => {
       const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
       const file = new File([blob], fileName || 'report.html', { type: 'text/html' });
       if (navigator.canShare({ files: [file] })) {
-        await navigator.share({ title: reportTitle, text: `📊 ${reportTitle}\n\nتم إنشاء التقرير من محفظتي المالية V88.1`, files: [file] });
+        await navigator.share({ title: reportTitle, text: `📊 ${reportTitle}\n\nتم إنشاء التقرير من محفظتي المالية V88.1.1`, files: [file] });
         return { ok: true, method: 'file' };
       }
     }
     if (navigator.share) {
-      await navigator.share({ title: reportTitle, text: `📊 ${reportTitle}\n\nتم إنشاء التقرير من محفظتي المالية V88.1` });
+      await navigator.share({ title: reportTitle, text: `📊 ${reportTitle}\n\nتم إنشاء التقرير من محفظتي المالية V88.1.1` });
       return { ok: true, method: 'text' };
     }
     downloadHtmlReport(htmlContent, fileName);
@@ -1846,10 +1853,14 @@ const isCarryoverMarker = (t) => {
   return false;
 };
 
-const isHanyPurchaseTx = (t) => t && (t.hanyEffect === 'purchase' || t.method === HANY_TAB_METHOD) && !isCarryoverMarker(t);
+// ✅ V88.1.1 FIX — يقبل method أو hanyEffect + يجب أن يكون category هاني
+const isHanyPurchaseTx = (t) =>
+  t && (t.hanyEffect === 'purchase' || t.method === HANY_TAB_METHOD)
+  && isHanyShopCategory(t.category)
+  && !isCarryoverMarker(t);
+
 const isHanySettleTx = (t) => t && (t.hanyEffect === 'settle' || isHanySettleCategory(t.category));
 
-/* ⭐ V88.1 — Cache للأرصدة */
 const _balanceCache = new Map();
 const _balanceCacheKey = (data, asOfDate) => {
   const txCount = data?.transactions?.length || 0;
@@ -1932,7 +1943,6 @@ const isCardPaymentTx = (t, cardId) => {
   return false;
 };
 
-/* ⭐ V88.1 Bank-Grade — computeCardDebt with _appReady guard (Bug 1 fix) */
 let _appReady = false;
 setTimeout(() => { _appReady = true; }, 150);
 
@@ -1980,7 +1990,6 @@ const computeCardDebt = (data, card, asOfDate = null) => {
     else if (t.type === 'income') debt -= amt;
   });
 
-  // ⭐ V88.1 Bug 1 fix — guard against undefined computeCardInstallmentsInfo
   if (_appReady && typeof computeCardInstallmentsInfo === 'function') {
     try {
       const instInfo = computeCardInstallmentsInfo(data, card, upper);
@@ -2026,10 +2035,7 @@ const computeCardPaymentInfo = (data, card, asOfDate = null) => {
     }
   });
 
-  return {
-    debt: computeCardDebt(data, card, asOfDate),
-    paymentsTotal, purchasesTotal, refundsTotal, lastPayment, paymentCount
-  };
+  return { debt: computeCardDebt(data, card, asOfDate), paymentsTotal, purchasesTotal, refundsTotal, lastPayment, paymentCount };
 };
 
 const computeCardAvailable = (data, card, asOfDate = null) => {
@@ -2044,6 +2050,7 @@ const computeTotalCardDebtNet = (data, asOfDate = null) => {
   return Math.max(0, sum);
 };
 
+// ✅ V88.1.1 FIX — يقبل method أو hanyEffect معاً
 const computeHanyPayable = (data, asOfDate = null) => {
   const upper = asOfDate ? new Date(asOfDate).getTime() : endOfToday().getTime();
   let purchases = 0;
@@ -2056,7 +2063,11 @@ const computeHanyPayable = (data, asOfDate = null) => {
     const d = parseISODate(t.date);
     if (!d || d.getTime() > upper) return;
 
-    if (t.method === HANY_TAB_METHOD && isHanyShopCategory(t.category)) {
+    const isPurchase =
+      (t.method === HANY_TAB_METHOD || t.hanyEffect === 'purchase') &&
+      isHanyShopCategory(t.category);
+
+    if (isPurchase) {
       purchases += safeNumber(t.amount);
       return;
     }
@@ -2068,6 +2079,7 @@ const computeHanyPayable = (data, asOfDate = null) => {
   return Math.max(0, purchases - settlements);
 };
 
+// ✅ V88.1.1 FIX — يقبل method أو hanyEffect معاً
 const computeHanySummaryForMonth = (data, year, month) => {
   const monthKey = makeMonthKey(year, month);
   let purchases = 0, settlements = 0, purchaseCount = 0, settleCount = 0;
@@ -2076,13 +2088,17 @@ const computeHanySummaryForMonth = (data, year, month) => {
     if (!t || t.status === 'void') return;
     if (isCarryoverMarker(t)) return;
 
-    if (t.month === month && (t.year || 2026) === year
-        && t.method === HANY_TAB_METHOD && isHanyShopCategory(t.category)) {
+    const isPurchase =
+      (t.method === HANY_TAB_METHOD || t.hanyEffect === 'purchase') &&
+      isHanyShopCategory(t.category);
+
+    if (t.month === month && (t.year || 2026) === year && isPurchase) {
       purchases += safeNumber(t.amount);
       purchaseCount++;
     }
     if (t.month === month && (t.year || 2026) === year
-        && (t.hanyEffect === 'settle' || isHanySettleCategory(t.category)) && t.status === 'paid') {
+        && (t.hanyEffect === 'settle' || isHanySettleCategory(t.category))
+        && t.status === 'paid') {
       settlements += safeNumber(t.amount);
       settleCount++;
     }
@@ -2145,11 +2161,7 @@ const computeNetWorth = (data, asOfDate = null) => {
   const hanyPayable = computeHanyPayable(data, asOfDate);
 
   const totalLiabilities = cardDebt + loanDebt + hanyPayable;
-  return {
-    liquidity, cardDebt, loanDebt, hanyPayable, totalLiabilities,
-    netWorth: liquidity - totalLiabilities,
-    balances
-  };
+  return { liquidity, cardDebt, loanDebt, hanyPayable, totalLiabilities, netWorth: liquidity - totalLiabilities, balances };
 };
 
 const FLOW = {
@@ -2178,7 +2190,6 @@ const classifyFlow = (t) => {
 
   if (t.sourceRecurringId && t.sourceRecurringId.indexOf('r-mortgage') === 0) return FLOW.LOAN_INSTALLMENT;
   if (t.linkedLoanId) return FLOW.LOAN_INSTALLMENT;
-
   if (t.category === 'الالتزامات البنكية والتمويلية'
       && t.type === 'expense'
       && !t.linkedCardId) return FLOW.LOAN_INSTALLMENT;
@@ -2352,7 +2363,7 @@ const computeCashbackSummary = (trackers) => {
   return { expected, received, pending: expected - received, list: trackers };
 };
 
-/* ═══════════════ MIGRATION V88.1 ═══════════════ */
+/* ═══════════════ MIGRATION V88.1.1 ═══════════════ */
 const migrateTransactionV87 = (t) => {
   if (!t) return t;
   const normCat = normalizeCategory(t.category);
@@ -2362,10 +2373,10 @@ const migrateTransactionV87 = (t) => {
     if (isMarker) {
       return { ...t, category: HANY_TAB_CATEGORY, hanyEffect: 'carryover-marker', affectsCash: false, method: HANY_TAB_METHOD };
     }
-    const isPaid = t.status === 'paid';
+    // ✅ V88.1.1 FIX — دائماً hany_tab (لا يعتمد على status)
     return {
       ...t, category: HANY_TAB_CATEGORY, kind: 'operational',
-      method: isPaid ? HANY_TAB_METHOD : (t.method || HANY_TAB_METHOD),
+      method: HANY_TAB_METHOD,
       affectsCash: false, hanyEffect: 'purchase'
     };
   }
@@ -2395,15 +2406,18 @@ const migrateTransactionV87 = (t) => {
   return { ...t, category: normCat };
 };
 
+// ✅ V88.1.1 FIX — إجبار method = hany_tab دائماً
 const migrateHanyTx = (t) => {
   if (!t) return t;
   if (isCarryoverMarker(t)) return t;
   if (isHanySettleCategory(t.category)) return t;
   if (!isHanyShopCategory(t.category)) return t;
   return {
-    ...t, category: HANY_TAB_CATEGORY,
-    method: t.status === 'paid' ? HANY_TAB_METHOD : (t.method || HANY_TAB_METHOD),
-    affectsCash: false, hanyEffect: 'purchase',
+    ...t,
+    category: HANY_TAB_CATEGORY,
+    method: HANY_TAB_METHOD,
+    affectsCash: false,
+    hanyEffect: 'purchase',
   };
 };
 
@@ -2448,7 +2462,6 @@ const migrateSnapshotsAndClosed = (snapshots, closedMonths) => {
   return { snapshots: snaps, closedMonths: closed };
 };
 
-/* ⭐ V88.1 — migrateCards with providerKey + displayName */
 const migrateCards = (cards) => {
   if (!Array.isArray(cards)) return JSON.parse(JSON.stringify(DEFAULT_CARDS));
   const migrated = cards.map(c => {
@@ -2489,7 +2502,6 @@ const migrateCards = (cards) => {
     }
     result.statementDay = Math.min(28, Math.max(1, safeNumber(result.statementDay, 5)));
 
-    /* ⭐ V88.1 — providerKey + displayName */
     if (!result.providerKey) {
       if (result.bank === 'CIB') result.providerKey = 'cib';
       else if (result.bank === 'AAIB') result.providerKey = 'aaib';
@@ -2616,7 +2628,6 @@ const migrateData = (parsed) => {
   });
   transactions = sortTransactions(transactions);
 
-  /* ⭐ V88.1 — accountsData with providerKey defaults */
   const accountsData = parsed.accountsData && typeof parsed.accountsData === 'object'
     ? { ...DEFAULT_ACCOUNTS, ...parsed.accountsData }
     : JSON.parse(JSON.stringify(DEFAULT_ACCOUNTS));
@@ -2645,7 +2656,6 @@ const migrateData = (parsed) => {
     if (k === 'cib_savings' && !accountsData[k].last4) accountsData[k] = { ...accountsData[k], last4: '1809' };
     if (k === 'aaib_savings' && !accountsData[k].last4) accountsData[k] = { ...accountsData[k], last4: '2106' };
 
-    /* ⭐ V88.1 — providerKey + type fallback */
     if (!accountsData[k].providerKey) {
       if (k === 'cib_savings')  accountsData[k] = { ...accountsData[k], providerKey: 'cib' };
       if (k === 'aaib_savings') accountsData[k] = { ...accountsData[k], providerKey: 'aaib' };
@@ -2707,8 +2717,21 @@ const migrateData = (parsed) => {
     deleteRequests,
   };
 
+  // ✅ V88.1.1 FORCE FIX — إجبار method = hany_tab على كل معاملة هاني قديمة
+  base.transactions = base.transactions.map(t => {
+    if (!t || !isHanyShopCategory(t.category)) return t;
+    if (isCarryoverMarker(t)) return t;
+    if (isHanySettleCategory(t.category)) return t;
+    return {
+      ...t,
+      method: HANY_TAB_METHOD,
+      affectsCash: false,
+      hanyEffect: 'purchase'
+    };
+  });
+
   base.hanyPayableCache = computeHanyPayable(base);
-  base.__v881MigratedAt = new Date().toISOString();
+  base.__v8811MigratedAt = new Date().toISOString();
   return base;
 };
 
@@ -2899,9 +2922,9 @@ const getOrCreateBackupFolder = async () => {
 const uploadBackupToDrive = async (payload, fileName) => {
   const token = await ensureDriveToken();
   const folderId = await getOrCreateBackupFolder();
-  const name = fileName || `finance_backup_v881_${getLocalISODate()}_${Date.now()}.json`;
+  const name = fileName || `finance_backup_v8811_${getLocalISODate()}_${Date.now()}.json`;
   const metadata = { name, parents: [folderId], mimeType: 'application/json' };
-  const boundary = '----V881DriveBoundary' + Date.now();
+  const boundary = '----V8811DriveBoundary' + Date.now();
   const body = `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n--${boundary}\r\nContent-Type: application/json\r\n\r\n${JSON.stringify(payload)}\r\n--${boundary}--`;
   const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,size,createdTime', {
     method: 'POST',
@@ -3009,11 +3032,9 @@ const applyMaterialization = (data, asOfDateStr) => {
   if (filteredTx.length !== updated.transactions.length) return { ...updated, transactions: filteredTx };
   return updated;
 };
+
 /* ═══════════════════════════════════════════════════════════════
-   V88.1 — PART 3/6
-   Modal Resolvers + ErrorBoundary + Toast + Sidebar (New)
-   + Login + PIN + SMS + Reducer + ReportsHub + HanyLedger
-   + Dashboard (Clean) + Transactions + Categories + CategoryDetail
+   PART 4/6 — Modals + Toast (FIXED) + Sidebar + Login + Reducer
    ═══════════════════════════════════════════════════════════════ */
 
 /* ═══════════════ MODAL RESOLVERS ═══════════════ */
@@ -3188,7 +3209,6 @@ const Modal = memo(({ isOpen, onClose, title, icon, size = 'md', children, foote
   );
 });
 
-/* ⭐ V88.1 Bug 3 fix — SafeDateInput for iOS Safari */
 const SafeDateInput = memo(({ value, onChange, className, ...props }) => {
   const inputRef = useRef(null);
   const handleChange = (e) => {
@@ -3277,7 +3297,7 @@ const ForceSaveButton = memo(({ onForceSave, state, isSaving, compact = false, l
   );
 });
 
-/* ═══════════════ SIDEBAR (V88.1 — 6 groups) ═══════════════ */
+/* ═══════════════ SIDEBAR ═══════════════ */
 const Sidebar = memo(({
   isOpen, onClose, activeTab, onNavigate, isDarkMode, onToggleTheme,
   isOnline, syncStatus, isSaving, hanyPayable, data,
@@ -3309,7 +3329,7 @@ const Sidebar = memo(({
               </div>
               <div>
                 <h1 className="text-sm font-black">محفظتي</h1>
-                <p className="text-[9px] font-semibold" style={{ color: 'var(--text-muted)' }}>Personal Banking · V88.1</p>
+                <p className="text-[9px] font-semibold" style={{ color: 'var(--text-muted)' }}>Personal Banking · V88.1.1</p>
               </div>
             </div>
             <button onClick={onClose} className="btn btn-ghost p-1.5 lg:hidden"><X size={16} /></button>
@@ -3391,7 +3411,7 @@ const ProfessionalHeader = memo(({
       </div>
       <div>
         <h1 className="text-base font-black">محفظتي</h1>
-        <p className="text-[9px] font-semibold" style={{ color: 'var(--text-muted)' }}>Personal Banking · V88.1</p>
+        <p className="text-[9px] font-semibold" style={{ color: 'var(--text-muted)' }}>Personal Banking · V88.1.1</p>
       </div>
     </div>
     <div className="flex items-center gap-1.5">
@@ -3418,30 +3438,49 @@ const ProfessionalHeader = memo(({
   </header>
 ));
 
-/* ═══════════════ TOAST ═══════════════ */
-const Toast = ({ notification, onClose }) => {
+/* ═══════════════ ✅ TOAST (FIXED V88.1.1) ═══════════════ */
+const Toast = ({ notification, removeNotification }) => {
   const [exiting, setExiting] = useState(false);
   const [progress, setProgress] = useState(100);
   const [dragY, setDragY] = useState(0);
   const touchStartY = useRef(0);
-  const duration = notification.duration || 5000;
+  const duration = Math.max(1500, notification.duration || 5000);
+  const startTimeRef = useRef(Date.now());
+  const exitTimerRef = useRef(null);
+  const dismissedRef = useRef(false);
 
   const handleClose = useCallback(() => {
-    if (exiting) return;
+    if (dismissedRef.current) return;
+    dismissedRef.current = true;
     setExiting(true);
-    setTimeout(onClose, 220);
-  }, [onClose, exiting]);
+    if (exitTimerRef.current) clearTimeout(exitTimerRef.current);
+    exitTimerRef.current = setTimeout(() => {
+      try { removeNotification(notification.id); } catch (e) {}
+    }, 220);
+  }, [removeNotification, notification.id]);
+
+  // ✅ استخدام useRef لمنع تسلسل useState اللانهائي
+  const handleCloseRef = useRef(handleClose);
+  useEffect(() => { handleCloseRef.current = handleClose; }, [handleClose]);
 
   useEffect(() => {
-    const startTime = Date.now();
+    startTimeRef.current = Date.now();
+    dismissedRef.current = false;
     const interval = setInterval(() => {
-      const elapsed = Date.now() - startTime;
+      const elapsed = Date.now() - startTimeRef.current;
       const remaining = Math.max(0, 100 - (elapsed / duration) * 100);
       setProgress(remaining);
-      if (remaining <= 0) { clearInterval(interval); handleClose(); }
+      if (remaining <= 0) {
+        clearInterval(interval);
+        handleCloseRef.current();
+      }
     }, 50);
     return () => clearInterval(interval);
-  }, [duration, handleClose]);
+  }, [duration, notification.id]);
+
+  useEffect(() => () => {
+    if (exitTimerRef.current) clearTimeout(exitTimerRef.current);
+  }, []);
 
   const onTouchStart = (e) => { touchStartY.current = e.touches[0].clientY; };
   const onTouchMove = (e) => {
@@ -3472,7 +3511,7 @@ const Toast = ({ notification, onClose }) => {
         {notification.message && <p className="text-xs opacity-95 leading-relaxed whitespace-pre-line">{notification.message}</p>}
       </div>
       <button onClick={handleClose} aria-label="إغلاق" className="toast-close-btn"><X size={15} /></button>
-      <div className="toast-progress-track">
+      <div className="toast-progress-track" onClick={handleClose}>
         <div className="toast-progress-fill" style={{ width: `${progress}%` }} />
       </div>
     </div>
@@ -3484,7 +3523,7 @@ const ToastContainer = ({ notifications, removeNotification }) => {
   return (
     <div className="toast-container no-print">
       {notifications.slice(-5).map(n => (
-        <Toast key={n.id} notification={n} onClose={() => removeNotification(n.id)} />
+        <Toast key={n.id} notification={n} removeNotification={removeNotification} />
       ))}
     </div>
   );
@@ -3552,7 +3591,7 @@ const LoginScreen = ({ onLogin }) => {
             <Wallet size={48} className="text-white" />
           </div>
           <h1 className="text-3xl font-black text-white mb-2">محفظتي</h1>
-          <p className="text-sm font-medium" style={{ color: '#94A3B8' }}>Personal Banking · V88.1</p>
+          <p className="text-sm font-medium" style={{ color: '#94A3B8' }}>Personal Banking · V88.1.1</p>
         </div>
         {error && (
           <div className="mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-300 text-xs font-bold flex items-center gap-2">
@@ -4055,9 +4094,12 @@ function dataReducer(state, action) {
     };
     case 'TOGGLE_CARDS_SECTION': return { ...state, expandedCardsSection: !state.expandedCardsSection };
 
-    case 'ADD_NOTIFICATION': return {
-      ...state, notifications: [...state.notifications, { id: Date.now() + Math.random(), ...action.payload }]
-    };
+    // ✅ V88.1.1 FIX — Toast deduplication + limited stack
+    case 'ADD_NOTIFICATION': {
+      const newNotif = { id: `n-${Date.now()}-${Math.random().toString(36).slice(2,7)}`, ...action.payload };
+      const filtered = state.notifications.filter(n => n.id !== newNotif.id);
+      return { ...state, notifications: [...filtered, newNotif].slice(-8) };
+    }
     case 'REMOVE_NOTIFICATION': return {
       ...state, notifications: state.notifications.filter(n => n.id !== action.payload)
     };
@@ -4663,7 +4705,8 @@ const ReportsHubView = memo(({ data, liveBalances, updatedLoans, selectedMonth, 
 
   const totalTransactions = (data.transactions || []).filter(t => !isCarryoverMarker(t)).length;
   const hanyPayable = computeHanyPayable(data);
-  const hanyPurchases = (data.transactions || []).filter(t => t.method === HANY_TAB_METHOD && isHanyShopCategory(t.category) && !isCarryoverMarker(t)).length;
+  // ✅ V88.1.1 FIX
+  const hanyPurchases = (data.transactions || []).filter(t => (t.method === HANY_TAB_METHOD || t.hanyEffect === 'purchase') && isHanyShopCategory(t.category) && !isCarryoverMarker(t)).length;
   const hanySettlements = (data.transactions || []).filter(t => isHanySettleTx(t) && t.status === 'paid').length;
 
   const handlePrintHany = (withMonthFilter = false) => {
@@ -4902,7 +4945,7 @@ const PrintPreviewModal = memo(({ content, title, onClose, onPrint, onDownload, 
   );
 });
 
-/* ═══════════════ HANY LEDGER VIEW ═══════════════ */
+/* ═══════════════ HANY LEDGER VIEW (FIXED) ═══════════════ */
 const HanyLedgerView = memo(function HanyLedgerView(props) {
   const data = props.data;
   const dispatch = props.dispatch;
@@ -4928,9 +4971,14 @@ const HanyLedgerView = memo(function HanyLedgerView(props) {
     return computeHanySummaryForMonth(data, selectedYear, selectedMonth);
   }, [data, selectedYear, selectedMonth]);
 
+  // ✅ V88.1.1 FIX — يقبل method أو hanyEffect
   const purchases = useMemo(function () {
     return (data.transactions || [])
-      .filter(function (t) { return t.method === HANY_TAB_METHOD && isHanyShopCategory(t.category) && !isCarryoverMarker(t); })
+      .filter(function (t) {
+        return (t.method === HANY_TAB_METHOD || t.hanyEffect === 'purchase')
+          && isHanyShopCategory(t.category)
+          && !isCarryoverMarker(t);
+      })
       .slice().sort(compareTransactions);
   }, [data.transactions]);
 
@@ -5414,7 +5462,7 @@ const MonthSelector = memo(({ selectedYear, selectedMonth, onSelectYear, onSelec
   );
 });
 
-/* ═══════════════ DASHBOARD VIEW (V88.1 — Clean) ═══════════════ */
+/* ═══════════════ DASHBOARD VIEW ═══════════════ */
 const DashboardView = memo(({
   data, financeSnapshot, liveBalances, liquidityDual, netWorthData,
   walletVisibility, onToggleVisibility, dispatch, selectedYear, selectedMonth,
@@ -5485,7 +5533,7 @@ const DashboardView = memo(({
           <div className="flex items-start gap-3">
             <div className="p-2 rounded-xl" style={{ background: 'var(--accent)', color: 'white' }}><Sparkles size={18} /></div>
             <div className="flex-1">
-              <h3 className="font-black text-sm mb-1" style={{ color: 'var(--accent)' }}>أهلاً بك في V88.1</h3>
+              <h3 className="font-black text-sm mb-1" style={{ color: 'var(--accent)' }}>أهلاً بك في V88.1.1</h3>
               <p className="text-[11px] leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
                 ابدأ بإدخال أرصدة حساباتك من <strong>الإعدادات → الحسابات</strong> ثم أضف أول معاملة
               </p>
@@ -5532,7 +5580,6 @@ const DashboardView = memo(({
         </button>
       </div>
 
-      {/* V88.1 — Merged QuickBalanceOverview + Income/Expense + Forecast */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div className="stat-card">
           <div className="flex justify-between items-start mb-2">
@@ -5610,9 +5657,6 @@ const DashboardView = memo(({
           </div>
         </button>
       )}
-
-      {/* V88.1 — REMOVED CardsMiniPanel + Stat cards duplicates */}
-      {/* V88.1 — REPLACED by unified QuickBalanceOverview below */}
 
       <div className="grid grid-cols-3 gap-2">
         <button onClick={() => dispatch({ type: 'SET_ACTIVE_TAB', payload: 'cards' })} className="card card-hover py-3 text-center active:scale-95">
@@ -5701,6 +5745,10 @@ const DashboardView = memo(({
     </div>
   );
 });
+
+/* ═══════════════════════════════════════════════════════════════
+   PART 5/6 — Transactions + Categories + Loans + Cards + Forecast + Calendar
+   ═══════════════════════════════════════════════════════════════ */
 
 /* ═══════════════ TX BADGES ═══════════════ */
 const SmsBadge = memo(({ tx }) => {
@@ -6516,13 +6564,6 @@ const CategoriesView = memo(({
     </div>
   );
 });
-/* ═══════════════════════════════════════════════════════════════
-   V88.1 — PART 4/6
-   RecurringItemsList + LoansView (No Custody) + GenericLedger
-   + CashbackView + BankCard3D + WalletsAndCardsView (NEW)
-   + ProviderGroupCard + ProviderItemRow + CardStatement
-   + FinancialForecast + CalendarView + ExternalTransfer
-   ═══════════════════════════════════════════════════════════════ */
 
 /* ═══════════════ RECURRING ITEMS LIST ═══════════════ */
 const RecurringItemsList = memo(function RecurringItemsList(props) {
@@ -6623,7 +6664,7 @@ const RecurringItemsList = memo(function RecurringItemsList(props) {
   );
 });
 
-/* ═══════════════ LOANS VIEW (V88.1 — بدون العهدة) ═══════════════ */
+/* ═══════════════ LOANS VIEW ═══════════════ */
 const LoansView = memo(function LoansView(props) {
   const updatedLoans = props.updatedLoans || [];
   const cards = props.cards || [];
@@ -6746,7 +6787,6 @@ const LoansView = memo(function LoansView(props) {
 
   return (
     <div className="space-y-4 animate-fadeIn pb-24">
-      {/* V88.1 — 2 sub-tabs only (removed custody) */}
       <div className="sub-tab-switcher">
         <button onClick={function () { setActiveTab('loans'); }} className={'sub-tab-btn ' + (activeTab === 'loans' ? 'active' : '')}>
           <Banknote size={14} /><span>القروض والمستحقات</span>
@@ -7378,7 +7418,7 @@ const BankCard3D = memo(({ card, liveDebt, liveAvailable, onStatement, onEdit, o
   );
 });
 
-/* ═══════════════ PROVIDER GROUP CARD (V88.1 NEW) ═══════════════ */
+/* ═══════════════ PROVIDER GROUP CARD ═══════════════ */
 const ProviderGroupCard = memo(({ providerKey, items, liveBalances, data, dispatch, onItemClick, defaultExpanded = true }) => {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
   const provider = PROVIDERS[providerKey];
@@ -7426,7 +7466,7 @@ const ProviderGroupCard = memo(({ providerKey, items, liveBalances, data, dispat
   );
 });
 
-/* ═══════════════ PROVIDER ITEM ROW (V88.1 NEW) ═══════════════ */
+/* ═══════════════ PROVIDER ITEM ROW ═══════════════ */
 const ProviderItemRow = memo(({ item, data, liveBalances, dispatch, onItemClick, providerColor }) => {
   const isCard = item.type === 'card';
   const isAccount = item.type === 'account';
@@ -7495,7 +7535,7 @@ const ProviderItemRow = memo(({ item, data, liveBalances, dispatch, onItemClick,
   );
 });
 
-/* ═══════════════ WALLETS AND CARDS VIEW (V88.1 — Grouping) ═══════════════ */
+/* ═══════════════ WALLETS AND CARDS VIEW ═══════════════ */
 const WalletsAndCardsView = memo(({
   cards, buildLedger, expandedLedgers, expandedCardsSection, selectedMonth, selectedYear,
   dispatch, handleDelete, handleAddWalletDeposit, handleAddWalletWithdrawal,
@@ -7503,7 +7543,7 @@ const WalletsAndCardsView = memo(({
 }) => {
   const [activeTab, setActiveTab] = useState('wallets');
   const [showAddCard, setShowAddCard] = useState(false);
-  const [viewMode, setViewMode] = useState('grouped'); // 'grouped' | 'ledger'
+  const [viewMode, setViewMode] = useState('grouped');
   const [newCard, setNewCard] = useState({
     name: '', bank: '', limit: '', last4: '', expiry: '', holderName: '',
     dueDate: '05 من كل شهر', statementDay: 15, theme: 'silver', cashbackRate: 1,
@@ -7521,12 +7561,10 @@ const WalletsAndCardsView = memo(({
     cards.reduce((s, c) => s + Math.max(0, computeCardDebt(data, c)), 0)
   , [cards, data]);
 
-  /* ⭐ V88.1 — Grouping by provider */
   const groupedData = useMemo(() => {
     const groups = {};
     Object.keys(PROVIDERS).forEach(pk => { groups[pk] = []; });
 
-    // Accounts
     ACCOUNT_KEYS.forEach(k => {
       const acc = data.accountsData?.[k] || DEFAULT_ACCOUNTS[k];
       const pk = acc?.providerKey || 'cash';
@@ -7539,7 +7577,6 @@ const WalletsAndCardsView = memo(({
       }
     });
 
-    // Cards
     (data.cards || []).forEach(card => {
       const pk = card.providerKey || 'cib';
       if (groups[pk]) {
@@ -7547,7 +7584,6 @@ const WalletsAndCardsView = memo(({
       }
     });
 
-    // Sort: CIB first, then AAIB, ADIB, wallets, cash
     return Object.keys(PROVIDERS)
       .sort((a, b) => PROVIDERS[a].order - PROVIDERS[b].order)
       .map(pk => ({ providerKey: pk, items: groups[pk] }))
@@ -7598,7 +7634,6 @@ const WalletsAndCardsView = memo(({
     if (item.type === 'card') {
       dispatch({ type: 'SET_VIEWING_CARD_STATEMENT', payload: item });
     } else if (item.type === 'account') {
-      // Switch to ledger view + expand that account
       setViewMode('ledger');
       if (WALLET_CONFIGS[item.key] && !expandedLedgers[item.key]) {
         dispatch({ type: 'TOGGLE_LEDGER', payload: item.key });
@@ -7678,7 +7713,6 @@ const WalletsAndCardsView = memo(({
             </div>
           ) : (
             <React.Fragment>
-              {/* Ledger mode — accounts expandable with full ledger */}
               <div className="card py-2">
                 <div className="flex items-center gap-2 px-2">
                   <Signal size={14} className="text-blue-500" />
@@ -8129,7 +8163,7 @@ const FinancialForecastView = memo(({
             <h2 className="text-base font-black flex items-center gap-2">
               <TrendingUp size={16} className="text-[color:var(--accent)]" /> التنبؤ المالي الشامل — 6 شهور
             </h2>
-            <p className="text-[11px] mt-1" style={{ color: 'var(--text-muted)' }}>V88.1 · بدون ازدواج · شامل دفتر هاني</p>
+            <p className="text-[11px] mt-1" style={{ color: 'var(--text-muted)' }}>V88.1.1 · بدون ازدواج · شامل دفتر هاني</p>
           </div>
           <button onClick={() => setShowSettings(!showSettings)} className={`btn text-xs ${showSettings ? 'btn-primary' : 'btn-secondary'}`}><Sliders size={12} /> إعدادات</button>
         </div>
@@ -8524,10 +8558,10 @@ const ExternalTransferModal = memo(({ data, dispatch, saveHistory, addNotificati
     </Modal>
   );
 });
+
 /* ═══════════════════════════════════════════════════════════════
-   V88.1 — PART 5/6
-   DuplicateDetection + DeletedArchive + DataHealth + AuditLog
-   + CardPaymentModal + SettingsView (with statementDay)
+   PART 6/6 — Duplicate + Archive + Health + CardPayment + Settings
+   + Statement Engine + Installments + Predictions + App + Render
    ═══════════════════════════════════════════════════════════════ */
 
 /* ═══════════════ DUPLICATE DETECTION ═══════════════ */
@@ -8659,7 +8693,7 @@ const DuplicateDetectionSystem = ({ transactions, data, dispatch, addNotificatio
   );
 };
 
-/* ═══════════════ DELETED ARCHIVE VIEW (V88.1 — يشمل AuditLog tabs) ═══════════════ */
+/* ═══════════════ DELETED ARCHIVE VIEW ═══════════════ */
 const DeletedArchiveView = memo(({ data, dispatch, saveHistory, addNotification, transactions }) => {
   const archive = data?.deletedTxArchive || [];
   const pendingRequests = useMemo(() =>
@@ -8669,11 +8703,7 @@ const DeletedArchiveView = memo(({ data, dispatch, saveHistory, addNotification,
   const [tab, setTab] = useState('archive');
   const [searchTerm, setSearchTerm] = useState('');
   const [monthFilter, setMonthFilter] = useState('all');
-
-  /* Archive subtabs */
   const [archiveSubTab, setArchiveSubTab] = useState('all');
-
-  /* Audit log state */
   const [auditFilterAction, setAuditFilterAction] = useState('all');
   const [auditSearchTerm, setAuditSearchTerm] = useState('');
 
@@ -8704,7 +8734,6 @@ const DeletedArchiveView = memo(({ data, dispatch, saveHistory, addNotification,
     return { familyCount, mineCount, total, count: archive.length, legacyCount };
   }, [archive]);
 
-  /* Audit log */
   const auditLog = useMemo(() => data?.auditLog || [], [data?.auditLog]);
   const filteredAudit = useMemo(() => {
     let arr = auditLog;
@@ -8868,7 +8897,6 @@ const DeletedArchiveView = memo(({ data, dispatch, saveHistory, addNotification,
           </div>
         </div>
 
-        {/* V88.1 — Sub-tabs بين Archive و Audit */}
         <div className="sub-tab-switcher">
           <button onClick={() => setTab('archive')} className={`sub-tab-btn ${tab === 'archive' ? 'active' : ''}`}>
             <Trash2 size={14} /> المحذوفات ({archive.length})
@@ -9289,7 +9317,83 @@ const CardPaymentModal = memo(({ cardId, data, dispatch, saveHistory, addNotific
   );
 });
 
-/* ═══════════════ SETTINGS VIEW (V88.1 — no duplicated ForceSave) ═══════════════ */
+/* ═══════════════ RECONCILIATION MODAL ═══════════════ */
+const ReconciliationModal = memo(({ accountKey, computedBalance, onClose, onReconcile, addNotification }) => {
+  const [actualBalance, setActualBalance] = useState(String(computedBalance || 0));
+  const [note, setNote] = useState('');
+
+  const parsedActual = parseNumberInput(actualBalance);
+  const diff = parsedActual - safeNumber(computedBalance);
+
+  const handleReconcile = () => {
+    if (!accountKey) return;
+    onReconcile({ accountKey, actualBalance: parsedActual, diff, note: note.trim(), computedBalance: safeNumber(computedBalance) });
+    onClose();
+  };
+
+  return (
+    <Modal isOpen={true} onClose={onClose} title="مطابقة الرصيد" icon="⚖️">
+      <div className="space-y-4">
+        <div className="p-3 rounded-xl" style={{ background: 'var(--bg-muted)' }}>
+          <div className="flex items-center gap-2 mb-2">
+            <div className="p-2 rounded-lg bg-blue-50 dark:bg-blue-950/30 text-blue-600"><Scale size={16} /></div>
+            <div>
+              <p className="text-xs font-black">{ACCOUNT_SHORT_NAMES[accountKey] || accountKey}</p>
+              <p className="text-[10px]" style={{ color: 'var(--text-muted)' }}>مطابقة الرصيد الفعلي مع الرصيد المحسوب</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div className="p-3 rounded-xl bg-blue-50 dark:bg-blue-950/30 text-center">
+            <p className="text-[10px] font-bold text-blue-700 dark:text-blue-400 mb-1">الرصيد المحسوب</p>
+            <p className="text-base font-black text-blue-600 money tabular">{fmt(computedBalance)}</p>
+          </div>
+          <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 text-center">
+            <p className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 mb-1">الرصيد الفعلي</p>
+            <p className="text-base font-black text-emerald-600 money tabular">{fmt(parsedActual)}</p>
+          </div>
+        </div>
+
+        <div>
+          <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>الرصيد الفعلي (من البنك)</label>
+          <input type="text" inputMode="decimal" className="input-field input-num text-2xl text-center font-black py-4" style={{ color: 'var(--accent)' }} value={actualBalance} onChange={e => setActualBalance(e.target.value)} placeholder="0.00" />
+        </div>
+
+        {Math.abs(diff) > 0.005 && (
+          <div className={`p-3 rounded-xl text-center ${diff > 0 ? 'bg-emerald-50 dark:bg-emerald-950/30' : 'bg-red-50 dark:bg-red-950/30'}`}>
+            <p className={`text-[11px] font-bold ${diff > 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-700 dark:text-red-400'}`}>
+              {diff > 0 ? '⬆️ زيادة فعلية' : '⬇️ عجز فعلي'}
+            </p>
+            <p className={`text-2xl font-black money tabular ${diff > 0 ? 'text-emerald-600' : 'text-red-600'}`}>{fmt(Math.abs(diff))} ج.م</p>
+            <p className="text-[10px] mt-1" style={{ color: 'var(--text-muted)' }}>سيتم إنشاء قيد تسوية تلقائياً</p>
+          </div>
+        )}
+
+        {Math.abs(diff) <= 0.005 && parsedActual === safeNumber(computedBalance) && (
+          <div className="p-3 rounded-xl text-center bg-emerald-50 dark:bg-emerald-950/30">
+            <CheckCircle2 size={20} className="text-emerald-600 mx-auto mb-1" />
+            <p className="text-xs font-bold text-emerald-700 dark:text-emerald-400">مطابق تماماً — لا حاجة لتسوية</p>
+          </div>
+        )}
+
+        <div>
+          <label className="text-[11px] font-bold block mb-1.5" style={{ color: 'var(--text-muted)' }}>ملاحظة (اختياري)</label>
+          <input type="text" className="input-field text-sm" value={note} onChange={e => setNote(e.target.value)} placeholder="سبب الفرق..." />
+        </div>
+
+        <div className="flex gap-2">
+          <button onClick={onClose} className="btn btn-secondary flex-1 py-3 text-sm">إلغاء</button>
+          <button onClick={handleReconcile} className="btn btn-primary flex-1 py-3 text-sm">
+            <Scale size={16} /> {Math.abs(diff) > 0.005 ? 'تسوية الفرق' : 'تأكيد المطابقة'}
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+});
+
+/* ═══════════════ SETTINGS VIEW ═══════════════ */
 const SettingsView = memo(({
   data, accountsData, cards, budgets, dispatch, saveHistory, addNotification,
   onResetPersonalData
@@ -9378,7 +9482,7 @@ const SettingsView = memo(({
   const handleDriveBackupNow = async () => {
     setDriveBusy(true); setDriveStatus('جاري الرفع...');
     try {
-      const payload = { data, budgets, exportedAt: new Date().toISOString(), version: 'V88.1' };
+      const payload = { data, budgets, exportedAt: new Date().toISOString(), version: 'V88.1.1' };
       const result = await uploadBackupToDrive(payload);
       localStorage.setItem(AUTO_BACKUP_LS_KEY, String(Date.now()));
       const folderId = localStorage.getItem(DRIVE_FOLDER_ID_LS_KEY) || DRIVE_DEFAULT_FOLDER_ID;
@@ -9606,8 +9710,8 @@ const SettingsView = memo(({
           <div className="flex-1">
             <p className="text-[11px] font-black mb-1">ℹ️ معلومات الإصدار</p>
             <p className="text-[10px] font-semibold" style={{ color: 'var(--text-muted)' }}>
-              محفظتي V88.1 + Bank-Grade · Engine v{CURRENT_ENGINE_VERSION}
-              <br />🆕 Renaming · Bank-First Grouping · Statement Cycle Engine
+              محفظتي V88.1.1 + Bank-Grade · Engine v{CURRENT_ENGINE_VERSION}
+              <br />🆕 Toast Fix · Form Scroll Fix · Hany Sync Force
               <br />Tainum ADIB (9982) · Titanium 9360 · Signature 3557 · SWYPE 6015 · PIN 8686
               <br />بداية المشروع: أكتوبر 2026 فقط.
             </p>
@@ -9678,13 +9782,8 @@ const SettingsView = memo(({
     </div>
   );
 });
-/* ═══════════════════════════════════════════════════════════════
-   V88.1 — PART 6/6
-   InstallmentPlanModal + CardInstallmentsPanel
-   + CardsPaymentPredictions + useForceSave + App + Root Render
-   ═══════════════════════════════════════════════════════════════ */
 
-/* ═══════════════ 1. CYCLE PARAMETERS ═══════════════ */
+/* ═══════════════ CYCLE PARAMETERS ═══════════════ */
 const getCardCycleParams = (card) => {
   const dueDayMatch = String(card?.dueDate || '25').match(/(\d{1,2})/);
   const dueDay = Math.min(28, Math.max(1, dueDayMatch ? parseInt(dueDayMatch[1], 10) : 25));
@@ -9739,7 +9838,7 @@ const getCycleRange = (card, cycleKey) => {
   };
 };
 
-/* ═══════════════ 2. INSTALLMENTS ENGINE ═══════════════ */
+/* ═══════════════ INSTALLMENTS ENGINE ═══════════════ */
 const computeInstallmentProgress = (plan, asOfDate = new Date()) => {
   if (!plan || !plan.months || plan.months <= 0) {
     return { monthsElapsed: 0, dueAmount: 0, remainingAmount: 0, remainingMonths: 0, completed: false, monthlyAmount: 0, progressPct: 0 };
@@ -9760,6 +9859,7 @@ const computeInstallmentProgress = (plan, asOfDate = new Date()) => {
   return { monthsElapsed, dueAmount, remainingAmount, remainingMonths, monthlyAmount, completed: monthsElapsed >= plan.months, progressPct };
 };
 
+// ✅ V88.1.1 — الدالة اللي كان مرجعها مفقود في Part 3
 const computeCardInstallmentsInfo = (data, card, asOfDate = new Date()) => {
   if (!card) return { plans: [], activeCount: 0, totalDueSoFar: 0, totalRemaining: 0, currentMonthly: 0 };
   const plans = (data?.cardInstallments || []).filter(p => p && p.cardId === card.id && p.status !== 'cancelled');
@@ -9774,7 +9874,7 @@ const computeCardInstallmentsInfo = (data, card, asOfDate = new Date()) => {
   return { plans: enriched, activeCount: enriched.filter(p => !p.completed).length, totalDueSoFar, totalRemaining, currentMonthly };
 };
 
-/* ═══════════════ 3. STATEMENT CYCLE ENGINE ═══════════════ */
+/* ═══════════════ STATEMENT CYCLE ENGINE ═══════════════ */
 const buildCardStatementEngine = (card, data, asOfDate = new Date()) => {
   if (!card) return { cycles: [], currentStatement: null, openCycle: null, totalDebt: 0, installmentsInfo: null };
 
@@ -9922,7 +10022,7 @@ const buildCardStatementEngine = (card, data, asOfDate = new Date()) => {
   };
 };
 
-/* ═══════════════ 4. SMART PREDICTION ═══════════════ */
+/* ═══════════════ SMART PREDICTION ═══════════════ */
 const computeCardPaymentPrediction = (data, card, asOfDate = new Date()) => {
   if (!card) return null;
   const engine = buildCardStatementEngine(card, data, asOfDate);
@@ -9990,7 +10090,7 @@ const computeTotalMonthlyObligation = (data, asOfDate = new Date()) => {
   };
 };
 
-/* ═══════════════ 5. INSTALLMENT PLAN MODAL ═══════════════ */
+/* ═══════════════ INSTALLMENT PLAN MODAL ═══════════════ */
 const InstallmentPlanModal = memo(({ card, data, onClose, dispatch, saveHistory, addNotification }) => {
   const [totalAmount, setTotalAmount] = useState('');
   const [months, setMonths] = useState('12');
@@ -10154,7 +10254,7 @@ const InstallmentPlanModal = memo(({ card, data, onClose, dispatch, saveHistory,
   );
 });
 
-/* ═══════════════ 6. INSTALLMENTS PANEL ═══════════════ */
+/* ═══════════════ INSTALLMENTS PANEL ═══════════════ */
 const CardInstallmentsPanel = memo(({ card, data, dispatch, saveHistory, addNotification }) => {
   const [showCreate, setShowCreate] = useState(false);
   const info = useMemo(() => computeCardInstallmentsInfo(data, card), [data, card]);
@@ -10248,7 +10348,7 @@ const CardInstallmentsPanel = memo(({ card, data, dispatch, saveHistory, addNoti
   );
 });
 
-/* ═══════════════ 7. CARDS PAYMENT PREDICTIONS ═══════════════ */
+/* ═══════════════ CARDS PAYMENT PREDICTIONS ═══════════════ */
 const CardsPaymentPredictions = memo(({ data, dispatch }) => {
   const summary = useMemo(() => computeTotalMonthlyObligation(data), [data]);
   const [expandedCard, setExpandedCard] = useState(null);
@@ -10381,7 +10481,7 @@ const buildCloudPayload = (data, budgets) => ({
   ...data,
   budgets: budgets || {},
   __lastClientSync: new Date().toISOString(),
-  __client: 'web-v88.1',
+  __client: 'web-v88.1.1',
   __hanyPayable: computeHanyPayable(data),
   __netWorth: computeNetWorth(data).netWorth
 });
@@ -10658,7 +10758,6 @@ function App() {
     return () => unsub();
   }, []);
 
-  /* Firestore listener */
   useEffect(() => {
     if (!isAuthenticated) return;
     const innerDocRef = db.collection(FIREBASE_DOC_PATH.collection).doc(FIREBASE_DOC_PATH.doc);
@@ -10733,7 +10832,6 @@ function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated]);
 
-  /* Auto-save */
   useEffect(() => {
     if (!isAuthenticated || !data?.transactions) return;
     if (!hasReceivedInitialSnapshot.current) return;
@@ -10758,7 +10856,6 @@ function App() {
     return () => clearTimeout(saveTimeoutRef.current);
   }, [data, isAuthenticated, cloudSyncStatus, queueCloudSave]);
 
-  /* Materialization */
   useEffect(() => {
     if (!isAuthenticated || !data?.recurringItems?.length) return;
     const today = getLocalISODate();
@@ -10780,7 +10877,6 @@ function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated, data?.recurringItems?.length, data?.transactions?.length, data?.loans]);
 
-  /* Offline retry */
   useEffect(() => {
     if (!isAuthenticated || cloudSyncStatus !== 'offline') return;
     let cancelled = false;
@@ -10797,7 +10893,6 @@ function App() {
     return () => { cancelled = true; clearInterval(retryTimer); };
   }, [isAuthenticated, cloudSyncStatus, addNotification]);
 
-  /* Online status */
   useEffect(() => {
     if (prevOnlineRef.current !== isOnline) {
       if (isOnline) {
@@ -11052,6 +11147,7 @@ function App() {
   const handleAddWalletDeposit = useCallback((k) => openWalletForm(k, 'deposit'), [openWalletForm]);
   const handleAddWalletWithdrawal = useCallback((k) => openWalletForm(k, 'withdrawal'), [openWalletForm]);
 
+  /* ✅ V88.1.1 FIX — handleSaveTransaction مع إجبار hany_tab */
   const handleSaveTransaction = useCallback((e) => {
     if (e && e.preventDefault) e.preventDefault();
     if (isProcessing || saveLockRef.current) return;
@@ -11137,7 +11233,12 @@ function App() {
           quantity: formData.quantity ? Number(formData.quantity) : undefined,
           unitPrice: formData.unitPrice ? Number(formData.unitPrice) : undefined,
           createdAt: formData.createdAt || new Date().toISOString(),
-          ...(isHany ? { method: status === 'paid' ? HANY_TAB_METHOD : (formData.method || HANY_TAB_METHOD), affectsCash: false, hanyEffect: 'purchase' } : {}),
+          // ✅ V88.1.1 FIX — إجبار hany_tab دائماً (لا يعتمد على status)
+          ...(isHany ? {
+            method: HANY_TAB_METHOD,
+            affectsCash: false,
+            hanyEffect: 'purchase'
+          } : {}),
           ...(isHanySettle ? { hanyEffect: 'settle', affectsCash: true, kind: KIND.FINANCIAL } : {})
         };
 
@@ -11286,7 +11387,6 @@ function App() {
     });
   }, [data, saveHistory, addNotification]);
 
-  /* Quick Transfer — 3 modes */
   const handleQuickTransfer = useCallback((e) => {
     if (e && e.preventDefault) e.preventDefault();
     if (isProcessing || saveLockRef.current) return;
@@ -11588,11 +11688,11 @@ function App() {
   }, [isAuthenticated, isOnline, data, addNotification]);
 
   const handleExport = useCallback(() => {
-    const blob = new Blob([JSON.stringify({ data, budgets, exportedAt: new Date().toISOString(), version: 'V88.1' })], { type: 'application/json' });
+    const blob = new Blob([JSON.stringify({ data, budgets, exportedAt: new Date().toISOString(), version: 'V88.1.1' })], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `finance_backup_v881_${getLocalISODate()}.json`;
+    a.download = `finance_backup_v8811_${getLocalISODate()}.json`;
     a.click();
     URL.revokeObjectURL(url);
     addNotification({ type: 'success', title: 'تم التصدير' });
@@ -11658,7 +11758,7 @@ function App() {
       const last = Number(localStorage.getItem(AUTO_BACKUP_LS_KEY) || 0);
       const dayMs = 24 * 60 * 60 * 1000;
       if (Date.now() - last > dayMs && _driveAccessToken) {
-        uploadBackupToDrive({ data, budgets, exportedAt: new Date().toISOString(), version: 'V88.1' })
+        uploadBackupToDrive({ data, budgets, exportedAt: new Date().toISOString(), version: 'V88.1.1' })
           .then(() => { localStorage.setItem(AUTO_BACKUP_LS_KEY, String(Date.now())); })
           .catch(() => {});
       }
@@ -11827,7 +11927,6 @@ function App() {
     dispatch({ type: 'SET_FORM_DATA', payload: { ...formData, description: current + sep + item } });
   };
 
-  /* V88.1 — NAV_ITEMS محدّثة (لا يوجد audit — مدموج مع deleted) */
   const NAV_ITEMS = [
     { id: 'dashboard', label: 'الرئيسية', icon: Home },
     { id: 'transactions', label: 'المعاملات', icon: Receipt },
@@ -12034,7 +12133,7 @@ function App() {
           </button>
         )}
 
-        {/* Form Modal */}
+        {/* ✅ V88.1.1 FIXED — Form Modal مع form-scrollable + Footer sticky */}
         {isFormOpen && (
           <div className="modal-backdrop no-print" onClick={(e) => { if (e.target === e.currentTarget) dispatch({ type: 'SET_FORM_OPEN', payload: false }); }}>
             <div className="w-full max-w-lg rounded-2xl shadow-2xl flex flex-col animate-slideInBottom"
@@ -12044,8 +12143,8 @@ function App() {
                 <button type="button" aria-label="إغلاق" onClick={() => dispatch({ type: 'SET_FORM_OPEN', payload: false })} className="btn btn-ghost p-2"><X size={18} /></button>
               </div>
 
-              <form data-form="main" onSubmit={handleSaveTransaction} className="flex-1 overflow-y-auto scroll-hide" style={{ minHeight: 0 }}>
-                <div className="p-4 space-y-3">
+              <form data-form="main" onSubmit={handleSaveTransaction} className="form-scrollable flex-1" style={{ minHeight: 0 }}>
+                <div className="p-3 space-y-3">
                   {!isOnline && (
                     <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 flex items-center gap-2">
                       <Wifi size={14} className="text-amber-600" />
@@ -12053,12 +12152,12 @@ function App() {
                     </div>
                   )}
 
-                  <div className="form-section">
+                  <div className="form-section form-section-compact">
                     <div className="form-section-title"><span>🎯</span> التصنيف</div>
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <label className="block text-[11px] font-bold mb-1.5" style={{ color: 'var(--text-muted)' }}>النوع</label>
-                        <select className="input-field font-bold text-sm py-3" value={formData.type}
+                        <select className="input-field font-bold text-sm py-2.5" value={formData.type}
                           onChange={(e) => {
                             const t = e.target.value;
                             dispatch({ type: 'SET_FORM_DATA', payload: { ...formData, type: t, subType: t === 'income' ? 'deposit' : 'withdrawal', category: '' } });
@@ -12069,7 +12168,7 @@ function App() {
                       </div>
                       <div>
                         <label className="block text-[11px] font-bold mb-1.5" style={{ color: 'var(--text-muted)' }}>الفئة *</label>
-                        <select className={`input-field font-bold text-sm py-3 ${formErrors.category ? 'error' : ''}`} value={formData.category}
+                        <select className={`input-field font-bold text-sm py-2.5 ${formErrors.category ? 'error' : ''}`} value={formData.category}
                           onChange={e => dispatch({ type: 'SET_FORM_DATA', payload: { ...formData, category: e.target.value } })} required>
                           <option value="">اختر...</option>
                           {Object.entries(CATEGORY_GROUPS[formData.type]).map(([g, items]) => (
@@ -12080,26 +12179,26 @@ function App() {
                     </div>
                   </div>
 
-                  <div className="form-section">
+                  <div className="form-section form-section-compact">
                     <div className="form-section-title"><span>📊</span> الحالة</div>
                     <div className="grid grid-cols-2 gap-2">
-                      <label className={`flex items-center justify-center gap-2 p-3 rounded-xl cursor-pointer border-2 font-bold text-xs transition-all ${formData.status !== 'paid' ? 'bg-amber-50 dark:bg-amber-950/30 border-amber-500 text-amber-700 dark:text-amber-400' : 'border-transparent'}`}>
+                      <label className={`flex items-center justify-center gap-2 p-2.5 rounded-xl cursor-pointer border-2 font-bold text-xs transition-all ${formData.status !== 'paid' ? 'bg-amber-50 dark:bg-amber-950/30 border-amber-500 text-amber-700 dark:text-amber-400' : 'border-transparent'}`}>
                         <input type="radio" name="status" value="pending" className="hidden" checked={formData.status !== 'paid'} onChange={() => dispatch({ type: 'SET_FORM_DATA', payload: { ...formData, status: 'pending' } })} />
                         <Clock size={14} /> معلق
                       </label>
-                      <label className={`flex items-center justify-center gap-2 p-3 rounded-xl cursor-pointer border-2 font-bold text-xs transition-all ${formData.status === 'paid' ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-500 text-emerald-700 dark:text-emerald-400' : 'border-transparent'}`}>
+                      <label className={`flex items-center justify-center gap-2 p-2.5 rounded-xl cursor-pointer border-2 font-bold text-xs transition-all ${formData.status === 'paid' ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-500 text-emerald-700 dark:text-emerald-400' : 'border-transparent'}`}>
                         <input type="radio" name="status" value="paid" className="hidden" checked={formData.status === 'paid'} onChange={() => dispatch({ type: 'SET_FORM_DATA', payload: { ...formData, status: 'paid' } })} />
                         <CheckCircle2 size={14} /> معتمد
                       </label>
                     </div>
                   </div>
 
-                  <div className="form-section">
+                  <div className="form-section form-section-compact">
                     <div className="form-section-title"><span>💰</span> المبلغ والدفع</div>
                     <div className="grid grid-cols-2 gap-2.5 mb-3">
                       <div>
                         <label className="block text-[11px] font-bold mb-1.5" style={{ color: 'var(--text-muted)' }}>الكمية</label>
-                        <input type="number" inputMode="numeric" min="1" className="input-field input-num text-base text-center py-3"
+                        <input type="number" inputMode="numeric" min="1" className="input-field input-num text-base text-center py-2.5"
                           value={formData.quantity || ''}
                           onChange={e => {
                             const qty = e.target.value;
@@ -12110,7 +12209,7 @@ function App() {
                       </div>
                       <div>
                         <label className="block text-[11px] font-bold mb-1.5" style={{ color: 'var(--text-muted)' }}>سعر الوحدة</label>
-                        <input type="text" inputMode="decimal" className="input-field input-num text-base text-center py-3"
+                        <input type="text" inputMode="decimal" className="input-field input-num text-base text-center py-2.5"
                           value={formData.unitPrice || ''}
                           onChange={e => {
                             const price = e.target.value;
@@ -12123,18 +12222,18 @@ function App() {
                     <div className="grid grid-cols-3 gap-2.5">
                       <div>
                         <label className="block text-[11px] font-bold mb-1.5" style={{ color: 'var(--text-muted)' }}>المبلغ *</label>
-                        <input type="text" inputMode="decimal" required className={`input-field input-num text-base text-center py-3 ${formErrors.amount ? 'error' : ''}`}
+                        <input type="text" inputMode="decimal" required className={`input-field input-num text-base text-center py-2.5 ${formErrors.amount ? 'error' : ''}`}
                           style={{ color: 'var(--accent)' }} value={formData.amount}
                           onChange={e => dispatch({ type: 'SET_FORM_DATA', payload: { ...formData, amount: e.target.value, quantity: '', unitPrice: '' } })} placeholder="0.00" />
                       </div>
                       <div>
                         <label className="block text-[11px] font-bold mb-1.5" style={{ color: 'var(--text-muted)' }}>التاريخ</label>
-                        <SafeDateInput required className={`input-field text-[11px] font-bold py-3 ${formErrors.date ? 'error' : ''}`}
+                        <SafeDateInput required className={`input-field text-[11px] font-bold py-2.5 ${formErrors.date ? 'error' : ''}`}
                           value={formData.date} onChange={v => dispatch({ type: 'SET_FORM_DATA', payload: { ...formData, date: v } })} />
                       </div>
                       <div>
                         <label className="block text-[11px] font-bold mb-1.5" style={{ color: 'var(--text-muted)' }}>الدفع</label>
-                        <select className="input-field text-[11px] font-bold py-3" value={formData.method}
+                        <select className="input-field text-[11px] font-bold py-2.5" value={formData.method}
                           onChange={e => dispatch({ type: 'SET_FORM_DATA', payload: { ...formData, method: e.target.value } })}>
                           {PAYMENT_METHODS.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
                         </select>
@@ -12142,9 +12241,9 @@ function App() {
                     </div>
                   </div>
 
-                  <div className="form-section">
+                  <div className="form-section form-section-compact">
                     <div className="form-section-title"><span>📝</span> الوصف</div>
-                    <input type="text" className={`input-field font-bold text-sm py-3 ${formErrors.description ? 'error' : ''}`}
+                    <input type="text" className={`input-field font-bold text-sm py-2.5 ${formErrors.description ? 'error' : ''}`}
                       value={formData.description || ''}
                       onChange={e => dispatch({ type: 'SET_FORM_DATA', payload: { ...formData, description: e.target.value } })} placeholder="تفاصيل..." />
                   </div>
@@ -12158,7 +12257,8 @@ function App() {
                           <button type="button" onClick={() => dispatch({ type: 'SET_FORM_DATA', payload: { ...formData, description: '' } })} className="text-[9px] font-bold text-red-500 hover:underline">مسح</button>
                         </div>
                       </div>
-                      <div className="flex flex-wrap gap-1">
+                      {/* ✅ V88.1.1 FIX — quick-items-grid للتمرير */}
+                      <div className="quick-items-grid flex flex-wrap gap-1">
                         {HANY_QUICK_ITEMS.slice(0, 12).map(item => (
                           <button key={item} type="button" onClick={() => appendQuickItem(item)} className="quick-chip" style={{ fontSize: '10px', padding: '4px 8px' }}>{item}</button>
                         ))}
@@ -12169,8 +12269,9 @@ function App() {
                 </div>
               </form>
 
-              <div className="p-3 flex gap-2 flex-shrink-0"
-                style={{ borderTop: '1px solid var(--border-subtle)', background: 'var(--bg-card)', paddingBottom: 'calc(12px + env(safe-area-inset-bottom, 0px))' }}>
+              {/* ✅ V88.1.1 FIX — Footer sticky */}
+              <div className="p-2 flex gap-2 flex-shrink-0 sticky bottom-0 z-10"
+                style={{ borderTop: '1px solid var(--border-subtle)', background: 'var(--bg-card)', paddingBottom: 'calc(10px + env(safe-area-inset-bottom, 0px))' }}>
                 <button type="button" onClick={() => dispatch({ type: 'SET_FORM_OPEN', payload: false })} className="btn btn-secondary text-sm py-3 px-4">إلغاء</button>
                 <button type="button" onClick={handleSaveTransaction} disabled={isProcessing} className="btn btn-primary flex-1 py-3 text-sm font-black">
                   {isProcessing ? (
@@ -12507,4 +12608,4 @@ if (rootElement) {
 }
 </script>
 </body>
-</html> 
+</html>
