@@ -1402,8 +1402,8 @@ const generateTransactionsReport = (data, options = {}) => {
     const dayTxs = groupedByDate[date].sort(compareTransactions);
     const dayTotal = dayTxs.reduce((s, t) => s + (t.type === 'income' ? safeNumber(t.amount) : -safeNumber(t.amount)), 0);
     rows.push(`
-      <tr class="report-day-header">
-        <td colspan="4">
+  <tr class="report-day-header">
+    <td colspan="6">
           <div style="display:flex;justify-content:space-between;align-items:center">
             <span>📅 ${formatArabicDate(date)}</span>
             <span style="font-size:10px">${dayTxs.length} عملية · صافي اليوم: ${dayTotal >= 0 ? '+' : ''}${fmt(dayTotal)} ج.م</span>
@@ -1414,19 +1414,23 @@ const generateTransactionsReport = (data, options = {}) => {
     dayTxs.forEach(t => {
       const isIncome = t.type === 'income';
       runningBalance += isIncome ? safeNumber(t.amount) : -safeNumber(t.amount);
-      rows.push(`
-        <tr>
-          <td class="col-desc">
-            <div class="desc-main">${escapeHtml(t.description || t.category || 'بدون وصف')}</div>
-            <div class="desc-sub">${escapeHtml(t.category)} · ${escapeHtml(getMethodLabel(t.method))}${t.status !== 'paid' ? ' · <span style="color:#D97706;font-weight:700">معلق</span>' : ''}</div>
-          </td>
-          <td style="text-align:center;width:80px">
-            <span style="padding:2px 8px;border-radius:999px;font-size:9px;font-weight:800;background:${isIncome ? '#DCFCE7' : '#FEE2E2'};color:${isIncome ? '#059669' : '#DC2626'}">${isIncome ? 'وارد' : 'صادر'}</span>
-          </td>
-          <td class="col-amount ${isIncome ? 'credit' : 'debit'}">${isIncome ? '+' : '−'}${fmt(t.amount)}</td>
-          <td class="col-balance">${fmt(runningBalance)}</td>
-        </tr>
-      `);
+      const qty = Number(t.quantity) || 1;
+const unit = Number(t.unitPrice) || (qty > 0 ? Number(t.amount) / qty : Number(t.amount));
+rows.push(`
+  <tr>
+    <td class="col-desc">
+      <div class="desc-main">${escapeHtml(t.description || t.category || 'بدون وصف')}</div>
+      <div class="desc-sub">${escapeHtml(t.category)} · ${escapeHtml(getMethodLabel(t.method))}${t.status !== 'paid' ? ' · <span style="color:#D97706;font-weight:700">معلق</span>' : ''}</div>
+    </td>
+    <td style="text-align:center;width:50px;font-weight:800">${qty}</td>
+    <td style="text-align:center;width:80px;font-family:monospace;font-weight:700">${unit.toFixed(2)}</td>
+    <td style="text-align:center;width:80px">
+      <span style="padding:2px 8px;border-radius:999px;font-size:9px;font-weight:800;background:${isIncome ? '#DCFCE7' : '#FEE2E2'};color:${isIncome ? '#059669' : '#DC2626'}">${isIncome ? 'وارد' : 'صادر'}</span>
+    </td>
+    <td class="col-amount ${isIncome ? 'credit' : 'debit'}">${isIncome ? '+' : '−'}${fmt(t.amount)}</td>
+    <td class="col-balance">${fmt(runningBalance)}</td>
+  </tr>
+`);
     });
   });
 
@@ -1440,7 +1444,7 @@ const generateTransactionsReport = (data, options = {}) => {
     </div>
     <div class="report-section-title"><span>📋 تفاصيل المعاملات</span><span class="section-sub">${sortedDates.length} يوم · ${allTxs.length} عملية</span></div>
     <table class="report-table">
-      <thead><tr><th>البيان / الفئة</th><th style="width:80px;text-align:center">النوع</th><th style="width:110px">المبلغ (ج.م)</th><th style="width:110px">الرصيد التراكمي</th></tr></thead>
+      <thead><tr><th>البيان / الفئة</th><th style="width:50px;text-align:center">العدد</th><th style="width:80px;text-align:center">السعر</th><th style="width:80px;text-align:center">النوع</th><th style="width:110px">المبلغ (ج.م)</th><th style="width:110px">الرصيد التراكمي</th></tr></thead>
       <tbody>${rows.join('')}</tbody>
     </table>
     <div class="report-totals-box">
@@ -5822,7 +5826,9 @@ const PendingDeleteBadge = memo(({ tx, pendingDeleteIds }) => {
 
 const FAMILY_MEMBERS = {
   ans: { name: 'أنس', bg: 'bg-blue-50 dark:bg-blue-950/40', text: 'text-blue-700 dark:text-blue-300', border: 'border-blue-200 dark:border-blue-900' },
-  abdelrahman: { name: 'عبد الرحمن', bg: 'bg-emerald-50 dark:bg-emerald-950/40', text: 'text-emerald-700 dark:text-emerald-300', border: 'border-emerald-200 dark:border-emerald-900' },
+  abdelrahman: { name: 'عبد الرحمن', bg: 'bg-emerald-50 dark      <div class="desc-main">${escapeHtml(t.description || t.category || 'بدون وصف')}</div>
+
+  :bg-emerald-950/40', text: 'text-emerald-700 dark:text-emerald-300', border: 'border-emerald-200 dark:border-emerald-900' },
   salma: { name: 'سلمى', bg: 'bg-purple-50 dark:bg-purple-950/40', text: 'text-purple-700 dark:text-purple-300', border: 'border-purple-200 dark:border-purple-900' },
   om_abdo: { name: 'أم عبده', bg: 'bg-pink-50 dark:bg-pink-950/40', text: 'text-pink-700 dark:text-pink-300', border: 'border-pink-200 dark:border-pink-900' }
 };
@@ -5835,12 +5841,15 @@ const FamilyBadge = memo(({ tx }) => {
   return (<span className={`badge ${m.bg} ${m.text} border ${m.border}`}>{m.name}</span>);
 });
 
-const getTxDisplay = (t) => {
+const getTxDisplayText = (t) => {
   if (!t) return '';
   const base = t.description || t.category || 'بدون وصف';
-  if (t.quantity && Number(t.quantity) >= 1 && t.unitPrice && !String(base).includes('×')) {
+  if (String(base).includes('×')) return base;
+  if (t.quantity && t.unitPrice) {
     return `${base} (${t.quantity} × ${t.unitPrice})`;
   }
+  return base;
+};
   return base;
 };
   
