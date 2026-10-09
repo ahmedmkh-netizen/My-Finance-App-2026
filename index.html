@@ -1865,12 +1865,16 @@ const _balanceCache = new Map();
 const _balanceCacheKey = (data, asOfDate) => {
   const txCount = data?.transactions?.length || 0;
   const lastTxId = data?.transactions?.[0]?.id || '';
+  // ✅ FIX — hash لكل المعاملات بدل أول واحدة
+  const txHash = (data?.transactions || [])
+    .map(t => `${t.id}:${t.amount}:${t.method}:${t.type}:${t.status}:${t.affectsCash === false ? 0 : 1}`)
+    .join('|');
   const accHash = Object.keys(data?.accountsData || {}).sort().map(k => {
     const a = data.accountsData[k];
     return `${k}:${a?.initialBalance}:${a?.initialDate || ''}`;
   }).join('|');
   const asOf = asOfDate ? new Date(asOfDate).getTime() : 'today';
-  return `${txCount}_${lastTxId}_${accHash}_${asOf}`;
+  return `${txCount}_${lastTxId}_${txHash}_${accHash}_${asOf}`;
 };
 
 const computeBalancesAsOf = (data, asOfDate = null) => {
@@ -4107,6 +4111,13 @@ function dataReducer(state, action) {
     case 'UPDATE_TRANSACTIONS': {
       const oldTxs = state.data.transactions || [];
       const newTxs = sortTransactions(action.payload || []);
+      
+case 'UPDATE_TRANSACTIONS': {
+  const oldTxs = state.data.transactions || [];
+  const newTxs = sortTransactions(action.payload || []);
+  
+  // ✅ FIX — مسح الـ balance cache عشان يعيد الحساب
+  try { _balanceCache.clear(); } catch(e) {}
       const oldMap = new Map(oldTxs.map(t => [t.id, t]));
       const newMap = new Map(newTxs.map(t => [t.id, t]));
       const auditEntries = [];
