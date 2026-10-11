@@ -10843,9 +10843,16 @@ function App() {
           setTimeout(() => queueCloudSave(migrated, { silent: true }), 800);
         }
 
-        const incoming = JSON.stringify(migrated);
-        if (lastRemoteRef.current === incoming && !isFirst) return;
-        lastRemoteRef.current = incoming;
+const incoming = JSON.stringify(migrated);
+
+// ✅ مقارنة المعاملات بس
+const localTxHash = (currentTxRef.current || [])
+  .map(t => `${t.id}:${t.status}:${t.amount}`).join('|');
+const remoteTxHash = (migrated.transactions || [])
+  .map(t => `${t.id}:${t.status}:${t.amount}`).join('|');
+
+if (localTxHash === remoteTxHash && !isFirst) return;
+lastRemoteRef.current = incoming;
 
         if (raw.budgets && typeof raw.budgets === 'object') {
           dispatch({ type: 'SET_BUDGETS', payload: raw.budgets });
