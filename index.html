@@ -4600,7 +4600,7 @@ function dataReducer(state, action) {
     };
 
     case 'CARD_PAYMENT': {
-      const { cardId, amount, sourceMethod, date, note, withFee, feeAmount } = action.payload;
+      const { cardId, amount, sourceMethod, date, note, withFee, feeAmount, status: paymentStatus = 'paid' } = action.payload;
       const d = parseISODate(date);
       if (!d) return state;
       const txYear = d.getFullYear();
@@ -4623,10 +4623,10 @@ function dataReducer(state, action) {
         amount: roundMoney(safeNumber(amount)),
         description: note || `سداد بطاقة ${card.bank} - ${card.name}`,
         method: sourceMethod, date, month: txMonth, year: txYear, monthIndex: d.getMonth(),
-        subType: 'withdrawal', status: 'paid', source: 'card-payment-plan',
-        linkedCardId: card.id, cardLast4: card.last4,
-        createdAt: new Date().toISOString()
-      };
+subType: 'withdrawal', status: paymentStatus, source: 'card-payment-plan',
+linkedCardId: card.id, cardLast4: card.last4,
+createdAt: new Date().toISOString()
+};
 
       const newTxs = [paymentTx];
 
@@ -4637,10 +4637,10 @@ function dataReducer(state, action) {
           amount: roundMoney(safeNumber(feeAmount)),
           description: `رسوم سداد بطاقة ${card.bank} - ${card.name}`,
           method: sourceMethod, date, month: txMonth, year: txYear, monthIndex: d.getMonth(),
-          subType: 'withdrawal', status: 'paid', source: 'card-payment-plan',
-          linkedCardId: card.id, linkedPaymentId: paymentId,
-          createdAt: new Date().toISOString()
-        });
+subType: 'withdrawal', status: paymentStatus, source: 'card-payment-plan',
+linkedCardId: card.id, linkedPaymentId: paymentId,
+createdAt: new Date().toISOString()
+});
       }
 
       const allTxs = sortTransactions([...newTxs, ...(state.data.transactions || [])]);
@@ -7941,6 +7941,7 @@ const CardPaymentModal = memo(({ cardId, data, dispatch, saveHistory, addNotific
   const [selectedCardId, setSelectedCardId] = useState(cardId || (cards[0]?.id || null));
   const [amount, setAmount] = useState('');
   const [sourceMethod, setSourceMethod] = useState('cib_savings');
+  const [paymentStatus, setPaymentStatus] = useState('paid');
   const [date, setDate] = useState(getLocalISODate());
   const [note, setNote] = useState('');
   const [withFee, setWithFee] = useState(false);
@@ -7979,6 +7980,7 @@ const CardPaymentModal = memo(({ cardId, data, dispatch, saveHistory, addNotific
         cardId: selectedCardId, amount: parsedAmount, sourceMethod, date,
         note: note.trim() || `سداد بطاقة ${selectedCard.bank} - ${selectedCard.name}`,
         withFee, feeAmount: parsedFee
+         status: paymentStatus
       }
     });
 
@@ -8085,7 +8087,25 @@ const CardPaymentModal = memo(({ cardId, data, dispatch, saveHistory, addNotific
           <div><label className="text-[11px] font-black block mb-2" style={{ color: 'var(--text-muted)' }}>التاريخ *</label><SafeDateInput className="input-field text-xs font-bold py-3" value={date} onChange={setDate} /></div>
           <div><label className="text-[11px] font-black block mb-2" style={{ color: 'var(--text-muted)' }}>ملاحظة</label><input type="text" className="input-field text-xs py-3" value={note} onChange={e => setNote(e.target.value)} placeholder="اختياري" /></div>
         </div>
-
+        <div className="p-3 rounded-xl" style={{ background: 'var(--bg-muted)' }}>
+  <p className="text-[11px] font-black mb-2" style={{ color: 'var(--text-muted)' }}>حالة السداد</p>
+  <div className="grid grid-cols-2 gap-2">
+    <label className={`flex items-center justify-center gap-2 p-2.5 rounded-xl cursor-pointer border-2 font-bold text-xs transition-all ${paymentStatus !== 'paid' ? 'bg-amber-50 dark:bg-amber-950/30 border-amber-500 text-amber-700 dark:text-amber-400' : 'border-transparent'}`}>
+      <input type="radio" name="pay-status" className="hidden" checked={paymentStatus !== 'paid'} onChange={() => setPaymentStatus('pending')} />
+      <Clock size={14} /> ⏳ معلق
+    </label>
+    <label className={`flex items-center justify-center gap-2 p-2.5 rounded-xl cursor-pointer border-2 font-bold text-xs transition-all ${paymentStatus === 'paid' ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-500 text-emerald-700 dark:text-emerald-400' : 'border-transparent'}`}>
+      <input type="radio" name="pay-status" className="hidden" checked={paymentStatus === 'paid'} onChange={() => setPaymentStatus('paid')} />
+      <CheckCircle2 size={14} /> ✅ معتمد
+    </label>
+  </div>
+  {paymentStatus === 'pending' && (
+    <p className="text-[10px] mt-2 text-amber-700 dark:text-amber-400 font-bold">
+      💡 معلق: مش بيتخصم فوراً، لكن يظهر في التنبؤ
+    </p>
+  )}
+</div>
+          <div><label className="text-[11px] font-black block mb-2" style={{ color: 'var(--text-muted)' }}>التاريخ *</label><SafeDateInput className="input-field text-xs font-bold py-3" value={date} onChange={setDate} /></div>
         <div>
           <div className={`fee-toggle-row ${withFee ? 'active' : ''}`} onClick={() => setWithFee(!withFee)}>
             <div className="flex items-center gap-2">
