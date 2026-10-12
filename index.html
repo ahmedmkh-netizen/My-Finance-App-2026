@@ -5814,13 +5814,31 @@ const DashboardView = memo(({
 
   return (
     <div className="space-y-4 animate-fadeIn pb-24">
-      <div className="hero-navy animate-slideInBottom">
-        <div className="flex items-start justify-between mb-5">
-          <div className="flex-1 min-w-0">
-            <p className="text-xs font-bold opacity-70 mb-1">مساء الخير، أحمد 👋</p>
-            <p className="text-[11px] font-semibold opacity-60">{quote}</p>
-          </div>
-        </div>
+<div className="hero-navy animate-slideInBottom">
+  <div className="flex items-start justify-between mb-5 gap-3">
+    <div className="flex-1 min-w-0">
+      <p className="text-xs font-bold opacity-70 mb-1">مساء الخير، أحمد 👋</p>
+      <p className="text-[11px] font-semibold opacity-60">{quote}</p>
+    </div>
+    <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+      <button
+        onClick={() => setShowDetails(true)}
+        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl transition-all active:scale-95"
+        style={{ background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.18)' }}
+        title="اضغط لعرض التفاصيل الكاملة"
+      >
+        <CalendarDays size={11} className="opacity-90" />
+        <span className="text-[11px] font-black tracking-tight">{selectedMonth} {selectedYear}</span>
+        <ChevronDown size={11} className="opacity-70" />
+      </button>
+      {isMonthClosed(data, selectedYear, selectedMonth) && (
+        <span className="badge text-[9px] px-2 py-0.5" style={{ background: 'rgba(16,185,129,0.25)', color: '#6EE7B7' }}>
+          <Lock size={8} /> مغلق
+        </span>
+      )}
+    </div>
+  </div>
+      
         <div className="mb-2">
           <p className="text-[10px] font-bold uppercase tracking-wider opacity-60 mb-1.5">صافي المركز (Net Worth)</p>
           <div className="flex items-baseline gap-2 flex-wrap">
@@ -5935,102 +5953,6 @@ const DashboardView = memo(({
         </div>
         <ChevronLeft size={18} style={{ color: 'var(--text-muted)' }} />
       </button>
-    </div>
-  );
-});
-/* ═══════════════ WELCOME HERO (Legacy Support) ═══════════════ */
-const WelcomeHero = memo(({ netWorth, liquidityDual, totalDebt, hanyPayable, onTransfer, onAddIncome, onAddExpense, onCardPayment }) => {
-  const [quote] = useState(() => DAILY_DHIKR[Math.floor(Math.random() * DAILY_DHIKR.length)]);
-  const hour = new Date().getHours();
-  const greeting = hour < 12 ? 'صباح الخير' : hour < 17 ? 'مساء الخير' : 'مساء النور';
-  const isPositive = netWorth >= 0;
-  const [revealed, setRevealed] = useState(true);
-
-  return (
-    <div className="hero-navy animate-slideInBottom">
-<div className="flex items-start justify-between mb-5 gap-3">
-  <div className="flex-1 min-w-0">
-    <p className="text-xs font-bold opacity-70 mb-1">مساء الخير، أحمد 👋</p>
-    <p className="text-[11px] font-semibold opacity-60">{quote}</p>
-  </div>
-  <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
-    <button
-      onClick={() => setShowDetails(true)}
-      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl transition-all active:scale-95"
-      style={{ background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.18)' }}
-      title="اضغط لعرض التفاصيل الكاملة"
-    >
-      <CalendarDays size={11} className="opacity-90" />
-      <span className="text-[11px] font-black tracking-tight">{selectedMonth} {selectedYear}</span>
-      <ChevronDown size={11} className="opacity-70" />
-    </button>
-    {isMonthClosed(data, selectedYear, selectedMonth) && (
-      <span className="badge text-[9px] px-2 py-0.5" style={{ background: 'rgba(16,185,129,0.25)', color: '#6EE7B7' }}>
-        <Lock size={8} /> مغلق
-      </span>
-    )}
-  </div>
-</div>
-         <button type="button" onClick={() => setRevealed(!revealed)} className="p-2 rounded-xl transition-colors" style={{ background: 'rgba(255,255,255,0.08)' }}>
-          {revealed ? <EyeOff size={16} /> : <Eye size={16} />}
-        </button>
-      </div>
-      <div className="mb-5">
-        <p className="text-[10px] font-bold uppercase tracking-wider opacity-60 mb-1.5">صافي المركز (Net Worth)</p>
-        <div className="flex items-baseline gap-2 flex-wrap">
-          <span className={`money-xl money ${isPositive ? 'text-white' : 'text-red-300'}`}>
-            {revealed ? <AnimatedNumber value={Math.abs(netWorth)} duration={800} /> : '•••••'}
-          </span>
-          <span className="text-sm font-bold opacity-60">ج.م</span>
-        </div>
-        {revealed && (
-          <div className="flex items-center gap-2 mt-2">
-            <span className="badge text-[10px]" style={{ background: isPositive ? 'rgba(16,185,129,0.2)' : 'rgba(248,113,113,0.2)', color: isPositive ? '#6EE7B7' : '#FCA5A5' }}>
-              {isPositive ? <><TrendingUp size={10} /> وضع آمن</> : <><TrendingDown size={10} /> يحتاج مراجعة</>}
-            </span>
-          </div>
-        )}
-      </div>
-      <div className="liquidity-hero mb-4">
-        <div className="p-3 rounded-2xl" style={{ background: 'rgba(5,150,105,0.15)', border: '1px solid rgba(5,150,105,0.25)' }}>
-          <p className="text-[10px] font-bold opacity-70 mb-1">🏦 سيولة أساسية</p>
-          <p className="text-lg font-black money tabular">{revealed ? <AnimatedNumber value={liquidityDual.withoutWallets} duration={700} /> : '•••••'}</p>
-          <p className="text-[9px] opacity-60 mt-0.5">كاش + توفير</p>
-        </div>
-        <div className="p-3 rounded-2xl" style={{ background: 'rgba(139,132,255,0.15)', border: '1px solid rgba(139,132,255,0.25)' }}>
-          <p className="text-[10px] font-bold opacity-70 mb-1">🌐 شاملة</p>
-          <p className="text-lg font-black money tabular">{revealed ? <AnimatedNumber value={liquidityDual.comprehensive} duration={700} /> : '•••••'}</p>
-          <p className="text-[9px] opacity-60 mt-0.5">+ محافظ {revealed ? fmtShort(liquidityDual.walletsOnly) : '••'}</p>
-        </div>
-      </div>
-      <div className="grid grid-cols-2 gap-2 mb-4">
-        <div className="p-3 rounded-2xl" style={{ background: 'rgba(220,38,38,0.15)', border: '1px solid rgba(220,38,38,0.2)' }}>
-          <div className="flex justify-between items-center">
-            <span className="text-[10px] font-bold opacity-70">💳 مديونية</span>
-            <p className="text-sm font-black money tabular">{revealed ? <AnimatedNumber value={totalDebt} duration={700} /> : '•••••'}</p>
-          </div>
-        </div>
-        <div className="p-3 rounded-2xl" style={{ background: 'rgba(234,88,12,0.15)', border: '1px solid rgba(234,88,12,0.25)' }}>
-          <div className="flex justify-between items-center">
-            <span className="text-[10px] font-bold opacity-70">🛒 هاني</span>
-            <p className="text-sm font-black money tabular">{revealed ? <AnimatedNumber value={hanyPayable} duration={700} /> : '•••••'}</p>
-          </div>
-        </div>
-      </div>
-      <div className="grid grid-cols-4 gap-2">
-        <button onClick={onTransfer} className="flex flex-col items-center gap-1.5 py-3 rounded-2xl transition-all active:scale-95" style={{ background: 'rgba(255,255,255,0.1)' }}>
-          <ArrowLeftRight size={16} /><span className="text-[10px] font-bold">تحويل</span>
-        </button>
-        <button onClick={onCardPayment} className="flex flex-col items-center gap-1.5 py-3 rounded-2xl transition-all active:scale-95" style={{ background: 'rgba(124,58,237,0.25)' }}>
-          <CreditCard size={16} /><span className="text-[10px] font-bold">سداد بطاقة</span>
-        </button>
-        <button onClick={onAddIncome} className="flex flex-col items-center gap-1.5 py-3 rounded-2xl transition-all active:scale-95" style={{ background: 'rgba(5,150,105,0.2)' }}>
-          <ArrowDown size={16} /><span className="text-[10px] font-bold">إيداع</span>
-        </button>
-        <button onClick={onAddExpense} className="flex flex-col items-center gap-1.5 py-3 rounded-2xl transition-all active:scale-95" style={{ background: 'rgba(220,38,38,0.2)' }}>
-          <ArrowUp size={16} /><span className="text-[10px] font-bold">مصروف</span>
-        </button>
-      </div>
     </div>
   );
 });
