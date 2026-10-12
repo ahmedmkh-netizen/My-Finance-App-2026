@@ -1591,11 +1591,29 @@ const classifyFlow = (t) => {
       && !t.linkedLoanId
       && !t.sourceRecurringId) return FLOW.CARD_PAYMENT;
 
-  if (t.sourceRecurringId && t.sourceRecurringId.indexOf('r-mortgage') === 0) return FLOW.LOAN_INSTALLMENT;
-  if (t.linkedLoanId) return FLOW.LOAN_INSTALLMENT;
-  if (t.category === 'الالتزامات البنكية والتمويلية'
-      && t.type === 'expense'
-      && !t.linkedCardId) return FLOW.LOAN_INSTALLMENT;
+if (t.sourceRecurringId && t.sourceRecurringId.indexOf('r-mortgage') === 0) return FLOW.LOAN_INSTALLMENT;
+if (t.linkedLoanId) return FLOW.LOAN_INSTALLMENT;
+
+// 🆕 كشف سداد البطاقة من الوصف (لما linkedCardId مفقود)
+const _desc = (t.description || '').toLowerCase();
+const _looksLikeCardPayment = 
+  _desc.includes('credit') ||
+  _desc.includes('titanium') ||
+  _desc.includes('signature') ||
+  _desc.includes('swype') ||
+  _desc.includes('tainum') ||
+  _desc.includes('adib') ||
+  _desc.includes('سداد بطاقة');
+
+if (t.category === 'الالتزامات البنكية والتمويلية'
+    && t.type === 'expense'
+    && !t.linkedCardId
+    && !t.linkedLoanId
+    && _looksLikeCardPayment) return FLOW.CARD_PAYMENT;
+
+if (t.category === 'الالتزامات البنكية والتمويلية'
+    && t.type === 'expense'
+    && !t.linkedCardId) return FLOW.LOAN_INSTALLMENT;
 
   if (t.source === 'reconciliation') return FLOW.RECONCILIATION;
   if (t.linkedTransferId) {
