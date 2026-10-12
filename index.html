@@ -301,7 +301,7 @@ h1,h2,h3,h4 { font-weight: 800; letter-spacing: -0.02em; color: var(--text-prima
 .print-fab { position: fixed; bottom: calc(var(--nav-h) + 20px); left: 16px; z-index: 800; width: 56px; height: 56px; border-radius: 50%; background: linear-gradient(135deg, #0A1628 0%, #635BFF 100%); color: white; border: none; cursor: pointer; box-shadow: 0 12px 28px -4px rgba(99,91,255,0.5), 0 4px 12px rgba(10,22,40,0.3); display: flex; align-items: center; justify-content: center; transition: all .22s var(--ease); }
 .print-fab:hover { transform: translateY(-3px) scale(1.05); }
 .print-fab:active { transform: scale(.94); }
-@media (min-width: 1024px) { .print-fab { bottom: 24px; left: 24px; } }
+@media (min-width: 1024px) { .print-fab { bottom: 24px; left: calc(var(--sidebar-w) + 24px); } }
 .provider-group { border-radius: var(--r-xl); background: var(--bg-card); border: 1px solid var(--border-subtle); box-shadow: var(--shadow-2); overflow: hidden; margin-bottom: 12px; }
 .provider-header { padding: 14px 18px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; background: linear-gradient(135deg, var(--bg-card), var(--bg-card-alt)); border-bottom: 1px solid var(--border-subtle); transition: all .2s; }
 .provider-header:hover { background: var(--bg-card-alt); }
@@ -5824,9 +5824,10 @@ const DashboardView = memo(({
         <div className="mb-2">
           <p className="text-[10px] font-bold uppercase tracking-wider opacity-60 mb-1.5">صافي المركز (Net Worth)</p>
           <div className="flex items-baseline gap-2 flex-wrap">
-            <span className={`money-xl money ${isPositive ? 'text-white' : 'text-red-300'}`}>
-              <AnimatedNumber value={Math.abs(netPosition)} duration={800} />
-            </span>
+<span className={`money-xl money ${isPositive ? 'text-white' : 'text-red-300'}`}>
+  {!isPositive && '−'}
+  <AnimatedNumber value={Math.abs(netPosition)} duration={800} />
+</span>
             <span className="text-sm font-bold opacity-60">ج.م</span>
           </div>
           <div className="flex items-center gap-2 mt-2">
@@ -5862,19 +5863,21 @@ const DashboardView = memo(({
       </div>
 
       {monthPendingCount > 0 && (
-        <div className="card" style={{ background: 'var(--warning-soft)', borderColor: 'var(--warning)' }}>
-          <div className="flex items-center gap-3 mb-3">
-            <div className="p-2 rounded-xl bg-amber-100 dark:bg-amber-950/40 text-amber-600"><Clock size={16} /></div>
-            <div className="flex-1">
-              <p className="text-xs font-black text-amber-700 dark:text-amber-400">⏳ {monthPendingCount} معلقات بانتظارك</p>
-              <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>إجمالي: {fmt(monthPendingTotal)} ج.م في {selectedMonth}</p>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <button onClick={() => dispatch({ type: 'SET_ACTIVE_TAB', payload: 'transactions' })} className="btn btn-secondary text-xs py-2">عرض التفاصيل</button>
-            <button onClick={approveAllPending} className="btn btn-primary text-xs py-2"><CheckCircle2 size={12} /> اعتماد الكل</button>
-          </div>
-        </div>
+<div className="card py-3" style={{ background: 'var(--warning-soft)', borderColor: 'var(--warning)' }}>
+  <div className="flex items-center gap-3 mb-2.5">
+    <div className="p-2 rounded-xl bg-amber-100 dark:bg-amber-950/40 text-amber-600 flex-shrink-0"><Clock size={16} /></div>
+    <div className="flex-1 min-w-0">
+      <p className="text-xs font-black text-amber-700 dark:text-amber-400">⏳ {monthPendingCount} معلقات</p>
+      <p className="text-[10px] mt-0.5 truncate" style={{ color: 'var(--text-muted)' }}>إجمالي <span className="money tabular font-bold text-amber-700 dark:text-amber-400">{fmt(monthPendingTotal)}</span> ج.م</p>
+    </div>
+    <button onClick={approveAllPending} className="btn btn-primary text-[11px] py-1.5 px-3 flex-shrink-0 font-black">
+      <CheckCircle2 size={12} /> اعتماد
+    </button>
+  </div>
+  <button onClick={() => dispatch({ type: 'SET_ACTIVE_TAB', payload: 'transactions' })} className="w-full text-[11px] font-black py-1.5 rounded-lg transition-colors" style={{ background: 'rgba(0,0,0,0.04)', color: 'var(--text-secondary)' }}>
+    عرض التفاصيل ←
+  </button>
+</div>
       )}
 
       <div className="card">
