@@ -5830,11 +5830,16 @@ const DashboardView = memo(({
 </span>
             <span className="text-sm font-bold opacity-60">ج.م</span>
           </div>
-          <div className="flex items-center gap-2 mt-2">
-            <span className="badge text-[10px]" style={{ background: isPositive ? 'rgba(16,185,129,0.2)' : 'rgba(248,113,113,0.2)', color: isPositive ? '#6EE7B7' : '#FCA5A5' }}>
-              {isPositive ? <><TrendingUp size={10} /> وضع آمن</> : <><TrendingDown size={10} /> يحتاج مراجعة</>}
-            </span>
-          </div>
+<div className="flex items-center gap-2 mt-2">
+  <span className="badge text-[10px]" style={{ background: isPositive ? 'rgba(16,185,129,0.2)' : 'rgba(248,113,113,0.2)', color: isPositive ? '#6EE7B7' : '#FCA5A5' }}>
+    {isPositive ? <><TrendingUp size={10} /> وضع آمن</> : <><TrendingDown size={10} /> يحتاج مراجعة</>}
+  </span>
+</div>
+{!isPositive && (
+  <p className="text-[10px] mt-2 opacity-75 leading-relaxed">
+    💡 الالتزامات <span className="font-bold money tabular">{fmtShort(netWorthData.totalLiabilities)}</span> ج.م أكبر من السيولة <span className="font-bold money tabular">{fmtShort(netWorthData.liquidity)}</span> ج.م
+  </p>
+)}
         </div>
       </div>
 
@@ -5880,10 +5885,24 @@ const DashboardView = memo(({
 </div>
       )}
 
-      <div className="card">
-        <h3 className="font-black text-sm mb-3 flex items-center gap-2"><LineChart className="text-[color:var(--accent)]" size={16} /> 📈 حركة آخر 30 يوم</h3>
-        <div className="h-40">
-          <ResponsiveContainer width="100%" height="100%">
+<div className="card py-3">
+  <div className="flex items-center justify-between mb-2">
+    <h3 className="font-black text-[11px] flex items-center gap-2">
+      <LineChart className="text-[color:var(--accent)]" size={14} /> 📈 آخر 30 يوم
+    </h3>
+    <div className="flex gap-2">
+      <span className="text-[10px] font-bold flex items-center gap-1" style={{ color: 'var(--success)' }}>
+        <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--success)', display: 'inline-block' }} />
+        دخل
+      </span>
+      <span className="text-[10px] font-bold flex items-center gap-1" style={{ color: 'var(--danger)' }}>
+        <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--danger)', display: 'inline-block' }} />
+        مصروف
+      </span>
+    </div>
+  </div>
+  <div className="h-32">
+              <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={last30ChartData}>
               <defs>
                 <linearGradient id="incGradDash" x1="0" y1="0" x2="0" y2="1">
@@ -5929,12 +5948,30 @@ const WelcomeHero = memo(({ netWorth, liquidityDual, totalDebt, hanyPayable, onT
 
   return (
     <div className="hero-navy animate-slideInBottom">
-      <div className="flex items-start justify-between mb-5">
-        <div className="flex-1 min-w-0">
-          <p className="text-xs font-bold opacity-70 mb-1">{greeting}، أحمد 👋</p>
-          <p className="text-[11px] font-semibold opacity-60">{quote}</p>
-        </div>
-        <button type="button" onClick={() => setRevealed(!revealed)} className="p-2 rounded-xl transition-colors" style={{ background: 'rgba(255,255,255,0.08)' }}>
+<div className="flex items-start justify-between mb-5 gap-3">
+  <div className="flex-1 min-w-0">
+    <p className="text-xs font-bold opacity-70 mb-1">مساء الخير، أحمد 👋</p>
+    <p className="text-[11px] font-semibold opacity-60">{quote}</p>
+  </div>
+  <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+    <button
+      onClick={() => setShowDetails(true)}
+      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl transition-all active:scale-95"
+      style={{ background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.18)' }}
+      title="اضغط لعرض التفاصيل الكاملة"
+    >
+      <CalendarDays size={11} className="opacity-90" />
+      <span className="text-[11px] font-black tracking-tight">{selectedMonth} {selectedYear}</span>
+      <ChevronDown size={11} className="opacity-70" />
+    </button>
+    {isMonthClosed(data, selectedYear, selectedMonth) && (
+      <span className="badge text-[9px] px-2 py-0.5" style={{ background: 'rgba(16,185,129,0.25)', color: '#6EE7B7' }}>
+        <Lock size={8} /> مغلق
+      </span>
+    )}
+  </div>
+</div>
+         <button type="button" onClick={() => setRevealed(!revealed)} className="p-2 rounded-xl transition-colors" style={{ background: 'rgba(255,255,255,0.08)' }}>
           {revealed ? <EyeOff size={16} /> : <Eye size={16} />}
         </button>
       </div>
