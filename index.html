@@ -6276,17 +6276,71 @@ const TransactionsView = memo(({
     <div className="space-y-3 animate-fadeIn pb-24">
       {/* Header */}
       <div className="card py-3">
-        <div className="flex justify-between items-center gap-2 mb-3">
-          <button onClick={() => dispatch({ type: 'SET_SELECTED_MONTH', payload: ALL_MONTHS[Math.max(0, getMonthIndex(selectedMonth) - 1)] })} className="btn btn-ghost p-2">
-            <ArrowRight size={16} />
-          </button>
-          <div className="flex-1 text-center">
-            <h2 className="font-black text-base">{selectedMonth} {selectedYear}</h2>
-            <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>{monthTx.length} معاملة</p>
-          </div>
-          <button onClick={() => setShowActionsSheet(true)} className="btn btn-ghost p-2">
-            <MoreVertical size={16} />
-          </button>
+{(() => {
+  // Build list of all valid (year, month) combos
+  const allValidMonths = [];
+  YEARS_LIST.forEach(y => {
+    getMonthsForYear(y).forEach(m => allValidMonths.push({ year: y, month: m }));
+  });
+  const currentKey = `${selectedYear}-${selectedMonth}`;
+  const currentIdx = allValidMonths.findIndex(v => `${v.year}-${v.month}` === currentKey);
+  const canGoPrev = currentIdx > 0;
+  const canGoNext = currentIdx >= 0 && currentIdx < allValidMonths.length - 1;
+
+  const navigateMonth = (delta) => {
+    const newIdx = currentIdx + delta;
+    if (newIdx < 0 || newIdx >= allValidMonths.length) return;
+    const target = allValidMonths[newIdx];
+    dispatch({ type: 'SET_SELECTED_YEAR', payload: target.year });
+    dispatch({ type: 'SET_SELECTED_MONTH', payload: target.month });
+  };
+
+  return (
+    <div className="flex items-center gap-2 mb-3">
+      {/* زرار الشهر السابق (يمين في RTL) */}
+      <button 
+        type="button"
+        onClick={() => navigateMonth(-1)} 
+        disabled={!canGoPrev}
+        className="btn btn-ghost p-2 disabled:opacity-30 disabled:cursor-not-allowed"
+        aria-label="الشهر السابق"
+        title="الشهر السابق"
+      >
+        <ArrowRight size={18} />
+      </button>
+      
+      {/* العنوان في النص */}
+      <div className="flex-1 text-center">
+        <h2 className="font-black text-base">{selectedMonth} {selectedYear}</h2>
+        <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>
+          {monthTx.length} معاملة
+        </p>
+      </div>
+      
+      {/* زرار الشهر التالي (يسار في RTL) */}
+      <button 
+        type="button"
+        onClick={() => navigateMonth(1)} 
+        disabled={!canGoNext}
+        className="btn btn-ghost p-2 disabled:opacity-30 disabled:cursor-not-allowed"
+        aria-label="الشهر التالي"
+        title="الشهر التالي"
+      >
+        <ArrowRight size={18} className="rotate-180" />
+      </button>
+
+      {/* قائمة الإجراءات */}
+      <button 
+        type="button"
+        onClick={() => setShowActionsSheet(true)} 
+        className="btn btn-ghost p-2"
+        aria-label="إجراءات"
+      >
+        <MoreVertical size={16} />
+      </button>
+    </div>
+  );
+})()}
         </div>
 
         <div className="sub-tab-switcher">
