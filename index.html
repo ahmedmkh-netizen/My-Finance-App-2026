@@ -6410,31 +6410,33 @@ const TransactionsView = memo(({
                         {t.createdAt && ` • ${formatTxTime(t.createdAt)}`}
                       </p>
                     </div>
-                    <div className="flex items-center gap-1 flex-shrink-0">
-                      <span className={`font-black text-xs money tabular ${t.type === 'income' ? 'text-emerald-600' : 'text-red-600'}`}>
-                        {t.type === 'income' ? '+' : '−'}{fmt(t.amount)}
-                      </span>
-                      {!selectMode && activeTab === 'pending' && (
-                        <button type="button" aria-label="اعتماد" onClick={() => approveOne(t)} className="btn btn-ghost p-1 text-emerald-500"><CheckCircle2 size={14} /></button>
-                      )}
-                      {!selectMode && activeTab === 'paid' && (
-                        <button type="button" aria-label="إعادة تعليق" onClick={() => reopenOne(t)} className="btn btn-ghost p-1 text-amber-500"><Undo2 size={14} /></button>
-                      )}
-                      {!selectMode && (
-                        <button type="button" aria-label="تعديل" onClick={() => {
-                          dispatch({ type: 'SET_FORM_MODE', payload: 'edit' });
-                          dispatch({ type: 'SET_FORM_DATA', payload: t });
-                          dispatch({ type: 'SET_FORM_OPEN', payload: true });
-                        }} className="btn btn-ghost p-1"><Edit size={14} /></button>
-                      )}
-                      {!selectMode && (
-  <button type="button" aria-label="حذف" onClick={() => {
-    if (window.confirm(`تأكيد حذف: ${t.description || t.category} — ${t.amount} ج.م؟`)) {
-      handleDelete(t.id);
-    }
-}} className="btn p-1.5 text-white" style={{ background: 'var(--danger)', borderRadius: '8px' }}><Trash2 size={14} /></button>
-                  )}
-                    </div>
+<div className="flex items-center gap-1.5 flex-shrink-0">
+  <span className={`font-black text-sm money tabular ${t.type === 'income' ? 'text-emerald-600' : 'text-red-600'}`}>
+    {t.type === 'income' ? '+' : '−'}{fmt(t.amount)}
+  </span>
+  {!selectMode && activeTab === 'pending' && (
+    <button
+      type="button"
+      aria-label="اعتماد"
+      onClick={(e) => { e.stopPropagation(); approveOne(t); }}
+      className="w-8 h-8 rounded-lg flex items-center justify-center text-white transition-transform active:scale-90"
+      style={{ background: 'var(--success)' }}
+      title="اعتماد المعاملة">
+      <CheckCircle2 size={15} />
+    </button>
+  )}
+  {!selectMode && (
+    <button
+      type="button"
+      aria-label="المزيد"
+      onClick={(e) => { e.stopPropagation(); setActionsTx(t); }}
+      className="w-8 h-8 rounded-lg flex items-center justify-center transition-transform active:scale-90"
+      style={{ background: 'var(--bg-muted)', color: 'var(--text-secondary)' }}
+      title="المزيد">
+      <MoreVertical size={15} />
+    </button>
+  )}
+</div>
                   </div>
                 ))}
               </div>
@@ -6486,7 +6488,115 @@ const TransactionsView = memo(({
           <button onClick={() => setShowFilterSheet(false)} className="btn btn-primary w-full py-2.5 text-sm">تطبيق</button>
         </div>
       </BottomSheet>
+      {/* ═══ V88.3 — Actions Sheet for individual transaction ═══ */}
+      <BottomSheet
+        isOpen={!!actionsTx}
+        onClose={() => setActionsTx(null)}
+        title={actionsTx ? (actionsTx.description || actionsTx.category) : ''}
+      >
+        {actionsTx && (
+          <div className="space-y-4">
+            {/* رأس المعاملة */}
+            <div className="p-3 rounded-xl flex items-center justify-between gap-3"
+              style={{ background: 'var(--bg-muted)' }}>
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] font-bold mb-0.5" style={{ color: 'var(--text-muted)' }}>
+                  {formatArabicDate(actionsTx.date)} • {getPaymentMethodShort(actionsTx.method)}
+                </p>
+                <p className="text-[11px] font-semibold truncate" style={{ color: 'var(--text-secondary)' }}>
+                  {actionsTx.category}
+                  {actionsTx.status === 'paid' ? ' · ✅ معتمد' : ' · ⏳ معلق'}
+                  {actionsTx.carryCount > 0 && ` · ↔️ مُرحّل ×${actionsTx.carryCount}`}
+                </p>
+              </div>
+              <span className={`font-black text-base money tabular ${actionsTx.type === 'income' ? 'text-emerald-600' : 'text-red-600'}`}>
+                {actionsTx.type === 'income' ? '+' : '−'}{fmt(actionsTx.amount)}
+              </span>
+            </div>
 
+            {/* قائمة الإجراءات */}
+            <div className="space-y-1">
+              {/* اعتماد / إعادة تعليق */}
+              {actionsTx.status !== 'paid' ? (
+                <button
+                  onClick={() => { approveOne(actionsTx); setActionsTx(null); }}
+                  className="more-item">
+                  <div className="more-item-icon" style={{ background: 'linear-gradient(135deg,#059669 0%,#047857 100%)', color: 'white' }}>
+                    <CheckCircle2 size={16} />
+                  </div>
+                  <span className="flex-1 truncate text-right font-black">✅ اعتماد المعاملة</span>
+                </button>
+              ) : (
+                <button
+                  onClick={() => { reopenOne(actionsTx); setActionsTx(null); }}
+                  className="more-item">
+                  <div className="more-item-icon" style={{ background: 'linear-gradient(135deg,#D97706 0%,#B45309 100%)', color: 'white' }}>
+                    <Undo2 size={16} />
+                  </div>
+                  <span className="flex-1 truncate text-right">↩️ إعادة تعليق</span>
+                </button>
+              )}
+
+              {/* تعديل */}
+              <button
+                onClick={() => {
+                  dispatch({ type: 'SET_FORM_MODE', payload: 'edit' });
+                  dispatch({ type: 'SET_FORM_DATA', payload: actionsTx });
+                  dispatch({ type: 'SET_FORM_OPEN', payload: true });
+                  setActionsTx(null);
+                }}
+                className="more-item">
+                <div className="more-item-icon" style={{ background: 'linear-gradient(135deg,#0EA5E9 0%,#0284C7 100%)', color: 'white' }}>
+                  <Edit size={16} />
+                </div>
+                <span className="flex-1 truncate text-right">✏️ تعديل</span>
+              </button>
+
+              {/* 🆕 ترحيل لشهر قادم */}
+              <button
+                onClick={() => { carryOverTransaction(actionsTx); setActionsTx(null); }}
+                className="more-item"
+                style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}>
+                <div className="more-item-icon" style={{ background: 'linear-gradient(135deg,#635BFF 0%,#4A42E5 100%)', color: 'white' }}>
+                  <ArrowRight size={16} />
+                </div>
+                <span className="flex-1 truncate text-right font-black">↔️ ترحيل لشهر قادم</span>
+                {(actionsTx.carryCount || 0) > 0 && (
+                  <span className="badge badge-warning text-[9px]">×{actionsTx.carryCount}</span>
+                )}
+              </button>
+
+              {/* حذف */}
+              <button
+                onClick={() => {
+                  const txId = actionsTx.id;
+                  const txLabel = actionsTx.description || actionsTx.category;
+                  const txAmt = actionsTx.amount;
+                  setActionsTx(null);
+                  setTimeout(() => {
+                    if (window.confirm(`تأكيد حذف: ${txLabel} — ${txAmt} ج.م؟`)) {
+                      handleDelete(txId);
+                    }
+                  }, 200);
+                }}
+                className="more-item"
+                style={{ color: 'var(--danger)' }}>
+                <div className="more-item-icon" style={{ background: 'linear-gradient(135deg,#DC2626 0%,#B91C1C 100%)', color: 'white' }}>
+                  <Trash2 size={16} />
+                </div>
+                <span className="flex-1 truncate text-right font-black">🗑️ حذف</span>
+              </button>
+            </div>
+
+            <p className="text-[10px] text-center font-semibold pt-2"
+              style={{ color: 'var(--text-muted)' }}>
+              💡 الترحيل ينقل المعاملة للشهر التالي بنفس اليوم (مع تعديله لو الشهر أقصر)
+            </p>
+          </div>
+        )}
+      </BottomSheet>
+
+      
       <BottomSheet isOpen={showActionsSheet} onClose={() => setShowActionsSheet(false)} title="إجراءات">
         <div className="space-y-1">
           <button onClick={() => { setSelectMode(true); setShowActionsSheet(false); }} className="more-item">
