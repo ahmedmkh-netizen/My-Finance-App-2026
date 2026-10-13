@@ -5408,8 +5408,7 @@ const TransactionsView = memo(function TransactionsView({
     if (!items || items.length === 0) return;
     setConfirmState({ tx: items[0], bulk: true, items, count: items.length });
   }, []);
-
-  const doApprove = useCallback((date) => {
+const doApprove = useCallback((date) => {
     if (!confirmState) return;
     const d = parseISODate(date);
     if (!d) { addNotification({ type: 'error', title: 'تاريخ غير صحيح' }); setConfirmState(null); return; }
@@ -5419,21 +5418,35 @@ const TransactionsView = memo(function TransactionsView({
       setConfirmState(null); return;
     }
     saveHistory();
+
+    // ✅ حالة الاعتماد الجماعي
     if (confirmState.bulk) {
       const ids = new Set((confirmState.items || []).map(t => t.id));
+      const total = (confirmState.items || []).reduce((s, t) => s + safeNumber(t.amount), 0);
       const next = transactions.map(t => ids.has(t.id) ? { ...t, status: 'paid', date, year: txYear, month: txMonth, monthIndex: d.getMonth() } : t);
       dispatch({ type: 'UPDATE_TRANSACTIONS', payload: next });
-      addNotification({ type: 'success', title: `تم اعتماد ${ids.size} معلقة`, duration: 4000 });
-    } else {
+      addNotification({
+        type: 'success',
+        title: `✅ تم اعتماد ${ids.size} معلقة`,
+        message: `إجمالي: ${fmt(total)} ج.م\nالتاريخ: ${date} • ${txMonth} ${txYear}`,
+        duration: 6000
+      });
+    }
+    // ✅ حالة الاعتماد الفردي
+    else {
       const tx = confirmState.tx;
       if (!tx) { setConfirmState(null); return; }
       const next = transactions.map(t => t.id === tx.id ? { ...t, status: 'paid', date, year: txYear, month: txMonth, monthIndex: d.getMonth() } : t);
       dispatch({ type: 'UPDATE_TRANSACTIONS', payload: next });
-     addNotification({ type: 'success', title: '✅ تم الاعتماد', message: `${tx.description || tx.category} — ${fmt(tx.amount)} ج.م`, duration: 5000 });
+      addNotification({
+        type: 'success',
+        title: '✅ تم الاعتماد',
+        message: `${tx.description || tx.category}\n${fmt(tx.amount)} ج.م • ${date} • ${txMonth} ${txYear}`,
+        duration: 6000
+      });
     }
     setConfirmState(null);
   }, [confirmState, transactions, data, saveHistory, dispatch, addNotification]);
-
   const handleApproveOne = useCallback((tx) => {
     if (isHanyPurchaseTx(tx) || isHanySettleTx(tx)) {
       if (isClosed) { addNotification({ type: 'error', title: 'محظور' }); return; }
