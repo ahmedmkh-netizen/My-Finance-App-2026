@@ -5179,12 +5179,18 @@
         };
       };
 
-      const computeCardAvailable = (data, card, asOfDate = null) => {
-        if (!card) return 0;
-        const debt = computeCardDebt(data, card, asOfDate);
-        const limit = safeNumber(card.limit);
-        return Math.max(0, limit - Math.max(0, debt));
-      };
+const computeCardAvailable = (data, card, asOfDate = null) => {
+  if (!card) return 0;
+  const debt = computeCardDebt(data, card, asOfDate);
+  const limit = safeNumber(card.limit);
+  const instInfo = computeCardInstallmentsInfo(
+    data,
+    card,
+    asOfDate ? new Date(asOfDate) : new Date(),
+  );
+  // ✅ نخصم الأقساط المتبقية لأن البنك بيحجزها من الحد
+  return Math.max(0, limit - Math.max(0, debt) - instInfo.totalRemaining);
+};
 
       const computeTotalCardDebtNet = (data, asOfDate = null) => {
         const sum = (data?.cards || []).reduce(
@@ -5984,6 +5990,7 @@
         const allTxs = (data?.transactions || [])
           .filter((t) => {
             if (!t || t.status !== "paid") return false;
+            if (t.installmentPlanId) return false;
             if (
               t.source === "void" ||
               t.source === "carryover" ||
