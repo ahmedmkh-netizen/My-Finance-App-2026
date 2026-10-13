@@ -786,12 +786,15 @@ const CORE_LIQUIDITY_KEYS = ['cash', 'cib_savings', 'aaib_savings'];
 const WALLET_ONLY_KEYS = ['fawry', 'etisalat'];
 const HANY_SETTLE_ALLOWED_METHODS = ['cash', 'cib_savings', 'aaib_savings', 'fawry', 'etisalat'];
 
+/* ═══════════════ PROVIDERS & LOGOS ═══════════════ */
+const LOGO_BASE_URL = 'https://raw.githubusercontent.com/ahmedmkh-netzen/My-Finance-App-2026/main/logos/';
+
 const PROVIDERS = {
-  cib:     { name: 'CIB',  icon: '🏦', color: '#005EB8', brandText: 'CIB',  order: 1 },
-  aaib:    { name: 'AAIB', icon: '🏦', color: '#00693E', brandText: 'AAIB', order: 2 },
-  adib:    { name: 'ADIB', icon: '🏦', color: '#8B1A3D', brandText: 'ADIB', order: 3 },
-  wallets: { name: 'محافظ إلكترونية', icon: '📱', color: '#CA8A04', brandText: null, order: 4 },
-  cash:    { name: 'نقدي', icon: '💵', color: '#059669', brandText: null, order: 5 }
+  cib:     { name: 'CIB',  icon: '🏦', color: '#005EB8', logoUrl: `${LOGO_BASE_URL}cib-logo.png`, order: 1 },
+  aaib:    { name: 'AAIB', icon: '🏦', color: '#00693E', logoUrl: `${LOGO_BASE_URL}AAIB-logo.jpg`, order: 2 },
+  adib:    { name: 'ADIB', icon: '🏦', color: '#8B1A3D', logoUrl: `${LOGO_BASE_URL}ADIB-logo.png`, order: 3 },
+  wallets: { name: 'محافظ إلكترونية', icon: '📱', color: '#CA8A04', logoUrl: null, order: 4 },
+  cash:    { name: 'نقدي', icon: '💵', color: '#059669', logoUrl: null, order: 5 }
 };
 
 const DAILY_DHIKR = [
@@ -6610,10 +6613,30 @@ const BankCard3D = memo(({ card, liveDebt, liveAvailable, onStatement, onEdit, o
     tainum: 'bank-card-tainum', tainum_gray: 'bank-card-tainum_gray'
   }[card.theme] || 'bank-card-silver';
   const isCredit = liveDebt < 0;
+    const getCardBgImage = () => {
+    if (card.bank === 'CIB' && card.name === 'Titanium') return `url(${LOGO_BASE_URL}CIBCARD.png)`;
+    if (card.bank === 'CIB' && card.name === 'SWYPE') return `url(${LOGO_BASE_URL}swypecibcard.png)`;
+    if (card.bank === 'AAIB') return `url(${LOGO_BASE_URL}AAIBCard.jpg)`;
+    if (card.bank === 'ADIB Egypt') return `url(${LOGO_BASE_URL}ADIBSiqCard.jpeg)`;
+    return null;
+  };
+
+  const bgImage = getCardBgImage();
   return (
     <div className="space-y-3">
-      <div dir="ltr" onClick={() => setFlipped(!flipped)} className={`bank-card ${themeClass}`}
-        style={{ transformStyle: 'preserve-3d', transform: flipped ? 'rotateY(180deg)' : 'rotateY(0)' }}>
+      <div dir="ltr" onClick={() => setFlipped(!flipped)} className={`bank-card ${bgImage ? '' : themeClass}`}
+        style={{
+          transformStyle: 'preserve-3d',
+          transform: flipped ? 'rotateY(180deg)' : 'rotateY(0)',
+          backgroundImage: bgImage,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          color: bgImage ? '#FFFFFF' : 'inherit',
+          position: 'relative',
+          overflow: 'hidden'
+        }}>
+        {bgImage && <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(135deg, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.1) 100%)', pointerEvents: 'none' }}></div>}
+              style={{ transformStyle: 'preserve-3d', transform: flipped ? 'rotateY(180deg)' : 'rotateY(0)' }}>
         {!flipped ? (
           <React.Fragment>
             <div className="flex justify-between items-start">
@@ -6692,15 +6715,7 @@ const BankCard3D = memo(({ card, liveDebt, liveAvailable, onStatement, onEdit, o
   );
 });
 
-const ProviderItemRow = memo(({ item, data, liveBalances, dispatch, onItemClick }) => {
-  const isCard = item.type === 'card';
-  const isAccount = item.type === 'account';
-
-  let balance = 0;
-  let label = '';
-  let sublabel = '';
-  let isNegative = false;
-  let icon = '';
+  let iconElement = null;
 
   if (isCard) {
     balance = computeCardDebt(data, item);
@@ -6709,14 +6724,20 @@ const ProviderItemRow = memo(({ item, data, liveBalances, dispatch, onItemClick 
     label = item.displayName || `💳 ${item.bank} ${item.name} • ${item.last4}`;
     sublabel = `متاح: ${formatAdaptive(available)} • حد: ${formatAdaptive(limit)}`;
     isNegative = balance > 0;
-    icon = '💳';
+    iconElement = <span className="text-lg">💳</span>;
   } else if (isAccount) {
     balance = safeNumber(liveBalances[item.key]);
     label = item.label || ACCOUNT_SHORT_NAMES[item.key] || item.key;
     sublabel = item.last4 ? `•••• ${item.last4}` : '';
     isNegative = balance < 0;
-    icon = DEFAULT_ACCOUNTS[item.key]?.type === 'wallet' ? '📱' :
-           DEFAULT_ACCOUNTS[item.key]?.type === 'cash' ? '💵' : '💰';
+    
+    if (item.key === 'cash') iconElement = <span className="text-lg">💵</span>;
+    else if (item.key === 'fawry') iconElement = <img src={`${LOGO_BASE_URL}Fawry-Logo.jpg.webp`} alt="Fawry" className="w-6 h-6 object-contain" />;
+    else if (item.key === 'etisalat') iconElement = <img src={`${LOGO_BASE_URL}Etslat.jpg`} alt="Etisalat" className="w-6 h-6 object-contain rounded" />;
+    else {
+      const provider = PROVIDERS[item.providerKey || 'cib'];
+      iconElement = <img src={provider.logoUrl} alt={provider.name} className="w-6 h-6 object-contain" />;
+    }
   }
 
   const handleClick = () => {
@@ -6735,7 +6756,9 @@ const ProviderItemRow = memo(({ item, data, liveBalances, dispatch, onItemClick 
   return (
     <button type="button" className="provider-item-row" onClick={handleClick}>
       <div className="flex items-center gap-3 min-w-0 flex-1">
-        <span className="text-lg flex-shrink-0">{icon}</span>
+        <div className="w-8 h-8 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center flex-shrink-0 p-1 shadow-sm">
+          {iconElement}
+        </div>
         <div className="min-w-0">
           <p className="font-bold text-xs truncate">{label}</p>
           {sublabel && <p className="text-[10px] font-semibold mt-0.5 truncate" style={{ color: 'var(--text-muted)' }}>{sublabel}</p>}
@@ -6777,23 +6800,18 @@ const ProviderGroupCard = memo(({ providerKey, items, liveBalances, data, dispat
   }} />
               <div className="flex items-center gap-3 min-w-0 flex-1">
 <div
-  className="flex items-center justify-center flex-shrink-0 text-white font-black"
+  className="flex items-center justify-center flex-shrink-0 bg-white dark:bg-slate-800"
   style={{
-    width: '44px',
-    height: '44px',
-    borderRadius: '14px',
-    background: provider.brandText 
-      ? `linear-gradient(135deg, ${provider.color} 0%, ${provider.color}CC 100%)`
-      : `${provider.color}15`,
-    color: provider.brandText ? 'white' : provider.color,
-    fontSize: provider.brandText 
-      ? (provider.brandText.length > 3 ? '11px' : '13px')
-      : '20px',
-    boxShadow: provider.brandText 
-      ? `0 4px 12px -4px ${provider.color}80`
-      : 'none'
+    width: '44px', height: '44px', borderRadius: '14px',
+    boxShadow: `0 4px 12px -4px rgba(0,0,0,0.1)`,
+    border: `1px solid var(--border-subtle)`,
+    padding: '6px'
   }}>
-  {provider.brandText || provider.icon}
+  {provider.logoUrl ? (
+    <img src={provider.logoUrl} alt={provider.name} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+  ) : (
+    <span style={{ fontSize: '20px' }}>{provider.icon}</span>
+  )}
 </div>
           
           <div className="min-w-0">
