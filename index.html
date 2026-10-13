@@ -14857,246 +14857,256 @@
               },
             );
 
-            const BankCard3D = memo(
-              ({ card, liveDebt, liveAvailable, onStatement, onEdit, onPay }) => {
-                const [flipped, setFlipped] = useState(false);
-                const themeClass =
-                  {
-                    silver: "bank-card-silver",
-                    gold: "bank-card-gold",
-                    black: "bank-card-black",
-                    blue: "bank-card-blue",
-                    platinum: "bank-card-silver",
-                    accent: "bank-card-accent",
-                    tainum: "bank-card-tainum",
-                    tainum_gray: "bank-card-tainum_gray",
-                  }[card.theme] || "bank-card-silver";
-                const isCredit = liveDebt < 0;
-                const [imageFailed, setImageFailed] = useState(false);
-                const getCardBgImage = () => {
-          if (imageFailed) return null;  // ✅ لو فشلت، ارجع للثيم
-          if (card.bank === "CIB" && card.name === "Titanium")
-            return `url(${LOGO_BASE_URL}CIBCARD.png)`;
-                  if (card.bank === "CIB" && card.name === "SWYPE")
-                    return `url(${LOGO_BASE_URL}swypecibcard.png)`;
-                  if (card.bank === "AAIB")
-                    return `url(${LOGO_BASE_URL}AAIBCard.jpg)`;
-                  if (card.bank === "ADIB Egypt")
-                    return `url(${LOGO_BASE_URL}ADIBSiqCard.jpeg)`;
-                  return null;
-                };
+const BankCard3D = memo(
+  ({ card, liveDebt, liveAvailable, onStatement, onEdit, onPay }) => {
+    const [flipped, setFlipped] = useState(false);
+    const [imageFailed, setImageFailed] = useState(false);
 
-                const bgImage = getCardBgImage();
-                return (
-                  <div className="space-y-3">
+    const themeClass =
+      {
+        silver: "bank-card-silver",
+        gold: "bank-card-gold",
+        black: "bank-card-black",
+        blue: "bank-card-blue",
+        platinum: "bank-card-silver",
+        accent: "bank-card-accent",
+        tainum: "bank-card-tainum",
+        tainum_gray: "bank-card-tainum_gray",
+      }[card.theme] || "bank-card-silver";
 
-                    {/* ✅ Perspective container — بيحيط الكارت ويدي عمق 3D */}
-      <div style={{ perspective: "1200px", width: "100%" }}>
-        <div
-          dir="ltr"
-          onClick={() => setFlipped(!flipped)}
-          className={`bank-card ${bgImage ? "" : themeClass}`}
-          style={{
-            backgroundImage: bgImage,
-            backgroundSize: "cover",
-            backgroundPosition: "center",
-            color: bgImage ? "#FFFFFF" : "inherit",
-            position: "relative",
-            cursor: "pointer",
-            transformStyle: "preserve-3d",
-            transition: "transform 0.6s cubic-bezier(0.16, 1, 0.3, 1)",
-            transform: flipped ? "rotateY(180deg)" : "rotateY(0deg)",
-            padding: 0,           // ⚠️ إلغاء padding الكلاس (هنحطه على كل وجه)
-            overflow: "visible",  // ⚠️ بدل hidden عشان الـ 3D مايتقصش
-          }}
-        >
-          {/* Overlay للصورة الخلفية (فوق الاتنين ومش بيلف) */}
-          {bgImage && (
+    const isCredit = liveDebt < 0;
+
+    const getCardBgImage = () => {
+      if (imageFailed) return null;
+      if (card.bank === "CIB" && card.name === "Titanium")
+        return `url(${LOGO_BASE_URL}CIBCARD.png)`;
+      if (card.bank === "CIB" && card.name === "SWYPE")
+        return `url(${LOGO_BASE_URL}swypecibcard.png)`;
+      if (card.bank === "AAIB") return `url(${LOGO_BASE_URL}AAIBCard.jpg)`;
+      if (card.bank === "ADIB Egypt")
+        return `url(${LOGO_BASE_URL}ADIBSiqCard.jpeg)`;
+      return null;
+    };
+
+    const bgImage = getCardBgImage();
+
+    useEffect(() => {
+      if (!bgImage) {
+        setImageFailed(false);
+        return;
+      }
+      const url = bgImage.slice(5, -2);
+      const img = new Image();
+      img.onerror = () => setImageFailed(true);
+      img.onload = () => setImageFailed(false);
+      img.src = url;
+    }, [bgImage]);
+
+    return (
+      <div className="space-y-3">
+        <div style={{ perspective: "1200px", width: "100%" }}>
+          <div
+            dir="ltr"
+            onClick={() => setFlipped(!flipped)}
+            className={`bank-card ${bgImage ? "" : themeClass}`}
+            style={{
+              backgroundImage: bgImage,
+              backgroundSize: "cover",
+              backgroundPosition: "center",
+              color: bgImage ? "#FFFFFF" : "inherit",
+              position: "relative",
+              cursor: "pointer",
+              transformStyle: "preserve-3d",
+              transition: "transform 0.6s cubic-bezier(0.16, 1, 0.3, 1)",
+              transform: flipped ? "rotateY(180deg)" : "rotateY(0deg)",
+              padding: 0,
+              overflow: "visible",
+            }}
+          >
+            {bgImage && (
+              <div
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  background:
+                    "linear-gradient(180deg, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.55) 100%)",
+                  pointerEvents: "none",
+                  borderRadius: "inherit",
+                }}
+              />
+            )}
+
+            <div
+              style={{
+                backfaceVisibility: "hidden",
+                WebkitBackfaceVisibility: "hidden",
+                padding: "20px",
+                minHeight: "180px",
+                display: "flex",
+                flexDirection: "column",
+                justifyContent: "space-between",
+                width: "100%",
+              }}
+            >
+              <div className="flex justify-between items-start">
+                <div>
+                  <span className="font-black text-sm uppercase tracking-wide">
+                    {card.bank}
+                  </span>
+                  <p className="text-[10px] font-bold opacity-70 mt-0.5">
+                    {card.name}
+                  </p>
+                </div>
+                <Wifi size={18} className="rotate-90 opacity-70" />
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="bank-card-chip"></div>
+                <span className="font-mono text-sm font-bold tracking-[0.2em] opacity-90">
+                  •••• •••• •••• {card.last4}
+                </span>
+              </div>
+              <div className="flex justify-between items-end text-[10px] font-bold">
+                <div>
+                  <div className="uppercase opacity-60 mb-0.5">Card Holder</div>
+                  <div className="tracking-wide text-xs">{card.holderName}</div>
+                </div>
+                <div className="text-right">
+                  <div className="uppercase opacity-60 mb-0.5">Expires</div>
+                  <div className="font-mono text-xs">{card.expiry}</div>
+                </div>
+              </div>
+            </div>
+
             <div
               style={{
                 position: "absolute",
                 inset: 0,
-                background:
-                  "linear-gradient(180deg, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.55) 100%)",
-                pointerEvents: "none",
-                borderRadius: "inherit",
+                backfaceVisibility: "hidden",
+                WebkitBackfaceVisibility: "hidden",
+                transform: "rotateY(180deg)",
+                padding: "20px",
+                minHeight: "180px",
+                display: "flex",
+                flexDirection: "column",
+                justifyContent: "center",
+                width: "100%",
               }}
-            />
-          )}
-
-          {/* ✅ الوجه الأمامي */}
-          <div
-            style={{
-              backfaceVisibility: "hidden",
-              WebkitBackfaceVisibility: "hidden",
-              padding: "20px",
-              minHeight: "180px",
-              display: "flex",
-              flexDirection: "column",
-              justifyContent: "space-between",
-              width: "100%",
-            }}
-          >
-            <div className="flex justify-between items-start">
-              <div>
-                <span className="font-black text-sm uppercase tracking-wide">
-                  {card.bank}
-                </span>
-                <p className="text-[10px] font-bold opacity-70 mt-0.5">
-                  {card.name}
-                </p>
+            >
+              <div
+                className="w-full h-10 rounded-md mb-4"
+                style={{ background: "rgba(0,0,0,0.5)" }}
+              />
+              <div className="flex justify-between items-center text-xs font-bold">
+                <span className="opacity-60">CVV</span>
+                <span className="font-mono tracking-widest">•••</span>
               </div>
-              <Wifi size={18} className="rotate-90 opacity-70" />
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="bank-card-chip"></div>
-              <span className="font-mono text-sm font-bold tracking-[0.2em] opacity-90">
-                •••• •••• •••• {card.last4}
-              </span>
-            </div>
-            <div className="flex justify-between items-end text-[10px] font-bold">
-              <div>
-                <div className="uppercase opacity-60 mb-0.5">Card Holder</div>
-                <div className="tracking-wide text-xs">{card.holderName}</div>
-              </div>
-              <div className="text-right">
-                <div className="uppercase opacity-60 mb-0.5">Expires</div>
-                <div className="font-mono text-xs">{card.expiry}</div>
-              </div>
+              <p className="text-[10px] opacity-60 mt-4 leading-relaxed">
+                هذه البطاقة صادرة من {card.bank}.
+              </p>
             </div>
           </div>
+        </div>
 
-          {/* ✅ الوجه الخلفي (مقلوب 180° وموضوع فوق الأمامي) */}
+        <div className="grid grid-cols-4 gap-2">
+          <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 text-center">
+            <p className="text-[9px] font-bold text-emerald-700 dark:text-emerald-400">
+              متاح
+            </p>
+            <p className="text-[11px] font-black text-emerald-600 money tabular">
+              {fmtShort(liveAvailable)}
+            </p>
+          </div>
           <div
-            style={{
-              position: "absolute",
-              inset: 0,
-              backfaceVisibility: "hidden",
-              WebkitBackfaceVisibility: "hidden",
-              transform: "rotateY(180deg)",
-              padding: "20px",
-              minHeight: "180px",
-              display: "flex",
-              flexDirection: "column",
-              justifyContent: "center",
-              width: "100%",
-            }}
+            className={`p-2 rounded-xl text-center ${isCredit ? "bg-emerald-50 dark:bg-emerald-950/30" : "bg-red-50 dark:bg-red-950/30"}`}
           >
-            <div
-              className="w-full h-10 rounded-md mb-4"
-              style={{ background: "rgba(0,0,0,0.5)" }}
-            />
-            <div className="flex justify-between items-center text-xs font-bold">
-              <span className="opacity-60">CVV</span>
-              <span className="font-mono tracking-widest">•••</span>
-            </div>
-            <p className="text-[10px] opacity-60 mt-4 leading-relaxed">
-              هذه البطاقة صادرة من {card.bank}.
+            <p
+              className={`text-[9px] font-bold ${isCredit ? "text-emerald-700 dark:text-emerald-400" : "text-red-700 dark:text-red-400"}`}
+            >
+              {isCredit ? "دائن" : "مديونية"}
+            </p>
+            <p
+              className={`text-[11px] font-black money tabular ${isCredit ? "text-emerald-600" : "text-red-600"}`}
+            >
+              {fmtShort(Math.abs(liveDebt))}
+            </p>
+          </div>
+          <div className="p-2 rounded-xl bg-blue-50 dark:bg-blue-950/30 text-center">
+            <p className="text-[9px] font-bold text-blue-700 dark:text-blue-400">
+              حد
+            </p>
+            <p className="text-[11px] font-black text-blue-600 money tabular">
+              {fmtShort(card.limit)}
+            </p>
+          </div>
+          <div className="p-2 rounded-xl bg-amber-50 dark:bg-amber-950/30 text-center">
+            <p className="text-[9px] font-bold text-amber-700 dark:text-amber-400">
+              كاش باك
+            </p>
+            <p className="text-[11px] font-black text-amber-600 money tabular">
+              {card.cashbackRate || 0}%
             </p>
           </div>
         </div>
+
+        <div className="flex gap-1.5">
+          {liveDebt > 0 && onPay && (
+            <button
+              onClick={onPay}
+              className="btn text-[11px] py-2 flex-1"
+              style={{
+                background: "linear-gradient(135deg, #635BFF 0%, #4A42E5 100%)",
+                color: "white",
+                boxShadow: "0 6px 16px -4px rgba(99,91,255,0.5)",
+              }}
+            >
+              <Banknote size={12} /> سداد
+            </button>
+          )}
+          <button
+            onClick={onStatement}
+            className="btn btn-secondary flex-1 text-[11px] py-2"
+          >
+            <FileSpreadsheet size={12} /> كشف
+          </button>
+          <button
+            onClick={onEdit}
+            className="btn btn-secondary text-[11px] py-2 px-3"
+          >
+            <Edit size={12} />
+          </button>
+        </div>
+
+        {Array.isArray(card.subCardLast4) && card.subCardLast4.length > 0 && (
+          <div className="flex gap-1 flex-wrap justify-center">
+            <span
+              className="text-[9px] font-bold self-center"
+              style={{ color: "var(--text-muted)" }}
+            >
+              فرعية:
+            </span>
+            {card.subCardLast4.map((s) => (
+              <span key={s} className="card-sub-badge">
+                •••• {s}
+              </span>
+            ))}
+          </div>
+        )}
+
+        {card.linkedAccountLast4 && (
+          <div className="flex gap-1 flex-wrap justify-center">
+            <span
+              className="text-[9px] font-bold self-center"
+              style={{ color: "var(--text-muted)" }}
+            >
+              مرتبط بحساب:
+            </span>
+            <span className="card-sub-badge">•••• {card.linkedAccountLast4}</span>
+          </div>
+        )}
       </div>
-                    <div className="grid grid-cols-4 gap-2">
-                      <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 text-center">
-                        <p className="text-[9px] font-bold text-emerald-700 dark:text-emerald-400">
-                          متاح
-                        </p>
-                        <p className="text-[11px] font-black text-emerald-600 money tabular">
-                          {fmtShort(liveAvailable)}
-                        </p>
-                      </div>
-                      <div
-                        className={`p-2 rounded-xl text-center ${isCredit ? "bg-emerald-50 dark:bg-emerald-950/30" : "bg-red-50 dark:bg-red-950/30"}`}
-                      >
-                        <p
-                          className={`text-[9px] font-bold ${isCredit ? "text-emerald-700 dark:text-emerald-400" : "text-red-700 dark:text-red-400"}`}
-                        >
-                          {isCredit ? "دائن" : "مديونية"}
-                        </p>
-                        <p
-                          className={`text-[11px] font-black money tabular ${isCredit ? "text-emerald-600" : "text-red-600"}`}
-                        >
-                          {fmtShort(Math.abs(liveDebt))}
-                        </p>
-                      </div>
-                      <div className="p-2 rounded-xl bg-blue-50 dark:bg-blue-950/30 text-center">
-                        <p className="text-[9px] font-bold text-blue-700 dark:text-blue-400">
-                          حد
-                        </p>
-                        <p className="text-[11px] font-black text-blue-600 money tabular">
-                          {fmtShort(card.limit)}
-                        </p>
-                      </div>
-                      <div className="p-2 rounded-xl bg-amber-50 dark:bg-amber-950/30 text-center">
-                        <p className="text-[9px] font-bold text-amber-700 dark:text-amber-400">
-                          كاش باك
-                        </p>
-                        <p className="text-[11px] font-black text-amber-600 money tabular">
-                          {card.cashbackRate || 0}%
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex gap-1.5">
-                      {liveDebt > 0 && onPay && (
-                        <button
-                          onClick={onPay}
-                          className="btn text-[11px] py-2 flex-1"
-                          style={{
-                            background:
-                              "linear-gradient(135deg, #635BFF 0%, #4A42E5 100%)",
-                            color: "white",
-                            boxShadow: "0 6px 16px -4px rgba(99,91,255,0.5)",
-                          }}
-                        >
-                          <Banknote size={12} /> سداد
-                        </button>
-                      )}
-                      <button
-                        onClick={onStatement}
-                        className="btn btn-secondary flex-1 text-[11px] py-2"
-                      >
-                        <FileSpreadsheet size={12} /> كشف
-                      </button>
-                      <button
-                        onClick={onEdit}
-                        className="btn btn-secondary text-[11px] py-2 px-3"
-                      >
-                        <Edit size={12} />
-                      </button>
-                    </div>
-                    {Array.isArray(card.subCardLast4) &&
-                      card.subCardLast4.length > 0 && (
-                        <div className="flex gap-1 flex-wrap justify-center">
-                          <span
-                            className="text-[9px] font-bold self-center"
-                            style={{ color: "var(--text-muted)" }}
-                          >
-                            فرعية:
-                          </span>
-                          {card.subCardLast4.map((s) => (
-                            <span key={s} className="card-sub-badge">
-                              •••• {s}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    {card.linkedAccountLast4 && (
-                      <div className="flex gap-1 flex-wrap justify-center">
-                        <span
-                          className="text-[9px] font-bold self-center"
-                          style={{ color: "var(--text-muted)" }}
-                        >
-                          مرتبط بحساب:
-                        </span>
-                        <span className="card-sub-badge">
-                          •••• {card.linkedAccountLast4}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                );
-              },
-            );
+    );
+  },
+);
             const ProviderItemRow = memo(
               ({ item, data, liveBalances, dispatch, onItemClick }) => {
                 const isCard = item.type === "card";
