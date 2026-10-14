@@ -3595,7 +3595,24 @@
                 return fallback;
               }
             };
-
+/* ✅ الإضافة الجديدة — دالة نسخ آمنة */
+const safeClone = (obj) => {
+  if (obj === null || obj === undefined) return obj;
+  try {
+    // المتصفحات الحديثة — أسرع وأدق من JSON
+    if (typeof structuredClone === "function") {
+      return structuredClone(obj);
+    }
+  } catch (e) {
+    // بعض الكائنات (functions, class instances) بتفشل مع structuredClone
+  }
+  try {
+    return JSON.parse(JSON.stringify(obj));
+  } catch (e) {
+    console.warn("safeClone: فشل النسخ، سيتم إرجاع المرجع الأصلي", e);
+    return obj;
+  }
+};
             const escapeHtml = (u) => {
               if (typeof u !== "string") return u;
               return u
