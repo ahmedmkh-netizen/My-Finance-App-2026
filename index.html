@@ -1062,116 +1062,56 @@
       .toast.toast-exiting {
         animation: toastOut 0.22s ease-in forwards;
       }
-      .bank-card {
-        border-radius: var(--r-xl);
-        padding: 20px;
-        min-height: 180px;
-        display: flex;
-        flex-direction: column;
-        justify-content: space-between;
+      /* ═══ الكارت البنكي الواقعي V88.4 ═══ */
+      .bank-card-real {
+        width: 100%;
+        height: 100%;
         position: relative;
+        border-radius: 18px;
         overflow: hidden;
-        box-shadow: var(--shadow-4);
-        transition: all 0.45s var(--ease);
-        cursor: pointer;
+        transform-style: preserve-3d;
+        will-change: transform;
+        user-select: none;
+        -webkit-user-select: none;
       }
-      .bank-card::before {
-        content: "";
-        position: absolute;
-        inset: 0;
-        background: linear-gradient(
-          135deg,
-          rgba(255, 255, 255, 0.15) 0%,
-          transparent 50%
-        );
-        pointer-events: none;
+
+      .bank-card-real.bank-card-silver {
+        background: linear-gradient(135deg, #E8ECF2 0%, #B8C2D3 50%, #8B96AB 100%);
+        color: #1E2B4A;
       }
-      .bank-card-chip {
-        width: 40px;
-        height: 30px;
-        background: linear-gradient(
-          135deg,
-          #f0d67a 0%,
-          #d97706 50%,
-          #b45309 100%
-        );
-        border-radius: 6px;
-        box-shadow:
-          inset 0 0 12px rgba(0, 0, 0, 0.25),
-          0 2px 4px rgba(0, 0, 0, 0.15);
-        position: relative;
-      }
-      .bank-card-chip::after {
-        content: "";
-        position: absolute;
-        inset: 6px 8px;
-        border: 1px solid rgba(0, 0, 0, 0.2);
-        border-radius: 2px;
-      }
-      .bank-card-silver {
-        background: linear-gradient(
-          135deg,
-          #e8ecf2 0%,
-          #b8c2d3 50%,
-          #8b96ab 100%
-        );
-        color: #1e2b4a;
-      }
-      .bank-card-black {
-        background: linear-gradient(
-          135deg,
-          #0a1628 0%,
-          #1e2b4a 60%,
-          #000000 100%
-        );
-        color: #f8fafc;
-      }
-      .bank-card-gold {
-        background: linear-gradient(
-          135deg,
-          #f2d57e 0%,
-          #d97706 50%,
-          #b45309 100%
-        );
-        color: #ffffff;
-      }
-      .bank-card-blue {
-        background: linear-gradient(
-          135deg,
-          #6b8fdc 0%,
-          #3b6fd4 50%,
-          #1e40af 100%
-        );
-        color: #ffffff;
-      }
-      .bank-card-accent {
-        background: linear-gradient(
-          135deg,
-          #8b84ff 0%,
-          #635bff 50%,
-          #4a42e5 100%
-        );
-        color: #ffffff;
-      }
-      .bank-card-tainum {
-        background: linear-gradient(
-          135deg,
-          #1e40af 0%,
-          #d97706 50%,
-          #1e40af 100%
-        );
-        color: #ffffff;
-      }
-      .bank-card-tainum_gray {
+      .bank-card-real.bank-card-black {
         background:
-          radial-gradient(
-            circle at 72% 45%,
-            rgba(255, 255, 255, 0.06) 0%,
-            transparent 42%
-          ),
-          linear-gradient(135deg, #4a5568 0%, #2d3748 50%, #1a202c 100%);
-        color: #ffffff;
-        position: relative;
+          radial-gradient(circle at 30% 20%, rgba(99,91,255,0.15) 0%, transparent 40%),
+          linear-gradient(135deg, #0A1628 0%, #1E2B4A 60%, #000 100%);
+        color: #F8FAFC;
+      }
+      .bank-card-real.bank-card-gold {
+        background:
+          radial-gradient(circle at 70% 20%, rgba(255,255,255,0.25) 0%, transparent 40%),
+          linear-gradient(135deg, #F2D57E 0%, #D97706 50%, #B45309 100%);
+        color: #fff;
+      }
+      .bank-card-real.bank-card-blue {
+        background:
+          radial-gradient(circle at 30% 80%, rgba(255,255,255,0.15) 0%, transparent 40%),
+          linear-gradient(135deg, #6B8FDC 0%, #3B6FD4 50%, #1E40AF 100%);
+        color: #fff;
+      }
+      .bank-card-real.bank-card-accent {
+        background:
+          radial-gradient(circle at 70% 30%, rgba(255,255,255,0.2) 0%, transparent 40%),
+          linear-gradient(135deg, #8B84FF 0%, #635BFF 50%, #4A42E5 100%);
+        color: #fff;
+      }
+      .bank-card-real.bank-card-tainum {
+        background: linear-gradient(135deg, #1E40AF 0%, #D97706 50%, #1E40AF 100%);
+        color: #fff;
+      }
+      .bank-card-real.bank-card-tainum_gray {
+        background:
+          radial-gradient(circle at 72% 45%, rgba(255,255,255,0.08) 0%, transparent 45%),
+          linear-gradient(135deg, #4A5568 0%, #2D3748 50%, #1A202C 100%);
+        color: #fff;
       }
       .tx-item {
         display: flex;
@@ -14921,10 +14861,13 @@
             );
 
 
-      const BankCard3D = memo(
+const BankCard3D = memo(
   ({ card, liveDebt, liveAvailable, onStatement, onEdit, onPay }) => {
+    const cardRef = useRef(null);
     const [flipped, setFlipped] = useState(false);
     const [imageFailed, setImageFailed] = useState(false);
+    const [tilt, setTilt] = useState({ x: 0, y: 0 });
+    const [shine, setShine] = useState({ x: 50, y: 50, opacity: 0 });
 
     const themeClass =
       {
@@ -14940,17 +14883,17 @@
 
     const isCredit = liveDebt < 0;
 
-const getCardBgImage = () => {
-  if (imageFailed) return null;
-  if (card.bank === "CIB" && card.name === "Titanium")
-    return `${LOGO_BASE_URL}CIBCARD.png`;
-  if (card.bank === "CIB" && card.name === "SWYPE")
-    return `${LOGO_BASE_URL}swypecibcard.png`;
-  if (card.bank === "AAIB") return `${LOGO_BASE_URL}AAIBCard.jpg`;
-  if (card.bank === "ADIB Egypt")
-    return `${LOGO_BASE_URL}ADIBSiqCard.jpeg`;
-  return null;
-};
+    const getCardBgImage = () => {
+      if (imageFailed) return null;
+      if (card.bank === "CIB" && card.name === "Titanium")
+        return `${LOGO_BASE_URL}CIBCARD.png`;
+      if (card.bank === "CIB" && card.name === "SWYPE")
+        return `${LOGO_BASE_URL}swypecibcard.png`;
+      if (card.bank === "AAIB") return `${LOGO_BASE_URL}AAIBCard.jpg`;
+      if (card.bank === "ADIB Egypt")
+        return `${LOGO_BASE_URL}ADIBSiqCard.jpeg`;
+      return null;
+    };
 
     const bgImage = getCardBgImage();
 
@@ -14965,17 +14908,44 @@ const getCardBgImage = () => {
       img.src = bgImage;
     }, [bgImage]);
 
+    const handleMove = (clientX, clientY) => {
+      if (!cardRef.current) return;
+      const rect = cardRef.current.getBoundingClientRect();
+      const x = (clientX - rect.left) / rect.width;
+      const y = (clientY - rect.top) / rect.height;
+      const tiltX = (0.5 - y) * 25;
+      const tiltY = (x - 0.5) * 30;
+      setTilt({ x: tiltX, y: tiltY });
+      setShine({ x: x * 100, y: y * 100, opacity: 1 });
+    };
+
+    const handleLeave = () => {
+      setTilt({ x: 0, y: 0 });
+      setShine((s) => ({ ...s, opacity: 0 }));
+    };
+
+    const onMouseMove = (e) => handleMove(e.clientX, e.clientY);
+    const onTouchMove = (e) => {
+      if (e.touches[0]) handleMove(e.touches[0].clientX, e.touches[0].clientY);
+    };
+
     return (
-      <div className="space-y-3">
-        {/* الكارت - نسبة 1.586:1 */}
+      <div className="space-y-3 w-full px-2">
         <div
           style={{
-            perspective: "1400px",
+            perspective: "1600px",
             width: "100%",
+            maxWidth: "300px",
+            margin: "0 auto",
             aspectRatio: "1.586 / 1",
           }}
+          onMouseMove={onMouseMove}
+          onMouseLeave={handleLeave}
+          onTouchMove={onTouchMove}
+          onTouchEnd={handleLeave}
         >
           <div
+            ref={cardRef}
             dir="ltr"
             onClick={() => setFlipped(!flipped)}
             className={`bank-card-real ${bgImage ? "" : themeClass}`}
@@ -14983,14 +14953,14 @@ const getCardBgImage = () => {
               position: "relative",
               width: "100%",
               height: "100%",
-              borderRadius: "16px",
+              borderRadius: "18px",
               overflow: "hidden",
               cursor: "pointer",
               transformStyle: "preserve-3d",
-              transition: "transform 0.7s cubic-bezier(0.16, 1, 0.3, 1)",
-              transform: flipped ? "rotateY(180deg)" : "rotateY(0deg)",
+              transform: `rotateX(${tilt.x}deg) rotateY(${flipped ? 180 : 0}deg)`,
+              transition: "transform 0.4s cubic-bezier(0.16, 1, 0.3, 1)",
               boxShadow:
-                "0 20px 40px -12px rgba(10,22,40,0.45), 0 8px 16px -8px rgba(10,22,40,0.3)",
+                "0 24px 48px -16px rgba(10,22,40,0.5), 0 12px 24px -12px rgba(10,22,40,0.35), 0 0 0 1px rgba(255,255,255,0.08) inset",
             }}
           >
             {/* الوجه الأمامي */}
@@ -15012,7 +14982,7 @@ const getCardBgImage = () => {
                     position: "absolute",
                     inset: 0,
                     background:
-                      "linear-gradient(135deg, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.05) 40%, rgba(0,0,0,0.55) 100%)",
+                      "linear-gradient(135deg, rgba(0,0,0,0.2) 0%, rgba(0,0,0,0.05) 45%, rgba(0,0,0,0.65) 100%)",
                     pointerEvents: "none",
                   }}
                 />
@@ -15021,12 +14991,24 @@ const getCardBgImage = () => {
               <div
                 style={{
                   position: "absolute",
+                  inset: 0,
+                  background: `radial-gradient(circle at ${shine.x}% ${shine.y}%, rgba(255,255,255,0.35) 0%, rgba(255,255,255,0.05) 30%, transparent 60%)`,
+                  opacity: shine.opacity,
+                  transition: "opacity 0.3s ease",
+                  pointerEvents: "none",
+                  mixBlendMode: "overlay",
+                }}
+              />
+
+              <div
+                style={{
+                  position: "absolute",
                   top: 0,
                   left: 0,
                   right: 0,
-                  height: "55%",
+                  height: "50%",
                   background:
-                    "linear-gradient(180deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 100%)",
+                    "linear-gradient(180deg, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0) 100%)",
                   pointerEvents: "none",
                 }}
               />
@@ -15035,12 +15017,13 @@ const getCardBgImage = () => {
                 style={{
                   position: "relative",
                   height: "100%",
-                  padding: "8%",
+                  padding: "7% 8%",
                   display: "flex",
                   flexDirection: "column",
                   justifyContent: "space-between",
                   color: "#FFFFFF",
-                  textShadow: "0 1px 3px rgba(0,0,0,0.5)",
+                  textShadow: "0 1px 4px rgba(0,0,0,0.55)",
+                  transform: "translateZ(30px)",
                 }}
               >
                 <div
@@ -15053,7 +15036,7 @@ const getCardBgImage = () => {
                   <div>
                     <div
                       style={{
-                        fontSize: "clamp(14px, 4vw, 20px)",
+                        fontSize: "clamp(13px, 3.6vw, 17px)",
                         fontWeight: 900,
                         letterSpacing: "0.05em",
                         textTransform: "uppercase",
@@ -15063,7 +15046,7 @@ const getCardBgImage = () => {
                     </div>
                     <div
                       style={{
-                        fontSize: "clamp(9px, 2.2vw, 11px)",
+                        fontSize: "clamp(8px, 2vw, 10px)",
                         fontWeight: 700,
                         opacity: 0.85,
                         marginTop: "2px",
@@ -15075,16 +15058,16 @@ const getCardBgImage = () => {
                     </div>
                   </div>
                   <svg
-                    width="28"
-                    height="28"
+                    width="22"
+                    height="22"
                     viewBox="0 0 24 24"
                     fill="none"
-                    style={{ opacity: 0.85, transform: "rotate(90deg)" }}
+                    style={{ opacity: 0.9 }}
                   >
                     <path
                       d="M6 8a8 8 0 0 1 0 8M9 6a12 12 0 0 1 0 12M3 10a4 4 0 0 1 0 4"
                       stroke="white"
-                      strokeWidth="2"
+                      strokeWidth="2.2"
                       strokeLinecap="round"
                     />
                   </svg>
@@ -15094,38 +15077,48 @@ const getCardBgImage = () => {
                   style={{
                     display: "flex",
                     alignItems: "center",
-                    gap: "14px",
+                    gap: "12px",
                   }}
                 >
                   <div
                     style={{
-                      width: "clamp(38px, 10vw, 48px)",
-                      height: "clamp(28px, 7.5vw, 36px)",
-                      borderRadius: "6px",
+                      width: "clamp(34px, 9vw, 42px)",
+                      height: "clamp(26px, 6.8vw, 32px)",
+                      borderRadius: "5px",
                       background:
-                        "linear-gradient(135deg, #F0D67A 0%, #D4AF37 30%, #B8860B 60%, #F0D67A 100%)",
+                        "linear-gradient(135deg, #F5DE8A 0%, #D4AF37 25%, #B8860B 55%, #F0D67A 100%)",
                       position: "relative",
                       boxShadow:
-                        "inset 0 0 8px rgba(0,0,0,0.3), 0 2px 4px rgba(0,0,0,0.3)",
+                        "inset 0 0 6px rgba(0,0,0,0.35), 0 1px 3px rgba(0,0,0,0.4)",
                       flexShrink: 0,
                     }}
                   >
                     <div
                       style={{
                         position: "absolute",
-                        inset: "20% 15%",
-                        border: "1px solid rgba(0,0,0,0.25)",
-                        borderRadius: "3px",
+                        inset: "18% 14%",
+                        border: "1px solid rgba(0,0,0,0.28)",
+                        borderRadius: "2px",
                       }}
                     />
                     <div
                       style={{
                         position: "absolute",
                         top: "50%",
-                        left: "15%",
-                        right: "15%",
+                        left: "14%",
+                        right: "14%",
                         height: "1px",
-                        background: "rgba(0,0,0,0.25)",
+                        background: "rgba(0,0,0,0.28)",
+                      }}
+                    />
+                    <div
+                      style={{
+                        position: "absolute",
+                        bottom: "18%",
+                        left: "14%",
+                        right: "14%",
+                        height: "1px",
+                        background: "rgba(0,0,0,0.2)",
                       }}
                     />
                   </div>
@@ -15133,9 +15126,9 @@ const getCardBgImage = () => {
                   <div
                     style={{
                       fontFamily: "'JetBrains Mono', monospace",
-                      fontSize: "clamp(13px, 3.6vw, 18px)",
+                      fontSize: "clamp(12px, 3.2vw, 16px)",
                       fontWeight: 700,
-                      letterSpacing: "0.15em",
+                      letterSpacing: "0.12em",
                       whiteSpace: "nowrap",
                     }}
                   >
@@ -15148,14 +15141,14 @@ const getCardBgImage = () => {
                     display: "flex",
                     justifyContent: "space-between",
                     alignItems: "flex-end",
-                    gap: "12px",
+                    gap: "10px",
                   }}
                 >
                   <div style={{ minWidth: 0, flex: 1 }}>
                     <div
                       style={{
-                        fontSize: "clamp(7px, 1.8vw, 9px)",
-                        opacity: 0.7,
+                        fontSize: "clamp(6px, 1.6vw, 8px)",
+                        opacity: 0.75,
                         letterSpacing: "0.15em",
                         textTransform: "uppercase",
                         marginBottom: "2px",
@@ -15165,7 +15158,7 @@ const getCardBgImage = () => {
                     </div>
                     <div
                       style={{
-                        fontSize: "clamp(10px, 2.6vw, 13px)",
+                        fontSize: "clamp(9px, 2.4vw, 12px)",
                         fontWeight: 700,
                         letterSpacing: "0.08em",
                         whiteSpace: "nowrap",
@@ -15179,8 +15172,8 @@ const getCardBgImage = () => {
                   <div style={{ textAlign: "right", flexShrink: 0 }}>
                     <div
                       style={{
-                        fontSize: "clamp(7px, 1.8vw, 9px)",
-                        opacity: 0.7,
+                        fontSize: "clamp(6px, 1.6vw, 8px)",
+                        opacity: 0.75,
                         letterSpacing: "0.15em",
                         textTransform: "uppercase",
                         marginBottom: "2px",
@@ -15191,7 +15184,7 @@ const getCardBgImage = () => {
                     <div
                       style={{
                         fontFamily: "'JetBrains Mono', monospace",
-                        fontSize: "clamp(11px, 2.8vw, 13px)",
+                        fontSize: "clamp(10px, 2.6vw, 12px)",
                         fontWeight: 700,
                       }}
                     >
@@ -15213,7 +15206,7 @@ const getCardBgImage = () => {
                 background:
                   "linear-gradient(135deg, #1E2B4A 0%, #0A1628 100%)",
                 color: "#FFFFFF",
-                padding: "8%",
+                padding: "7% 8%",
                 display: "flex",
                 flexDirection: "column",
                 justifyContent: "center",
@@ -15222,7 +15215,7 @@ const getCardBgImage = () => {
               <div
                 style={{
                   position: "absolute",
-                  top: "14%",
+                  top: "12%",
                   left: 0,
                   right: 0,
                   height: "18%",
@@ -15231,10 +15224,10 @@ const getCardBgImage = () => {
               />
               <div
                 style={{
-                  marginTop: "30%",
-                  background: "rgba(255,255,255,0.92)",
+                  marginTop: "28%",
+                  background: "rgba(255,255,255,0.94)",
                   borderRadius: "4px",
-                  padding: "6px 10px",
+                  padding: "5px 10px",
                   display: "flex",
                   justifyContent: "space-between",
                   alignItems: "center",
@@ -15244,8 +15237,9 @@ const getCardBgImage = () => {
                   style={{
                     fontFamily: "'JetBrains Mono', monospace",
                     color: "#0A1628",
-                    fontSize: "11px",
+                    fontSize: "10px",
                     fontWeight: 700,
+                    fontStyle: "italic",
                   }}
                 >
                   Authorized Signature
@@ -15254,7 +15248,7 @@ const getCardBgImage = () => {
                   style={{
                     fontFamily: "'JetBrains Mono', monospace",
                     color: "#0A1628",
-                    fontSize: "13px",
+                    fontSize: "12px",
                     fontWeight: 900,
                     letterSpacing: "2px",
                   }}
@@ -15264,21 +15258,19 @@ const getCardBgImage = () => {
               </div>
               <div
                 style={{
-                  marginTop: "10px",
-                  fontSize: "9px",
+                  marginTop: "8px",
+                  fontSize: "8px",
                   opacity: 0.7,
-                  lineHeight: 1.6,
+                  lineHeight: 1.5,
                 }}
               >
-                هذه البطاقة صادرة من {card.bank}. استخدامها يعني موافقتك على
-                الشروط والأحكام.
+                صادرة من {card.bank}. الاستخدام يعني موافقتك على الشروط.
               </div>
             </div>
           </div>
         </div>
 
-        {/* الإحصائيات */}
-        <div className="grid grid-cols-4 gap-2">
+        <div className="grid grid-cols-4 gap-2 max-w-[300px] mx-auto">
           <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 text-center">
             <p className="text-[9px] font-bold text-emerald-700 dark:text-emerald-400">
               متاح
@@ -15319,8 +15311,7 @@ const getCardBgImage = () => {
           </div>
         </div>
 
-        {/* الأزرار */}
-        <div className="flex gap-1.5">
+        <div className="flex gap-1.5 max-w-[300px] mx-auto">
           {liveDebt > 0 && onPay && (
             <button
               onClick={onPay}
@@ -15350,7 +15341,7 @@ const getCardBgImage = () => {
         </div>
 
         {Array.isArray(card.subCardLast4) && card.subCardLast4.length > 0 && (
-          <div className="flex gap-1 flex-wrap justify-center">
+          <div className="flex gap-1 flex-wrap justify-center max-w-[300px] mx-auto">
             <span
               className="text-[9px] font-bold self-center"
               style={{ color: "var(--text-muted)" }}
@@ -15366,16 +15357,14 @@ const getCardBgImage = () => {
         )}
 
         {card.linkedAccountLast4 && (
-          <div className="flex gap-1 flex-wrap justify-center">
+          <div className="flex gap-1 flex-wrap justify-center max-w-[300px] mx-auto">
             <span
               className="text-[9px] font-bold self-center"
               style={{ color: "var(--text-muted)" }}
             >
               مرتبط بحساب:
             </span>
-            <span className="card-sub-badge">
-              •••• {card.linkedAccountLast4}
-            </span>
+            <span className="card-sub-badge">•••• {card.linkedAccountLast4}</span>
           </div>
         )}
       </div>
