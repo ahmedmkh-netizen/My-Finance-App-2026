@@ -14342,7 +14342,736 @@ const PinLockScreen = memo(({ onSuccess, onLogout }) => {
     </div>
   );
 });
+/* ═══════════════════════════════════════════════════════════════════
+   DUPLICATE DETECTION — كاشف التكرار
+   ═══════════════════════════════════════════════════════════════════ */
+const DuplicateDetectionSystem = memo(function DuplicateDetectionSystem({
+  transactions, data, dispatch, addNotification, saveHistory, onBulkDelete,
+}) {
+  const [threshold, setThreshold] = useState(2);
+  const [selectedMonth, setSelectedMonth] = useState("all");
+  const [expandedGroups, setExpandedGroups] = useState({});
 
+  const duplicates = useMemo(() => {
+    const map = {};
+    const filtered = selectedMonth === "all"
+      ? transactions
+      : transactions.filter((t) => {
+          const parsed = parseMonthKey(selectedMonth);
+          if (!parsed) return t.month === selectedMonth;
+          return t.month === parsed.month && (t.year || 2026) === parsed.year;
+        });
+
+    filtered.forEach((t) => {
+      if (t.method === HANY_TAB_METHOD || isCarryoverMarker(t) || isHanySettleTx(t)) return;
+      const key = `${safeNumber(t.amount)}_${t.method}_${t.category}_${(t.date || "").slice(0, 10)}`;
+      if (!map[key]) map[key] = [];
+      map[key].push(t);
+    });
+
+    return Object.entries(map)
+      .filter(([_, items]) => items.length >= threshold)
+      .map(([key, items]) => {
+        const sortedItems = [...items].sort(compareTransactions);
+        return {
+          key,
+          amount: items[0].amount,
+          count: items.length,
+          items: sortedItems,
+          category: items[0].category,
+          risk: items.length >= 5 ? "high" : items.length >= 3 ? "medium" : "low",
+        };
+      });
+  }, [transactions, threshold, selectedMonth]);
+
+  const doDelete = (ids) => {
+    if (!onBulkDelete || !ids?.length) return;
+    dispatch({
+      type: "SHOW_CONFIRM",
+      danger: true,
+      title: "تأكيد الحذف",
+      message: `سيتم نقل ${ids.length} عملية للأرشيف.`,
+      onConfirm: () => {
+        onBulkDelete(ids);
+        dispatch({ type: "HIDE_CONFIRM" });
+      },
+      onCancel: () => dispatch({ type: "HIDE_CONFIRM" }),
+    });
+  };
+
+  const handleDeleteAll = () => {
+    const idsToDelete = [];
+    duplicates.forEach((d) => {
+      d.items.slice(1).forEach((item) => {
+        if (!isMonthClosed(data, item.year || 2026, item.month)) idsToDelete.push(item.id);
+      });
+    });
+    if (idsToDelete.length === 0) {
+      addNotification({ type: "info", title: "لا يوجد للتكرار" });
+      return;
+    }
+    doDelete(idsToDelete);
+  };
+
+  const deleteSingle = (item) => {
+    if (isMonthClosed(data, item.year || 2026, item.month)) {
+      addNotification({ type: "error", title: "محظور — الشهر مغلق" });
+      return;
+    }
+    doDelete([item.id]);
+  };
+
+  return (
+    <div className="animate-fadeIn" style={{ paddingBottom: 24 }}>
+      <div className="card">
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+          <div>
+            <h2 style={{ fontSize: 16, fontWeight: 900, display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+              <Filter size={18} style={{ color: "var(--brand)" }} />
+              كاشف التكرار
+            </h2>
+            <p style={{ fontSize: 11, color: "var(--text-muted)", margin: 0 }}>
+              {threshold}+ تكرار بنفس المبلغ والطريقة والتاريخ
+            </p>
+          </div>
+          <button
+            onClick={handleDeleteAll}
+            disabled={duplicates.length === 0}
+            className={`btn ${duplicates.length === 0 ? "btn-secondary" : "btn-primary"}`}
+            style={{ fontSize: 11, padding: "8px 14px" }}
+          >
+            <Trash2 size={12} /> تنظيف الكل
+          </button>
+        </div>
+      </div>
+
+      <div className="card" style={{ marginTop: 12, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+        <div>
+          <label style={{ fontSize: 11, fontWeight: 800, color: "var(--text-muted)", display: "block", marginBottom: 6 }}>
+            نطاق البحث
+          </label>
+          <select
+            className="input-field"
+            style={{ fontSize: 12, padding: "10px 12px" }}
+            value={selectedMonth}
+            onChange={(e) => setSelectedMonth(e.target.value)}
+          >
+            <option value="all">جميع الشهور</option>
+            {YEARS_LIST.flatMap((y) =>
+              getMonthsForYear(y).map((m) => (
+                <option key={makeMonthKey(y, m)} value={makeMonthKey(y, m)}>
+                  {m} {y}
+                </option>
+              )),
+            )}
+          </select>
+        </div>
+        <div>
+          <label style={{ fontSize: 11, fontWeight: 800, color: "var(--text-muted)", display: "block", marginBottom: 6 }}>
+            الحساسية: {threshold}
+          </label>
+          <input
+            type="range"
+            min="2"
+            max="10"
+            className="w-full"
+            style={{ accentColor: "var(--brand)", width: "100%", marginTop: 8 }}
+            value={threshold}
+            onChange={(e) => setThreshold(Number(e.target.value))}
+          />
+        </div>
+      </div>
+
+      {duplicates.length === 0 ? (
+        <div className="card" style={{ marginTop: 12 }}>
+          <EmptyState icon={CheckCircle2} title="ممتاز! لا توجد تكرارات" size="lg" />
+        </div>
+      ) : (
+        <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 10 }}>
+          {duplicates.map((dup) => {
+            const isOpen = expandedGroups[dup.key];
+            const riskColor = dup.risk === "high" ? "var(--negative)" : dup.risk === "medium" ? "var(--warning)" : "var(--brand)";
+            return (
+              <div key={dup.key} className="card" style={{ padding: 0, overflow: "hidden" }}>
+                <div
+                  onClick={() => setExpandedGroups((p) => ({ ...p, [dup.key]: !p[dup.key] }))}
+                  style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: 14, cursor: "pointer" }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                    <div style={{ width: 40, height: 40, borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", background: `${riskColor}20`, color: riskColor }}>
+                      <Repeat size={18} />
+                    </div>
+                    <div>
+                      <p className="money" style={{ fontWeight: 900, fontSize: 14, margin: 0 }}>
+                        {fmt(dup.amount)} ج.م
+                      </p>
+                      <p style={{ fontSize: 10, color: "var(--text-muted)", margin: "3px 0 0", fontWeight: 700 }}>
+                        {dup.category} • {dup.count} مرات
+                      </p>
+                    </div>
+                  </div>
+                  <ChevronDown
+                    size={16}
+                    style={{
+                      color: "var(--text-muted)",
+                      transform: isOpen ? "rotate(180deg)" : "none",
+                      transition: "transform 0.2s ease",
+                    }}
+                  />
+                </div>
+                {isOpen && (
+                  <div style={{ padding: "0 14px 14px", borderTop: "1px solid var(--border)", paddingTop: 12 }}>
+                    {dup.items.map((item, idx) => (
+                      <div
+                        key={item.id}
+                        style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: 10, borderRadius: 12, background: "var(--bg-muted)", marginBottom: 6 }}
+                      >
+                        <div style={{ fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                          <span>{item.date}</span>
+                          <span style={{ color: "var(--text-muted)" }}>•</span>
+                          <span>{item.description || "بدون وصف"}</span>
+                          {idx === 0 && <Badge variant="positive" size="xs">الأحدث — محفوظ</Badge>}
+                        </div>
+                        {idx !== 0 && (
+                          <button
+                            onClick={() => deleteSingle(item)}
+                            style={{ background: "var(--negative-soft)", color: "var(--negative)", border: "none", borderRadius: 8, padding: 6, cursor: "pointer", display: "flex" }}
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+});
+
+/* ═══════════════════════════════════════════════════════════════════
+   DATA HEALTH VIEW — صحة البيانات
+   ═══════════════════════════════════════════════════════════════════ */
+const checkDataIntegrity = (data, transactions, cards, updatedLoans, liveBalances) => {
+  const issues = [];
+  const now = Date.now();
+  const dayMs = 24 * 60 * 60 * 1000;
+
+  const oldPending = transactions.filter((t) => {
+    if (t.status === "paid") return false;
+    if (isCarryoverMarker(t)) return false;
+    const d = parseISODate(t.date);
+    return d && now - d.getTime() > 30 * dayMs;
+  });
+  if (oldPending.length > 0) {
+    issues.push({
+      severity: "warning",
+      title: `${oldPending.length} معاملة معلقة قديمة (+30 يوم)`,
+      description: "يفضل اعتمادها أو ترحيلها",
+      action: "transactions",
+    });
+  }
+
+  const multiCarried = transactions.filter((t) => (t.carryCount || 0) >= 2);
+  if (multiCarried.length > 0) {
+    issues.push({
+      severity: "warning",
+      title: `${multiCarried.length} قيد مرحّل أكثر من مرتين`,
+      description: "يجب معالجتها قبل أن تتكرر للأبد",
+    });
+  }
+
+  const orphans = findOrphanTransfers(transactions);
+  if (orphans.length > 0) {
+    issues.push({
+      severity: "danger",
+      title: `${orphans.length} تحويل يتيم`,
+      description: "قيد واحد فقط موجود من تحويل مزدوج",
+    });
+  }
+
+  const staleAccounts = ACCOUNT_KEYS.filter((k) => {
+    const lastUpd = data.accountsData?.[k]?.initialDate || data.accountsData?.[k]?.lastUpdated;
+    if (!lastUpd) return true;
+    const d = parseISODate(lastUpd);
+    return d && now - d.getTime() > 30 * dayMs;
+  });
+  if (staleAccounts.length > 0) {
+    issues.push({
+      severity: "info",
+      title: `${staleAccounts.length} حساب لم يُحدّث من 30+ يوم`,
+      description: staleAccounts.map((k) => ACCOUNT_SHORT_NAMES[k]).join("، "),
+    });
+  }
+
+  const overusedCards = cards.filter((c) => {
+    const debt = computeCardDebt(data, c);
+    const limit = safeNumber(c.limit);
+    return limit > 0 && debt / limit > 0.8;
+  });
+  if (overusedCards.length > 0) {
+    issues.push({
+      severity: "warning",
+      title: `${overusedCards.length} بطاقة استُخدمت أكثر من 80%`,
+      description: overusedCards.map((c) => `${c.bank} ${c.name}`).join("، "),
+    });
+  }
+
+  const negativeAccounts = ACCOUNT_KEYS.filter((k) => safeNumber(liveBalances[k]) < 0);
+  if (negativeAccounts.length > 0) {
+    issues.push({
+      severity: "danger",
+      title: `${negativeAccounts.length} حساب برصيد سالب`,
+      description: negativeAccounts.map((k) => ACCOUNT_SHORT_NAMES[k]).join("، "),
+    });
+  }
+
+  const penalties = { danger: 25, warning: 10, info: 3 };
+  const totalPenalty = issues.reduce((s, i) => s + (penalties[i.severity] || 0), 0);
+  const score = Math.max(0, 100 - totalPenalty);
+  return { issues, score };
+};
+
+const DataHealthView = memo(function DataHealthView({
+  data, transactions, cards, updatedLoans, liveBalances, dispatch,
+}) {
+  const { issues, score } = useMemo(
+    () => checkDataIntegrity(data, transactions, cards, updatedLoans, liveBalances),
+    [data, transactions, cards, updatedLoans, liveBalances],
+  );
+
+  const scoreColor = score >= 80 ? "var(--positive)" : score >= 50 ? "var(--warning)" : "var(--negative)";
+
+  return (
+    <div className="animate-fadeIn" style={{ paddingBottom: 24 }}>
+      <div className="card">
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+          <h2 style={{ fontSize: 16, fontWeight: 900, display: "flex", alignItems: "center", gap: 8, margin: 0 }}>
+            <ShieldCheck size={18} style={{ color: "var(--brand)" }} />
+            صحة البيانات
+          </h2>
+          <Badge variant={score >= 80 ? "positive" : score >= 50 ? "warning" : "negative"} size="md">
+            <span className="money">{score}%</span>
+          </Badge>
+        </div>
+        <div style={{ height: 8, borderRadius: 999, overflow: "hidden", background: "var(--bg-muted)" }}>
+          <div style={{
+            width: `${score}%`, height: "100%",
+            background: scoreColor, transition: "width 0.5s ease",
+          }} />
+        </div>
+        <p style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 8, marginBottom: 0 }}>
+          {score === 100 ? "✨ كل شيء ممتاز!" : `${issues.length} مشكلة تحتاج انتباهك`}
+        </p>
+      </div>
+
+      {issues.length === 0 ? (
+        <div className="card" style={{ marginTop: 12 }}>
+          <EmptyState
+            icon={CheckCircle2}
+            title="بياناتك سليمة 100%"
+            message="لا توجد مشاكل حسابية حالياً"
+            size="lg"
+          />
+        </div>
+      ) : (
+        <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 10 }}>
+          {issues.map((issue, idx) => {
+            const sevColor = issue.severity === "danger" ? "var(--negative)"
+              : issue.severity === "warning" ? "var(--warning)" : "var(--brand)";
+            const Icon = issue.severity === "danger" ? AlertTriangle
+              : issue.severity === "warning" ? AlertCircle : Info;
+            return (
+              <div key={idx} className="card" style={{ padding: 14, borderRightWidth: 4, borderRightColor: sevColor }}>
+                <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+                  <div style={{ width: 36, height: 36, borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", background: `${sevColor}20`, color: sevColor, flexShrink: 0 }}>
+                    <Icon size={16} />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <h4 style={{ fontSize: 12, fontWeight: 900, marginBottom: 4, margin: 0 }}>{issue.title}</h4>
+                    {issue.description && (
+                      <p style={{ fontSize: 10, color: "var(--text-muted)", lineHeight: 1.6, margin: "4px 0 0" }}>
+                        {issue.description}
+                      </p>
+                    )}
+                    {issue.action && (
+                      <button
+                        onClick={() => dispatch({ type: "SET_ACTIVE_TAB", payload: issue.action })}
+                        className="btn btn-secondary"
+                        style={{ fontSize: 10, padding: "6px 12px", marginTop: 8 }}
+                      >
+                        اذهب ←
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+});
+
+/* ═══════════════════════════════════════════════════════════════════
+   DELETED ARCHIVE VIEW — السجل والتدقيق
+   ═══════════════════════════════════════════════════════════════════ */
+const DeletedArchiveView = memo(function DeletedArchiveView({
+  data, dispatch, saveHistory, addNotification, transactions,
+}) {
+  const archive = data?.deletedTxArchive || [];
+  const pendingRequests = useMemo(
+    () => (data?.deleteRequests || []).filter((r) => r && r.status === "pending" && r.txSnapshot),
+    [data?.deleteRequests],
+  );
+
+  const [tab, setTab] = useState("archive");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [monthFilter, setMonthFilter] = useState("all");
+  const [auditFilterAction, setAuditFilterAction] = useState("all");
+
+  const auditLog = useMemo(() => data?.auditLog || [], [data?.auditLog]);
+
+  const filtered = useMemo(() => {
+    let arr = archive;
+    if (monthFilter !== "all") {
+      const parsed = parseMonthKey(monthFilter);
+      if (parsed) {
+        arr = arr.filter(
+          (t) => t.month === parsed.month && (t.year || 2026) === parsed.year,
+        );
+      }
+    }
+    if (searchTerm.trim()) {
+      const term = normalizeText(searchTerm);
+      arr = arr.filter(
+        (t) => normalizeText(t.description).includes(term) || normalizeText(t.category).includes(term),
+      );
+    }
+    return arr.slice().sort((a, b) => {
+      const da = parseISODate(a.deletedAt) || parseISODate(a.date) || new Date(0);
+      const db = parseISODate(b.deletedAt) || parseISODate(b.date) || new Date(0);
+      return db - da;
+    });
+  }, [archive, searchTerm, monthFilter]);
+
+  const filteredAudit = useMemo(() => {
+    let arr = auditLog;
+    if (auditFilterAction !== "all") arr = arr.filter((e) => e.action === auditFilterAction);
+    if (searchTerm.trim()) {
+      const term = normalizeText(searchTerm);
+      arr = arr.filter(
+        (e) => normalizeText(e.note).includes(term) || String(e.entityId).includes(searchTerm),
+      );
+    }
+    return arr;
+  }, [auditLog, auditFilterAction, searchTerm]);
+
+  const restoreOne = (tombstone) => {
+    if (tombstone._legacy) {
+      addNotification({ type: "error", title: "لا يمكن استرجاع هذه (بيانات ناقصة)" });
+      return;
+    }
+    const d = parseISODate(tombstone.date);
+    const y = tombstone.year || (d ? d.getFullYear() : null);
+    const m = tombstone.month || (d ? ALL_MONTHS[d.getMonth()] : null);
+    if (!y || !m) {
+      addNotification({ type: "error", title: "بيانات غير كاملة" });
+      return;
+    }
+    if (isMonthClosed(data, y, m)) {
+      addNotification({ type: "error", title: "الشهر مغلق" });
+      return;
+    }
+    dispatch({
+      type: "SHOW_CONFIRM",
+      danger: false,
+      title: "استرجاع المعاملة",
+      message: `استرجاع "${tombstone.description || tombstone.category}" بمبلغ ${fmt(tombstone.amount)}`,
+      onConfirm: () => {
+        saveHistory();
+        const { deletedAt, deletedBy, originalStatus, reason, _legacy, ...original } = tombstone;
+        const restoredTx = { ...original, status: originalStatus || "pending" };
+        const newTx = sortTransactions([...transactions, restoredTx]);
+        const newArchive = (data.deletedTxArchive || []).filter((a) => a.id !== tombstone.id);
+        const newDeletedIds = (data.deletedTxIds || []).filter((id) => id !== tombstone.id);
+        const newMaterialized = { ...(data.materializedRecurring || {}) };
+        if (restoredTx.sourceRecurringId && restoredTx.year && restoredTx.month) {
+          delete newMaterialized[`${restoredTx.sourceRecurringId}_${makeMonthKey(restoredTx.year, restoredTx.month)}`];
+        }
+        dispatch({
+          type: "SET_DATA",
+          payload: {
+            ...data, transactions: newTx,
+            deletedTxArchive: newArchive, deletedTxIds: newDeletedIds,
+            materializedRecurring: newMaterialized,
+          },
+        });
+        addNotification({ type: "success", title: "تم الاسترجاع" });
+        dispatch({ type: "HIDE_CONFIRM" });
+      },
+      onCancel: () => dispatch({ type: "HIDE_CONFIRM" }),
+    });
+  };
+
+  const permanentlyDelete = (id) => {
+    dispatch({
+      type: "SHOW_CONFIRM",
+      danger: true,
+      title: "حذف نهائي",
+      message: "سيُحذف نهائياً ولن يمكن استرجاعه",
+      onConfirm: () => {
+        saveHistory();
+        const newArchive = (data.deletedTxArchive || []).filter((a) => a.id !== id);
+        const newTx = (data.transactions || []).filter((t) => t.id !== id);
+        const newDeletedIds = Array.from(new Set([...(data.deletedTxIds || []), id])).slice(-500);
+        dispatch({
+          type: "SET_DATA",
+          payload: { ...data, transactions: newTx, deletedTxArchive: newArchive, deletedTxIds: newDeletedIds },
+        });
+        addNotification({ type: "success", title: "تم الحذف نهائياً" });
+        dispatch({ type: "HIDE_CONFIRM" });
+      },
+      onCancel: () => dispatch({ type: "HIDE_CONFIRM" }),
+    });
+  };
+
+  const clearArchive = () => {
+    dispatch({
+      type: "SHOW_CONFIRM",
+      danger: true,
+      title: "تفريغ الأرشيف",
+      message: `سيتم حذف ${archive.length} سجل نهائياً`,
+      onConfirm: () => {
+        saveHistory();
+        dispatch({
+          type: "SET_DATA",
+          payload: { ...data, deletedTxArchive: [], deletedTxIds: [] },
+        });
+        addNotification({ type: "success", title: "تم التفريغ" });
+        dispatch({ type: "HIDE_CONFIRM" });
+      },
+      onCancel: () => dispatch({ type: "HIDE_CONFIRM" }),
+    });
+  };
+
+  return (
+    <div className="animate-fadeIn" style={{ paddingBottom: 24 }}>
+      <div className="card">
+        <h2 style={{ fontSize: 16, fontWeight: 900, display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+          <History size={18} style={{ color: "var(--brand)" }} />
+          السجل والتدقيق
+        </h2>
+        <p style={{ fontSize: 11, color: "var(--text-muted)", margin: 0 }}>
+          أرشيف المحذوفات + سجل التعديلات الكامل
+        </p>
+      </div>
+
+      {pendingRequests.length > 0 && (
+        <div className="card" style={{ marginTop: 12, borderColor: "var(--warning)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+            <Clock size={16} style={{ color: "var(--warning)" }} />
+            <div>
+              <h3 style={{ fontSize: 13, fontWeight: 900, margin: 0 }}>📥 طلبات حذف معلقة</h3>
+              <p style={{ fontSize: 10, color: "var(--text-muted)", margin: "2px 0 0" }}>
+                {pendingRequests.length} طلب بانتظار مراجعتك
+              </p>
+            </div>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {pendingRequests.map((req) => {
+              const tx = req.txSnapshot;
+              return (
+                <div key={req.id} style={{ padding: 12, borderRadius: 12, background: "var(--bg-muted)" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginBottom: 8 }}>
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <p style={{ fontSize: 11, fontWeight: 800, margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {tx.description || tx.category || "بدون وصف"}
+                      </p>
+                      <p style={{ fontSize: 10, color: "var(--text-muted)", margin: "3px 0 0" }}>
+                        {tx.date} • من: <strong>{req.requestedByName || "فاميلي"}</strong>
+                      </p>
+                    </div>
+                    <span className="money" style={{ fontSize: 13, fontWeight: 900, color: "var(--negative)" }}>
+                      {fmt(tx.amount)}
+                    </span>
+                  </div>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <button
+                      onClick={() => {
+                        saveHistory();
+                        dispatch({
+                          type: "APPROVE_DELETE_REQUEST",
+                          payload: { requestId: req.id, txSnapshot: tx, requestedBy: req.requestedByName || "family" },
+                        });
+                        addNotification({ type: "success", title: "تمت الموافقة" });
+                      }}
+                      className="btn btn-primary"
+                      style={{ flex: 1, fontSize: 10, padding: "8px 10px" }}
+                    >
+                      <CheckCircle2 size={11} /> موافقة
+                    </button>
+                    <button
+                      onClick={() => {
+                        dispatch({ type: "REJECT_DELETE_REQUEST", payload: { requestId: req.id } });
+                        addNotification({ type: "info", title: "تم الرفض" });
+                      }}
+                      className="btn btn-secondary"
+                      style={{ flex: 1, fontSize: 10, padding: "8px 10px", color: "var(--negative)" }}
+                    >
+                      <X size={11} /> رفض
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      <div style={{ marginTop: 12 }}>
+        <SegmentedControl
+          value={tab}
+          onChange={setTab}
+          options={[
+            { value: "archive", label: `المحذوفات (${archive.length})`, icon: Trash2 },
+            { value: "audit", label: `التدقيق (${auditLog.length})`, icon: History },
+          ]}
+        />
+      </div>
+
+      <div className="card" style={{ marginTop: 12, padding: 10 }}>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <div style={{ position: "relative", flex: 1, minWidth: 160 }}>
+            <Search size={14} style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }} />
+            <input
+              type="text"
+              placeholder="ابحث..."
+              className="input-field"
+              style={{ paddingRight: 36, fontSize: 12, padding: "10px 36px 10px 12px" }}
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+          {tab === "archive" && (
+            <select
+              className="input-field"
+              style={{ fontSize: 11, padding: "10px 12px", flex: "0 0 150px" }}
+              value={monthFilter}
+              onChange={(e) => setMonthFilter(e.target.value)}
+            >
+              <option value="all">كل الشهور</option>
+              {YEARS_LIST.flatMap((y) =>
+                getMonthsForYear(y).map((m) => (
+                  <option key={makeMonthKey(y, m)} value={makeMonthKey(y, m)}>{m} {y}</option>
+                )),
+              )}
+            </select>
+          )}
+        </div>
+      </div>
+
+      {tab === "archive" && (
+        <>
+          {archive.length > 0 && (
+            <div style={{ marginTop: 12, display: "flex", justifyContent: "flex-end" }}>
+              <button onClick={clearArchive} className="btn btn-secondary" style={{ fontSize: 11, padding: "8px 12px", color: "var(--negative)" }}>
+                <Trash2 size={12} /> تفريغ الكل
+              </button>
+            </div>
+          )}
+
+          {filtered.length === 0 ? (
+            <div className="card" style={{ marginTop: 12 }}>
+              <EmptyState icon={CheckCircle2} title={archive.length === 0 ? "الأرشيف فارغ" : "لا نتائج"} size="md" />
+            </div>
+          ) : (
+            <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
+              {filtered.map((tombstone) => {
+                const isLegacy = tombstone._legacy;
+                const delDate = parseISODate(tombstone.deletedAt);
+                return (
+                  <div key={tombstone.id} className="card" style={{ padding: 12 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginBottom: 8 }}>
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <p style={{ fontSize: 12, fontWeight: 800, margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {tombstone.type === "income" ? "💰" : "💸"} {tombstone.description || tombstone.category || "بدون وصف"}
+                        </p>
+                        <p style={{ fontSize: 10, color: "var(--text-muted)", margin: "3px 0 0", fontWeight: 700 }}>
+                          {tombstone.category} • {tombstone.date}
+                        </p>
+                        <p style={{ fontSize: 10, color: "var(--negative)", margin: "3px 0 0", fontWeight: 700 }}>
+                          🗑️ حُذفت {delDate ? delDate.toLocaleDateString("ar-EG") : "—"}
+                        </p>
+                      </div>
+                      <span className="money" style={{ fontSize: 13, fontWeight: 900, color: tombstone.type === "income" ? "var(--positive)" : "var(--negative)" }}>
+                        {tombstone.type === "income" ? "+" : "−"}{fmt(tombstone.amount)}
+                      </span>
+                    </div>
+                    {!isLegacy && (
+                      <div style={{ display: "flex", justifyContent: "flex-end", gap: 6 }}>
+                        <button
+                          onClick={() => restoreOne(tombstone)}
+                          className="btn btn-secondary"
+                          style={{ fontSize: 10, padding: "6px 10px" }}
+                        >
+                          <Undo2 size={10} /> استرجاع
+                        </button>
+                        <button
+                          onClick={() => permanentlyDelete(tombstone.id)}
+                          className="btn btn-ghost"
+                          style={{ fontSize: 10, padding: "6px 10px", color: "var(--negative)" }}
+                        >
+                          <Trash2 size={10} /> حذف نهائي
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </>
+      )}
+
+      {tab === "audit" && (
+        <>
+          {filteredAudit.length === 0 ? (
+            <div className="card" style={{ marginTop: 12 }}>
+              <EmptyState icon={History} title={auditLog.length === 0 ? "السجل فارغ" : "لا نتائج"} size="md" />
+            </div>
+          ) : (
+            <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
+              {filteredAudit.slice(0, 200).map((entry) => {
+                const d = new Date(entry.ts);
+                const dateStr = d.toLocaleDateString("ar-EG", { day: "numeric", month: "short", year: "numeric" });
+                const timeStr = d.toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit" });
+                const color = AUDIT_COLORS[entry.action] || "#64748B";
+                return (
+                  <div key={entry.id} style={{ padding: 12, borderRadius: 12, background: "var(--bg-muted)", borderRightWidth: 3, borderRightColor: color }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4, flexWrap: "wrap" }}>
+                      <span style={{ fontSize: 11, fontWeight: 900, color }}>{AUDIT_LABELS[entry.action] || entry.action}</span>
+                      <span style={{ fontSize: 10, fontWeight: 700, color: "var(--text-muted)" }}>{entry.entity}</span>
+                    </div>
+                    {entry.note && <p style={{ fontSize: 11, fontWeight: 600, margin: "4px 0 0" }}>{entry.note}</p>}
+                    <p style={{ fontSize: 10, color: "var(--text-muted)", margin: "4px 0 0" }}>
+                      {dateStr} • {timeStr}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+});
 /* ═══════════════════════════════════════════════════════════════════
    7) DATA REDUCER
    ═══════════════════════════════════════════════════════════════════ */
@@ -14923,6 +15652,61 @@ function dataReducer(state, action) {
       };
     }
 
+    case "APPROVE_DELETE_REQUEST": {
+      const { requestId, txSnapshot, requestedBy } = action.payload;
+      if (!txSnapshot) return state;
+      const tx = txSnapshot;
+      const newArchive = [
+        ...(state.data.deletedTxArchive || []),
+        {
+          ...tx,
+          deletedAt: new Date().toISOString(),
+          deletedBy: requestedBy || "family",
+          originalStatus: tx.status || "pending",
+          reason: "موافقة على طلب مسح",
+        },
+      ].slice(-500);
+      const newTx = (state.data.transactions || []).filter((t) => t.id !== tx.id);
+      const newDeletedIds = Array.from(new Set([...(state.data.deletedTxIds || []), tx.id])).slice(-500);
+      const updatedRequests = (state.data.deleteRequests || []).map((r) =>
+        r.id === requestId ? { ...r, status: "approved", approvedAt: Date.now() } : r,
+      );
+      const newMaterialized = { ...(state.data.materializedRecurring || {}) };
+      if (tx.sourceRecurringId && tx.year && tx.month) {
+        newMaterialized[`${tx.sourceRecurringId}_${makeMonthKey(tx.year, tx.month)}`] = "deleted";
+      }
+      return {
+        ...state,
+        data: {
+          ...state.data,
+          transactions: newTx,
+          deletedTxArchive: newArchive,
+          deletedTxIds: newDeletedIds,
+          deleteRequests: updatedRequests,
+          materializedRecurring: newMaterialized,
+          auditLog: [
+            buildAuditEntry(AUDIT.DELETE, "transaction", tx.id, {
+              before: { amount: tx.amount, category: tx.category, method: tx.method },
+              note: `موافقة على طلب مسح من ${requestedBy || "family"}: ${tx.description || tx.category} — ${fmt(tx.amount)} ج.م`,
+            }),
+            ...(state.data.auditLog || []),
+          ].slice(0, 1000),
+        },
+      };
+    }
+
+    case "REJECT_DELETE_REQUEST": {
+      const { requestId } = action.payload;
+      const updatedRequests = (state.data.deleteRequests || []).map((r) =>
+        r.id === requestId ? { ...r, status: "rejected", rejectedAt: Date.now() } : r,
+      );
+      return {
+        ...state,
+        data: { ...state.data, deleteRequests: updatedRequests },
+      };
+    }
+
+      
     case "TOGGLE_WALLET_VISIBILITY":
       return {
         ...state,
@@ -15749,17 +16533,36 @@ function App() {
           />
         );
       case "duplicates":
+        return (
+          <DuplicateDetectionSystem
+            transactions={transactions}
+            data={data}
+            dispatch={dispatch}
+            addNotification={addNotification}
+            saveHistory={saveHistory}
+            onBulkDelete={handleBulkDelete}
+          />
+        );
       case "data-health":
+        return (
+          <DataHealthView
+            data={data}
+            transactions={transactions}
+            cards={cards}
+            updatedLoans={updatedLoans}
+            liveBalances={liveBalances}
+            dispatch={dispatch}
+          />
+        );
       case "deleted":
         return (
-          <div className="card" style={{ marginTop: 12 }}>
-            <EmptyState
-              icon={ShieldCheck}
-              title="قريباً"
-              message="هذه الصفحة قيد التطوير في إصدار قادم"
-              size="lg"
-            />
-          </div>
+          <DeletedArchiveView
+            data={data}
+            dispatch={dispatch}
+            saveHistory={saveHistory}
+            addNotification={addNotification}
+            transactions={transactions}
+          />
         );
       default:
         return null;
