@@ -25263,17 +25263,21 @@ const BankCard3D = memo(
                 (id) => dispatch({ type: "REMOVE_NOTIFICATION", payload: id }),
                 [],
               );
-              const saveHistory = useCallback(
-                () =>
-                  dispatch({
-                    type: "ADD_TO_HISTORY",
-                    payload: {
-                      data: JSON.parse(JSON.stringify(data)),
-                      budgets: JSON.parse(JSON.stringify(budgets)),
-                    },
-                  }),
-                [data, budgets],
-              );
+const saveHistory = useCallback(
+  () => {
+    // نأخد snapshot من أحدث حالة فعلية
+    const currentData = dataRef.current || data;
+    const currentBudgets = budgetsRef.current || budgets;
+    dispatch({
+      type: "ADD_TO_HISTORY",
+      payload: {
+        data: safeClone(currentData),
+        budgets: safeClone(currentBudgets),
+      },
+    });
+  },
+  [data, budgets],
+);
 
               const queueCloudSave = useCallback(
                 (newData, options = {}) => {
