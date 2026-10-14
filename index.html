@@ -14920,7 +14920,8 @@
               },
             );
 
-const BankCard3D = memo(
+
+      const BankCard3D = memo(
   ({ card, liveDebt, liveAvailable, onStatement, onEdit, onPay }) => {
     const [flipped, setFlipped] = useState(false);
     const [imageFailed, setImageFailed] = useState(false);
@@ -14942,12 +14943,12 @@ const BankCard3D = memo(
     const getCardBgImage = () => {
       if (imageFailed) return null;
       if (card.bank === "CIB" && card.name === "Titanium")
-        return `url(${LOGO_BASE_URL}CIBCARD.png)`;
+        return `${LOGO_BASE_URL}CIBCARD.png`;
       if (card.bank === "CIB" && card.name === "SWYPE")
-        return `url(${LOGO_BASE_URL}swypecibcard.png)`;
-      if (card.bank === "AAIB") return `url(${LOGO_BASE_URL}AAIBCard.jpg)`;
+        return `${LOGO_BASE_URL}swypecibcard.png`;
+      if (card.bank === "AAIB") return `${LOGO_BASE_URL}AAIBCard.png`;
       if (card.bank === "ADIB Egypt")
-        return `url(${LOGO_BASE_URL}ADIBSiqCard.jpeg)`;
+        return `${LOGO_BASE_URL}ADIBSiqCard.png`;
       return null;
     };
 
@@ -14958,88 +14959,250 @@ const BankCard3D = memo(
         setImageFailed(false);
         return;
       }
-      const url = bgImage.slice(5, -2);
       const img = new Image();
       img.onerror = () => setImageFailed(true);
       img.onload = () => setImageFailed(false);
-      img.src = url;
+      img.src = bgImage;
     }, [bgImage]);
 
     return (
       <div className="space-y-3">
-        <div style={{ perspective: "1200px", width: "100%" }}>
+        {/* الكارت - نسبة 1.586:1 */}
+        <div
+          style={{
+            perspective: "1400px",
+            width: "100%",
+            aspectRatio: "1.586 / 1",
+          }}
+        >
           <div
             dir="ltr"
             onClick={() => setFlipped(!flipped)}
-            className={`bank-card ${bgImage ? "" : themeClass}`}
+            className={`bank-card-real ${bgImage ? "" : themeClass}`}
             style={{
-              backgroundImage: bgImage,
-              backgroundSize: "cover",
-              backgroundPosition: "center",
-              color: bgImage ? "#FFFFFF" : "inherit",
               position: "relative",
+              width: "100%",
+              height: "100%",
+              borderRadius: "16px",
+              overflow: "hidden",
               cursor: "pointer",
               transformStyle: "preserve-3d",
-              transition: "transform 0.6s cubic-bezier(0.16, 1, 0.3, 1)",
+              transition: "transform 0.7s cubic-bezier(0.16, 1, 0.3, 1)",
               transform: flipped ? "rotateY(180deg)" : "rotateY(0deg)",
-              padding: 0,
-              overflow: "visible",
+              boxShadow:
+                "0 20px 40px -12px rgba(10,22,40,0.45), 0 8px 16px -8px rgba(10,22,40,0.3)",
             }}
           >
-            {bgImage && (
+            {/* الوجه الأمامي */}
+            <div
+              style={{
+                position: "absolute",
+                inset: 0,
+                backfaceVisibility: "hidden",
+                WebkitBackfaceVisibility: "hidden",
+                backgroundImage: bgImage ? `url(${bgImage})` : undefined,
+                backgroundSize: "cover",
+                backgroundPosition: "center",
+                backgroundRepeat: "no-repeat",
+              }}
+            >
+              {bgImage && (
+                <div
+                  style={{
+                    position: "absolute",
+                    inset: 0,
+                    background:
+                      "linear-gradient(135deg, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.05) 40%, rgba(0,0,0,0.55) 100%)",
+                    pointerEvents: "none",
+                  }}
+                />
+              )}
+
               <div
                 style={{
                   position: "absolute",
-                  inset: 0,
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  height: "55%",
                   background:
-                    "linear-gradient(180deg, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.55) 100%)",
+                    "linear-gradient(180deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 100%)",
                   pointerEvents: "none",
-                  borderRadius: "inherit",
                 }}
               />
-            )}
 
-            <div
-              style={{
-                backfaceVisibility: "hidden",
-                WebkitBackfaceVisibility: "hidden",
-                padding: "20px",
-                minHeight: "180px",
-                display: "flex",
-                flexDirection: "column",
-                justifyContent: "space-between",
-                width: "100%",
-              }}
-            >
-              <div className="flex justify-between items-start">
-                <div>
-                  <span className="font-black text-sm uppercase tracking-wide">
-                    {card.bank}
-                  </span>
-                  <p className="text-[10px] font-bold opacity-70 mt-0.5">
-                    {card.name}
-                  </p>
+              <div
+                style={{
+                  position: "relative",
+                  height: "100%",
+                  padding: "8%",
+                  display: "flex",
+                  flexDirection: "column",
+                  justifyContent: "space-between",
+                  color: "#FFFFFF",
+                  textShadow: "0 1px 3px rgba(0,0,0,0.5)",
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "flex-start",
+                  }}
+                >
+                  <div>
+                    <div
+                      style={{
+                        fontSize: "clamp(14px, 4vw, 20px)",
+                        fontWeight: 900,
+                        letterSpacing: "0.05em",
+                        textTransform: "uppercase",
+                      }}
+                    >
+                      {card.bank}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: "clamp(9px, 2.2vw, 11px)",
+                        fontWeight: 700,
+                        opacity: 0.85,
+                        marginTop: "2px",
+                        letterSpacing: "0.15em",
+                        textTransform: "uppercase",
+                      }}
+                    >
+                      {card.name}
+                    </div>
+                  </div>
+                  <svg
+                    width="28"
+                    height="28"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    style={{ opacity: 0.85, transform: "rotate(90deg)" }}
+                  >
+                    <path
+                      d="M6 8a8 8 0 0 1 0 8M9 6a12 12 0 0 1 0 12M3 10a4 4 0 0 1 0 4"
+                      stroke="white"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                    />
+                  </svg>
                 </div>
-                <Wifi size={18} className="rotate-90 opacity-70" />
-              </div>
-              <div className="flex items-center gap-3">
-                <div className="bank-card-chip"></div>
-                <span className="font-mono text-sm font-bold tracking-[0.2em] opacity-90">
-                  •••• •••• •••• {card.last4}
-                </span>
-              </div>
-              <div className="flex justify-between items-end text-[10px] font-bold">
-                <div>
-                  <div className="uppercase opacity-60 mb-0.5">Card Holder</div>
-                  <div className="tracking-wide text-xs">{card.holderName}</div>
+
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "14px",
+                  }}
+                >
+                  <div
+                    style={{
+                      width: "clamp(38px, 10vw, 48px)",
+                      height: "clamp(28px, 7.5vw, 36px)",
+                      borderRadius: "6px",
+                      background:
+                        "linear-gradient(135deg, #F0D67A 0%, #D4AF37 30%, #B8860B 60%, #F0D67A 100%)",
+                      position: "relative",
+                      boxShadow:
+                        "inset 0 0 8px rgba(0,0,0,0.3), 0 2px 4px rgba(0,0,0,0.3)",
+                      flexShrink: 0,
+                    }}
+                  >
+                    <div
+                      style={{
+                        position: "absolute",
+                        inset: "20% 15%",
+                        border: "1px solid rgba(0,0,0,0.25)",
+                        borderRadius: "3px",
+                      }}
+                    />
+                    <div
+                      style={{
+                        position: "absolute",
+                        top: "50%",
+                        left: "15%",
+                        right: "15%",
+                        height: "1px",
+                        background: "rgba(0,0,0,0.25)",
+                      }}
+                    />
+                  </div>
+
+                  <div
+                    style={{
+                      fontFamily: "'JetBrains Mono', monospace",
+                      fontSize: "clamp(13px, 3.6vw, 18px)",
+                      fontWeight: 700,
+                      letterSpacing: "0.15em",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    •••• •••• •••• {card.last4}
+                  </div>
                 </div>
-                <div className="text-right">
-                  <div className="uppercase opacity-60 mb-0.5">Expires</div>
-                  <div className="font-mono text-xs">{card.expiry}</div>
+
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "flex-end",
+                    gap: "12px",
+                  }}
+                >
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div
+                      style={{
+                        fontSize: "clamp(7px, 1.8vw, 9px)",
+                        opacity: 0.7,
+                        letterSpacing: "0.15em",
+                        textTransform: "uppercase",
+                        marginBottom: "2px",
+                      }}
+                    >
+                      Card Holder
+                    </div>
+                    <div
+                      style={{
+                        fontSize: "clamp(10px, 2.6vw, 13px)",
+                        fontWeight: 700,
+                        letterSpacing: "0.08em",
+                        whiteSpace: "nowrap",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                      }}
+                    >
+                      {card.holderName || "AHMED M. KHALIL"}
+                    </div>
+                  </div>
+                  <div style={{ textAlign: "right", flexShrink: 0 }}>
+                    <div
+                      style={{
+                        fontSize: "clamp(7px, 1.8vw, 9px)",
+                        opacity: 0.7,
+                        letterSpacing: "0.15em",
+                        textTransform: "uppercase",
+                        marginBottom: "2px",
+                      }}
+                    >
+                      Expires
+                    </div>
+                    <div
+                      style={{
+                        fontFamily: "'JetBrains Mono', monospace",
+                        fontSize: "clamp(11px, 2.8vw, 13px)",
+                        fontWeight: 700,
+                      }}
+                    >
+                      {card.expiry}
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
 
+            {/* الوجه الخلفي */}
             <div
               style={{
                 position: "absolute",
@@ -15047,29 +15210,74 @@ const BankCard3D = memo(
                 backfaceVisibility: "hidden",
                 WebkitBackfaceVisibility: "hidden",
                 transform: "rotateY(180deg)",
-                padding: "20px",
-                minHeight: "180px",
+                background:
+                  "linear-gradient(135deg, #1E2B4A 0%, #0A1628 100%)",
+                color: "#FFFFFF",
+                padding: "8%",
                 display: "flex",
                 flexDirection: "column",
                 justifyContent: "center",
-                width: "100%",
               }}
             >
               <div
-                className="w-full h-10 rounded-md mb-4"
-                style={{ background: "rgba(0,0,0,0.5)" }}
+                style={{
+                  position: "absolute",
+                  top: "14%",
+                  left: 0,
+                  right: 0,
+                  height: "18%",
+                  background: "#000000",
+                }}
               />
-              <div className="flex justify-between items-center text-xs font-bold">
-                <span className="opacity-60">CVV</span>
-                <span className="font-mono tracking-widest">•••</span>
+              <div
+                style={{
+                  marginTop: "30%",
+                  background: "rgba(255,255,255,0.92)",
+                  borderRadius: "4px",
+                  padding: "6px 10px",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                }}
+              >
+                <span
+                  style={{
+                    fontFamily: "'JetBrains Mono', monospace",
+                    color: "#0A1628",
+                    fontSize: "11px",
+                    fontWeight: 700,
+                  }}
+                >
+                  Authorized Signature
+                </span>
+                <span
+                  style={{
+                    fontFamily: "'JetBrains Mono', monospace",
+                    color: "#0A1628",
+                    fontSize: "13px",
+                    fontWeight: 900,
+                    letterSpacing: "2px",
+                  }}
+                >
+                  •••
+                </span>
               </div>
-              <p className="text-[10px] opacity-60 mt-4 leading-relaxed">
-                هذه البطاقة صادرة من {card.bank}.
-              </p>
+              <div
+                style={{
+                  marginTop: "10px",
+                  fontSize: "9px",
+                  opacity: 0.7,
+                  lineHeight: 1.6,
+                }}
+              >
+                هذه البطاقة صادرة من {card.bank}. استخدامها يعني موافقتك على
+                الشروط والأحكام.
+              </div>
             </div>
           </div>
         </div>
 
+        {/* الإحصائيات */}
         <div className="grid grid-cols-4 gap-2">
           <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 text-center">
             <p className="text-[9px] font-bold text-emerald-700 dark:text-emerald-400">
@@ -15111,13 +15319,15 @@ const BankCard3D = memo(
           </div>
         </div>
 
+        {/* الأزرار */}
         <div className="flex gap-1.5">
           {liveDebt > 0 && onPay && (
             <button
               onClick={onPay}
               className="btn text-[11px] py-2 flex-1"
               style={{
-                background: "linear-gradient(135deg, #635BFF 0%, #4A42E5 100%)",
+                background:
+                  "linear-gradient(135deg, #635BFF 0%, #4A42E5 100%)",
                 color: "white",
                 boxShadow: "0 6px 16px -4px rgba(99,91,255,0.5)",
               }}
@@ -15163,7 +15373,9 @@ const BankCard3D = memo(
             >
               مرتبط بحساب:
             </span>
-            <span className="card-sub-badge">•••• {card.linkedAccountLast4}</span>
+            <span className="card-sub-badge">
+              •••• {card.linkedAccountLast4}
+            </span>
           </div>
         )}
       </div>
