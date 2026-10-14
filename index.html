@@ -14865,7 +14865,6 @@ const BankCard3D = memo(
   ({ card, liveDebt, liveAvailable, onStatement, onEdit, onPay }) => {
     const cardRef = useRef(null);
     const [flipped, setFlipped] = useState(false);
-    const [imageFailed, setImageFailed] = useState(false);
     const [tilt, setTilt] = useState({ x: 0, y: 0 });
     const [shine, setShine] = useState({ x: 50, y: 50, opacity: 0 });
 
@@ -14882,31 +14881,63 @@ const BankCard3D = memo(
       }[card.theme] || "bank-card-silver";
 
     const isCredit = liveDebt < 0;
-
-    const getCardBgImage = () => {
-      if (imageFailed) return null;
-      if (card.bank === "CIB" && card.name === "Titanium")
-        return `${LOGO_BASE_URL}CIBCARD.png`;
-      if (card.bank === "CIB" && card.name === "SWYPE")
-        return `${LOGO_BASE_URL}swypecibcard.jpg`;
-      if (card.bank === "AAIB") return `${LOGO_BASE_URL}AAIBCard.jpg`;
-      if (card.bank === "ADIB Egypt")
-        return `${LOGO_BASE_URL}ADIBSiqCard.jpeg`;
-      return null;
-    };
-
-    const bgImage = getCardBgImage();
+    const [bgImage, setBgImage] = useState(null);
 
     useEffect(() => {
-      if (!bgImage) {
-        setImageFailed(false);
+      if (!card) {
+        setBgImage(null);
         return;
       }
-      const img = new Image();
-      img.onerror = () => setImageFailed(true);
-      img.onload = () => setImageFailed(false);
-      img.src = bgImage;
-    }, [bgImage]);
+      
+      // 🎯 حدد الاسم الأساسي للصورة حسب الكارت
+      let baseName = null;
+      if (card.bank === "CIB" && card.name === "Titanium") baseName = "CIBCARD";
+      else if (card.bank === "CIB" && card.name === "SWYPE") baseName = "swypecibcard";
+      else if (card.bank === "AAIB") baseName = "AAIBCard";
+      else if (card.bank === "ADIB Egypt") baseName = "ADIBSiqCard";
+      
+      if (!baseName) {
+        setBgImage(null);
+        return;
+      }
+      
+      // 🔄 جرّب كل الامتدادات تلقائياً
+      const extensions = [".jpg", ".jpeg", ".png", ".webp"];
+      let currentIdx = 0;
+      let cancelled = false;
+      
+      const tryNext = () => {
+        if (cancelled) return;
+        if (currentIdx >= extensions.length) {
+          console.warn(`❌ لم يتم العثور على صورة لـ ${baseName}`);
+          setBgImage(null);
+          return;
+        }
+        
+        // ✅ أضف v=2 لتجاوز الـ cache القديم
+        const url = `${LOGO_BASE_URL}${baseName}${extensions[currentIdx]}?v=2`;
+        const img = new Image();
+        
+        img.onload = () => {
+          if (cancelled) return;
+          console.log(`✅ ${baseName} تم تحميلها من: ${url}`);
+          setBgImage(url);
+        };
+        
+        img.onerror = () => {
+          currentIdx++;
+          tryNext();
+        };
+        
+        img.src = url;
+      };
+      
+      tryNext();
+      
+      return () => {
+        cancelled = true;
+      };
+    }, [card]);
 
     const handleMove = (clientX, clientY) => {
       if (!cardRef.current) return;
