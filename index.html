@@ -8387,6 +8387,7 @@ const CardsPage = memo(function CardsPage({
 }) {
   const [activeTab, setActiveTab] = useState("wallets");
   const [viewMode, setViewMode] = useState("grouped");
+  const [scrollTarget, setScrollTarget] = useState(null);
 
   const cards = data.cards || [];
   const totalCardDebt = useMemo(
@@ -8394,7 +8395,6 @@ const CardsPage = memo(function CardsPage({
     [cards, data],
   );
 
-  /* Group by provider */
   const groupedData = useMemo(() => {
     const groups = {};
     Object.keys(PROVIDERS).forEach((pk) => { groups[pk] = []; });
@@ -8423,45 +8423,37 @@ const CardsPage = memo(function CardsPage({
       .filter((g) => g.items.length > 0);
   }, [data.accountsData, cards, liveBalances]);
 
+  const handleItemClick = useCallback((item) => {
+    if (item.type === "card") {
+      onOpenCardStatement(item);
+      return;
+    }
+    if (item.type === "account") {
+      setViewMode("ledger");
+      setScrollTarget(item.key);
+    }
+  }, [onOpenCardStatement]);
+
   return (
     <div className="animate-fadeIn" style={{ paddingBottom: 24 }}>
-      {/* Header card */}
       <div className="card">
-        <div style={{
-          display: "flex", alignItems: "center", justifyContent: "space-between",
-          gap: 12, flexWrap: "wrap",
-        }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div style={{
-              width: 40, height: 40, borderRadius: 14,
-              display: "flex", alignItems: "center", justifyContent: "center",
-              background: "var(--brand-soft)", color: "var(--brand)",
-            }}>
+            <div style={{ width: 40, height: 40, borderRadius: 14, display: "flex", alignItems: "center", justifyContent: "center", background: "var(--brand-soft)", color: "var(--brand)" }}>
               <CreditCard size={18} />
             </div>
             <div>
               <h2 style={{ fontSize: 15, fontWeight: 900, margin: 0 }}>البطاقات والمحافظ</h2>
-              <p style={{
-                fontSize: 11, marginTop: 2, marginBottom: 0,
-                color: "var(--text-muted)",
-              }}>
+              <p style={{ fontSize: 11, marginTop: 2, marginBottom: 0, color: "var(--text-muted)" }}>
                 {cards.length} بطاقة + {ACCOUNT_KEYS.length} حساب/محفظة
               </p>
             </div>
           </div>
           <div style={{ display: "flex", gap: 6 }}>
-            <button
-              onClick={() => setViewMode("grouped")}
-              className={`btn ${viewMode === "grouped" ? "btn-primary" : "btn-secondary"}`}
-              style={{ fontSize: 10, padding: "6px 12px" }}
-            >
+            <button onClick={() => setViewMode("grouped")} className={`btn ${viewMode === "grouped" ? "btn-primary" : "btn-secondary"}`} style={{ fontSize: 10, padding: "6px 12px" }}>
               <Layers size={11} /> مجموعات
             </button>
-            <button
-              onClick={() => setViewMode("ledger")}
-              className={`btn ${viewMode === "ledger" ? "btn-primary" : "btn-secondary"}`}
-              style={{ fontSize: 10, padding: "6px 12px" }}
-            >
+            <button onClick={() => setViewMode("ledger")} className={`btn ${viewMode === "ledger" ? "btn-primary" : "btn-secondary"}`} style={{ fontSize: 10, padding: "6px 12px" }}>
               <Table size={11} /> كشوف
             </button>
           </div>
@@ -8481,40 +8473,20 @@ const CardsPage = memo(function CardsPage({
 
       {activeTab === "wallets" ? (
         <>
-          {/* Quick pay card */}
           {cards.length > 0 && (
             <button
               onClick={() => onOpenCardPayment(null)}
               className="card card-hover"
-              style={{
-                width: "100%", marginTop: 12, textAlign: "right",
-                background: "linear-gradient(135deg, rgba(99,91,255,0.1), rgba(74,66,229,0.06))",
-                borderColor: "rgba(99,91,255,0.3)",
-                cursor: "pointer", fontFamily: "inherit",
-              }}
+              style={{ width: "100%", marginTop: 12, textAlign: "right", background: "linear-gradient(135deg, rgba(99,91,255,0.1), rgba(74,66,229,0.06))", borderColor: "rgba(99,91,255,0.3)", cursor: "pointer", fontFamily: "inherit" }}
             >
               <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                <div style={{
-                  width: 44, height: 44, borderRadius: 14,
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  background: "linear-gradient(135deg, #635BFF 0%, #4A42E5 100%)",
-                  color: "white", flexShrink: 0,
-                }}>
+                <div style={{ width: 44, height: 44, borderRadius: 14, display: "flex", alignItems: "center", justifyContent: "center", background: "linear-gradient(135deg, #635BFF 0%, #4A42E5 100%)", color: "white", flexShrink: 0 }}>
                   <Banknote size={20} />
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ fontSize: 13, fontWeight: 900, margin: 0 }}>
-                    💳 سداد بطاقة سريع
-                  </p>
-                  <p style={{
-                    fontSize: 10, marginTop: 2, marginBottom: 0,
-                    color: "var(--text-muted)",
-                  }}>
-                    المديونية:{" "}
-                    <span style={{ fontWeight: 900, color: "var(--negative)" }}>
-                      {formatAdaptive(totalCardDebt)}
-                    </span>{" "}
-                    ج.م
+                  <p style={{ fontSize: 13, fontWeight: 900, margin: 0 }}>💳 سداد بطاقة سريع</p>
+                  <p style={{ fontSize: 10, marginTop: 2, marginBottom: 0, color: "var(--text-muted)" }}>
+                    المديونية: <span style={{ fontWeight: 900, color: "var(--negative)" }}>{formatAdaptive(totalCardDebt)}</span> ج.م
                   </p>
                 </div>
                 <ChevronLeft size={16} style={{ color: "var(--text-muted)" }} />
@@ -8531,12 +8503,7 @@ const CardsPage = memo(function CardsPage({
                   items={items}
                   data={data}
                   liveBalances={liveBalances}
-                  onItemClick={(item) => {
-                    if (item.type === "card") onOpenCardStatement(item);
-                    else if (item.type === "account" && WALLET_CONFIGS[item.key]) {
-                      dispatch({ type: "TOGGLE_LEDGER", payload: item.key });
-                    }
-                  }}
+                  onItemClick={handleItemClick}
                 />
               ))}
             </div>
@@ -8547,51 +8514,29 @@ const CardsPage = memo(function CardsPage({
                 liveBalances={liveBalances}
                 dispatch={dispatch}
                 onReconcile={onOpenReconcile}
+                scrollTarget={scrollTarget}
+                onScrollHandled={() => setScrollTarget(null)}
               />
             </div>
           )}
 
-          {/* All Cards Grid */}
           {cards.length > 0 && (
             <div style={{ marginTop: 20 }}>
-              <SectionTitle icon={CreditCard}>
-                كل البطاقات ({cards.length})
-              </SectionTitle>
-              <div style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
-                gap: 16,
-              }}>
+              <SectionTitle icon={CreditCard}>كل البطاقات ({cards.length})</SectionTitle>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 16 }}>
                 {cards.map((card) => {
                   const debt = computeCardDebt(data, card);
                   return (
                     <div key={card.id}>
                       <BankCard card={card} onClick={() => onOpenCardStatement(card)} />
-                      <div style={{
-                        display: "grid", gridTemplateColumns: "repeat(4, 1fr)",
-                        gap: 6, marginTop: 10,
-                      }}>
-                        <MiniStat
-                          label="متاح"
-                          value={fmtShort(Math.max(0, safeNumber(card.limit) - Math.max(0, debt)))}
-                          color="var(--positive)"
-                        />
-                        <MiniStat
-                          label={debt < 0 ? "دائن" : "مديونية"}
-                          value={fmtShort(Math.abs(debt))}
-                          color={debt < 0 ? "var(--positive)" : "var(--negative)"}
-                        />
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6, marginTop: 10 }}>
+                        <MiniStat label="متاح" value={fmtShort(Math.max(0, safeNumber(card.limit) - Math.max(0, debt)))} color="var(--positive)" />
+                        <MiniStat label={debt < 0 ? "دائن" : "مديونية"} value={fmtShort(Math.abs(debt))} color={debt < 0 ? "var(--positive)" : "var(--negative)"} />
                         <MiniStat label="حد" value={fmtShort(card.limit)} color="var(--brand)" />
                         <MiniStat label="كاش باك" value={`${card.cashbackRate || 0}%`} color="var(--warning)" />
                       </div>
                       {debt > 0 && (
-                        <button
-                          onClick={() => onOpenCardPayment(card.id)}
-                          className="btn btn-primary"
-                          style={{
-                            width: "100%", marginTop: 8, fontSize: 11, padding: "10px 12px",
-                          }}
-                        >
+                        <button onClick={() => onOpenCardPayment(card.id)} className="btn btn-primary" style={{ width: "100%", marginTop: 8, fontSize: 11, padding: "10px 12px" }}>
                           <Banknote size={12} /> سداد
                         </button>
                       )}
@@ -8603,18 +8548,11 @@ const CardsPage = memo(function CardsPage({
           )}
         </>
       ) : (
-        <CashbackView
-          data={data}
-          dispatch={dispatch}
-          addNotification={addNotification}
-          selectedYear={data.__selectedYear || 2026}
-          selectedMonth={data.__selectedMonth || "أكتوبر"}
-        />
+        <CashbackView data={data} dispatch={dispatch} addNotification={addNotification} />
       )}
     </div>
   );
 });
-
 /* Provider Group Card */
 const ProviderGroupCard = memo(({
   providerKey, items, data, liveBalances, onItemClick, defaultExpanded = true,
@@ -8757,22 +8695,18 @@ const ProviderItemRow = memo(({ item, data, liveBalances, onClick }) => {
 });
 
 /* Ledger View — كشوف الحسابات */
-const LedgerView = memo(({ data, liveBalances, dispatch, onReconcile }) => {
-  const wallets = ["fawry", "etisalat"];
-  const banks = ["cib_savings", "aaib_savings"];
-  const cash = ["cash"];
-
+const LedgerView = memo(({ data, liveBalances, dispatch, onReconcile, scrollTarget, onScrollHandled }) => {
   const groups = [
-    { title: "📱 المحافظ الإلكترونية", keys: wallets },
-    { title: "🏦 الحسابات البنكية", keys: banks },
-    { title: "💵 الكاش", keys: cash },
+    { title: "📱 المحافظ الإلكترونية", keys: ["fawry", "etisalat"] },
+    { title: "🏦 الحسابات البنكية", keys: ["cib_savings", "aaib_savings"] },
+    { title: "💵 الكاش", keys: ["cash"] },
   ];
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       {groups.map((g) => (
         <div key={g.title}>
-          <h3 style={{ fontSize: 12, fontWeight: 900, marginBottom: 8, margin: 0, padding: "8px 0" }}>
+          <h3 style={{ fontSize: 12, fontWeight: 900, marginBottom: 8, padding: "8px 0" }}>
             {g.title}
           </h3>
           {g.keys.map((k) => (
@@ -8781,7 +8715,9 @@ const LedgerView = memo(({ data, liveBalances, dispatch, onReconcile }) => {
               accountKey={k}
               data={data}
               liveBalance={safeNumber(liveBalances[k])}
-              onReconcile={() => onReconcile(k)}
+              onReconcile={onReconcile}
+              autoScroll={scrollTarget === k}
+              onScrollDone={onScrollHandled}
             />
           ))}
         </div>
@@ -8790,10 +8726,28 @@ const LedgerView = memo(({ data, liveBalances, dispatch, onReconcile }) => {
   );
 });
 
-/* Ledger Card — كشف حساب مفرد */
-const LedgerCard = memo(({ accountKey, data, liveBalance, onReconcile }) => {
+const LedgerCard = memo(({ accountKey, data, liveBalance, onReconcile, autoScroll, onScrollDone }) => {
   const [expanded, setExpanded] = useState(false);
+  const cardRef = useRef(null);
   const config = WALLET_CONFIGS[accountKey];
+
+  useEffect(() => {
+    if (autoScroll && cardRef.current) {
+      setExpanded(true);
+      setTimeout(() => {
+        if (cardRef.current) {
+          cardRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+          cardRef.current.style.transition = "box-shadow 0.4s ease";
+          cardRef.current.style.boxShadow = "0 0 0 3px var(--brand), var(--shadow-md)";
+          setTimeout(() => {
+            if (cardRef.current) cardRef.current.style.boxShadow = "";
+          }, 1500);
+        }
+        if (onScrollDone) onScrollDone();
+      }, 100);
+    }
+  }, [autoScroll, onScrollDone]);
+
   if (!config) return null;
 
   const ledger = useMemo(
@@ -8807,15 +8761,10 @@ const LedgerCard = memo(({ accountKey, data, liveBalance, onReconcile }) => {
     return { deposits, withdrawals };
   }, [ledger]);
 
-  const provider = PROVIDERS[config.group === "bank" ? accountKey.split("_")[0] : config.group] || PROVIDERS.cash;
-
   return (
-    <div className="card" style={{ marginBottom: 8 }}>
+    <div ref={cardRef} className="card" style={{ marginBottom: 8 }}>
       <div
-        style={{
-          display: "flex", alignItems: "center", justifyContent: "space-between",
-          gap: 12, cursor: "pointer",
-        }}
+        style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, cursor: "pointer" }}
         onClick={() => setExpanded(!expanded)}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 12, flex: 1, minWidth: 0 }}>
@@ -8829,11 +8778,7 @@ const LedgerCard = memo(({ accountKey, data, liveBalance, onReconcile }) => {
               />
             </div>
           ) : (
-            <div style={{
-              width: 44, height: 44, borderRadius: 14,
-              display: "flex", alignItems: "center", justifyContent: "center",
-              background: "var(--bg-muted)", color: "var(--text-secondary)",
-            }}>
+            <div style={{ width: 44, height: 44, borderRadius: 14, display: "flex", alignItems: "center", justifyContent: "center", background: "var(--bg-muted)", color: "var(--text-secondary)" }}>
               <Wallet size={20} />
             </div>
           )}
@@ -8841,27 +8786,18 @@ const LedgerCard = memo(({ accountKey, data, liveBalance, onReconcile }) => {
             <h3 style={{ fontSize: 13, fontWeight: 900, margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {config.title}
             </h3>
-            <p style={{
-              fontSize: 10, color: "var(--text-muted)",
-              marginTop: 2, marginBottom: 0, fontWeight: 700,
-            }}>
+            <p style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 2, marginBottom: 0, fontWeight: 700 }}>
               {config.subtitle}
             </p>
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-          <span className="money" style={{
-            fontSize: 15, fontWeight: 900, color: "var(--brand)",
-          }}>
+          <span className="money" style={{ fontSize: 15, fontWeight: 900, color: "var(--brand)" }}>
             {formatAdaptive(liveBalance)}
           </span>
           <ChevronDown
             size={14}
-            style={{
-              color: "var(--text-muted)",
-              transform: expanded ? "rotate(180deg)" : "none",
-              transition: "transform 0.2s ease",
-            }}
+            style={{ color: "var(--text-muted)", transform: expanded ? "rotate(180deg)" : "none", transition: "transform 0.2s ease" }}
           />
         </div>
       </div>
@@ -8874,49 +8810,31 @@ const LedgerCard = memo(({ accountKey, data, liveBalance, onReconcile }) => {
             <MiniStat label="الرصيد" value={fmtShort(liveBalance)} color="var(--brand)" />
           </div>
 
-          <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
-            <button
-              onClick={() => onReconcile(accountKey)}
-              className="btn btn-secondary"
-              style={{ flex: 1, fontSize: 10, padding: "8px 10px" }}
-            >
-              <Scale size={11} /> مطابقة
-            </button>
-          </div>
+          <button
+            onClick={(e) => { e.stopPropagation(); onReconcile(accountKey); }}
+            className="btn btn-secondary"
+            style={{ width: "100%", fontSize: 10, padding: "8px 10px", marginBottom: 10 }}
+          >
+            <Scale size={11} /> مطابقة
+          </button>
 
           {ledger.length === 0 ? (
-            <p style={{
-              fontSize: 11, color: "var(--text-muted)", textAlign: "center",
-              padding: 16, margin: 0,
-            }}>
-              لا توجد عمليات بعد آخر تحديث
+            <p style={{ fontSize: 11, color: "var(--text-muted)", textAlign: "center", padding: 16, margin: 0 }}>
+              لا توجد عمليات بعد
             </p>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 300, overflowY: "auto" }}>
               {ledger.slice(0, 20).map((t) => (
-                <div key={t.id} style={{
-                  display: "flex", justifyContent: "space-between",
-                  alignItems: "center", gap: 8,
-                  padding: 8, borderRadius: 10, background: "var(--bg-muted)",
-                }}>
+                <div key={t.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, padding: 8, borderRadius: 10, background: "var(--bg-muted)" }}>
                   <div style={{ minWidth: 0, flex: 1 }}>
-                    <p style={{
-                      fontSize: 11, fontWeight: 700, margin: 0,
-                      overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                    }}>
+                    <p style={{ fontSize: 11, fontWeight: 700, margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {t.description || "بدون وصف"}
                     </p>
-                    <p style={{
-                      fontSize: 9, color: "var(--text-muted)",
-                      marginTop: 2, marginBottom: 0, fontWeight: 700,
-                    }}>
+                    <p style={{ fontSize: 9, color: "var(--text-muted)", marginTop: 2, marginBottom: 0, fontWeight: 700 }}>
                       {t.date}
                     </p>
                   </div>
-                  <span className="money" style={{
-                    fontSize: 11, fontWeight: 900, flexShrink: 0,
-                    color: t.subType === "deposit" ? "var(--positive)" : "var(--negative)",
-                  }}>
+                  <span className="money" style={{ fontSize: 11, fontWeight: 900, flexShrink: 0, color: t.subType === "deposit" ? "var(--positive)" : "var(--negative)" }}>
                     {t.subType === "deposit" ? "+" : "−"}{fmt(t.amount)}
                   </span>
                 </div>
