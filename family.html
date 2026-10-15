@@ -15,9 +15,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging-compat.js"></script>
 <style>
-/* ══════════ DESIGN SYSTEM v5.7 — Royal Edition ══════════ */
+/* ══════════ DESIGN SYSTEM v5.7 — Auto Theme Edition ══════════ */
 :root{
   --bg-app:#F4F6FA; --bg-card:#FFFFFF; --bg-muted:#EEF2F8; --bg-elevated:#FFFFFF;
   --border-subtle:rgba(15,27,51,0.06); --border-default:rgba(15,27,51,0.10);
@@ -53,20 +52,22 @@ body{font-family:'Cairo',system-ui,sans-serif;font-weight:500;color:var(--text-p
   overflow-x:hidden;-webkit-font-smoothing:antialiased;transition:background .5s ease,color .5s ease;position:relative}
 body::before{content:'';position:fixed;top:-15%;right:-15%;width:70vw;height:70vw;max-width:520px;max-height:520px;
   background:radial-gradient(circle,rgba(99,102,241,.10) 0%,transparent 62%);
-  pointer-events:none;z-index:0;filter:blur(20px);transition:opacity .6s}
+  pointer-events:none;z-index:0;filter:blur(20px);transition:background .6s ease}
 body::after{content:'';position:fixed;bottom:-20%;left:-15%;width:60vw;height:60vw;max-width:460px;max-height:460px;
   background:radial-gradient(circle,rgba(212,168,87,.08) 0%,transparent 62%);
-  pointer-events:none;z-index:0;filter:blur(20px);transition:opacity .6s}
-body.light::before{background:radial-gradient(circle,rgba(99,102,241,.06) 0%,transparent 62%)}
-body.light::after{background:radial-gradient(circle,rgba(212,168,87,.05) 0%,transparent 62%)}
+  pointer-events:none;z-index:0;filter:blur(20px);transition:background .6s ease}
+body.light::before{background:radial-gradient(circle,rgba(99,102,241,.05) 0%,transparent 62%)}
+body.light::after{background:radial-gradient(circle,rgba(212,168,87,.04) 0%,transparent 62%)}
 ::-webkit-scrollbar{width:6px;height:6px}
 ::-webkit-scrollbar-thumb{background:var(--border-default);border-radius:999px}
 .tabular{font-variant-numeric:tabular-nums;font-feature-settings:'tnum' 1;letter-spacing:-.02em}
 h1,h2,h3,h4{font-weight:800;letter-spacing:-.02em}
 button,input,textarea,select{font-family:'Cairo',system-ui,sans-serif}
 
-/* Theme transition helper */
-.theme-transition, .theme-transition *{transition:background .5s ease,color .5s ease,border-color .5s ease !important}
+/* Smooth theme transition applied temporarily */
+.theme-transition, .theme-transition *{
+  transition: background .5s ease, color .5s ease, border-color .5s ease, box-shadow .5s ease !important;
+}
 
 .splash{position:fixed;inset:0;z-index:9989;background:linear-gradient(135deg,#050A14 0%,#0A1628 50%,#1E2B4A 100%);
   display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff;transition:opacity .3s}
@@ -145,10 +146,16 @@ button,input,textarea,select{font-family:'Cairo',system-ui,sans-serif}
 .header-actions{display:flex;gap:6px;flex-shrink:0}
 .icon-btn{width:40px;height:40px;border-radius:12px;background:var(--bg-card);border:1px solid var(--border-subtle);
   color:var(--text-secondary);display:flex;align-items:center;justify-content:center;cursor:pointer;
-  transition:all .2s;box-shadow:var(--shadow-1)}
+  transition:all .2s;box-shadow:var(--shadow-1);position:relative}
 .icon-btn:hover{background:var(--accent-soft);color:var(--accent);border-color:var(--accent);transform:translateY(-1px)}
 .icon-btn:active{transform:scale(.94)}
 .icon-btn svg{width:17px;height:17px}
+/* Theme mode small indicator on theme button */
+.icon-btn .theme-mode-dot{position:absolute;bottom:3px;right:3px;width:9px;height:9px;border-radius:50%;
+  border:1.5px solid var(--bg-card);background:var(--accent);transition:background .4s}
+.icon-btn .theme-mode-dot.auto{background:linear-gradient(135deg,#FBBF24 50%,#4338CA 50%)}
+.icon-btn .theme-mode-dot.dark{background:#4338CA}
+.icon-btn .theme-mode-dot.light{background:#FBBF24}
 
 .admin-badge{display:inline-flex;align-items:center;gap:3px;
   font-size:9px;font-weight:900;color:#B45309;
@@ -223,7 +230,7 @@ body.dark .admin-badge{color:#FBBF24}
 .stat-mini{background:var(--bg-card);border-radius:16px;padding:14px 12px;
   border:1px solid var(--border-subtle);box-shadow:var(--shadow-1);
   display:flex;flex-direction:column;gap:6px;position:relative;overflow:hidden;
-  transition:transform .2s}
+  transition:transform .2s,background .4s,border-color .4s}
 .stat-mini:hover{transform:translateY(-2px)}
 .stat-mini::before{content:'';position:absolute;top:0;right:0;width:3px;height:100%;border-radius:2px}
 .stat-mini.today::before{background:linear-gradient(180deg,#6366F1,#4338CA)}
@@ -249,7 +256,8 @@ body.dark .admin-badge{color:#FBBF24}
   background:var(--accent-soft);border:none;padding:6px 12px;border-radius:999px}
 
 .card{background:var(--bg-card);border-radius:18px;border:1px solid var(--border-subtle);
-  padding:18px;margin-bottom:14px;box-shadow:var(--shadow-2);position:relative;overflow:hidden}
+  padding:18px;margin-bottom:14px;box-shadow:var(--shadow-2);position:relative;overflow:hidden;
+  transition:background .4s,border-color .4s}
 .card-title{font-size:13.5px;font-weight:900;color:var(--text-primary);margin-bottom:14px;
   display:flex;align-items:center;gap:9px}
 .card-title svg{width:15px;height:15px;color:var(--accent);flex-shrink:0}
@@ -413,7 +421,8 @@ body.dark .admin-badge{color:#FBBF24}
   padding:8px 12px calc(8px + env(safe-area-inset-bottom));
   background:color-mix(in srgb,var(--bg-card) 94%,transparent);
   backdrop-filter:blur(28px) saturate(180%);-webkit-backdrop-filter:blur(28px) saturate(180%);
-  border-top:1px solid var(--border-subtle);box-shadow:0 -8px 32px rgba(10,22,40,.08)}
+  border-top:1px solid var(--border-subtle);box-shadow:0 -8px 32px rgba(10,22,40,.08);
+  transition:background .4s,border-color .4s}
 body.dark .bottom-nav{box-shadow:0 -8px 32px rgba(0,0,0,.5)}
 .nav-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;max-width:600px;margin:0 auto}
 .nav-btn{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;height:58px;
@@ -670,32 +679,39 @@ body.dark .pending-chevron{color:#FBBF24}
 .setting-btn.primary{background:var(--accent);color:#fff;box-shadow:0 4px 12px -2px rgba(99,102,241,.3)}
 .setting-btn.danger{background:var(--danger-soft);color:var(--danger)}
 
-/* ═══════════════ THEME SEGMENTED CONTROL — New ═══════════════ */
+/* ══════════ THEME SEGMENTED CONTROL ══════════ */
 .theme-segmented{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;padding:5px;
   background:var(--bg-muted);border-radius:12px;margin-top:8px}
-.theme-seg{padding:11px 8px;border-radius:9px;color:var(--text-muted);background:transparent;
+.theme-seg{padding:12px 8px;border-radius:9px;color:var(--text-muted);background:transparent;
   border:none;font-size:11.5px;font-weight:800;cursor:pointer;transition:all .25s;
-  display:flex;flex-direction:column;align-items:center;gap:3px;line-height:1.2}
-.theme-seg .seg-icon{font-size:16px;line-height:1}
-.theme-seg:hover{color:var(--text-primary)}
-.theme-seg.on{background:var(--bg-card);color:var(--accent);box-shadow:0 4px 12px rgba(10,22,40,.08);font-weight:900;transform:translateY(-1px)}
-.theme-seg.on .seg-sub{color:var(--accent);opacity:.8}
+  display:flex;flex-direction:column;align-items:center;gap:4px;line-height:1.2;font-family:inherit}
+.theme-seg .seg-icon{font-size:18px;line-height:1}
+.theme-seg:hover{color:var(--text-primary);background:color-mix(in srgb,var(--bg-card) 50%,transparent)}
+.theme-seg.on{background:var(--bg-card);color:var(--accent);
+  box-shadow:0 4px 12px rgba(10,22,40,.08);font-weight:900;transform:translateY(-1px)}
+.theme-seg.on .seg-sub{color:var(--accent);opacity:.9}
 .theme-seg .seg-sub{font-size:9px;font-weight:700;opacity:.7}
+body.dark .theme-seg.on{box-shadow:0 4px 12px rgba(0,0,0,.4)}
 
-.sun-info{display:flex;align-items:center;gap:10px;padding:10px 12px;margin-top:10px;
-  background:linear-gradient(135deg,rgba(251,191,36,.10),rgba(217,119,6,.06));
-  border:1px solid rgba(217,119,6,.2);border-radius:10px;font-size:11px;font-weight:700;color:var(--text-secondary)}
-.sun-info-icon{width:26px;height:26px;border-radius:8px;display:flex;align-items:center;justify-content:center;
-  background:linear-gradient(135deg,#FBBF24,#D97706);color:#fff;flex-shrink:0}
-.sun-info-icon svg{width:14px;height:14px}
+.sun-info{display:flex;align-items:center;gap:10px;padding:11px 13px;margin-top:10px;
+  background:linear-gradient(135deg,rgba(251,191,36,.12),rgba(217,119,6,.06));
+  border:1px solid rgba(217,119,6,.22);border-radius:10px;
+  font-size:11.5px;font-weight:700;color:var(--text-secondary);line-height:1.5}
+.sun-info-icon{width:28px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center;
+  background:linear-gradient(135deg,#FBBF24,#D97706);color:#fff;flex-shrink:0;
+  box-shadow:0 4px 10px -2px rgba(217,119,6,.5)}
+.sun-info-icon svg{width:15px;height:15px}
 .sun-info strong{color:var(--text-primary);font-weight:900;font-variant-numeric:tabular-nums}
 
-/* FCM status pill */
-.fcm-pill{display:inline-flex;align-items:center;gap:4px;font-size:9.5px;font-weight:900;
-  padding:3px 9px;border-radius:999px;margin-right:auto}
-.fcm-pill.ok{background:var(--success-soft);color:var(--success);border:1px solid rgba(16,185,129,.3)}
-.fcm-pill.warn{background:var(--warning-soft);color:var(--warning);border:1px solid rgba(217,119,6,.3)}
-.fcm-pill.off{background:var(--danger-soft);color:var(--danger);border:1px solid rgba(220,38,38,.3)}
+/* Status indicator pill for auto theme */
+.auto-status-pill{display:inline-flex;align-items:center;gap:5px;
+  font-size:10px;font-weight:900;padding:4px 10px;border-radius:999px;margin-right:auto;
+  background:var(--accent-soft);color:var(--accent);border:1px solid rgba(99,102,241,.25)}
+.auto-status-pill.dark-pill{background:rgba(67,56,202,.14);color:#818CF8;border-color:rgba(129,140,248,.35)}
+.auto-status-pill.light-pill{background:rgba(251,191,36,.15);color:#B45309;border-color:rgba(217,119,6,.35)}
+body.dark .auto-status-pill.light-pill{color:#FBBF24}
+.auto-status-pill .dot-live{width:6px;height:6px;border-radius:50%;background:currentColor;
+  animation:dotPulse 1.6s infinite}
 
 .admin-info{display:flex;gap:8px;align-items:flex-start;padding:12px;border-radius:12px;
   background:linear-gradient(135deg,rgba(251,191,36,.10),rgba(217,119,6,.08));
@@ -714,7 +730,8 @@ body.dark .pending-chevron{color:#FBBF24}
   .stat-mini{padding:12px 10px}
   .stat-mini-val{font-size:14px}
   .hh-value .num{font-size:30px}
-  .theme-seg{font-size:10.5px;padding:9px 5px}
+  .theme-seg{font-size:10.5px;padding:10px 5px}
+  .theme-seg .seg-icon{font-size:16px}
 }
 @media (min-width:640px){
   .items{grid-template-columns:repeat(4,1fr)}
@@ -806,10 +823,11 @@ body.dark .pending-chevron{color:#FBBF24}
           <path d="M8.6 13.5l6.8 3.98M15.4 6.5l-6.8 3.98"/>
         </svg>
       </button>
-      <button class="icon-btn" id="themeBtn" aria-label="الوضع">
+      <button class="icon-btn" id="themeBtn" aria-label="الوضع" title="تبديل الوضع (تلقائي/داكن/فاتح)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="12" r="4.5"/><path d="M12 1.5v2M12 20.5v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1.5 12h2M20.5 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
         </svg>
+        <span class="theme-mode-dot auto" id="themeModeDot"></span>
       </button>
       <button class="icon-btn" id="logoutBtn" aria-label="خروج">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
@@ -1168,13 +1186,17 @@ body.dark .pending-chevron{color:#FBBF24}
         </div>
       </div>
 
-      <!-- ══════ APPEARANCE — New ══════ -->
+      <!-- ══════ APPEARANCE — 3 Theme Modes ══════ -->
       <div class="card">
         <div class="card-title">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="4.5"/><path d="M12 1.5v2M12 20.5v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1.5 12h2M20.5 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
           </svg>
           المظهر
+          <span class="auto-status-pill" id="autoStatusPill" style="display:none">
+            <span class="dot-live"></span>
+            <span id="autoStatusText">آلي</span>
+          </span>
         </div>
         <div style="font-size:11.5px;color:var(--text-muted);font-weight:700;margin-bottom:4px">اختر نمط العرض</div>
         <div class="theme-segmented" id="themeSegmented">
@@ -1200,7 +1222,7 @@ body.dark .pending-chevron{color:#FBBF24}
               <path d="M17 18a5 5 0 0 0-10 0"/><path d="M12 9V3M4.22 10.22l1.42 1.42M1 18h2M21 18h2M18.36 11.64l1.42-1.42M23 22H1M8 6l4-4 4 4"/>
             </svg>
           </div>
-          <div>
+          <div id="sunInfoText">
             🌅 شروق: <strong id="sunriseTime">—</strong> · 🌇 غروب: <strong id="sunsetTime">—</strong>
           </div>
         </div>
@@ -1257,23 +1279,6 @@ body.dark .pending-chevron{color:#FBBF24}
         </div>
         <div class="setting-row">
           <div>
-            <div class="setting-label" style="display:flex;align-items:center;gap:8px">
-              <span>Push Notifications (FCM)</span>
-              <span class="fcm-pill off" id="fcmPill">غير مفعّل</span>
-            </div>
-            <div class="setting-desc" id="fcmStatus">إشعارات فورية حتى في الخلفية</div>
-          </div>
-          <button class="setting-btn primary" id="enableFcmBtn">تفعيل</button>
-        </div>
-        <div class="setting-row" id="fcmTestRow" style="display:none">
-          <div>
-            <div class="setting-label">اختبار الإشعارات</div>
-            <div class="setting-desc">إرسال إشعار تجريبي الآن</div>
-          </div>
-          <button class="setting-btn primary" id="testFcmBtn">اختبار</button>
-        </div>
-        <div class="setting-row">
-          <div>
             <div class="setting-label">Telegram الذكية</div>
             <div class="setting-desc">✅ مفعّلة — تصلك فوراً</div>
           </div>
@@ -1305,6 +1310,7 @@ body.dark .pending-chevron{color:#FBBF24}
       <div class="card" style="text-align:center;padding:18px;color:var(--text-muted);font-size:11px;font-weight:700;line-height:1.9">
         🌸 محل هاني · نسخة العيلة · V5.7<br>
         🔗 مرتبط بمحفظتي V85 · ☁️ Google Drive<br>
+        🌗 الوضع التلقائي حسب شروق/غروب القاهرة<br>
         💰 الجنيه المصري فقط
       </div>
     </div>
@@ -1356,9 +1362,6 @@ var FIREBASE_DOC_PATH = { collection: 'finance_2026', doc: 'user_ahmed_data' };
 var TELEGRAM_PROXY_URL = 'https://curly-sea-90cftelegram-proxy.ahmedmkh.workers.dev';
 var TELEGRAM_ENABLED = !!TELEGRAM_PROXY_URL;
 
-/* FCM VAPID key — استبدله بمفتاحك من Firebase Console → Cloud Messaging → Web Push certificates */
-var FCM_VAPID_KEY = 'BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZJjSgSnfckjBJuBkr3qBUYIHBQFLXYp5Nksh8U';
-
 var USERS = {
   '1111': { id: 'ans',         name: 'أنس',        emoji: 'أ' },
   '2222': { id: 'abdelrahman', name: 'عبد الرحمن', emoji: 'ع' },
@@ -1381,14 +1384,12 @@ var CLOUD_TIMEOUT_MS = 12000;
 var WHISPER_MODEL = 'whisper-1';
 var API_KEY_LS = 'hani_openai_key';
 var REMINDERS_LAST_CHECK = 'hani_reminders_last';
-var THEME_LS_KEY = 'theme';
-var THEME_MODE_LS_KEY = 'hani_theme_mode'; // auto | dark | light
+var THEME_MODE_LS_KEY = 'hani_theme_mode'; /* auto | dark | light */
 var SHARED_V85_PREFIX = 'v85_';
 var NOTIF_REQUESTED_KEY = 'hani_notif_requested';
-var FCM_TOKEN_LS = 'hani_fcm_token';
-var FCM_ENABLED_LS = 'hani_fcm_enabled';
 var CAIRO_LAT = 30.0444;
 var CAIRO_LNG = 31.2357;
+var THEME_CHECK_INTERVAL_MS = 5 * 60 * 1000; /* 5 دقائق */
 
 var AZKAR = [
   { text: 'سُبْحَانَ اللَّهِ وَبِحَمْدِهِ، سُبْحَانَ اللَّهِ الْعَظِيمِ', icon: '📿' },
@@ -1455,6 +1456,7 @@ var currentTab = 'home';
 var favorites = [];
 var recentItems = [];
 var budget = 0;
+/* themeMode محفوظ في localStorage — auto | dark | light */
 var themeMode = localStorage.getItem(THEME_MODE_LS_KEY) || 'auto';
 var isDark = true;
 var deferredPrompt = null;
@@ -1478,9 +1480,6 @@ var themeCheckInterval = null;
 var histUserFilter = 'all';
 var histSearchQuery = '';
 var pendingExpanded = false;
-var messaging = null;
-var swRegistration = null;
-var fcmEnabled = localStorage.getItem(FCM_ENABLED_LS) === 'yes';
 
 /* ═══════════════ UTILITIES ═══════════════ */
 function isoDateCairo(d){
@@ -1638,7 +1637,11 @@ function updateApiKeyStatus(){
   }
 }
 
-/* ═══════════════ SUNRISE / SUNSET CALC (NOAA Simplified) ═══════════════ */
+/* ═══════════════════════════════════════════════════════════════
+   SUNRISE / SUNSET CALCULATION
+   خوارزمية فلكية (NOAA Simplified / SunCalc-like)
+   تعمل بدون اتصال بالإنترنت وبدون API خارجي
+   ═══════════════════════════════════════════════════════════════ */
 function getSunTimes(date, lat, lng) {
   var rad = Math.PI / 180;
   var dayMs = 86400000;
@@ -1676,6 +1679,7 @@ function getSunTimes(date, lat, lng) {
   return { sunrise: fromJulian(Jrise), sunset: fromJulian(Jset) };
 }
 
+/* ═══════════════ AUTO THEME ═══════════════ */
 function applyAutoTheme(){
   if(themeMode !== 'auto') return false;
   try{
@@ -1685,6 +1689,7 @@ function applyAutoTheme(){
     if(shouldBeDark !== isDark){
       isDark = shouldBeDark;
       applyTheme(true);
+      console.log('🌗 Auto theme switched to:', shouldBeDark ? 'dark' : 'light');
       return true;
     }
   }catch(e){console.warn('Sun calc error:',e);}
@@ -1696,13 +1701,39 @@ function updateSunInfoDisplay(){
     var now = new Date();
     var times = getSunTimes(now, CAIRO_LAT, CAIRO_LNG);
     var fmtTime = function(d){
-      return d.toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit',timeZone:CAIRO_TZ});
+      try{return d.toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit',timeZone:CAIRO_TZ});}
+      catch(e){return d.toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'});}
     };
     var sr = document.getElementById('sunriseTime');
     var ss = document.getElementById('sunsetTime');
     if(sr) sr.textContent = fmtTime(times.sunrise);
     if(ss) ss.textContent = fmtTime(times.sunset);
-  }catch(e){}
+  }catch(e){console.warn('Sun display error:',e);}
+}
+
+function updateAutoStatusPill(){
+  var pill = document.getElementById('autoStatusPill');
+  var txt = document.getElementById('autoStatusText');
+  if(!pill || !txt) return;
+  if(themeMode === 'auto'){
+    pill.style.display = 'inline-flex';
+    pill.classList.remove('dark-pill','light-pill');
+    if(isDark){
+      pill.classList.add('dark-pill');
+      txt.textContent = 'آلي · داكن الآن';
+    } else {
+      pill.classList.add('light-pill');
+      txt.textContent = 'آلي · فاتح الآن';
+    }
+  } else {
+    pill.style.display = 'none';
+  }
+}
+
+function updateThemeModeDot(){
+  var dot = document.getElementById('themeModeDot');
+  if(!dot) return;
+  dot.className = 'theme-mode-dot ' + themeMode;
 }
 
 function applyTheme(isTransition){
@@ -1712,293 +1743,56 @@ function applyTheme(isTransition){
   if(meta)meta.content=isDark?'#050A14':'#F4F6FA';
   if(isTransition){
     document.body.classList.add('theme-transition');
+    /* Remove transition class after animation completes to avoid slowness */
     setTimeout(function(){document.body.classList.remove('theme-transition');},600);
   }
   /* Update theme segmented control */
   document.querySelectorAll('.theme-seg').forEach(function(seg){
     seg.classList.toggle('on', seg.dataset.mode === themeMode);
   });
+  updateThemeModeDot();
+  updateAutoStatusPill();
   updateSunInfoDisplay();
 }
 
 function setThemeMode(mode){
+  if(mode !== 'auto' && mode !== 'dark' && mode !== 'light') return;
+  if(themeMode === mode) return;
   themeMode = mode;
   localStorage.setItem(THEME_MODE_LS_KEY, mode);
   if(mode === 'auto'){
-    applyAutoTheme();
+    /* Apply auto state right away */
+    try{
+      var now = new Date();
+      var times = getSunTimes(now, CAIRO_LAT, CAIRO_LNG);
+      isDark = (now < times.sunrise || now > times.sunset);
+    }catch(e){ isDark = true; }
+    applyTheme(true);
+    toast('🌗 وضع تلقائي — يتغير مع شروق/غروب القاهرة');
   }else if(mode === 'dark'){
     isDark = true;
     applyTheme(true);
+    toast('🌙 وضع داكن دائم');
   }else{
     isDark = false;
     applyTheme(true);
+    toast('☀️ وضع فاتح دائم');
   }
-  toast(mode === 'auto' ? '🌗 وضع تلقائي (غروب → شروق)' : mode === 'dark' ? '🌙 وضع داكن' : '☀️ وضع فاتح');
 }
 
 function startAutoThemeWatcher(){
   if(themeCheckInterval) clearInterval(themeCheckInterval);
-  applyAutoTheme();
+  /* Apply immediately */
+  if(themeMode === 'auto') applyAutoTheme();
   updateSunInfoDisplay();
-  /* Check every 5 minutes */
+  updateThemeModeDot();
+  updateAutoStatusPill();
+  /* Then every 5 minutes */
   themeCheckInterval = setInterval(function(){
-    applyAutoTheme();
+    if(themeMode === 'auto') applyAutoTheme();
     updateSunInfoDisplay();
-  }, 5 * 60 * 1000);
-}
-
-/* ═══════════════ FIREBASE CLOUD MESSAGING ═══════════════ */
-function getServiceWorkerCode(){
-  /* Service worker inline for FCM background messages + PWA caching */
-  return `
-/* محل هاني — Service Worker V5.7 */
-importScripts('https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js');
-importScripts('https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging-compat.js');
-
-try{
-  firebase.initializeApp({
-    apiKey: "AIzaSyCEq-Trf1oFsvPF5tlMvqU83ea_J2DLZjs",
-    authDomain: "finance-app-2026-3e318.firebaseapp.com",
-    projectId: "finance-app-2026-3e318",
-    storageBucket: "finance-app-2026-3e318.firebasestorage.app",
-    messagingSenderId: "855414629770",
-    appId: "1:855414629770:web:8bb07198b8245b63781473"
-  });
-  var messaging = firebase.messaging();
-  messaging.onBackgroundMessage(function(payload){
-    var title = (payload.notification && payload.notification.title) || (payload.data && payload.data.title) || 'محل هاني';
-    var body  = (payload.notification && payload.notification.body)  || (payload.data && payload.data.body)  || 'لديك إشعار جديد';
-    var icon  = (payload.notification && payload.notification.icon)  || 'data:image/svg+xml;charset=utf-8,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#818CF8"/><stop offset="1" stop-color="#4338CA"/></linearGradient></defs><rect width="192" height="192" rx="42" fill="url(#g)"/><path d="M60 96 L96 60 L132 96 V138 a6 6 0 0 1-6 6 h-18 V112 h-24 V144 H66 a6 6 0 0 1-6-6 Z" fill="white" opacity="0.95"/></svg>');
-    self.registration.showNotification(title, {
-      body: body,
-      icon: icon,
-      badge: icon,
-      dir: 'rtl',
-      lang: 'ar',
-      vibrate: [200, 100, 200],
-      tag: 'hani-notification',
-      renotify: true,
-      data: payload.data || {}
-    });
-  });
-}catch(e){ console.warn('SW Firebase init failed:', e); }
-
-self.addEventListener('notificationclick', function(event){
-  event.notification.close();
-  event.waitUntil(
-    clients.matchAll({type:'window', includeUncontrolled:true}).then(function(clientList){
-      for(var i=0;i<clientList.length;i++){
-        if(clientList[i].url.indexOf(self.location.origin) >= 0){
-          return clientList[i].focus();
-        }
-      }
-      if(clients.openWindow) return clients.openWindow('./');
-    })
-  );
-});
-
-self.addEventListener('install', function(e){ self.skipWaiting(); });
-self.addEventListener('activate', function(e){ e.waitUntil(clients.claim()); });
-`;
-}
-
-async function registerServiceWorker(){
-  if(!('serviceWorker' in navigator)){
-    throw new Error('Service Worker غير مدعوم');
-  }
-  if(swRegistration) return swRegistration;
-  try{
-    var code = getServiceWorkerCode();
-    var blob = new Blob([code], {type: 'application/javascript'});
-    var swUrl = URL.createObjectURL(blob);
-    swRegistration = await navigator.serviceWorker.register(swUrl, {scope: './'});
-    console.log('✓ SW registered:', swRegistration.scope);
-    return swRegistration;
-  }catch(e){
-    console.error('SW registration failed:', e);
-    throw e;
-  }
-}
-
-async function initFCM(){
-  if(!('Notification' in window)) throw new Error('المتصفح لا يدعم الإشعارات');
-  if(!('serviceWorker' in navigator)) throw new Error('Service Worker غير مدعوم');
-  if(!firebase.messaging || !firebase.messaging.isSupported) throw new Error('FCM غير مدعوم على هذا المتصفح');
-  var supported = false;
-  try{ supported = firebase.messaging.isSupported(); }catch(e){}
-  if(!supported) throw new Error('FCM غير مدعوم على هذا المتصفح');
-
-  /* Permission */
-  var perm = Notification.permission;
-  if(perm === 'default'){
-    perm = await Notification.requestPermission();
-  }
-  if(perm !== 'granted'){
-    throw new Error('لم يتم منح إذن الإشعارات');
-  }
-
-  /* SW */
-  await registerServiceWorker();
-
-  /* Get token */
-  messaging = firebase.messaging();
-  var token = null;
-  try{
-    token = await messaging.getToken({vapidKey: FCM_VAPID_KEY, serviceWorkerRegistration: swRegistration});
-  }catch(e){
-    console.warn('getToken failed:', e);
-    throw new Error('فشل الحصول على التوكن — تأكد من VAPID key');
-  }
-  if(!token) throw new Error('لم يتم إنشاء التوكن');
-
-  localStorage.setItem(FCM_TOKEN_LS, token);
-  fcmEnabled = true;
-  localStorage.setItem(FCM_ENABLED_LS, 'yes');
-
-  /* Save token to Firestore */
-  await saveFcmTokenToFirestore(token);
-
-  /* Foreground handler */
-  messaging.onMessage(function(payload){
-    console.log('📨 FCM foreground:', payload);
-    var title = (payload.notification && payload.notification.title) || (payload.data && payload.data.title) || 'محل هاني';
-    var body  = (payload.notification && payload.notification.body)  || (payload.data && payload.data.body)  || '';
-    toast(title + (body ? ' — ' + body : ''), 'ok');
-    if(navigator.vibrate) navigator.vibrate([200, 100, 200]);
-  });
-
-  updateFcmUI(true);
-  return token;
-}
-
-async function saveFcmTokenToFirestore(token){
-  if(!docRef || !currentUser) return;
-  try{
-    await db.runTransaction(function(transaction){
-      return transaction.get(docRef).then(function(snap){
-        var d = snap.exists ? (snap.data() || {}) : {};
-        var tokens = d.fcmTokens || {};
-        tokens[currentUser.id] = {
-          token: token,
-          updatedAt: Date.now(),
-          userName: currentUser.name,
-          platform: navigator.platform || 'web',
-          userAgent: navigator.userAgent.slice(0, 200)
-        };
-        transaction.set(docRef, {fcmTokens: tokens}, {merge: true});
-      });
-    });
-    console.log('✓ FCM token saved to Firestore');
-  }catch(e){
-    console.warn('Failed to save FCM token:', e);
-  }
-}
-
-function updateFcmUI(enabled){
-  var pill = document.getElementById('fcmPill');
-  var status = document.getElementById('fcmStatus');
-  var btn = document.getElementById('enableFcmBtn');
-  var testRow = document.getElementById('fcmTestRow');
-
-  if(!pill || !status || !btn) return;
-
-  if(enabled){
-    pill.className = 'fcm-pill ok';
-    pill.textContent = '✓ مفعّل';
-    status.textContent = 'سيصلك إشعار فوري عند أي حدث';
-    btn.textContent = 'إعادة تعيين';
-    btn.className = 'setting-btn danger';
-    if(testRow) testRow.style.display = 'flex';
-  }else{
-    pill.className = 'fcm-pill off';
-    pill.textContent = 'غير مفعّل';
-    status.textContent = 'إشعارات فورية حتى في الخلفية';
-    btn.textContent = 'تفعيل';
-    btn.className = 'setting-btn primary';
-    if(testRow) testRow.style.display = 'none';
-  }
-}
-
-async function disableFCM(){
-  try{
-    if(messaging){
-      await messaging.deleteToken().catch(function(){});
-    }
-  }catch(e){}
-  localStorage.removeItem(FCM_TOKEN_LS);
-  localStorage.removeItem(FCM_ENABLED_LS);
-  fcmEnabled = false;
-  /* Remove from Firestore */
-  if(docRef && currentUser){
-    try{
-      await db.runTransaction(function(transaction){
-        return transaction.get(docRef).then(function(snap){
-          if(!snap.exists) return;
-          var d = snap.data() || {};
-          var tokens = d.fcmTokens || {};
-          if(tokens[currentUser.id]){
-            delete tokens[currentUser.id];
-            transaction.set(docRef, {fcmTokens: tokens}, {merge: true});
-          }
-        });
-      });
-    }catch(e){}
-  }
-  updateFcmUI(false);
-  toast('تم إلغاء تفعيل Push Notifications');
-}
-
-async function testFcmLocal(){
-  /* اختبار الإشعارات المحلية (بدون خادم) */
-  if(Notification.permission === 'granted'){
-    try{
-      new Notification('🔔 إشعار تجريبي', {
-        body: 'محل هاني يعمل بشكل صحيح — Push Notifications جاهزة',
-        icon: 'data:image/svg+xml;charset=utf-8,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192"><rect width="192" height="192" rx="42" fill="#4F46E5"/></svg>'),
-        dir: 'rtl',
-        lang: 'ar'
-      });
-    }catch(e){}
-  }
-  if(swRegistration){
-    try{
-      await swRegistration.showNotification('🔔 إشعار تجريبي من SW', {
-        body: 'هذا إشعار من Service Worker — يعمل حتى لو التطبيق في الخلفية',
-        icon: 'data:image/svg+xml;charset=utf-8,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192"><rect width="192" height="192" rx="42" fill="#4F46E5"/></svg>'),
-        dir: 'rtl',
-        lang: 'ar',
-        vibrate: [200,100,200],
-        tag: 'hani-test'
-      });
-    }catch(e){console.warn('SW notification failed:', e);}
-  }
-  toast('تم إرسال إشعار تجريبي');
-}
-
-async function handleEnableFcm(){
-  if(fcmEnabled){
-    /* Confirm disable */
-    modal({
-      title: 'إلغاء تفعيل الإشعارات؟',
-      message: 'لن تصلك الإشعارات الفورية حتى تعيد التفعيل',
-      danger: true,
-      confirmText: 'إلغاء التفعيل',
-      onConfirm: function(){ disableFCM(); }
-    });
-    return;
-  }
-  var btn = document.getElementById('enableFcmBtn');
-  if(btn){ btn.disabled = true; btn.textContent = 'جارٍ التفعيل...'; }
-  try{
-    await initFCM();
-    toast('✓ تم تفعيل Push Notifications');
-  }catch(e){
-    console.error('FCM init failed:', e);
-    toast('فشل التفعيل: ' + (e.message || 'خطأ'), 'err');
-    updateFcmUI(false);
-  }finally{
-    if(btn) btn.disabled = false;
-  }
+    updateAutoStatusPill();
+  }, THEME_CHECK_INTERVAL_MS);
 }
 
 /* ═══════════════ PWA SETUP ═══════════════ */
@@ -2159,8 +1953,9 @@ function resetLock(){
   document.addEventListener(e,resetLock,{passive:true});
 });
 
-/* Init theme on load */
+/* ═══════════════ INITIAL THEME ON LOAD ═══════════════ */
 function initThemeOnLoad(){
+  themeMode = localStorage.getItem(THEME_MODE_LS_KEY) || 'auto';
   if(themeMode === 'auto'){
     try{
       var now = new Date();
@@ -2239,12 +2034,6 @@ function init(){
   var azkarPromise=showAzkar();
   Promise.all([authPromise,azkarPromise]).then(function(){
     showMainApp();setupSync();subscribe();startSmartReminders();startAutoThemeWatcher();autoRequestNotifications();
-    /* Try silent FCM re-registration if was enabled */
-    if(fcmEnabled){
-      setTimeout(function(){
-        initFCM().catch(function(e){ console.warn('FCM silent re-init failed:', e); fcmEnabled=false; updateFcmUI(false); });
-      }, 2500);
-    }
   }).catch(function(err){
     console.warn('بدون Firebase:',err);
     showMainApp();
@@ -2253,6 +2042,8 @@ function init(){
     document.getElementById('heroSub').textContent='تحقق من الإنترنت وأعد التحميل';
     var syncText=document.getElementById('syncStripText');
     if(syncText)syncText.textContent='غير متصل';
+    /* Still start auto theme watcher even offline */
+    startAutoThemeWatcher();
   });
 }
 
@@ -2296,7 +2087,13 @@ function showMainApp(){
   updateDateQuickButtons();
   updateApiKeyStatus();
   updateNotifStatus();
-  updateFcmUI(fcmEnabled);
+  /* Apply theme state to segmented control */
+  document.querySelectorAll('.theme-seg').forEach(function(seg){
+    seg.classList.toggle('on', seg.dataset.mode === themeMode);
+  });
+  updateThemeModeDot();
+  updateAutoStatusPill();
+  updateSunInfoDisplay();
   var ci=document.getElementById('customDateInput');
   if(ci)ci.max=isoDate();
   resetLock();setupSync();setupInstall();
@@ -2634,13 +2431,14 @@ function bindEvents(){
     renderHistory();
   });
 
+  /* Theme button cycles through modes */
   document.getElementById('themeBtn').addEventListener('click',function(){
-    /* Cycle through modes */
     var order = ['auto','dark','light'];
     var i = order.indexOf(themeMode);
     setThemeMode(order[(i+1) % order.length]);
   });
 
+  /* Segmented control */
   document.getElementById('themeSegmented').addEventListener('click',function(e){
     var seg = e.target.closest('.theme-seg');
     if(!seg) return;
@@ -2655,8 +2453,6 @@ function bindEvents(){
   document.getElementById('testTelegramBtn').addEventListener('click',testTelegram);
   document.getElementById('setApiKeyBtn').addEventListener('click',setApiKeyModal);
   document.getElementById('enableNotifBtn').addEventListener('click',requestNotifPermission);
-  document.getElementById('enableFcmBtn').addEventListener('click',handleEnableFcm);
-  document.getElementById('testFcmBtn').addEventListener('click',testFcmLocal);
 
   document.getElementById('feed').addEventListener('click',function(e){
     var editBtn=e.target.closest('[data-e]');if(editBtn){doEdit(editBtn.dataset.e);return;}
@@ -2723,7 +2519,7 @@ function switchTab(t){
   document.querySelectorAll('.tab').forEach(function(c){c.classList.toggle('active',c.id==='tab-'+t);});
   if(t==='history')renderHistory();
   if(t==='family')renderFamilyTab();
-  if(t==='profile'){updateBudgetDesc();updateSunInfoDisplay();}
+  if(t==='profile'){updateBudgetDesc();updateSunInfoDisplay();updateAutoStatusPill();}
 }
 
 function saveTx(){
@@ -2991,17 +2787,13 @@ function approveDelete(reqId){
   var req = allDeleteRequests.find(function(r){return r.id===reqId;});
   if(!req){toast('الطلب غير موجود','err');return;}
   if(req.status!=='pending'){toast('تمت مراجعة الطلب','warn');return;}
-
   modal({
     title:'موافقة على الحذف',
     message:'سيتم حذف العملية نهائياً من السجل:\n\n'+esc(req.txSnapshot.description||'')+'\n'+fmt(req.txSnapshot.amount)+' ج.م\n\nهل أنت متأكد؟',
-    danger:true,
-    confirmText:'موافقة وحذف',
-    cancelText:'رجوع',
+    danger:true,confirmText:'موافقة وحذف',cancelText:'رجوع',
     onConfirm:function(){doApproveDelete(req);}
   });
 }
-
 function doApproveDelete(req){
   if(!isAuthReady||!docRef)return;
   db.runTransaction(function(transaction){
@@ -3011,57 +2803,40 @@ function doApproveDelete(req){
       var txs = d.transactions || [];
       var reqs = d.deleteRequests || [];
       var now = Date.now();
-      var found = false;
       for(var i=0;i<txs.length;i++){
         if(txs[i].id === req.txId){
-          txs[i].deleted = true;
-          txs[i].deletedAt = now;
-          txs[i].deletedBy = currentUser.id;
-          txs[i].deletedByName = currentUser.name;
-          txs[i].deleteReason = req.reason;
-          found = true;
-          break;
+          txs[i].deleted = true; txs[i].deletedAt = now;
+          txs[i].deletedBy = currentUser.id; txs[i].deletedByName = currentUser.name;
+          txs[i].deleteReason = req.reason; break;
         }
       }
       for(var j=0;j<reqs.length;j++){
         if(reqs[j].id === req.id){
-          reqs[j].status = 'approved';
-          reqs[j].approvedAt = now;
-          reqs[j].approvedBy = currentUser.id;
-          reqs[j].approvedByName = currentUser.name;
-          break;
+          reqs[j].status = 'approved'; reqs[j].approvedAt = now;
+          reqs[j].approvedBy = currentUser.id; reqs[j].approvedByName = currentUser.name; break;
         }
       }
       transaction.set(docRef, {transactions: txs, deleteRequests: reqs}, {merge:true});
-      return {found:found};
     });
   }).then(function(){
     toast('✓ تم حذف العملية');
-    sendTelegram('✅ <b>موافقة على حذف</b>\n👑 '+currentUser.name+'\n📦 '+(req.txSnapshot.description||'')+'\n💰 '+fmt(req.txSnapshot.amount)+' ج.م\n📝 سبب الطلب: '+req.reason);
-  }).catch(function(e){
-    console.error('Approve error:',e);
-    toast('فشل الحذف','err');
-  });
+    sendTelegram('✅ <b>موافقة على حذف</b>\n👑 '+currentUser.name+'\n📦 '+(req.txSnapshot.description||'')+'\n💰 '+fmt(req.txSnapshot.amount)+' ج.م');
+  }).catch(function(e){console.error(e);toast('فشل الحذف','err');});
 }
-
 function rejectDelete(reqId){
   if(!isAdmin(currentUser.id)){toast('صلاحية المشرف فقط','err');return;}
   var req = allDeleteRequests.find(function(r){return r.id===reqId;});
   if(!req){toast('الطلب غير موجود','err');return;}
   if(req.status!=='pending'){toast('تمت مراجعة الطلب','warn');return;}
-
   modal({
     title:'رفض طلب الحذف',
     message:'سيتم الاحتفاظ بالعملية في السجل:\n\n'+esc(req.txSnapshot.description||'')+'\n'+fmt(req.txSnapshot.amount)+' ج.م',
-    confirmText:'رفض الطلب',
-    cancelText:'رجوع',
-    input:true,
-    inputPlaceholder:'سبب الرفض (اختياري)',
+    confirmText:'رفض الطلب',cancelText:'رجوع',
+    input:true,inputPlaceholder:'سبب الرفض (اختياري)',
     inputStyle:'font-size:13px;padding:12px;text-align:right;font-weight:600',
-    onConfirm:function(reason){doRejectDelete(req, (reason||'').trim());}
+    onConfirm:function(reason){doRejectDelete(req,(reason||'').trim());}
   });
 }
-
 function doRejectDelete(req, reason){
   if(!isAuthReady||!docRef)return;
   db.runTransaction(function(transaction){
@@ -3072,40 +2847,30 @@ function doRejectDelete(req, reason){
       var now = Date.now();
       for(var j=0;j<reqs.length;j++){
         if(reqs[j].id === req.id){
-          reqs[j].status = 'rejected';
-          reqs[j].rejectedAt = now;
-          reqs[j].rejectedBy = currentUser.id;
-          reqs[j].rejectedByName = currentUser.name;
-          if(reason) reqs[j].rejectionReason = reason;
-          break;
+          reqs[j].status = 'rejected'; reqs[j].rejectedAt = now;
+          reqs[j].rejectedBy = currentUser.id; reqs[j].rejectedByName = currentUser.name;
+          if(reason) reqs[j].rejectionReason = reason; break;
         }
       }
       transaction.set(docRef, {deleteRequests: reqs}, {merge:true});
     });
   }).then(function(){
     toast('تم رفض الطلب');
-    sendTelegram('❌ <b>رفض حذف</b>\n👑 '+currentUser.name+'\n📦 '+(req.txSnapshot.description||'')+'\n💰 '+fmt(req.txSnapshot.amount)+' ج.م'+(reason?'\n📝 '+reason:''));
-  }).catch(function(e){
-    console.error('Reject error:',e);
-    toast('فشل الرفض','err');
-  });
+    sendTelegram('❌ <b>رفض حذف</b>\n👑 '+currentUser.name+'\n📦 '+(req.txSnapshot.description||'')+'');
+  }).catch(function(e){console.error(e);toast('فشل الرفض','err');});
 }
-
 function cancelOwnRequest(reqId){
   var req = allDeleteRequests.find(function(r){return r.id===reqId;});
   if(!req){toast('الطلب غير موجود','err');return;}
   if(req.requestedBy !== currentUser.id && !isAdmin(currentUser.id)){toast('لا تملك صلاحية','err');return;}
   if(req.status!=='pending'){toast('تمت مراجعة الطلب','warn');return;}
-
   modal({
     title:'سحب طلب الحذف',
     message:'سيتم إلغاء طلب حذف هذه العملية:\n\n'+esc(req.txSnapshot.description||'')+'\n'+fmt(req.txSnapshot.amount)+' ج.م',
-    confirmText:'سحب الطلب',
-    cancelText:'رجوع',
+    confirmText:'سحب الطلب',cancelText:'رجوع',
     onConfirm:function(){doCancelRequest(req);}
   });
 }
-
 function doCancelRequest(req){
   if(!isAuthReady||!docRef)return;
   db.runTransaction(function(transaction){
@@ -3116,21 +2881,13 @@ function doCancelRequest(req){
       var now = Date.now();
       for(var j=0;j<reqs.length;j++){
         if(reqs[j].id === req.id){
-          reqs[j].status = 'cancelled';
-          reqs[j].cancelledAt = now;
-          reqs[j].cancelledBy = currentUser.id;
-          reqs[j].cancelledByName = currentUser.name;
-          break;
+          reqs[j].status = 'cancelled'; reqs[j].cancelledAt = now;
+          reqs[j].cancelledBy = currentUser.id; reqs[j].cancelledByName = currentUser.name; break;
         }
       }
       transaction.set(docRef, {deleteRequests: reqs}, {merge:true});
     });
-  }).then(function(){
-    toast('تم سحب الطلب');
-  }).catch(function(e){
-    console.error('Cancel error:',e);
-    toast('فشل السحب','err');
-  });
+  }).then(function(){toast('تم سحب الطلب');}).catch(function(e){console.error(e);toast('فشل السحب','err');});
 }
 
 function renderPendingDeletes(){
@@ -3140,31 +2897,19 @@ function renderPendingDeletes(){
   var subEl = document.getElementById('pendingHeaderSub');
   var badgeEl = document.getElementById('navBadgeHistory');
   if(!section || !listEl) return;
-
   var allPending = allDeleteRequests.filter(function(r){ return r.status === 'pending'; });
   var myPending = allPending.filter(function(r){ return r.requestedBy === currentUser.id; });
   var visible = isAdmin(currentUser.id) ? allPending : myPending;
-
   if(!visible.length){
-    section.classList.remove('show');
-    section.classList.remove('expanded');
+    section.classList.remove('show'); section.classList.remove('expanded');
     if(badgeEl){badgeEl.classList.remove('show');}
     return;
   }
-
   section.classList.add('show');
   if(countEl) countEl.textContent = visible.length;
-  if(subEl) subEl.textContent = isAdmin(currentUser.id)
-    ? 'طلبات بانتظار موافقتك — اضغط للعرض'
-    : 'طلباتك بانتظار مراجعة المشرف';
-
-  if(badgeEl){
-    badgeEl.textContent = visible.length;
-    badgeEl.classList.add('show');
-  }
-
+  if(subEl) subEl.textContent = isAdmin(currentUser.id) ? 'طلبات بانتظار موافقتك — اضغط للعرض' : 'طلباتك بانتظار مراجعة المشرف';
+  if(badgeEl){badgeEl.textContent = visible.length;badgeEl.classList.add('show');}
   var sorted = visible.slice().sort(function(a,b){ return (b.requestedAt||0) - (a.requestedAt||0); });
-
   listEl.innerHTML = sorted.map(function(r){
     var tx = r.txSnapshot || {};
     var requester = null;
@@ -3176,45 +2921,29 @@ function renderPendingDeletes(){
     var time = new Date(r.requestedAt||Date.now()).toLocaleString('ar-EG',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
     var canApprove = isAdmin(currentUser.id);
     var isRequester = r.requestedBy === currentUser.id;
-
     var actions = '';
     if(canApprove){
       actions = '<div class="pending-actions">'+
         '<button class="pending-btn approve" data-approve="'+r.id+'">'+
-          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>'+
-          'موافقة على الحذف'+
-        '</button>'+
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>موافقة على الحذف</button>'+
         '<button class="pending-btn reject" data-reject="'+r.id+'">'+
-          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>'+
-          'رفض'+
-        '</button>'+
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>رفض</button>'+
       '</div>';
     } else if(isRequester){
-      actions = '<div class="pending-actions">'+
-        '<div style="flex:1;display:flex;align-items:center;justify-content:center">'+
-          '<span class="pending-status">'+
-            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="M12 6v6l4 2"/></svg>'+
-            'قيد المراجعة'+
-          '</span>'+
-        '</div>'+
+      actions = '<div class="pending-actions"><div style="flex:1;display:flex;align-items:center;justify-content:center">'+
+        '<span class="pending-status"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="M12 6v6l4 2"/></svg>قيد المراجعة</span></div>'+
         '<button class="pending-btn cancel-req" data-cancelreq="'+r.id+'">'+
-          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>'+
-          'سحب الطلب'+
-        '</button>'+
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>سحب الطلب</button>'+
       '</div>';
     }
-
     return '<div class="pending-card">'+
       '<div class="pending-top">'+
-        '<div class="pending-avatar av-'+ownerId+(ownerIsAdmin?' is-admin':'')+'">'+
-          (owner?owner.emoji:'؟')+
-        '</div>'+
+        '<div class="pending-avatar av-'+ownerId+(ownerIsAdmin?' is-admin':'')+'">'+(owner?owner.emoji:'؟')+'</div>'+
         '<div class="pending-info">'+
           '<div class="pending-desc">'+esc(tx.description || '—')+'</div>'+
           '<div class="pending-meta">'+
             '<span>👤 مقدّم الطلب: <strong style="color:var(--text-primary)">'+(requester?requester.name:'—')+'</strong></span>'+
-            '<span>·</span>'+
-            '<span>🕐 '+time+'</span>'+
+            '<span>·</span><span>🕐 '+time+'</span>'+
           '</div>'+
         '</div>'+
         '<div class="pending-amount">'+fmt(tx.amount||0)+' ج.م</div>'+
@@ -3222,9 +2951,7 @@ function renderPendingDeletes(){
       '<div class="pending-reason">'+
         '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>'+
         '<div><strong>السبب:</strong> '+esc(r.reason||'—')+'</div>'+
-      '</div>'+
-      actions+
-    '</div>';
+      '</div>'+actions+'</div>';
   }).join('');
 }
 
@@ -3234,7 +2961,6 @@ function filterByPeriod(list,period){
   if(period==='yesterday')return list.filter(function(t){return t._isoDate===yesterday;});
   return list;
 }
-
 function updatePeriodCounts(){
   var today=isoDate(),yesterday=yesterdayISO();
   var todayCnt=cachedTx.filter(function(t){return t._isoDate===today;}).length;
@@ -3244,43 +2970,32 @@ function updatePeriodCounts(){
   var e2=document.getElementById('cnt-yesterday');if(e2)e2.textContent='('+yestCnt+')';
   var e3=document.getElementById('cnt-all');if(e3)e3.textContent='('+allCnt+')';
 }
-
 function renderHistUserFilter(){
   var wrap=document.getElementById('histUserFilter');if(!wrap)return;
   var chips='<button class="uf-chip '+(histUserFilter==='all'?'on':'')+'" data-u="all">'+
-    '<span style="width:22px;height:22px;border-radius:50%;background:linear-gradient(135deg,#6366F1,#4338CA);color:#fff;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:900">⊕</span>'+
-    'الكل</button>';
+    '<span style="width:22px;height:22px;border-radius:50%;background:linear-gradient(135deg,#6366F1,#4338CA);color:#fff;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:900">⊕</span>الكل</button>';
   chips+=Object.keys(USERS).map(function(k){
-    var u=USERS[k];
-    var cls=(histUserFilter===u.id?'on':'');
+    var u=USERS[k];var cls=(histUserFilter===u.id?'on':'');
     var adminIcon=isAdmin(u.id)?' 👑':'';
     return '<button class="uf-chip '+cls+'" data-u="'+u.id+'">'+
-      '<span class="uf-av av-'+u.id+'">'+u.emoji+'</span>'+
-      esc(u.name)+adminIcon+'</button>';
+      '<span class="uf-av av-'+u.id+'">'+u.emoji+'</span>'+esc(u.name)+adminIcon+'</button>';
   }).join('');
   wrap.innerHTML=chips;
 }
-
 function renderHistoryHero(list){
   var total=list.reduce(function(s,t){return s+Number(t.amount||0);},0);
-  var count=list.length;
-  var avg=count>0?total/count:0;
-  var daysSet={};
-  list.forEach(function(t){if(t._isoDate)daysSet[t._isoDate]=true;});
+  var count=list.length;var avg=count>0?total/count:0;
+  var daysSet={};list.forEach(function(t){if(t._isoDate)daysSet[t._isoDate]=true;});
   var days=Object.keys(daysSet).length;
   var e1=document.getElementById('histHeroTotal');if(e1)e1.textContent=fmt(total);
   var e2=document.getElementById('histHeroCount');if(e2)e2.textContent=count;
   var e3=document.getElementById('histHeroAvg');if(e3)e3.textContent=fmt(avg);
   var e4=document.getElementById('histHeroDays');if(e4)e4.textContent=days;
 }
-
 function renderHistory(){
   renderPendingDeletes();
-
   var list=filterByPeriod(cachedTx,currentPeriod);
-  if(histUserFilter!=='all'){
-    list=list.filter(function(t){return t.createdBy===histUserFilter;});
-  }
+  if(histUserFilter!=='all'){list=list.filter(function(t){return t.createdBy===histUserFilter;});}
   if(histSearchQuery){
     var q=histSearchQuery.toLowerCase();
     list=list.filter(function(t){
@@ -3291,25 +3006,17 @@ function renderHistory(){
     });
   }
   var displayList=list.slice(0,500);
-
-  renderHistoryHero(list);
-  renderHistUserFilter();
-
+  renderHistoryHero(list);renderHistUserFilter();
   var histCount=document.getElementById('histCount');
   if(histCount)histCount.textContent=displayList.length+' عملية';
   updatePeriodCounts();
-
   var box=document.getElementById('histList');
   var totalBox=document.getElementById('histTotal');
   if(!box)return;
-
   if(!displayList.length){
     var msg;
     if(histSearchQuery) msg='لا توجد نتائج لـ "'+esc(histSearchQuery)+'"';
-    else if(histUserFilter!=='all'){
-      var u=null;Object.values(USERS).forEach(function(x){if(x.id===histUserFilter)u=x;});
-      msg='لا توجد عمليات لـ '+(u?u.name:'');
-    }
+    else if(histUserFilter!=='all'){var u=null;Object.values(USERS).forEach(function(x){if(x.id===histUserFilter)u=x;});msg='لا توجد عمليات لـ '+(u?u.name:'');}
     else if(currentPeriod==='today') msg='لا توجد عمليات النهاردة';
     else if(currentPeriod==='yesterday') msg='لا توجد عمليات امبارح';
     else msg='لا توجد عمليات';
@@ -3317,13 +3024,8 @@ function renderHistory(){
     if(totalBox)totalBox.style.display='none';
     return;
   }
-
   var groups={};
-  displayList.forEach(function(t){
-    var d=t._isoDate||'unknown';
-    if(!groups[d])groups[d]=[];
-    groups[d].push(t);
-  });
+  displayList.forEach(function(t){var d=t._isoDate||'unknown';if(!groups[d])groups[d]=[];groups[d].push(t);});
   var sortedDates=Object.keys(groups).sort(function(a,b){return b.localeCompare(a);});
   var today=isoDate(),yesterdayISOVal=yesterdayISO();
   box.innerHTML=sortedDates.slice(0,100).map(function(date){
@@ -3333,25 +3035,19 @@ function renderHistory(){
     if(date===today)label='النهاردة';
     else if(date===yesterdayISOVal)label='امبارح';
     else{
-      try{
-        var dObj=new Date(date+'T12:00:00');
-        label=dObj.toLocaleDateString('ar-EG',{weekday:'long',day:'numeric',month:'long'})+(dObj.getFullYear()!==new Date().getFullYear()?' '+dObj.getFullYear():'');
-      }catch(e){label=date;}
+      try{var dObj=new Date(date+'T12:00:00');label=dObj.toLocaleDateString('ar-EG',{weekday:'long',day:'numeric',month:'long'})+(dObj.getFullYear()!==new Date().getFullYear()?' '+dObj.getFullYear():'');}
+      catch(e){label=date;}
     }
     var header='<div class="day-header"><div class="day-badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/></svg> '+label+' <span style="opacity:.6;font-weight:700">· '+dayTx.length+' عملية</span></div><div class="day-total">'+fmt(dayTotal)+' ج.م</div></div>';
-    var items=dayTx.map(buildFeedItem).join('');
-    return '<div class="day-group">'+header+items+'</div>';
+    return '<div class="day-group">'+header+dayTx.map(buildFeedItem).join('')+'</div>';
   }).join('');
-
   var total=list.reduce(function(s,t){return s+Number(t.amount||0);},0);
   var histTotalVal=document.getElementById('histTotalVal');
   if(histTotalVal)histTotalVal.textContent=fmt(total)+' ج.م';
   if(totalBox)totalBox.style.display='flex';
 }
-
 function renderFamilyTab(){
-  var today=isoDate();
-  var monthPfx=today.slice(0,7);
+  var today=isoDate();var monthPfx=today.slice(0,7);
   var todayList=cachedTx.filter(function(t){return t._isoDate===today;});
   var monthList=cachedTx.filter(function(t){return t._isoDate&&t._isoDate.indexOf(monthPfx)===0;});
   var todayTotal=todayList.reduce(function(s,t){return s+Number(t.amount||0);},0);
@@ -3361,8 +3057,7 @@ function renderFamilyTab(){
   document.getElementById('statMine').textContent=fmt(myToday);
   document.getElementById('statMonth').textContent=fmt(monthTotal);
   document.getElementById('statCount').textContent=monthList.length;
-  var perUser={};
-  Object.keys(USERS).forEach(function(k){perUser[USERS[k].id]=0;});
+  var perUser={};Object.keys(USERS).forEach(function(k){perUser[USERS[k].id]=0;});
   monthList.forEach(function(t){if(perUser[t.createdBy]!==undefined)perUser[t.createdBy]+=Number(t.amount||0);});
   var entries=Object.keys(USERS).map(function(k){return {u:USERS[k],total:perUser[USERS[k].id]};}).sort(function(a,b){return b.total-a.total;});
   var maxTotal=Math.max.apply(null,entries.map(function(x){return x.total;}).concat([1]));
@@ -3379,22 +3074,16 @@ function renderFamilyTab(){
       '<div class="amt">'+fmt(x.total)+'</div></div>';
   }).join('');
   var itemCount={};
-  monthList.forEach(function(t){
-    var name=(t.description||'').split(' — ')[0];
-    if(!name)return;
-    itemCount[name]=(itemCount[name]||0)+1;
-  });
+  monthList.forEach(function(t){var name=(t.description||'').split(' — ')[0];if(!name)return;itemCount[name]=(itemCount[name]||0)+1;});
   var sorted=Object.keys(itemCount).map(function(k){return [k,itemCount[k]];}).sort(function(a,b){return b[1]-a[1];}).slice(0,8);
   var tbox=document.getElementById('topItems');
-  if(!sorted.length){
-    tbox.innerHTML='<div class="empty">لا توجد بيانات بعد</div>';
-  }else{
+  if(!sorted.length){tbox.innerHTML='<div class="empty">لا توجد بيانات بعد</div>';}
+  else{
     tbox.innerHTML=sorted.map(function(e,i){
       return '<div class="feed-item">'+
         '<div style="width:30px;height:30px;border-radius:50%;background:var(--accent-soft);border:1px solid rgba(99,102,241,0.2);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:900;color:var(--accent)">'+(i+1)+'</div>'+
         '<div class="feed-body"><div class="feed-name">'+esc(e[0])+'</div></div>'+
-        '<div style="font-size:13px;font-weight:900;color:var(--accent);font-variant-numeric:tabular-nums">×'+e[1]+'</div>'+
-      '</div>';
+        '<div style="font-size:13px;font-weight:900;color:var(--accent);font-variant-numeric:tabular-nums">×'+e[1]+'</div></div>';
     }).join('');
   }
 }
@@ -3406,14 +3095,12 @@ function startVoice(){
   if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){toast('الجهاز لا يدعم التسجيل الصوتي','err');return;}
   openVoiceRecorder();
 }
-
 function openVoiceRecorder(){
   var overlay=document.createElement('div');
   overlay.className='voice-modal';
   overlay.innerHTML='<div class="mic-circle" id="micCircle">'+
     '<svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M19 11a7 7 0 0 1-14 0M12 18v4M8 22h8"/></svg>'+
-    '</div>'+
-    '<h3 id="voiceTitle">اضغط للتسجيل</h3>'+
+    '</div><h3 id="voiceTitle">اضغط للتسجيل</h3>'+
     '<p id="voiceDesc">سجّل: "مارلبورو" أو "بيبسي 20"</p>'+
     '<div class="voice-text" id="vt">...</div>'+
     '<button class="voice-close" id="vc">إغلاق</button>';
@@ -3446,11 +3133,8 @@ function openVoiceRecorder(){
         try{
           var text=await transcribeWithWhisper(blob);
           if(!text||!text.trim()){voiceTitle.textContent='لم يتم التعرف على الكلام';voiceDesc.textContent='جرّب مرة أخرى';vt.textContent='...';return;}
-          vt.textContent=text;
-          voiceTitle.textContent='✓ تم التعرف';
-          voiceDesc.textContent='اضغط للاستخدام';
-          applyVoiceText(text);
-          setTimeout(close,1800);
+          vt.textContent=text;voiceTitle.textContent='✓ تم التعرف';voiceDesc.textContent='اضغط للاستخدام';
+          applyVoiceText(text);setTimeout(close,1800);
         }catch(e){
           console.error('Whisper error:',e);
           voiceTitle.textContent='فشل التحويل';
@@ -3463,13 +3147,9 @@ function openVoiceRecorder(){
       voiceTitle.textContent='جاري التسجيل...';
       voiceDesc.textContent='اضغط للإيقاف والإرسال';
       vt.textContent='🎤 يتسجل الآن...';
-    }catch(e){
-      console.error('Mic error:',e);
-      toast('تعذر الوصول للمايكروفون','err');
-    }
+    }catch(e){console.error('Mic error:',e);toast('تعذر الوصول للمايكروفون','err');}
   });
 }
-
 async function transcribeWithWhisper(blob){
   var apiKey=getApiKey();
   var formData=new FormData();
@@ -3478,66 +3158,40 @@ async function transcribeWithWhisper(blob){
   formData.append('language','ar');
   formData.append('prompt','مشتريات من محل هاني: سجاير، مارلبورو، بيبسي، جبنة، لب، بيض، شيبسي، وجميع أصناف البقالة');
   var res=await fetch('https://api.openai.com/v1/audio/transcriptions',{method:'POST',headers:{'Authorization':'Bearer '+apiKey},body:formData});
-  if(!res.ok){
-    var errData=await res.json().catch(function(){return {};});
-    throw new Error(errData.error?errData.error.message:'فشل الاتصال بـ Whisper');
-  }
+  if(!res.ok){var errData=await res.json().catch(function(){return {};});throw new Error(errData.error?errData.error.message:'فشل الاتصال بـ Whisper');}
   var data=await res.json();
   return data.text||'';
 }
-
 function applyVoiceText(text){
   var parsed=parseVoiceText(text);
   if(parsed.item){
     selectedItem=parsed.item;
-    Object.keys(CATEGORIES).forEach(function(k){
-      if(CATEGORIES[k].items.indexOf(parsed.item)>=0)selectedCategory=k;
-    });
+    Object.keys(CATEGORIES).forEach(function(k){if(CATEGORIES[k].items.indexOf(parsed.item)>=0)selectedCategory=k;});
     document.getElementById('searchInput').value='';
     var hint=document.getElementById('searchHint');if(hint)hint.classList.remove('show');
     renderCats();renderItems();
-    if(parsed.amount){
-      document.getElementById('amount').value=parsed.amount;
-      clearAutoPrice();updateAmountClearBtn();
-    }else{
-      applyAutoPrice(parsed.item,true);
-    }
+    if(parsed.amount){document.getElementById('amount').value=parsed.amount;clearAutoPrice();updateAmountClearBtn();}
+    else{applyAutoPrice(parsed.item,true);}
     toast('✓ تم التعرف: '+parsed.item+(parsed.amount?' — '+parsed.amount+' ج.م':''));
-  }else{
-    toast('لم يتم التعرف على الصنف — جرّب مرة أخرى','warn');
-  }
+  }else{toast('لم يتم التعرف على الصنف — جرّب مرة أخرى','warn');}
 }
-
 var AR_NUMS={'واحد':1,'واحدة':1,'اثنين':2,'اتنين':2,'اثنان':2,'تلاتة':3,'ثلاثة':3,'أربعة':4,'اربعة':4,'خمسة':5,'خمسه':5,'ستة':6,'سته':6,'سبعة':7,'سبعه':7,'تمانية':8,'ثمانية':8,'تمانيه':8,'تسعة':9,'تسعه':9,'عشرة':10,'عشره':10,'عشرين':20,'ثلاثين':30,'تلاتين':30,'اربعين':40,'أربعين':40,'خمسين':50,'ستين':60,'سبعين':70,'تمانين':80,'ثمانين':80,'تسعين':90,'مية':100,'مائة':100,'ميه':100,'ميتين':200,'مائتين':200};
-
 function parseVoiceText(t){
   var amount=null,txt=t.trim();
   var d=txt.match(/\d+/);
   if(d){amount=parseFloat(d[0]);txt=txt.replace(d[0],' ').trim();}
-  else{
-    for(var k in AR_NUMS){
-      if(txt.indexOf(k)>=0){amount=AR_NUMS[k];txt=txt.replace(k,' ').trim();break;}
-    }
-  }
+  else{for(var k in AR_NUMS){if(txt.indexOf(k)>=0){amount=AR_NUMS[k];txt=txt.replace(k,' ').trim();break;}}}
   txt=txt.replace(/جنيه|جنية|جنيهاً|بجنيه|من|على|علشان|اشتريت|اشتري|عايز|أريد|محل هاني|هاني/g,' ').replace(/\s+/g,' ').trim();
   var item=matchItem(txt);
   return {item:item,amount:amount,raw:t};
 }
-
 function matchItem(txt){
   if(!txt)return null;
-  var all=[];
-  Object.keys(CATEGORIES).forEach(function(k){all=all.concat(CATEGORIES[k].items);});
-  var m=all.find(function(i){return i===txt;});
-  if(m)return m;
-  m=all.find(function(i){return i.indexOf(txt)>=0||txt.indexOf(i)>=0;});
-  if(m)return m;
+  var all=[];Object.keys(CATEGORIES).forEach(function(k){all=all.concat(CATEGORIES[k].items);});
+  var m=all.find(function(i){return i===txt;});if(m)return m;
+  m=all.find(function(i){return i.indexOf(txt)>=0||txt.indexOf(i)>=0;});if(m)return m;
   var words=txt.split(/\s+/);
-  for(var w=0;w<words.length;w++){
-    if(words[w].length<2)continue;
-    var mm=all.find(function(i){return i.indexOf(words[w])>=0;});
-    if(mm)return mm;
-  }
+  for(var w=0;w<words.length;w++){if(words[w].length<2)continue;var mm=all.find(function(i){return i.indexOf(words[w])>=0;});if(mm)return mm;}
   return null;
 }
 
@@ -3546,21 +3200,16 @@ function startSmartReminders(){
   checkReminders();
   remindersInterval=setInterval(checkReminders,5*60*1000);
 }
-
 function checkReminders(){
   if(!currentUser)return;
-  var now=new Date();
-  var today=isoDate();
+  var now=new Date();var today=isoDate();
   var lastCheck=localStorage.getItem(REMINDERS_LAST_CHECK+'_'+currentUser.id);
   if(budget>0){
     var monthPfx=today.slice(0,7);
-    var spent=cachedTx.filter(function(t){
-      return t._isoDate&&t._isoDate.indexOf(monthPfx)===0&&t.createdBy===currentUser.id;
-    }).reduce(function(s,t){return s+Number(t.amount||0);},0);
+    var spent=cachedTx.filter(function(t){return t._isoDate&&t._isoDate.indexOf(monthPfx)===0&&t.createdBy===currentUser.id;}).reduce(function(s,t){return s+Number(t.amount||0);},0);
     if(spent>budget&&lastCheck!=='budget_'+today){
       notifyReminder('تجاوز الميزانية','صرفت '+fmt(spent)+' ج.م من أصل '+fmt(budget)+' ج.م');
-      localStorage.setItem(REMINDERS_LAST_CHECK+'_'+currentUser.id,'budget_'+today);
-      return;
+      localStorage.setItem(REMINDERS_LAST_CHECK+'_'+currentUser.id,'budget_'+today);return;
     }
   }
   if(now.getHours()>=20&&lastCheck!=='no_tx_'+today){
@@ -3571,12 +3220,7 @@ function checkReminders(){
     }
   }
   if(now.getDay()===5&&now.getHours()>=20&&lastCheck!=='week_'+today){
-    var weekList=cachedTx.filter(function(t){
-      if(!t._isoDate)return false;
-      var d=new Date(t._isoDate+'T00:00:00');
-      var wAgo=new Date();wAgo.setDate(wAgo.getDate()-6);wAgo.setHours(0,0,0,0);
-      return d>=wAgo;
-    });
+    var weekList=cachedTx.filter(function(t){if(!t._isoDate)return false;var d=new Date(t._isoDate+'T00:00:00');var wAgo=new Date();wAgo.setDate(wAgo.getDate()-6);wAgo.setHours(0,0,0,0);return d>=wAgo;});
     var weekTotal=weekList.reduce(function(s,t){return s+Number(t.amount||0);},0);
     if(weekTotal>0){
       notifyReminder('ملخص الأسبوع','إجمالي '+weekList.length+' عملية بـ '+fmt(weekTotal)+' ج.م');
@@ -3584,32 +3228,19 @@ function checkReminders(){
     }
   }
 }
-
 function notifyReminder(title,body){
   if(!('Notification' in window))return;
   if(Notification.permission==='granted'){
     try{
-      /* Prefer SW notification if available (works in background) */
-      if(swRegistration && swRegistration.showNotification){
-        swRegistration.showNotification(title,{
-          body:body,
-          icon:'data:image/svg+xml;charset=utf-8,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192"><rect width="192" height="192" rx="42" fill="#4F46E5"/></svg>'),
-          dir:'rtl',lang:'ar',vibrate:[200,100,200],tag:'hani-reminder'
-        }).catch(function(){
-          try{new Notification(title,{body:body,dir:'rtl',lang:'ar'});}catch(e){}
-        });
-      }else{
-        new Notification(title,{
-          body:body,
-          icon:'data:image/svg+xml;charset=utf-8,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192"><rect width="192" height="192" rx="42" fill="#4F46E5"/></svg>'),
-          dir:'rtl',lang:'ar'
-        });
-      }
+      new Notification(title,{
+        body:body,
+        icon:'data:image/svg+xml;charset=utf-8,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192"><rect width="192" height="192" rx="42" fill="#4F46E5"/></svg>'),
+        dir:'rtl',lang:'ar'
+      });
     }catch(e){}
   }
   sendTelegram('🔔 <b>'+title+'</b>\n'+body);
 }
-
 function requestNotifPermission(){
   if(!('Notification' in window)){toast('المتصفح لا يدعم الإشعارات','err');return;}
   Notification.requestPermission().then(function(perm){
@@ -3619,7 +3250,6 @@ function requestNotifPermission(){
     else toast('لم يتم منح الإذن','warn');
   });
 }
-
 function updateNotifStatus(){
   var el=document.getElementById('notifStatus');if(!el)return;
   if(!('Notification' in window)){el.textContent='غير مدعوم';el.style.color='var(--danger)';return;}
@@ -3629,8 +3259,7 @@ function updateNotifStatus(){
 }
 
 function parseTransactions(data){
-  var seen={};
-  var result=[];
+  var seen={};var result=[];
   (data.transactions||[]).forEach(function(t){
     if(!t)return;
     var isFamilyApp=(t.source==='family-app');
@@ -3638,8 +3267,7 @@ function parseTransactions(data){
     var isHanyRelated=(t.category==='مشتريات بقالة هاني');
     if(!isFamilyApp&&!isHanyCategory&&!isHanyRelated)return;
     if(!isActiveTx(t))return;
-    var iso=getTxDate(t);
-    if(!iso)return;
+    var iso=getTxDate(t);if(!iso)return;
     if(seen[t.id]){
       var curTime=new Date(seen[t.id].createdAt||0).getTime();
       var newTime=new Date(t.createdAt||0).getTime();
@@ -3655,14 +3283,12 @@ function parseTransactions(data){
   });
   return result.sort(function(a,b){return new Date(b.createdAt||0).getTime()-new Date(a.createdAt||0).getTime();});
 }
-
 function subscribe(){
   if(unsubscribe)unsubscribe();
   if(!docRef)return;
   initialSnapshotTimeout=setTimeout(function(){
     if(isFirstLoad){
-      var hv=document.getElementById('heroValue');
-      if(hv)hv.classList.remove('loading');
+      var hv=document.getElementById('heroValue');if(hv)hv.classList.remove('loading');
       document.getElementById('heroToday').textContent='—';
       document.getElementById('heroSub').textContent='تعذر تحميل البيانات';
       toast('تعذر تحميل البيانات','err');
@@ -3690,18 +3316,11 @@ function subscribe(){
     }catch(err){}
   });
 }
-
 function renderAll(){
-  renderFamilyStrip();
-  renderFeed();
-  renderQuickStats();
-  updateBudgetDesc();
-  updatePeriodCounts();
-  if(currentTab==='history')renderHistory();
-  else renderPendingDeletes();
+  renderFamilyStrip();renderFeed();renderQuickStats();updateBudgetDesc();updatePeriodCounts();
+  if(currentTab==='history')renderHistory();else renderPendingDeletes();
   if(currentTab==='family')renderFamilyTab();
 }
-
 function doLogout(){
   modal({
     title:'تسجيل الخروج',
@@ -3715,7 +3334,6 @@ function doLogout(){
     }
   });
 }
-
 function exportData(){
   var mine=cachedTx.filter(function(t){return t.createdBy===currentUser.id;});
   if(!mine.length){toast('لا توجد بيانات للتصدير','err');return;}
@@ -3725,15 +3343,11 @@ function exportData(){
   }).join('\n');
   var blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8;'});
   var url=URL.createObjectURL(blob);
-  var a=document.createElement('a');
-  a.href=url;a.download='hani_'+currentUser.id+'_'+isoDate()+'.csv';a.click();
-  URL.revokeObjectURL(url);
-  toast('تم التصدير');
+  var a=document.createElement('a');a.href=url;a.download='hani_'+currentUser.id+'_'+isoDate()+'.csv';a.click();
+  URL.revokeObjectURL(url);toast('تم التصدير');
 }
-
 function share(){
-  var today=isoDate();
-  var monthPfx=today.slice(0,7);
+  var today=isoDate();var monthPfx=today.slice(0,7);
   var todayList=cachedTx.filter(function(t){return t._isoDate===today;});
   var monthList=cachedTx.filter(function(t){return t._isoDate&&t._isoDate.indexOf(monthPfx)===0;});
   var todayTotal=todayList.reduce(function(s,t){return s+Number(t.amount||0);},0);
@@ -3745,14 +3359,11 @@ function share(){
   text+='حصتك: '+fmt(myMonth)+' ج.م\n\n';
   if(todayList.length){
     text+='عمليات اليوم:\n';
-    todayList.slice(0,10).forEach(function(t){
-      text+='• '+t.description+' — '+fmt(t.amount)+' ج.م ('+(t.createdByName||'—')+')\n';
-    });
+    todayList.slice(0,10).forEach(function(t){text+='• '+t.description+' — '+fmt(t.amount)+' ج.م ('+(t.createdByName||'—')+')\n';});
   }
   if(navigator.share)navigator.share({title:'محل هاني',text:text}).catch(function(){});
   else window.open('https://wa.me/?text='+encodeURIComponent(text),'_blank');
 }
-
 function setBudgetModal(){
   modal({
     title:'الميزانية الشهرية',
@@ -3765,12 +3376,9 @@ function setBudgetModal(){
       saveBudget(n);updateBudgetDesc();renderQuickStats();
       toast('تم تعيين الميزانية: '+fmt(n)+' ج.م');
     },
-    onCancel:function(){
-      if(budget){saveBudget(0);updateBudgetDesc();renderQuickStats();toast('تم حذف الميزانية');}
-    }
+    onCancel:function(){if(budget){saveBudget(0);updateBudgetDesc();renderQuickStats();toast('تم حذف الميزانية');}}
   });
 }
-
 function setApiKeyModal(){
   var current=getApiKey();
   modal({
@@ -3781,17 +3389,14 @@ function setApiKeyModal(){
     onConfirm:function(v){
       var k=(v||'').trim();
       if(k&&k.indexOf('sk-')!==0){toast('المفتاح غير صحيح — يبدأ بـ sk-','err');return;}
-      setApiKey(k);
-      toast(k?'✓ تم الحفظ':'تم الحذف');
+      setApiKey(k);toast(k?'✓ تم الحفظ':'تم الحذف');
     },
-    onCancel:function(){
-      if(current){setApiKey('');toast('تم حذف المفتاح');}
-    }
+    onCancel:function(){if(current){setApiKey('');toast('تم حذف المفتاح');}}
   });
 }
 
 function bootstrap(){
-  console.log('🚀 Bootstrap V5.7 — Royal Edition');
+  console.log('🚀 Bootstrap V5.7 — Auto Theme Edition');
   setTimeout(function(){
     var s=document.getElementById('splash');
     if(s&&s.style.display!=='none')s.style.display='none';
@@ -3828,7 +3433,6 @@ function bootstrap(){
     if(pinScreenEl3)pinScreenEl3.style.display='flex';
   }
 }
-
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bootstrap);
 else bootstrap();
 
@@ -3847,21 +3451,30 @@ setTimeout(function(){
 })();
 
 window.__haniDebug=function(){
-  console.log('=== محل هاني V5.7 — Royal Edition ===');
+  console.log('=== محل هاني V5.7 — Auto Theme Edition ===');
   console.log('currentUser:',currentUser?currentUser.name:'لا يوجد');
-  console.log('isAdmin:',currentUser?isAdmin(currentUser.id):false);
-  console.log('themeMode:',themeMode,'| isDark:',isDark);
+  console.log('themeMode:',themeMode,'| isDark now:',isDark);
   console.log('isAuthReady:',isAuthReady);
   console.log('cachedTx:',cachedTx.length);
   console.log('pending requests:',cachedDeleteRequests.length);
-  console.log('FCM enabled:',fcmEnabled);
-  console.log('FCM token:',localStorage.getItem(FCM_TOKEN_LS) ? localStorage.getItem(FCM_TOKEN_LS).slice(0,20)+'...' : 'none');
-  console.log('Notif permission:',typeof Notification!=='undefined'?Notification.permission:'N/A');
   try{
     var times = getSunTimes(new Date(), CAIRO_LAT, CAIRO_LNG);
-    console.log('Sunrise:',times.sunrise.toLocaleTimeString('ar-EG',{timeZone:CAIRO_TZ}));
-    console.log('Sunset:',times.sunset.toLocaleTimeString('ar-EG',{timeZone:CAIRO_TZ}));
+    console.log('🌅 Sunrise (Cairo):',times.sunrise.toLocaleTimeString('ar-EG',{timeZone:CAIRO_TZ}));
+    console.log('🌇 Sunset (Cairo):',times.sunset.toLocaleTimeString('ar-EG',{timeZone:CAIRO_TZ}));
   }catch(e){}
+};
+
+/* Manual override to test theme calculation */
+window.__testSunCalc = function(dateStr){
+  try{
+    var d = dateStr ? new Date(dateStr) : new Date();
+    var t = getSunTimes(d, CAIRO_LAT, CAIRO_LNG);
+    return {
+      date: d.toLocaleDateString('ar-EG'),
+      sunrise: t.sunrise.toLocaleTimeString('ar-EG',{timeZone:CAIRO_TZ}),
+      sunset: t.sunset.toLocaleTimeString('ar-EG',{timeZone:CAIRO_TZ})
+    };
+  }catch(e){return {error: e.message};}
 };
 </script>
 </body>
