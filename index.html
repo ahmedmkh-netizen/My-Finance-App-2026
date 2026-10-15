@@ -2626,7 +2626,53 @@
 .dark .lux-card__body {
   border-top-color: rgba(148, 163, 184, 0.06);
 }
+.lux-day-divider {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 4px 8px;
+  margin-top: 4px;
+  margin-bottom: 4px;
+  position: relative;
+}
 
+.lux-day-divider::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  left: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(99, 91, 255, 0.15) 20%,
+    rgba(99, 91, 255, 0.15) 80%,
+    transparent 100%
+  );
+}
+
+.lux-day-divider:first-child {
+  padding-top: 4px;
+}
+
+.lux-day-divider__label {
+  font-size: 11px;
+  font-weight: 900;
+  color: #635BFF;
+  letter-spacing: -0.01em;
+}
+
+.dark .lux-day-divider__label {
+  color: #8B84FF;
+}
+
+.lux-day-divider__total {
+  font-size: 11px;
+  font-weight: 800;
+  color: #94A3B8;
+  font-variant-numeric: tabular-nums;
+}
 @keyframes luxSlideDown {
   from { opacity: 0; transform: translateY(-10px); }
   to { opacity: 1; transform: translateY(0); }
@@ -11643,9 +11689,29 @@ const DayGroupHeader = memo(({ label, total, count }) => (
             const getCategoryIcon = (category) => CATEGORY_ICON_MAP[category] || "📌";
 
             /* ═══════════════ CATEGORY CARD ═══════════════ */
+const getDayLabelFn = (date) => {
+  const today = getLocalISODate();
+  const yest = new Date();
+  yest.setDate(yest.getDate() - 1);
+  const yestISO = getLocalISODate(yest);
+  if (date === today) return "📅 النهاردة";
+  if (date === yestISO) return "📅 امبارح";
+  const d = parseISODate(date);
+  if (!d) return "📅 " + date;
+  return (
+    "📅 " +
+    d.toLocaleDateString("ar-EG", {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+    })
+  );
+};
+
 const CategoryCard = memo(function CategoryCard({
   category,
   items,
+  days,
   isOpen,
   onToggle,
   isMonthClosedFlag,
@@ -11734,7 +11800,20 @@ const CategoryCard = memo(function CategoryCard({
 
       {isOpen && (
         <div className="lux-card__body">
-          {items.map((t) => {
+{(days && days.length > 0
+  ? days
+  : [{ date: "unknown", items, total }]
+).map((day) => (
+  <React.Fragment key={day.date}>
+    <div className="lux-day-divider">
+      <span className="lux-day-divider__label">
+        {getDayLabelFn(day.date)}
+      </span>
+      <span className="lux-day-divider__total">
+        {fmt(day.total)} ج.م
+      </span>
+    </div>
+    {day.items.map((t) => {
             const isPending = t.status !== "paid";
             const dotColor = isPending
               ? "#D97706"
@@ -11842,6 +11921,8 @@ const CategoryCard = memo(function CategoryCard({
               </div>
             );
           })}
+        </React.Fragment>
+      ))}
 
           {(pendingCount > 0 || !isMonthClosedFlag) && (
             <div className="lux-card__footer">
@@ -12152,37 +12233,40 @@ const CategoryCard = memo(function CategoryCard({
               );
               const displayedList = activeTab === "pending" ? pendingList : paidList;
 
-              const dayGroups = useMemo(() => {
-                const map = new Map();
-                displayedList.forEach((t) => {
-                  const day = t.date || "unknown";
-                  if (!map.has(day)) map.set(day, { date: day, items: [], total: 0 });
-                  const g = map.get(day);
-                  g.items.push(t);
-                  g.total += safeNumber(t.amount);
-                });
-                return Array.from(map.values())
-                  .sort((a, b) => b.date.localeCompare(a.date))
-                  .map((g) => {
-                    const catMap = new Map();
-                    g.items.forEach((t) => {
-                      if (!catMap.has(t.category))
-                        catMap.set(t.category, {
-                          category: t.category,
-                          items: [],
-                          total: 0,
-                          type: t.type,
-                        });
-                      const c = catMap.get(t.category);
-                      c.items.push(t);
-                      c.total += safeNumber(t.amount);
-                    });
-                    const categories = Array.from(catMap.values()).sort(
-                      (a, b) => b.total - a.total,
-                    );
-                    return { ...g, categories };
-                  });
-              }, [displayedList]);
+const categoryGroups = useMemo(() => {
+  const catMap = new Map();
+  displayedList.forEach((t) => {
+    const cat = t.category || "أخرى";
+    if (!catMap.has(cat)) {
+      catMap.set(cat, {
+        category: cat,
+        items: [],
+        total: 0,
+        days: new Map(),
+      });
+    }
+    const cg = catMap.get(cat);
+    cg.items.push(t);
+    cg.total += safeNumber(t.amount);
+
+    const day = t.date || "unknown";
+    if (!cg.days.has(day)) {
+      cg.days.set(day, { date: day, items: [], total: 0 });
+    }
+    const dg = cg.days.get(day);
+    dg.items.push(t);
+    dg.total += safeNumber(t.amount);
+  });
+
+  return Array.from(catMap.values())
+    .sort((a, b) => b.total - a.total)
+    .map((cg) => ({
+      ...cg,
+      days: Array.from(cg.days.values()).sort((a, b) =>
+        b.date.localeCompare(a.date),
+      ),
+    }));
+}, [displayedList]);
 
               const getDayLabel = useCallback((date) => {
                 const today = getLocalISODate();
@@ -12478,21 +12562,14 @@ const CategoryCard = memo(function CategoryCard({
                 });
               }, []);
 
-              const toggleAll = useCallback(() => {
-                const allKeys = [];
-                dayGroups.forEach((g) =>
-                  g.categories.forEach((c) =>
-                    allKeys.push(`${g.date}::${c.category}`),
-                  ),
-                );
-                if (openCards.size === allKeys.length && allKeys.length > 0) {
-                  setOpenCards(new Set());
-                  setOpenDays(new Set());
-                } else {
-                  setOpenCards(new Set(allKeys));
-                  setOpenDays(new Set(dayGroups.map((g) => `day-${g.date}`)));
-                }
-              }, [dayGroups, openCards.size]);
+const toggleAll = useCallback(() => {
+  const allKeys = categoryGroups.map((c) => c.category);
+  if (openCards.size === allKeys.length && allKeys.length > 0) {
+    setOpenCards(new Set());
+  } else {
+    setOpenCards(new Set(allKeys));
+  }
+}, [categoryGroups, openCards.size]);
 
               const handlePrint = useCallback(() => {
                 const html = generateTransactionsReport(data, {
@@ -12811,76 +12888,26 @@ const CategoryCard = memo(function CategoryCard({
                     </div>
                   ) : (
                     <div>
-                      {dayGroups.map((group) => {
-                        const dayKey = `day-${group.date}`;
-                        const isDayOpen = openDays.has(dayKey);
-                        const allCatKeys = group.categories.map(
-                          (c) => `${group.date}::${c.category}`,
-                        );
-                        return (
-                          <div key={group.date}>
-                            <div
-                              className="day-header"
-                              onClick={() => toggleDay(group.date, allCatKeys)}
-                              role="button"
-                              tabIndex={0}
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter" || e.key === " ") {
-                                  e.preventDefault();
-                                  toggleDay(group.date, allCatKeys);
-                                }
-                              }}
-                            >
-                              <div className="day-header-badge">
-                                {getDayLabel(group.date)}
-                                <span
-                                  style={{
-                                    fontSize: "10px",
-                                    opacity: 0.7,
-                                    fontWeight: 700,
-                                  }}
-                                >
-                                  ({group.items.length})
-                                </span>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <div className="day-header-total money tabular">
-                                  {fmt(group.total)} ج.م
-                                </div>
-                                <ChevronDown
-                                  size={14}
-                                  className={`transition-transform ${isDayOpen ? "rotate-180" : ""}`}
-                                  style={{ color: "var(--accent)" }}
-                                />
-                              </div>
-                            </div>
-
-                            {group.categories.map((cat) => {
-                              const catKey = `${group.date}::${cat.category}`;
-                              const isOpen = openCards.has(catKey);
-                              return (
-                                <CategoryCard
-                                  key={catKey}
-                                  category={cat.category}
-                                  items={cat.items}
-                                  isOpen={isOpen}
-                                  onToggle={() => toggleCard(catKey)}
-                                  isMonthClosedFlag={isClosed}
-                                  onApproveOne={handleApproveOne}
-                                  onReopenOne={handleReopenOne}
-                                  onEditOne={handleEditOne}
-                                  onDeleteOne={handleDeleteOne}
-                                  onApproveAll={handleApproveAll}
-                                  onDeleteAll={handleDeleteAllCategory}
-                                  pendingDeleteIds={pendingDeleteIds}
-                                  addNotification={addNotification}
-                                  dispatch={dispatch}
-                                />
-                              );
-                            })}
-                          </div>
-                        );
-                      })}
+{categoryGroups.map((catGroup) => (
+  <CategoryCard
+    key={catGroup.category}
+    category={catGroup.category}
+    items={catGroup.items}
+    days={catGroup.days}
+    isOpen={openCards.has(catGroup.category)}
+    onToggle={() => toggleCard(catGroup.category)}
+    isMonthClosedFlag={isClosed}
+    onApproveOne={handleApproveOne}
+    onReopenOne={handleReopenOne}
+    onEditOne={handleEditOne}
+    onDeleteOne={handleDeleteOne}
+    onApproveAll={handleApproveAll}
+    onDeleteAll={handleDeleteAllCategory}
+    pendingDeleteIds={pendingDeleteIds}
+    addNotification={addNotification}
+    dispatch={dispatch}
+  />
+))}
                     </div>
                   )}
 
