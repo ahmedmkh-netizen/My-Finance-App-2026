@@ -15,8 +15,9 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging-compat.js"></script>
 <style>
-/* ══════════ DESIGN SYSTEM v5.5 — Royal Edition ══════════ */
+/* ══════════ DESIGN SYSTEM v5.7 — Royal Edition ══════════ */
 :root{
   --bg-app:#F4F6FA; --bg-card:#FFFFFF; --bg-muted:#EEF2F8; --bg-elevated:#FFFFFF;
   --border-subtle:rgba(15,27,51,0.06); --border-default:rgba(15,27,51,0.10);
@@ -49,21 +50,24 @@ body.dark{
 html{-webkit-text-size-adjust:100%}
 body{font-family:'Cairo',system-ui,sans-serif;font-weight:500;color:var(--text-primary);background:var(--bg-app);
   min-height:100dvh;padding-bottom:calc(var(--nav-h) + env(safe-area-inset-bottom) + 20px);
-  overflow-x:hidden;-webkit-font-smoothing:antialiased;transition:background .3s,color .3s;position:relative}
-/* ✨ Ambient orbs for beauty */
+  overflow-x:hidden;-webkit-font-smoothing:antialiased;transition:background .5s ease,color .5s ease;position:relative}
 body::before{content:'';position:fixed;top:-15%;right:-15%;width:70vw;height:70vw;max-width:520px;max-height:520px;
   background:radial-gradient(circle,rgba(99,102,241,.10) 0%,transparent 62%);
-  pointer-events:none;z-index:0;filter:blur(20px)}
+  pointer-events:none;z-index:0;filter:blur(20px);transition:opacity .6s}
 body::after{content:'';position:fixed;bottom:-20%;left:-15%;width:60vw;height:60vw;max-width:460px;max-height:460px;
   background:radial-gradient(circle,rgba(212,168,87,.08) 0%,transparent 62%);
-  pointer-events:none;z-index:0;filter:blur(20px)}
+  pointer-events:none;z-index:0;filter:blur(20px);transition:opacity .6s}
+body.light::before{background:radial-gradient(circle,rgba(99,102,241,.06) 0%,transparent 62%)}
+body.light::after{background:radial-gradient(circle,rgba(212,168,87,.05) 0%,transparent 62%)}
 ::-webkit-scrollbar{width:6px;height:6px}
 ::-webkit-scrollbar-thumb{background:var(--border-default);border-radius:999px}
 .tabular{font-variant-numeric:tabular-nums;font-feature-settings:'tnum' 1;letter-spacing:-.02em}
 h1,h2,h3,h4{font-weight:800;letter-spacing:-.02em}
 button,input,textarea,select{font-family:'Cairo',system-ui,sans-serif}
 
-/* SPLASH */
+/* Theme transition helper */
+.theme-transition, .theme-transition *{transition:background .5s ease,color .5s ease,border-color .5s ease !important}
+
 .splash{position:fixed;inset:0;z-index:9989;background:linear-gradient(135deg,#050A14 0%,#0A1628 50%,#1E2B4A 100%);
   display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff;transition:opacity .3s}
 .splash-logo{width:88px;height:88px;border-radius:28px;background:linear-gradient(135deg,#6366F1,#4338CA);
@@ -77,7 +81,6 @@ button,input,textarea,select{font-family:'Cairo',system-ui,sans-serif}
 @keyframes splashPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.05)}}
 @keyframes spin{to{transform:rotate(360deg)}}
 
-/* AZKAR */
 .azkar-screen{position:fixed;inset:0;z-index:9990;background:linear-gradient(135deg,#050A14 0%,#0A1628 50%,#1E2B4A 100%);
   display:none;align-items:center;justify-content:center;padding:24px;cursor:pointer}
 .azkar-screen.show{display:flex;animation:fadeIn .4s ease-out}
@@ -91,7 +94,6 @@ button,input,textarea,select{font-family:'Cairo',system-ui,sans-serif}
 .azkar-text{font-size:22px;font-weight:700;color:#fff;line-height:1.9}
 .azkar-hint{margin-top:24px;font-size:10px;color:#475569;font-weight:600}
 
-/* PIN */
 .pin-screen{position:fixed;inset:0;z-index:9995;
   background:linear-gradient(135deg,#050A14 0%,#0A1628 50%,#1E2B4A 100%);
   display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;overflow:hidden}
@@ -117,7 +119,6 @@ button,input,textarea,select{font-family:'Cairo',system-ui,sans-serif}
 .shake{animation:shake .4s ease-in-out}
 @keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-8px)}75%{transform:translateX(8px)}}
 
-/* OFFLINE */
 .offline-banner{position:fixed;top:0;left:0;right:0;z-index:8000;
   background:linear-gradient(135deg,#D97706,#B45309);color:#fff;
   padding:8px 12px;font-size:11px;font-weight:800;text-align:center;
@@ -125,11 +126,9 @@ button,input,textarea,select{font-family:'Cairo',system-ui,sans-serif}
   box-shadow:0 4px 12px rgba(0,0,0,.15)}
 .offline-banner.show{display:flex}
 
-/* MAIN */
 .main-content{display:none;position:relative;z-index:1}
 .main-content.show{display:block;animation:fadeIn .3s ease-out}
 
-/* HEADER */
 .app-header{padding:16px 16px 8px;display:flex;justify-content:space-between;align-items:center;gap:12px}
 .header-profile{display:flex;align-items:center;gap:12px;flex:1;min-width:0}
 .header-avatar{width:44px;height:44px;border-radius:50%;flex-shrink:0;
@@ -138,7 +137,7 @@ button,input,textarea,select{font-family:'Cairo',system-ui,sans-serif}
   box-shadow:0 8px 20px -6px rgba(99,102,241,.5);position:relative}
 .header-avatar.admin::after{content:'';position:absolute;bottom:-2px;left:-2px;width:16px;height:16px;
   background:linear-gradient(135deg,#FBBF24,#D97706);border-radius:50%;
-  border:2px solid var(--bg-app);display:flex}
+  border:2px solid var(--bg-app)}
 .header-user{display:flex;flex-direction:column;min-width:0;line-height:1.25}
 .header-user-label{font-size:10.5px;color:var(--text-muted);font-weight:700;display:flex;align-items:center;gap:5px}
 .header-user-name{font-size:15px;color:var(--text-primary);font-weight:900;
@@ -151,7 +150,6 @@ button,input,textarea,select{font-family:'Cairo',system-ui,sans-serif}
 .icon-btn:active{transform:scale(.94)}
 .icon-btn svg{width:17px;height:17px}
 
-/* Admin badge inline */
 .admin-badge{display:inline-flex;align-items:center;gap:3px;
   font-size:9px;font-weight:900;color:#B45309;
   background:linear-gradient(135deg,rgba(251,191,36,.20),rgba(217,119,6,.16));
@@ -159,7 +157,6 @@ button,input,textarea,select{font-family:'Cairo',system-ui,sans-serif}
   border:1px solid rgba(217,119,6,.35);letter-spacing:.3px}
 body.dark .admin-badge{color:#FBBF24}
 
-/* SYNC STRIP */
 .sync-strip{display:flex;align-items:center;justify-content:center;gap:8px;
   margin:0 16px 14px;padding:7px 14px;border-radius:999px;font-size:10.5px;font-weight:800;
   transition:all .3s;box-shadow:var(--shadow-1);width:fit-content}
@@ -169,7 +166,6 @@ body.dark .admin-badge{color:#FBBF24}
 .sync-dot{width:7px;height:7px;border-radius:50%;background:currentColor;animation:dotPulse 1.6s infinite}
 @keyframes dotPulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.85)}}
 
-/* FAMILY STRIP */
 .family-strip{display:flex;gap:8px;overflow-x:auto;padding:4px 16px 14px;scrollbar-width:none}
 .family-strip::-webkit-scrollbar{display:none}
 .fam-pill{flex-shrink:0;display:flex;align-items:center;gap:8px;padding:7px 14px 7px 8px;
@@ -191,7 +187,6 @@ body.dark .admin-badge{color:#FBBF24}
 .fam-amount{color:var(--text-muted);font-size:10px;font-weight:700;font-variant-numeric:tabular-nums;margin-top:1px}
 .fam-pill.me .fam-name{color:var(--accent)}
 
-/* BALANCE CARD */
 .balance-card{
   margin:0 16px 14px;padding:22px 22px 20px;border-radius:22px;
   background:linear-gradient(135deg,#1a1f3a 0%,#0d1225 55%,#1e2b4a 100%);
@@ -224,7 +219,6 @@ body.dark .admin-badge{color:#FBBF24}
 .balance-amount.loading{opacity:.5;animation:pulseLoad 1.5s ease-in-out infinite}
 @keyframes pulseLoad{0%,100%{opacity:.4}50%{opacity:.7}}
 
-/* QUICK STATS */
 .quick-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:0 16px 18px}
 .stat-mini{background:var(--bg-card);border-radius:16px;padding:14px 12px;
   border:1px solid var(--border-subtle);box-shadow:var(--shadow-1);
@@ -246,7 +240,6 @@ body.dark .admin-badge{color:#FBBF24}
   font-variant-numeric:tabular-nums;letter-spacing:-.02em}
 .stat-mini-val .cur{font-size:10px;color:var(--text-muted);font-weight:700;margin-right:3px}
 
-/* SECTION */
 .section{margin:0 16px 14px}
 .section-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;padding:0 2px}
 .section-title{font-size:14px;font-weight:900;color:var(--text-primary);
@@ -255,7 +248,6 @@ body.dark .admin-badge{color:#FBBF24}
 .section-action{font-size:11px;font-weight:800;color:var(--accent);cursor:pointer;
   background:var(--accent-soft);border:none;padding:6px 12px;border-radius:999px}
 
-/* CARD */
 .card{background:var(--bg-card);border-radius:18px;border:1px solid var(--border-subtle);
   padding:18px;margin-bottom:14px;box-shadow:var(--shadow-2);position:relative;overflow:hidden}
 .card-title{font-size:13.5px;font-weight:900;color:var(--text-primary);margin-bottom:14px;
@@ -264,7 +256,6 @@ body.dark .admin-badge{color:#FBBF24}
 .card-title .badge{margin-right:auto;font-size:10px;font-weight:900;padding:4px 10px;border-radius:999px;
   background:var(--accent-soft);color:var(--accent)}
 
-/* SEARCH */
 .search-box{position:relative;margin-bottom:12px}
 .search-input{width:100%;height:48px;padding:14px 46px 14px 46px;background:var(--bg-muted);
   border:1.5px solid transparent;border-radius:12px;color:var(--text-primary);
@@ -282,7 +273,6 @@ body.dark .admin-badge{color:#FBBF24}
 .voice-btn svg{width:17px;height:17px}
 @keyframes recPulse{0%,100%{box-shadow:0 0 0 0 rgba(220,38,38,.4)}50%{box-shadow:0 0 0 12px rgba(220,38,38,0)}}
 
-/* CATS */
 .cats{display:flex;gap:8px;overflow-x:auto;padding-bottom:10px;margin-bottom:12px;scrollbar-width:none}
 .cats::-webkit-scrollbar{display:none}
 .cat{flex-shrink:0;padding:8px 14px;border-radius:999px;background:var(--bg-muted);color:var(--text-secondary);
@@ -290,7 +280,6 @@ body.dark .admin-badge{color:#FBBF24}
 .cat:active{transform:scale(.96)}
 .cat.on{background:var(--accent-soft);color:var(--accent);border-color:var(--accent);box-shadow:0 0 0 3px rgba(99,102,241,.1)}
 
-/* ITEMS */
 .items{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
 .item{position:relative;background:var(--bg-muted);border:1.5px solid transparent;border-radius:12px;
   padding:12px 6px 10px;font-size:12px;font-weight:700;color:var(--text-primary);cursor:pointer;
@@ -313,7 +302,6 @@ body.dark .admin-badge{color:#FBBF24}
 .item .star-btn svg{width:100%;height:100%}
 .item .star-btn.on{color:var(--gold);filter:drop-shadow(0 0 6px rgba(212,168,87,.6))}
 
-/* FAVS */
 .favs{display:flex;gap:8px;overflow-x:auto;padding-bottom:10px;margin-bottom:12px;scrollbar-width:none}
 .favs::-webkit-scrollbar{display:none}
 .fav-chip{flex-shrink:0;padding:7px 13px;background:var(--bg-muted);border:1.5px solid transparent;
@@ -323,7 +311,6 @@ body.dark .admin-badge{color:#FBBF24}
 .fav-chip:hover{background:var(--bg-card);border-color:var(--border-default);color:var(--text-primary)}
 .fav-price{font-size:10px;color:var(--accent);font-weight:900;font-variant-numeric:tabular-nums}
 
-/* AMOUNT */
 .amount-box{background:var(--bg-muted);border-radius:14px;padding:20px 16px;margin-bottom:12px;
   border:2px solid transparent;transition:all .2s;display:flex;align-items:center;justify-content:center;
   gap:10px;position:relative}
@@ -344,7 +331,6 @@ body.dark .admin-badge{color:#FBBF24}
 .amount-box.has-value .amount-clear{display:flex}
 .amount-clear:hover{background:var(--danger-soft);color:var(--danger);border-color:var(--danger)}
 
-/* QUICK */
 .quick{display:grid;grid-template-columns:repeat(auto-fill,minmax(54px,1fr));gap:7px;margin-bottom:14px}
 .quick-btn{padding:11px 6px;background:var(--bg-muted);border:1.5px solid transparent;border-radius:11px;
   font-size:13px;font-weight:800;color:var(--text-secondary);cursor:pointer;transition:all .15s;
@@ -352,7 +338,6 @@ body.dark .admin-badge{color:#FBBF24}
 .quick-btn:hover{background:var(--bg-card);border-color:var(--border-default);color:var(--text-primary);transform:translateY(-1px)}
 .quick-btn:active{background:var(--accent);color:#fff;border-color:var(--accent);transform:scale(.95)}
 
-/* DATES */
 .date-quick{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
 .date-btn{padding:13px 6px;background:var(--bg-muted);border:1.5px solid transparent;border-radius:12px;
   font-size:11px;font-weight:800;color:var(--text-secondary);cursor:pointer;transition:all .2s;
@@ -371,14 +356,12 @@ body.dark .admin-badge{color:#FBBF24}
   border-radius:12px;color:var(--text-primary);font-size:14px;font-weight:800;text-align:center;
   font-variant-numeric:tabular-nums;outline:none}
 
-/* NOTE */
 .note-input{width:100%;padding:13px 15px;margin-bottom:12px;background:var(--bg-muted);
   border:1.5px solid transparent;border-radius:12px;color:var(--text-primary);
   font-size:13.5px;font-weight:600;transition:all .2s}
 .note-input:focus{border-color:var(--accent);background:var(--bg-card);box-shadow:0 0 0 4px var(--accent-soft);outline:none}
 .note-input::placeholder{color:var(--text-muted);font-weight:500}
 
-/* SAVE */
 .save-btn{width:100%;padding:17px;background:linear-gradient(135deg,#6366F1,#4338CA);color:#fff;
   border:none;border-radius:14px;font-size:15px;font-weight:900;cursor:pointer;transition:all .2s;
   display:flex;align-items:center;justify-content:center;gap:10px;
@@ -391,12 +374,10 @@ body.dark .admin-badge{color:#FBBF24}
 .save-btn:disabled{opacity:.55;cursor:not-allowed}
 .save-btn svg{width:18px;height:18px}
 
-/* SEARCH HINT */
 .search-hint{display:none;align-items:center;gap:8px;font-size:11.5px;font-weight:800;color:var(--accent);
   background:var(--accent-soft);border:1px solid rgba(99,102,241,.2);padding:8px 12px;border-radius:10px;margin-bottom:12px}
 .search-hint.show{display:flex}
 
-/* FEED */
 .feed-item{display:flex;align-items:center;gap:12px;padding:13px 0;border-bottom:1px solid var(--border-subtle);
   transition:all .15s;animation:feedIn .35s ease-out}
 .feed-item:last-child{border-bottom:none;padding-bottom:0}
@@ -428,7 +409,6 @@ body.dark .admin-badge{color:#FBBF24}
 .transfer-badge.in{color:var(--success);background:var(--success-soft);border:1px solid rgba(16,185,129,.3)}
 .transfer-badge.fee{color:var(--warning);background:var(--warning-soft);border:1px solid rgba(217,119,6,.3)}
 
-/* BOTTOM NAV */
 .bottom-nav{position:fixed;bottom:0;left:0;right:0;z-index:1000;
   padding:8px 12px calc(8px + env(safe-area-inset-bottom));
   background:color-mix(in srgb,var(--bg-card) 94%,transparent);
@@ -446,13 +426,20 @@ body.dark .bottom-nav{box-shadow:0 -8px 32px rgba(0,0,0,.5)}
 .nav-btn.active::before{content:'';position:absolute;top:5px;left:50%;transform:translateX(-50%);
   width:5px;height:5px;border-radius:50%;background:var(--accent);box-shadow:0 0 6px var(--accent)}
 
-/* TABS */
+.nav-badge{position:absolute;top:2px;right:calc(50% - 24px);
+  background:linear-gradient(135deg,#DC2626,#B91C1C);color:#fff;
+  font-size:9.5px;font-weight:900;min-width:18px;height:18px;padding:0 5px;
+  border-radius:999px;display:none;align-items:center;justify-content:center;
+  border:2px solid var(--bg-card);box-shadow:0 2px 8px rgba(220,38,38,.5);
+  animation:badgePop .3s cubic-bezier(.34,1.56,.64,1);font-variant-numeric:tabular-nums}
+.nav-badge.show{display:flex}
+@keyframes badgePop{from{transform:scale(0)}to{transform:scale(1)}}
+
 .tab{display:none}
 .tab.active{display:block;animation:slideUp .3s ease-out}
 @keyframes slideUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
 
-/* ══════ HISTORY HERO — New ══════ */
 .history-hero{margin:0 16px 14px;padding:22px 22px 18px;border-radius:22px;
   background:linear-gradient(135deg,#1a1f3a 0%,#0d1225 55%,#1e2b4a 100%);
   color:#fff;position:relative;overflow:hidden;
@@ -477,7 +464,69 @@ body.dark .bottom-nav{box-shadow:0 -8px 32px rgba(0,0,0,.5)}
 .hh-stat .v.gold{color:#E8C285}
 .hh-stat .l{font-size:10px;color:rgba(255,255,255,.5);font-weight:700}
 
-/* USER FILTER */
+.pending-section{margin:0 16px 14px;display:none}
+.pending-section.show{display:block;animation:slideUp .3s ease-out}
+.pending-header{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;
+  background:linear-gradient(135deg,rgba(251,191,36,.14),rgba(217,119,6,.08));
+  border:1.5px solid rgba(217,119,6,.4);border-radius:16px;cursor:pointer;
+  box-shadow:0 4px 16px -4px rgba(217,119,6,.25);transition:all .25s;position:relative;overflow:hidden}
+.pending-header::before{content:'';position:absolute;top:-50%;right:-20%;width:60%;height:200%;
+  background:radial-gradient(circle,rgba(251,191,36,.15) 0%,transparent 60%);pointer-events:none}
+.pending-header:hover{transform:translateY(-1px);box-shadow:0 8px 20px -4px rgba(217,119,6,.35)}
+.pending-header-left{display:flex;align-items:center;gap:12px;position:relative;z-index:1}
+.pending-header-icon{width:40px;height:40px;border-radius:12px;display:flex;align-items:center;justify-content:center;
+  background:linear-gradient(135deg,#FBBF24,#D97706);color:#fff;
+  box-shadow:0 6px 16px -4px rgba(217,119,6,.5);flex-shrink:0}
+.pending-header-icon svg{width:19px;height:19px}
+.pending-header-title{font-size:14px;font-weight:900;color:#B45309;
+  display:flex;align-items:center;gap:6px;line-height:1.2}
+body.dark .pending-header-title{color:#FBBF24}
+.pending-header-sub{font-size:10.5px;color:var(--text-muted);font-weight:700;margin-top:3px}
+.pending-header-count{background:linear-gradient(135deg,#FBBF24,#D97706);color:#fff;
+  font-size:14px;font-weight:900;min-width:36px;height:36px;padding:0 11px;border-radius:999px;
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 6px 16px -4px rgba(217,119,6,.5);position:relative;z-index:1;
+  font-variant-numeric:tabular-nums}
+.pending-chevron{position:relative;z-index:1;color:#B45309;transition:transform .3s;margin-right:4px}
+body.dark .pending-chevron{color:#FBBF24}
+.pending-chevron svg{width:16px;height:16px}
+.pending-section.expanded .pending-chevron{transform:rotate(180deg)}
+.pending-list{display:none;gap:8px;flex-direction:column;margin-top:10px}
+.pending-section.expanded .pending-list{display:flex;animation:fadeIn .3s}
+.pending-card{background:var(--bg-card);border:1.5px solid rgba(217,119,6,.3);border-radius:14px;padding:14px;
+  box-shadow:var(--shadow-2);animation:feedIn .35s ease-out}
+.pending-top{display:flex;align-items:flex-start;gap:10px;margin-bottom:10px}
+.pending-avatar{width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  font-size:14px;font-weight:900;color:#fff;flex-shrink:0;position:relative;
+  box-shadow:0 4px 12px -4px rgba(0,0,0,.3)}
+.pending-info{flex:1;min-width:0}
+.pending-desc{font-size:13px;font-weight:800;color:var(--text-primary);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pending-meta{font-size:10.5px;color:var(--text-muted);font-weight:700;margin-top:4px;
+  display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.pending-amount{font-size:15px;font-weight:900;color:var(--danger);white-space:nowrap;
+  font-variant-numeric:tabular-nums}
+.pending-reason{background:var(--warning-soft);border:1px solid rgba(217,119,6,.3);border-radius:10px;
+  padding:10px 12px;font-size:11.5px;font-weight:700;color:var(--text-secondary);margin-bottom:10px;
+  display:flex;gap:8px;align-items:flex-start;line-height:1.6}
+.pending-reason svg{width:14px;height:14px;color:var(--warning);flex-shrink:0;margin-top:2px}
+.pending-reason strong{color:var(--text-primary);font-weight:900}
+.pending-actions{display:flex;gap:8px}
+.pending-btn{flex:1;padding:11px 12px;border-radius:10px;font-size:12px;font-weight:900;
+  cursor:pointer;transition:all .18s;border:none;display:flex;align-items:center;justify-content:center;gap:6px}
+.pending-btn svg{width:14px;height:14px}
+.pending-btn.approve{background:linear-gradient(135deg,#059669,#047857);color:#fff;
+  box-shadow:0 6px 16px -3px rgba(5,150,105,.4)}
+.pending-btn.approve:hover{transform:translateY(-1px);box-shadow:0 8px 20px -3px rgba(5,150,105,.55)}
+.pending-btn.reject{background:var(--danger-soft);color:var(--danger);border:1px solid rgba(220,38,38,.35)}
+.pending-btn.reject:hover{background:var(--danger);color:#fff}
+.pending-btn.cancel-req{background:var(--bg-muted);color:var(--text-secondary);border:1px solid var(--border-default)}
+.pending-btn.cancel-req:hover{background:var(--warning-soft);color:var(--warning);border-color:var(--warning)}
+.pending-status{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:900;
+  padding:5px 11px;border-radius:999px;background:var(--warning-soft);color:var(--warning);
+  border:1px solid rgba(217,119,6,.3)}
+.pending-status svg{width:12px;height:12px}
+
 .user-filter{display:flex;gap:6px;overflow-x:auto;padding-bottom:10px;margin-bottom:10px;scrollbar-width:none}
 .user-filter::-webkit-scrollbar{display:none}
 .uf-chip{flex-shrink:0;display:flex;align-items:center;gap:6px;padding:6px 12px 6px 6px;
@@ -489,7 +538,6 @@ body.dark .bottom-nav{box-shadow:0 -8px 32px rgba(0,0,0,.5)}
 .uf-av{width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;
   font-size:10px;font-weight:900;color:#fff;flex-shrink:0}
 
-/* PERIODS */
 .periods{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding:5px;
   background:var(--bg-muted);border-radius:14px;margin-bottom:12px}
 .period{padding:12px 8px;border-radius:10px;color:var(--text-muted);background:transparent;
@@ -500,7 +548,6 @@ body.dark .bottom-nav{box-shadow:0 -8px 32px rgba(0,0,0,.5)}
 .period.on .period-count{opacity:1;color:var(--accent)}
 .period:active{transform:scale(.97)}
 
-/* DAY GROUP */
 .day-group{margin-bottom:20px;animation:feedIn .4s ease-out}
 .day-header{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;margin-bottom:8px;
   background:linear-gradient(135deg,var(--accent-soft),transparent);border-radius:12px;
@@ -510,7 +557,6 @@ body.dark .bottom-nav{box-shadow:0 -8px 32px rgba(0,0,0,.5)}
 .day-total{font-size:13px;font-weight:900;color:var(--text-primary);font-variant-numeric:tabular-nums;
   background:var(--bg-card);padding:5px 13px;border-radius:999px;box-shadow:var(--shadow-1)}
 
-/* STATS */
 .stats{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:14px}
 .stat{background:var(--bg-muted);border-radius:14px;padding:16px 14px}
 .stat-lbl{font-size:10.5px;color:var(--text-muted);font-weight:800;margin-bottom:6px}
@@ -520,7 +566,6 @@ body.dark .bottom-nav{box-shadow:0 -8px 32px rgba(0,0,0,.5)}
 .stat.hot .stat-val{color:var(--accent)}
 .stat.green .stat-val{color:var(--success)}
 
-/* FAM CARD */
 .fam-card{display:flex;align-items:center;gap:12px;padding:14px 12px;border-radius:12px;margin-bottom:6px;transition:all .2s}
 .fam-card:hover{background:var(--bg-muted)}
 .fam-card.winner{background:linear-gradient(135deg,var(--accent-soft),rgba(99,102,241,.05));border:1px solid rgba(99,102,241,.2)}
@@ -536,12 +581,10 @@ body.dark .bottom-nav{box-shadow:0 -8px 32px rgba(0,0,0,.5)}
 .fam-bar{height:4px;background:var(--bg-muted);border-radius:3px;margin-top:6px;overflow:hidden}
 .fam-bar-fill{height:100%;background:linear-gradient(90deg,#6366F1,#818CF8);border-radius:3px;transition:width .6s}
 
-/* EMPTY */
 .empty{text-align:center;padding:44px 24px;color:var(--text-muted);font-weight:700;font-size:13px}
 .empty-emoji{display:flex;justify-content:center;margin-bottom:14px;opacity:.4;color:var(--accent)}
 .empty-emoji svg{width:44px;height:44px}
 
-/* PROFILE */
 .profile-av{width:88px;height:88px;margin:0 auto 16px;border-radius:50%;
   background:linear-gradient(135deg,#6366F1,#4338CA);display:flex;align-items:center;justify-content:center;
   color:#fff;font-size:34px;font-weight:900;box-shadow:0 20px 48px -8px rgba(99,102,241,.5);position:relative}
@@ -550,7 +593,6 @@ body.dark .bottom-nav{box-shadow:0 -8px 32px rgba(0,0,0,.5)}
   display:flex;align-items:center;justify-content:center;border:3px solid var(--bg-card);
   box-shadow:0 4px 12px rgba(217,119,6,.4)}
 
-/* TOAST */
 .toast{position:fixed;top:24px;left:50%;transform:translateX(-50%);padding:13px 18px;border-radius:12px;
   background:var(--bg-card);color:var(--text-primary);font-weight:800;font-size:13px;z-index:10000;
   box-shadow:var(--shadow-4);animation:toastIn .35s cubic-bezier(.34,1.56,.64,1);max-width:90vw;
@@ -564,7 +606,6 @@ body.dark .bottom-nav{box-shadow:0 -8px 32px rgba(0,0,0,.5)}
 .toast.warn svg{color:#fff}
 @keyframes toastIn{from{opacity:0;transform:translate(-50%,-20px) scale(.9)}to{opacity:1;transform:translate(-50%,0) scale(1)}}
 
-/* MODAL */
 .modal-bg{position:fixed;inset:0;z-index:5000;background:rgba(10,22,40,.65);backdrop-filter:blur(12px);
   display:flex;align-items:center;justify-content:center;padding:20px;animation:fadeIn .22s}
 .modal{background:var(--bg-card);border-radius:22px;padding:26px;max-width:420px;width:100%;
@@ -590,7 +631,6 @@ body.dark .bottom-nav{box-shadow:0 -8px 32px rgba(0,0,0,.5)}
   font-variant-numeric:tabular-nums;outline:none}
 .modal-input:focus{border-color:var(--accent);background:var(--bg-card);box-shadow:0 0 0 4px var(--accent-soft)}
 
-/* VOICE MODAL */
 .voice-modal{position:fixed;inset:0;z-index:9500;background:rgba(5,10,20,.94);backdrop-filter:blur(24px);
   display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px;color:#fff;text-align:center}
 .mic-circle{width:118px;height:118px;border-radius:50%;background:linear-gradient(135deg,#6366F1,#4338CA);
@@ -608,20 +648,17 @@ body.dark .bottom-nav{box-shadow:0 -8px 32px rgba(0,0,0,.5)}
   border:1px solid rgba(255,255,255,.14);font-size:13px;font-weight:700;cursor:pointer;transition:all .15s}
 .voice-close:hover{background:rgba(255,255,255,.18)}
 
-/* BUDGET */
 .budget-card{background:var(--bg-muted);border-radius:14px;padding:15px;margin-bottom:12px}
 .budget-bar{height:9px;background:var(--bg-app);border-radius:5px;overflow:hidden;margin-top:11px}
 .budget-fill{height:100%;background:linear-gradient(90deg,#6366F1,#818CF8);border-radius:5px;transition:width .6s}
 .budget-fill.warn{background:linear-gradient(90deg,#D97706,#FBBF24)}
 .budget-fill.danger{background:linear-gradient(90deg,#DC2626,#F87171)}
 
-/* LOADING */
 .loading-state{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:44px 20px;
   color:var(--text-muted);font-size:12px;font-weight:700}
 .loading-state .spinner{width:30px;height:30px;border:3px solid var(--border-subtle);border-top-color:var(--accent);
   border-radius:50%;animation:spin .8s linear infinite;margin-bottom:12px}
 
-/* SETTINGS */
 .setting-row{display:flex;align-items:center;justify-content:space-between;padding:13px 0;
   border-bottom:1px solid var(--border-subtle);gap:12px}
 .setting-row:last-child{border-bottom:none}
@@ -633,7 +670,33 @@ body.dark .bottom-nav{box-shadow:0 -8px 32px rgba(0,0,0,.5)}
 .setting-btn.primary{background:var(--accent);color:#fff;box-shadow:0 4px 12px -2px rgba(99,102,241,.3)}
 .setting-btn.danger{background:var(--danger-soft);color:var(--danger)}
 
-/* ADMIN INFO */
+/* ═══════════════ THEME SEGMENTED CONTROL — New ═══════════════ */
+.theme-segmented{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;padding:5px;
+  background:var(--bg-muted);border-radius:12px;margin-top:8px}
+.theme-seg{padding:11px 8px;border-radius:9px;color:var(--text-muted);background:transparent;
+  border:none;font-size:11.5px;font-weight:800;cursor:pointer;transition:all .25s;
+  display:flex;flex-direction:column;align-items:center;gap:3px;line-height:1.2}
+.theme-seg .seg-icon{font-size:16px;line-height:1}
+.theme-seg:hover{color:var(--text-primary)}
+.theme-seg.on{background:var(--bg-card);color:var(--accent);box-shadow:0 4px 12px rgba(10,22,40,.08);font-weight:900;transform:translateY(-1px)}
+.theme-seg.on .seg-sub{color:var(--accent);opacity:.8}
+.theme-seg .seg-sub{font-size:9px;font-weight:700;opacity:.7}
+
+.sun-info{display:flex;align-items:center;gap:10px;padding:10px 12px;margin-top:10px;
+  background:linear-gradient(135deg,rgba(251,191,36,.10),rgba(217,119,6,.06));
+  border:1px solid rgba(217,119,6,.2);border-radius:10px;font-size:11px;font-weight:700;color:var(--text-secondary)}
+.sun-info-icon{width:26px;height:26px;border-radius:8px;display:flex;align-items:center;justify-content:center;
+  background:linear-gradient(135deg,#FBBF24,#D97706);color:#fff;flex-shrink:0}
+.sun-info-icon svg{width:14px;height:14px}
+.sun-info strong{color:var(--text-primary);font-weight:900;font-variant-numeric:tabular-nums}
+
+/* FCM status pill */
+.fcm-pill{display:inline-flex;align-items:center;gap:4px;font-size:9.5px;font-weight:900;
+  padding:3px 9px;border-radius:999px;margin-right:auto}
+.fcm-pill.ok{background:var(--success-soft);color:var(--success);border:1px solid rgba(16,185,129,.3)}
+.fcm-pill.warn{background:var(--warning-soft);color:var(--warning);border:1px solid rgba(217,119,6,.3)}
+.fcm-pill.off{background:var(--danger-soft);color:var(--danger);border:1px solid rgba(220,38,38,.3)}
+
 .admin-info{display:flex;gap:8px;align-items:flex-start;padding:12px;border-radius:12px;
   background:linear-gradient(135deg,rgba(251,191,36,.10),rgba(217,119,6,.08));
   border:1px solid rgba(217,119,6,.25);margin-bottom:14px}
@@ -651,6 +714,7 @@ body.dark .bottom-nav{box-shadow:0 -8px 32px rgba(0,0,0,.5)}
   .stat-mini{padding:12px 10px}
   .stat-mini-val{font-size:14px}
   .hh-value .num{font-size:30px}
+  .theme-seg{font-size:10.5px;padding:9px 5px}
 }
 @media (min-width:640px){
   .items{grid-template-columns:repeat(4,1fr)}
@@ -762,7 +826,6 @@ body.dark .bottom-nav{box-shadow:0 -8px 32px rgba(0,0,0,.5)}
 
   <div class="family-strip" id="familyStrip"></div>
 
-  <!-- ══════ HOME ══════ -->
   <div class="tab active" id="tab-home">
 
     <div class="balance-card">
@@ -952,8 +1015,35 @@ body.dark .bottom-nav{box-shadow:0 -8px 32px rgba(0,0,0,.5)}
     </div>
   </div>
 
-  <!-- ══════ HISTORY — Improved ══════ -->
   <div class="tab" id="tab-history">
+
+    <div class="pending-section" id="pendingDeleteSection">
+      <div class="pending-header" id="pendingHeader">
+        <div class="pending-header-left">
+          <div class="pending-header-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+              <path d="M12 11v5M10 13h4"/>
+            </svg>
+          </div>
+          <div>
+            <div class="pending-header-title">
+              <span>تحت اعتماد الحذف</span>
+            </div>
+            <div class="pending-header-sub" id="pendingHeaderSub">طلبات بانتظار المراجعة</div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;position:relative;z-index:1">
+          <div class="pending-header-count" id="pendingHeaderCount">0</div>
+          <span class="pending-chevron" id="pendingChevron">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M6 9l6 6 6-6"/>
+            </svg>
+          </span>
+        </div>
+      </div>
+      <div class="pending-list" id="pendingList"></div>
+    </div>
 
     <div class="history-hero">
       <div class="hh-top">
@@ -1017,7 +1107,6 @@ body.dark .bottom-nav{box-shadow:0 -8px 32px rgba(0,0,0,.5)}
     </div>
   </div>
 
-  <!-- ══════ FAMILY ══════ -->
   <div class="tab" id="tab-family">
     <div class="section">
       <div class="card">
@@ -1056,7 +1145,6 @@ body.dark .bottom-nav{box-shadow:0 -8px 32px rgba(0,0,0,.5)}
     </div>
   </div>
 
-  <!-- ══════ PROFILE ══════ -->
   <div class="tab" id="tab-profile">
     <div class="section">
 
@@ -1075,7 +1163,45 @@ body.dark .bottom-nav{box-shadow:0 -8px 32px rgba(0,0,0,.5)}
           </div>
           <div class="admin-info-text">
             <strong>👑 صلاحيات المشرف مفعّلة</strong><br>
-            يمكنك تعديل وحذف عمليات جميع أفراد العيلة.
+            يمكنك تعديل وحذف عمليات جميع أفراد العيلة، والموافقة على طلبات الحذف.
+          </div>
+        </div>
+      </div>
+
+      <!-- ══════ APPEARANCE — New ══════ -->
+      <div class="card">
+        <div class="card-title">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="4.5"/><path d="M12 1.5v2M12 20.5v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1.5 12h2M20.5 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+          </svg>
+          المظهر
+        </div>
+        <div style="font-size:11.5px;color:var(--text-muted);font-weight:700;margin-bottom:4px">اختر نمط العرض</div>
+        <div class="theme-segmented" id="themeSegmented">
+          <button class="theme-seg" data-mode="auto">
+            <span class="seg-icon">🌗</span>
+            <span>تلقائي</span>
+            <span class="seg-sub">غروب → شروق</span>
+          </button>
+          <button class="theme-seg" data-mode="dark">
+            <span class="seg-icon">🌙</span>
+            <span>داكن</span>
+            <span class="seg-sub">دائماً</span>
+          </button>
+          <button class="theme-seg" data-mode="light">
+            <span class="seg-icon">☀️</span>
+            <span>فاتح</span>
+            <span class="seg-sub">دائماً</span>
+          </button>
+        </div>
+        <div class="sun-info" id="sunInfo">
+          <div class="sun-info-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M17 18a5 5 0 0 0-10 0"/><path d="M12 9V3M4.22 10.22l1.42 1.42M1 18h2M21 18h2M18.36 11.64l1.42-1.42M23 22H1M8 6l4-4 4 4"/>
+            </svg>
+          </div>
+          <div>
+            🌅 شروق: <strong id="sunriseTime">—</strong> · 🌇 غروب: <strong id="sunsetTime">—</strong>
           </div>
         </div>
       </div>
@@ -1131,6 +1257,23 @@ body.dark .bottom-nav{box-shadow:0 -8px 32px rgba(0,0,0,.5)}
         </div>
         <div class="setting-row">
           <div>
+            <div class="setting-label" style="display:flex;align-items:center;gap:8px">
+              <span>Push Notifications (FCM)</span>
+              <span class="fcm-pill off" id="fcmPill">غير مفعّل</span>
+            </div>
+            <div class="setting-desc" id="fcmStatus">إشعارات فورية حتى في الخلفية</div>
+          </div>
+          <button class="setting-btn primary" id="enableFcmBtn">تفعيل</button>
+        </div>
+        <div class="setting-row" id="fcmTestRow" style="display:none">
+          <div>
+            <div class="setting-label">اختبار الإشعارات</div>
+            <div class="setting-desc">إرسال إشعار تجريبي الآن</div>
+          </div>
+          <button class="setting-btn primary" id="testFcmBtn">اختبار</button>
+        </div>
+        <div class="setting-row">
+          <div>
             <div class="setting-label">Telegram الذكية</div>
             <div class="setting-desc">✅ مفعّلة — تصلك فوراً</div>
           </div>
@@ -1160,7 +1303,7 @@ body.dark .bottom-nav{box-shadow:0 -8px 32px rgba(0,0,0,.5)}
       </div>
 
       <div class="card" style="text-align:center;padding:18px;color:var(--text-muted);font-size:11px;font-weight:700;line-height:1.9">
-        🌸 محل هاني · نسخة العيلة · V5.5<br>
+        🌸 محل هاني · نسخة العيلة · V5.7<br>
         🔗 مرتبط بمحفظتي V85 · ☁️ Google Drive<br>
         💰 الجنيه المصري فقط
       </div>
@@ -1180,6 +1323,7 @@ body.dark .bottom-nav{box-shadow:0 -8px 32px rgba(0,0,0,.5)}
           <path d="M9 6h12M9 12h12M9 18h12"/>
         </svg>
         <span>السجل</span>
+        <span class="nav-badge" id="navBadgeHistory">0</span>
       </button>
       <button class="nav-btn" data-t="family">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -1200,7 +1344,6 @@ body.dark .bottom-nav{box-shadow:0 -8px 32px rgba(0,0,0,.5)}
 <script>
 'use strict';
 
-/* ═══════════════ CONFIG ═══════════════ */
 var FIREBASE_CONFIG = {
   apiKey: "AIzaSyCEq-Trf1oFsvPF5tlMvqU83ea_J2DLZjs",
   authDomain: "finance-app-2026-3e318.firebaseapp.com",
@@ -1210,11 +1353,12 @@ var FIREBASE_CONFIG = {
   appId: "1:855414629770:web:8bb07198b8245b63781473"
 };
 var FIREBASE_DOC_PATH = { collection: 'finance_2026', doc: 'user_ahmed_data' };
-
 var TELEGRAM_PROXY_URL = 'https://curly-sea-90cftelegram-proxy.ahmedmkh.workers.dev';
 var TELEGRAM_ENABLED = !!TELEGRAM_PROXY_URL;
 
-/* ═══════════ USERS — أُضيف أحمد ═══════════ */
+/* FCM VAPID key — استبدله بمفتاحك من Firebase Console → Cloud Messaging → Web Push certificates */
+var FCM_VAPID_KEY = 'BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZJjSgSnfckjBJuBkr3qBUYIHBQFLXYp5Nksh8U';
+
 var USERS = {
   '1111': { id: 'ans',         name: 'أنس',        emoji: 'أ' },
   '2222': { id: 'abdelrahman', name: 'عبد الرحمن', emoji: 'ع' },
@@ -1223,7 +1367,6 @@ var USERS = {
   '5555': { id: 'ahmed',       name: 'أحمد',       emoji: 'ح' }
 };
 
-/* ═══════════ ADMINS — صلاحيات الإدارة ═══════════ */
 var ADMINS = ['ans', 'ahmed'];
 function isAdmin(userId){ return ADMINS.indexOf(userId) >= 0; }
 function canManageTx(tx){
@@ -1239,8 +1382,13 @@ var WHISPER_MODEL = 'whisper-1';
 var API_KEY_LS = 'hani_openai_key';
 var REMINDERS_LAST_CHECK = 'hani_reminders_last';
 var THEME_LS_KEY = 'theme';
+var THEME_MODE_LS_KEY = 'hani_theme_mode'; // auto | dark | light
 var SHARED_V85_PREFIX = 'v85_';
 var NOTIF_REQUESTED_KEY = 'hani_notif_requested';
+var FCM_TOKEN_LS = 'hani_fcm_token';
+var FCM_ENABLED_LS = 'hani_fcm_enabled';
+var CAIRO_LAT = 30.0444;
+var CAIRO_LNG = 31.2357;
 
 var AZKAR = [
   { text: 'سُبْحَانَ اللَّهِ وَبِحَمْدِهِ، سُبْحَانَ اللَّهِ الْعَظِيمِ', icon: '📿' },
@@ -1256,87 +1404,21 @@ var AZKAR = [
 ];
 
 var CATEGORIES = {
-  smokes: { label: 'سجاير', items: [
-    'سجاير','مارلبورو','ميريت','LM','كليوباترا','كليوباترا بوكس','نكست','وينستون','PINE',
-    'إل إم أزرق','إل إم أحمر','ميريت أصفر','ميريت أزرق','بال مال'
-  ]},
-  drinks: { label: 'مشروبات وعصائر', items: [
-    'بيبسي','بيبسي كانز','كوكاكولا','سفن أب','ميرندا','شويبس','فيروز',
-    'عصير جوافة','عصير مانجو','عصير برتقال','عصير تفاح','عصير فراولة',
-    'عصير كوكتيل','توت','ليمون بالنعناع','ريد بُل','مياه معدنية','مياه غازية',
-    'بيرة خفيفة','عصير قصب معلب','حليب شوكولاتة'
-  ]},
-  hotdrinks: { label: 'مشروبات ساخنة', items: [
-    'شاي','شاي أكياس','شاي بالنعناع','نسكافيه','نسكافيه جولد','قهوة','قهوة تركي',
-    'قهوة فرنساوي','إسبريسو','كابتشينو','لاتيه','هوت شوكليت','ميلو','حليب مجفف',
-    'سكر','سكر ناعم','أعشاب','ينسون','كركديه','حلبة','قرفة','مرمرية'
-  ]},
-  snacks: { label: 'سناكس ومقرمشات', items: [
-    'شيبسي','شيتوس','دوريتوس','ليز','تايجر','بريك','تسالي','بندق','فول سوداني',
-    'كورن فليكس','بوب كورن','فشار','مقرمشات','بسكويت سادة','بسكويت محشي',
-    'بسكويت بالشوكولاتة','ويفر','كيك','مولتو','دونات معلب'
-  ]},
-  dairy: { label: 'ألبان وبيض', items: [
-    'بيض','بيض بلدي','لبن','لبن معلب','لبن طويل الأجل','حليب بودرة','زبادي','زبادي بالفواكه',
-    'رايب','لبن رايب','زبدة','زبدة بلدي','قشطة','قشطة معلبة','لبنة','سمنة','سمنة بلدي',
-    'جبنة قشطة','كريمة خفق'
-  ]},
-  desserts: { label: 'حلويات مُعلبة', items: [
-    'أرز بلبن','أرز بلبن بالفراولة','أرز بلبن بالمانجو','أرز بلبن بالمكسرات',
-    'مهلبية','مهلبية بالشوكولاتة','كريم كراميل','بودنج','بودنج شوكولاتة',
-    'جيلي','جيلي فراولة','جيلي برتقال','كريم شانتيه','شوكولاتة نوتيلا صغيرة'
-  ]},
-  cheeses: { label: 'أجبان', items: [
-    'جبنة بيضاء','جبنة رومي','جبنة شيدر','جبنة كيري','جبنة فيتا','جبنة موزاريلا',
-    'جبنة موتزريلا','جبنة حلوم','جبنة قريش','جبنة مثلثات','جبنة نستو','جبنة دمياطي',
-    'جبنة ريكفورد','جبنة براميلي','جبنة بريزيدون','جبنة باردو','جبنة لاكتوس',
-    'جبنة مطبوخة','جبنة شيدر شرائح'
-  ]},
-  coldcuts: { label: 'لانشون ومصنعات', items: [
-    'لانشون','لانشون فراخ','لانشون بلدي','بسطرمة','سوسيس','سوسيس مدخن',
-    'هوت دوج','مورتاديلا','رومي مدخن','تكا','كبد وقوانص','سجق بلدي','سجق شرقي',
-    'شاورما مجمدة','برجر','كفتة جاهزة','ناجتس'
-  ]},
-  bakery: { label: 'مخبوزات معلبة', items: [
-    'توست','توست أسمر','توست بالحبوب','بقسماط','عيش فينو','عيش بلدي','عيش مغلف',
-    'خبز صمول','خبز برجر','خبز شاورما'
-  ]},
-  basics: { label: 'بقالة', items: [
-    'زيت','زيت عافية','زيت عباد الشمس','زيت ذرة','زيت زيتون','أرز','أرز بسمتي',
-    'أرز مصري','مكرونة','مكرونة اسباجتي','مكرونة بينيه','شعرية','شعرية سريعة',
-    'كسكس','فريك','برغل','دقيق','دقيق فاخر','سميد','نشا','ملح','سكر',
-    'عدس','عدس أصفر','فول','فول مدشوش','حمص','صلصة','خل','مربي','عسل','طحينة',
-    'حلاوة طحينية','بيكنج بودر','فانيليا','خميرة','جلاتين','كاسترد',
-    'لوز','فستق','جوز','كاجو','زبيب','مكسرات مشكلة'
-  ]},
-  canned: { label: 'معلبات', items: [
-    'تونة','تونة بالزيت','تونة بالماء','سردين','سلمون','زيتون','زيتون أخضر',
-    'زيتون أسود','كاتشب','مايونيز','مستردة','صوص حار','صوص حلو حار',
-    'فول مدمس','فول بالصلصة','حمص معلب','بامية معلبة','بسلة معلبة','ذرة معلبة',
-    'مشروم معلبة','فطر معلبة'
-  ]},
-  spices: { label: 'توابل وبهارات', items: [
-    'كمون','كمون ناعم','فلفل أسود','فلفل أبيض','فلفل أحمر','شطة','بهارات',
-    'كركم','قرفة','قرنفل','زنجبيل','جوزة الطيب','لومي','زعتر','مردقوش',
-    'روزماري','شبت','كزبرة','بقدونس','كرات','كرفس','ملح ليمون','خلة',
-    'بهارات فراخ','بهارات لحمة','بهارات سمك','بهارات كفتة'
-  ]},
-  frozen: { label: 'مجمدات', items: [
-    'بسلة مجمدة','ذرة مجمدة','خضار مشكل','ملوخية مجمدة','بامية مجمدة',
-    'بطاطس شيبسي مجمدة','كفتة مجمدة','برجر مجمد','سوسيس مجمد','ناجتس مجمد',
-    'دجاج مجمد','سمك مجمد','جمبري مجمد','فيليه سمك','بانيه مجمد'
-  ]},
-  cleaning: { label: 'منظفات وعناية', items: [
-    'صابون','صابون سائل','شامبو','بلسم','معجون','فرشاة','مناديل','كلور','فلاش',
-    'ديتول','ديتول سائل','مسحوق غسيل','سائل أطباق','منظف أرضيات','معطر',
-    'مزيل عرق','كريم','لوشن','فوط صحية','حفاضات','فاين','برسيل','أريال',
-    'كمفورت','داوني'
-  ]},
-  sweets: { label: 'حلويات وبسكويت', items: [
-    'شوكولاتة','شوكولاتة جالاكسي','شوكولاتة كادبوري','بونبون','لبان','مصاصة',
-    'حلاوة','نوجا','مارشميلو','آيس كريم','آيس كريم كوب','آيس كريم ساندويتش',
-    'براوني','كيك بالشوكولاتة','بسكويت أوريو','بسكويت لوتس'
-  ]},
+  smokes: { label: 'سجاير', items: ['سجاير','مارلبورو','ميريت','LM','كليوباترا','كليوباترا بوكس','نكست','وينستون','PINE','إل إم أزرق','إل إم أحمر','ميريت أصفر','ميريت أزرق','بال مال']},
+  drinks: { label: 'مشروبات وعصائر', items: ['بيبسي','بيبسي كانز','كوكاكولا','سفن أب','ميرندا','شويبس','فيروز','عصير جوافة','عصير مانجو','عصير برتقال','عصير تفاح','عصير فراولة','عصير كوكتيل','توت','ليمون بالنعناع','ريد بُل','مياه معدنية','مياه غازية','بيرة خفيفة','عصير قصب معلب','حليب شوكولاتة']},
+  hotdrinks: { label: 'مشروبات ساخنة', items: ['شاي','شاي أكياس','شاي بالنعناع','نسكافيه','نسكافيه جولد','قهوة','قهوة تركي','قهوة فرنساوي','إسبريسو','كابتشينو','لاتيه','هوت شوكليت','ميلو','حليب مجفف','سكر','سكر ناعم','أعشاب','ينسون','كركديه','حلبة','قرفة','مرمرية']},
+  snacks: { label: 'سناكس ومقرمشات', items: ['شيبسي','شيتوس','دوريتوس','ليز','تايجر','بريك','تسالي','بندق','فول سوداني','كورن فليكس','بوب كورن','فشار','مقرمشات','بسكويت سادة','بسكويت محشي','بسكويت بالشوكولاتة','ويفر','كيك','مولتو','دونات معلب']},
+  dairy: { label: 'ألبان وبيض', items: ['بيض','بيض بلدي','لبن','لبن معلب','لبن طويل الأجل','حليب بودرة','زبادي','زبادي بالفواكه','رايب','لبن رايب','زبدة','زبدة بلدي','قشطة','قشطة معلبة','لبنة','سمنة','سمنة بلدي','جبنة قشطة','كريمة خفق']},
+  desserts: { label: 'حلويات مُعلبة', items: ['أرز بلبن','أرز بلبن بالفراولة','أرز بلبن بالمانجو','أرز بلبن بالمكسرات','مهلبية','مهلبية بالشوكولاتة','كريم كراميل','بودنج','بودنج شوكولاتة','جيلي','جيلي فراولة','جيلي برتقال','كريم شانتيه','شوكولاتة نوتيلا صغيرة']},
+  cheeses: { label: 'أجبان', items: ['جبنة بيضاء','جبنة رومي','جبنة شيدر','جبنة كيري','جبنة فيتا','جبنة موزاريلا','جبنة موتزريلا','جبنة حلوم','جبنة قريش','جبنة مثلثات','جبنة نستو','جبنة دمياطي','جبنة ريكفورد','جبنة براميلي','جبنة بريزيدون','جبنة باردو','جبنة لاكتوس','جبنة مطبوخة','جبنة شيدر شرائح']},
+  coldcuts: { label: 'لانشون ومصنعات', items: ['لانشون','لانشون فراخ','لانشون بلدي','بسطرمة','سوسيس','سوسيس مدخن','هوت دوج','مورتاديلا','رومي مدخن','تكا','كبد وقوانص','سجق بلدي','سجق شرقي','شاورما مجمدة','برجر','كفتة جاهزة','ناجتس']},
+  bakery: { label: 'مخبوزات معلبة', items: ['توست','توست أسمر','توست بالحبوب','بقسماط','عيش فينو','عيش بلدي','عيش مغلف','خبز صمول','خبز برجر','خبز شاورما']},
+  basics: { label: 'بقالة', items: ['زيت','زيت عافية','زيت عباد الشمس','زيت ذرة','زيت زيتون','أرز','أرز بسمتي','أرز مصري','مكرونة','مكرونة اسباجتي','مكرونة بينيه','شعرية','شعرية سريعة','كسكس','فريك','برغل','دقيق','دقيق فاخر','سميد','نشا','ملح','سكر','عدس','عدس أصفر','فول','فول مدشوش','حمص','صلصة','خل','مربي','عسل','طحينة','حلاوة طحينية','بيكنج بودر','فانيليا','خميرة','جلاتين','كاسترد','لوز','فستق','جوز','كاجو','زبيب','مكسرات مشكلة']},
+  canned: { label: 'معلبات', items: ['تونة','تونة بالزيت','تونة بالماء','سردين','سلمون','زيتون','زيتون أخضر','زيتون أسود','كاتشب','مايونيز','مستردة','صوص حار','صوص حلو حار','فول مدمس','فول بالصلصة','حمص معلب','بامية معلبة','بسلة معلبة','ذرة معلبة','مشروم معلبة','فطر معلبة']},
+  spices: { label: 'توابل وبهارات', items: ['كمون','كمون ناعم','فلفل أسود','فلفل أبيض','فلفل أحمر','شطة','بهارات','كركم','قرفة','قرنفل','زنجبيل','جوزة الطيب','لومي','زعتر','مردقوش','روزماري','شبت','كزبرة','بقدونس','كرات','كرفس','ملح ليمون','خلة','بهارات فراخ','بهارات لحمة','بهارات سمك','بهارات كفتة']},
+  frozen: { label: 'مجمدات', items: ['بسلة مجمدة','ذرة مجمدة','خضار مشكل','ملوخية مجمدة','بامية مجمدة','بطاطس شيبسي مجمدة','كفتة مجمدة','برجر مجمد','سوسيس مجمد','ناجتس مجمد','دجاج مجمد','سمك مجمد','جمبري مجمد','فيليه سمك','بانيه مجمد']},
+  cleaning: { label: 'منظفات وعناية', items: ['صابون','صابون سائل','شامبو','بلسم','معجون','فرشاة','مناديل','كلور','فلاش','ديتول','ديتول سائل','مسحوق غسيل','سائل أطباق','منظف أرضيات','معطر','مزيل عرق','كريم','لوشن','فوط صحية','حفاضات','فاين','برسيل','أريال','كمفورت','داوني']},
+  sweets: { label: 'حلويات وبسكويت', items: ['شوكولاتة','شوكولاتة جالاكسي','شوكولاتة كادبوري','بونبون','لبان','مصاصة','حلاوة','نوجا','مارشميلو','آيس كريم','آيس كريم كوب','آيس كريم ساندويتش','براوني','كيك بالشوكولاتة','بسكويت أوريو','بسكويت لوتس']},
   special: { label: 'طلبات خاصة', items: ['أنس','أحمد','أم عبده','سلمى','عبد الرحمن'] }
 };
 
@@ -1361,7 +1443,6 @@ var ITEM_PRICES = {
 var MONTHS_AR = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
 var CAIRO_TZ = 'Africa/Cairo';
 
-/* STATE */
 var currentUser = null;
 var selectedItem = '';
 var selectedCategory = 'snacks';
@@ -1374,7 +1455,8 @@ var currentTab = 'home';
 var favorites = [];
 var recentItems = [];
 var budget = 0;
-var isDark = localStorage.getItem(THEME_LS_KEY) !== 'light';
+var themeMode = localStorage.getItem(THEME_MODE_LS_KEY) || 'auto';
+var isDark = true;
 var deferredPrompt = null;
 var unsubscribe = null;
 var isAuthReady = false;
@@ -1392,10 +1474,15 @@ var eventsBound = false;
 var mediaRecorder = null;
 var audioChunks = [];
 var remindersInterval = null;
+var themeCheckInterval = null;
 var histUserFilter = 'all';
 var histSearchQuery = '';
+var pendingExpanded = false;
+var messaging = null;
+var swRegistration = null;
+var fcmEnabled = localStorage.getItem(FCM_ENABLED_LS) === 'yes';
 
-/* UTILITIES */
+/* ═══════════════ UTILITIES ═══════════════ */
 function isoDateCairo(d){
   d = d || new Date();
   try{
@@ -1551,6 +1638,370 @@ function updateApiKeyStatus(){
   }
 }
 
+/* ═══════════════ SUNRISE / SUNSET CALC (NOAA Simplified) ═══════════════ */
+function getSunTimes(date, lat, lng) {
+  var rad = Math.PI / 180;
+  var dayMs = 86400000;
+  var J1970 = 2440588;
+  var J2000 = 2451545;
+  function toJulian(date) { return date.valueOf() / dayMs - 0.5 + J1970; }
+  function fromJulian(j) { return new Date((j + 0.5 - J1970) * dayMs); }
+  function toDays(date) { return toJulian(date) - J2000; }
+  var e = rad * 23.4397;
+  function solarMeanAnomaly(d) { return rad * (357.5291 + 0.98560028 * d); }
+  function eclipticLongitude(M) {
+    var C = rad * (1.9148 * Math.sin(M) + 0.02 * Math.sin(2 * M) + 0.0003 * Math.sin(3 * M));
+    var P = rad * 102.9372;
+    return M + C + P + Math.PI;
+  }
+  function declination(l, b) { return Math.asin(Math.sin(b) * Math.cos(e) + Math.cos(b) * Math.sin(e) * Math.sin(l)); }
+  function julianCycle(d, lw) { return Math.round(d - 0.0009 - lw / (2 * Math.PI)); }
+  function approxTransit(Ht, lw, n) { return 0.0009 + (Ht + lw) / (2 * Math.PI) + n; }
+  function solarTransitJ(ds, M, L) { return J2000 + ds + 0.0053 * Math.sin(M) - 0.0069 * Math.sin(2 * L); }
+  function hourAngle(h, phi, d) { return Math.acos((Math.sin(h) - Math.sin(phi) * Math.sin(d)) / (Math.cos(phi) * Math.cos(d))); }
+  var lw = rad * -lng;
+  var phi = rad * lat;
+  var d = toDays(date);
+  var n = julianCycle(d, lw);
+  var ds = approxTransit(0, lw, n);
+  var M = solarMeanAnomaly(ds);
+  var L = eclipticLongitude(M);
+  var dec = declination(L, 0);
+  var Jnoon = solarTransitJ(ds, M, L);
+  var h0 = rad * -0.833;
+  var w0 = hourAngle(h0, phi, dec);
+  var a0 = approxTransit(w0, lw, n);
+  var Jset = solarTransitJ(a0, M, L);
+  var Jrise = Jnoon - (Jset - Jnoon);
+  return { sunrise: fromJulian(Jrise), sunset: fromJulian(Jset) };
+}
+
+function applyAutoTheme(){
+  if(themeMode !== 'auto') return false;
+  try{
+    var now = new Date();
+    var times = getSunTimes(now, CAIRO_LAT, CAIRO_LNG);
+    var shouldBeDark = (now < times.sunrise || now > times.sunset);
+    if(shouldBeDark !== isDark){
+      isDark = shouldBeDark;
+      applyTheme(true);
+      return true;
+    }
+  }catch(e){console.warn('Sun calc error:',e);}
+  return false;
+}
+
+function updateSunInfoDisplay(){
+  try{
+    var now = new Date();
+    var times = getSunTimes(now, CAIRO_LAT, CAIRO_LNG);
+    var fmtTime = function(d){
+      return d.toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit',timeZone:CAIRO_TZ});
+    };
+    var sr = document.getElementById('sunriseTime');
+    var ss = document.getElementById('sunsetTime');
+    if(sr) sr.textContent = fmtTime(times.sunrise);
+    if(ss) ss.textContent = fmtTime(times.sunset);
+  }catch(e){}
+}
+
+function applyTheme(isTransition){
+  document.body.classList.toggle('dark',isDark);
+  document.body.classList.toggle('light',!isDark);
+  var meta=document.querySelector('meta[name="theme-color"]');
+  if(meta)meta.content=isDark?'#050A14':'#F4F6FA';
+  if(isTransition){
+    document.body.classList.add('theme-transition');
+    setTimeout(function(){document.body.classList.remove('theme-transition');},600);
+  }
+  /* Update theme segmented control */
+  document.querySelectorAll('.theme-seg').forEach(function(seg){
+    seg.classList.toggle('on', seg.dataset.mode === themeMode);
+  });
+  updateSunInfoDisplay();
+}
+
+function setThemeMode(mode){
+  themeMode = mode;
+  localStorage.setItem(THEME_MODE_LS_KEY, mode);
+  if(mode === 'auto'){
+    applyAutoTheme();
+  }else if(mode === 'dark'){
+    isDark = true;
+    applyTheme(true);
+  }else{
+    isDark = false;
+    applyTheme(true);
+  }
+  toast(mode === 'auto' ? '🌗 وضع تلقائي (غروب → شروق)' : mode === 'dark' ? '🌙 وضع داكن' : '☀️ وضع فاتح');
+}
+
+function startAutoThemeWatcher(){
+  if(themeCheckInterval) clearInterval(themeCheckInterval);
+  applyAutoTheme();
+  updateSunInfoDisplay();
+  /* Check every 5 minutes */
+  themeCheckInterval = setInterval(function(){
+    applyAutoTheme();
+    updateSunInfoDisplay();
+  }, 5 * 60 * 1000);
+}
+
+/* ═══════════════ FIREBASE CLOUD MESSAGING ═══════════════ */
+function getServiceWorkerCode(){
+  /* Service worker inline for FCM background messages + PWA caching */
+  return `
+/* محل هاني — Service Worker V5.7 */
+importScripts('https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js');
+importScripts('https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging-compat.js');
+
+try{
+  firebase.initializeApp({
+    apiKey: "AIzaSyCEq-Trf1oFsvPF5tlMvqU83ea_J2DLZjs",
+    authDomain: "finance-app-2026-3e318.firebaseapp.com",
+    projectId: "finance-app-2026-3e318",
+    storageBucket: "finance-app-2026-3e318.firebasestorage.app",
+    messagingSenderId: "855414629770",
+    appId: "1:855414629770:web:8bb07198b8245b63781473"
+  });
+  var messaging = firebase.messaging();
+  messaging.onBackgroundMessage(function(payload){
+    var title = (payload.notification && payload.notification.title) || (payload.data && payload.data.title) || 'محل هاني';
+    var body  = (payload.notification && payload.notification.body)  || (payload.data && payload.data.body)  || 'لديك إشعار جديد';
+    var icon  = (payload.notification && payload.notification.icon)  || 'data:image/svg+xml;charset=utf-8,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#818CF8"/><stop offset="1" stop-color="#4338CA"/></linearGradient></defs><rect width="192" height="192" rx="42" fill="url(#g)"/><path d="M60 96 L96 60 L132 96 V138 a6 6 0 0 1-6 6 h-18 V112 h-24 V144 H66 a6 6 0 0 1-6-6 Z" fill="white" opacity="0.95"/></svg>');
+    self.registration.showNotification(title, {
+      body: body,
+      icon: icon,
+      badge: icon,
+      dir: 'rtl',
+      lang: 'ar',
+      vibrate: [200, 100, 200],
+      tag: 'hani-notification',
+      renotify: true,
+      data: payload.data || {}
+    });
+  });
+}catch(e){ console.warn('SW Firebase init failed:', e); }
+
+self.addEventListener('notificationclick', function(event){
+  event.notification.close();
+  event.waitUntil(
+    clients.matchAll({type:'window', includeUncontrolled:true}).then(function(clientList){
+      for(var i=0;i<clientList.length;i++){
+        if(clientList[i].url.indexOf(self.location.origin) >= 0){
+          return clientList[i].focus();
+        }
+      }
+      if(clients.openWindow) return clients.openWindow('./');
+    })
+  );
+});
+
+self.addEventListener('install', function(e){ self.skipWaiting(); });
+self.addEventListener('activate', function(e){ e.waitUntil(clients.claim()); });
+`;
+}
+
+async function registerServiceWorker(){
+  if(!('serviceWorker' in navigator)){
+    throw new Error('Service Worker غير مدعوم');
+  }
+  if(swRegistration) return swRegistration;
+  try{
+    var code = getServiceWorkerCode();
+    var blob = new Blob([code], {type: 'application/javascript'});
+    var swUrl = URL.createObjectURL(blob);
+    swRegistration = await navigator.serviceWorker.register(swUrl, {scope: './'});
+    console.log('✓ SW registered:', swRegistration.scope);
+    return swRegistration;
+  }catch(e){
+    console.error('SW registration failed:', e);
+    throw e;
+  }
+}
+
+async function initFCM(){
+  if(!('Notification' in window)) throw new Error('المتصفح لا يدعم الإشعارات');
+  if(!('serviceWorker' in navigator)) throw new Error('Service Worker غير مدعوم');
+  if(!firebase.messaging || !firebase.messaging.isSupported) throw new Error('FCM غير مدعوم على هذا المتصفح');
+  var supported = false;
+  try{ supported = firebase.messaging.isSupported(); }catch(e){}
+  if(!supported) throw new Error('FCM غير مدعوم على هذا المتصفح');
+
+  /* Permission */
+  var perm = Notification.permission;
+  if(perm === 'default'){
+    perm = await Notification.requestPermission();
+  }
+  if(perm !== 'granted'){
+    throw new Error('لم يتم منح إذن الإشعارات');
+  }
+
+  /* SW */
+  await registerServiceWorker();
+
+  /* Get token */
+  messaging = firebase.messaging();
+  var token = null;
+  try{
+    token = await messaging.getToken({vapidKey: FCM_VAPID_KEY, serviceWorkerRegistration: swRegistration});
+  }catch(e){
+    console.warn('getToken failed:', e);
+    throw new Error('فشل الحصول على التوكن — تأكد من VAPID key');
+  }
+  if(!token) throw new Error('لم يتم إنشاء التوكن');
+
+  localStorage.setItem(FCM_TOKEN_LS, token);
+  fcmEnabled = true;
+  localStorage.setItem(FCM_ENABLED_LS, 'yes');
+
+  /* Save token to Firestore */
+  await saveFcmTokenToFirestore(token);
+
+  /* Foreground handler */
+  messaging.onMessage(function(payload){
+    console.log('📨 FCM foreground:', payload);
+    var title = (payload.notification && payload.notification.title) || (payload.data && payload.data.title) || 'محل هاني';
+    var body  = (payload.notification && payload.notification.body)  || (payload.data && payload.data.body)  || '';
+    toast(title + (body ? ' — ' + body : ''), 'ok');
+    if(navigator.vibrate) navigator.vibrate([200, 100, 200]);
+  });
+
+  updateFcmUI(true);
+  return token;
+}
+
+async function saveFcmTokenToFirestore(token){
+  if(!docRef || !currentUser) return;
+  try{
+    await db.runTransaction(function(transaction){
+      return transaction.get(docRef).then(function(snap){
+        var d = snap.exists ? (snap.data() || {}) : {};
+        var tokens = d.fcmTokens || {};
+        tokens[currentUser.id] = {
+          token: token,
+          updatedAt: Date.now(),
+          userName: currentUser.name,
+          platform: navigator.platform || 'web',
+          userAgent: navigator.userAgent.slice(0, 200)
+        };
+        transaction.set(docRef, {fcmTokens: tokens}, {merge: true});
+      });
+    });
+    console.log('✓ FCM token saved to Firestore');
+  }catch(e){
+    console.warn('Failed to save FCM token:', e);
+  }
+}
+
+function updateFcmUI(enabled){
+  var pill = document.getElementById('fcmPill');
+  var status = document.getElementById('fcmStatus');
+  var btn = document.getElementById('enableFcmBtn');
+  var testRow = document.getElementById('fcmTestRow');
+
+  if(!pill || !status || !btn) return;
+
+  if(enabled){
+    pill.className = 'fcm-pill ok';
+    pill.textContent = '✓ مفعّل';
+    status.textContent = 'سيصلك إشعار فوري عند أي حدث';
+    btn.textContent = 'إعادة تعيين';
+    btn.className = 'setting-btn danger';
+    if(testRow) testRow.style.display = 'flex';
+  }else{
+    pill.className = 'fcm-pill off';
+    pill.textContent = 'غير مفعّل';
+    status.textContent = 'إشعارات فورية حتى في الخلفية';
+    btn.textContent = 'تفعيل';
+    btn.className = 'setting-btn primary';
+    if(testRow) testRow.style.display = 'none';
+  }
+}
+
+async function disableFCM(){
+  try{
+    if(messaging){
+      await messaging.deleteToken().catch(function(){});
+    }
+  }catch(e){}
+  localStorage.removeItem(FCM_TOKEN_LS);
+  localStorage.removeItem(FCM_ENABLED_LS);
+  fcmEnabled = false;
+  /* Remove from Firestore */
+  if(docRef && currentUser){
+    try{
+      await db.runTransaction(function(transaction){
+        return transaction.get(docRef).then(function(snap){
+          if(!snap.exists) return;
+          var d = snap.data() || {};
+          var tokens = d.fcmTokens || {};
+          if(tokens[currentUser.id]){
+            delete tokens[currentUser.id];
+            transaction.set(docRef, {fcmTokens: tokens}, {merge: true});
+          }
+        });
+      });
+    }catch(e){}
+  }
+  updateFcmUI(false);
+  toast('تم إلغاء تفعيل Push Notifications');
+}
+
+async function testFcmLocal(){
+  /* اختبار الإشعارات المحلية (بدون خادم) */
+  if(Notification.permission === 'granted'){
+    try{
+      new Notification('🔔 إشعار تجريبي', {
+        body: 'محل هاني يعمل بشكل صحيح — Push Notifications جاهزة',
+        icon: 'data:image/svg+xml;charset=utf-8,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192"><rect width="192" height="192" rx="42" fill="#4F46E5"/></svg>'),
+        dir: 'rtl',
+        lang: 'ar'
+      });
+    }catch(e){}
+  }
+  if(swRegistration){
+    try{
+      await swRegistration.showNotification('🔔 إشعار تجريبي من SW', {
+        body: 'هذا إشعار من Service Worker — يعمل حتى لو التطبيق في الخلفية',
+        icon: 'data:image/svg+xml;charset=utf-8,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192"><rect width="192" height="192" rx="42" fill="#4F46E5"/></svg>'),
+        dir: 'rtl',
+        lang: 'ar',
+        vibrate: [200,100,200],
+        tag: 'hani-test'
+      });
+    }catch(e){console.warn('SW notification failed:', e);}
+  }
+  toast('تم إرسال إشعار تجريبي');
+}
+
+async function handleEnableFcm(){
+  if(fcmEnabled){
+    /* Confirm disable */
+    modal({
+      title: 'إلغاء تفعيل الإشعارات؟',
+      message: 'لن تصلك الإشعارات الفورية حتى تعيد التفعيل',
+      danger: true,
+      confirmText: 'إلغاء التفعيل',
+      onConfirm: function(){ disableFCM(); }
+    });
+    return;
+  }
+  var btn = document.getElementById('enableFcmBtn');
+  if(btn){ btn.disabled = true; btn.textContent = 'جارٍ التفعيل...'; }
+  try{
+    await initFCM();
+    toast('✓ تم تفعيل Push Notifications');
+  }catch(e){
+    console.error('FCM init failed:', e);
+    toast('فشل التفعيل: ' + (e.message || 'خطأ'), 'err');
+    updateFcmUI(false);
+  }finally{
+    if(btn) btn.disabled = false;
+  }
+}
+
+/* ═══════════════ PWA SETUP ═══════════════ */
 (function setupPWA(){
   try{
     var svg='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#818CF8"/><stop offset="1" stop-color="#4338CA"/></linearGradient></defs><rect width="192" height="192" rx="42" fill="url(#g)"/><path d="M60 96 L96 60 L132 96 V138 a6 6 0 0 1-6 6 h-18 V112 h-24 V144 H66 a6 6 0 0 1-6-6 Z" fill="white" opacity="0.95"/></svg>';
@@ -1572,6 +2023,7 @@ function updateApiKeyStatus(){
   }catch(e){}
 })();
 
+/* ═══════════════ FIREBASE INIT ═══════════════ */
 var db=null,docRef=null,auth=null;
 try{
   if(!firebase.apps.length)firebase.initializeApp(FIREBASE_CONFIG);
@@ -1616,7 +2068,7 @@ function modal(opt){
     '<div class="modal-icon '+(opt.danger?'danger':'')+'">'+iconHtml+'</div>'+
     '<h3>'+esc(opt.title)+'</h3>'+
     '<p>'+esc(opt.message).replace(/\n/g,'<br>')+'</p>'+
-    (opt.input?'<input class="modal-input" id="modalInput" type="'+(opt.inputType||'text')+'" value="'+(opt.inputValue||'')+'" placeholder="'+(opt.inputPlaceholder||'')+'">':'')+
+    (opt.input?'<input class="modal-input" id="modalInput" type="'+(opt.inputType||'text')+'" value="'+(opt.inputValue||'')+'" placeholder="'+(opt.inputPlaceholder||'')+'" style="'+(opt.inputStyle||'')+'">':'')+
     '<div class="modal-acts">'+
       '<button class="modal-btn cancel" data-a="cancel">'+esc(opt.cancelText||'إلغاء')+'</button>'+
       '<button class="modal-btn '+(opt.danger?'danger':'ok')+'" data-a="ok">'+esc(opt.confirmText||'تأكيد')+'</button>'+
@@ -1707,13 +2159,20 @@ function resetLock(){
   document.addEventListener(e,resetLock,{passive:true});
 });
 
-function applyTheme(){
-  document.body.classList.toggle('dark',isDark);
-  document.body.classList.toggle('light',!isDark);
-  var meta=document.querySelector('meta[name="theme-color"]');
-  if(meta)meta.content=isDark?'#050A14':'#F4F6FA';
+/* Init theme on load */
+function initThemeOnLoad(){
+  if(themeMode === 'auto'){
+    try{
+      var now = new Date();
+      var times = getSunTimes(now, CAIRO_LAT, CAIRO_LNG);
+      isDark = (now < times.sunrise || now > times.sunset);
+    }catch(e){ isDark = true; }
+  }else{
+    isDark = (themeMode === 'dark');
+  }
+  applyTheme(false);
 }
-applyTheme();
+initThemeOnLoad();
 
 function loadData(){
   if(!currentUser)return;
@@ -1779,7 +2238,13 @@ function init(){
   var authPromise=initFirebaseAuth();
   var azkarPromise=showAzkar();
   Promise.all([authPromise,azkarPromise]).then(function(){
-    showMainApp();setupSync();subscribe();startSmartReminders();autoRequestNotifications();
+    showMainApp();setupSync();subscribe();startSmartReminders();startAutoThemeWatcher();autoRequestNotifications();
+    /* Try silent FCM re-registration if was enabled */
+    if(fcmEnabled){
+      setTimeout(function(){
+        initFCM().catch(function(e){ console.warn('FCM silent re-init failed:', e); fcmEnabled=false; updateFcmUI(false); });
+      }, 2500);
+    }
   }).catch(function(err){
     console.warn('بدون Firebase:',err);
     showMainApp();
@@ -1831,6 +2296,7 @@ function showMainApp(){
   updateDateQuickButtons();
   updateApiKeyStatus();
   updateNotifStatus();
+  updateFcmUI(fcmEnabled);
   var ci=document.getElementById('customDateInput');
   if(ci)ci.max=isoDate();
   resetLock();setupSync();setupInstall();
@@ -2169,9 +2635,16 @@ function bindEvents(){
   });
 
   document.getElementById('themeBtn').addEventListener('click',function(){
-    isDark=!isDark;
-    localStorage.setItem(THEME_LS_KEY,isDark?'dark':'light');
-    applyTheme();
+    /* Cycle through modes */
+    var order = ['auto','dark','light'];
+    var i = order.indexOf(themeMode);
+    setThemeMode(order[(i+1) % order.length]);
+  });
+
+  document.getElementById('themeSegmented').addEventListener('click',function(e){
+    var seg = e.target.closest('.theme-seg');
+    if(!seg) return;
+    setThemeMode(seg.dataset.mode);
   });
 
   document.getElementById('shareBtn').addEventListener('click',share);
@@ -2182,13 +2655,29 @@ function bindEvents(){
   document.getElementById('testTelegramBtn').addEventListener('click',testTelegram);
   document.getElementById('setApiKeyBtn').addEventListener('click',setApiKeyModal);
   document.getElementById('enableNotifBtn').addEventListener('click',requestNotifPermission);
+  document.getElementById('enableFcmBtn').addEventListener('click',handleEnableFcm);
+  document.getElementById('testFcmBtn').addEventListener('click',testFcmLocal);
 
   document.getElementById('feed').addEventListener('click',function(e){
     var editBtn=e.target.closest('[data-e]');if(editBtn){doEdit(editBtn.dataset.e);return;}
     var delBtn=e.target.closest('[data-d]');if(delBtn){doDelete(delBtn.dataset.d);return;}
   });
 
-  /* History events */
+  document.getElementById('pendingHeader').addEventListener('click',function(){
+    pendingExpanded = !pendingExpanded;
+    var sec = document.getElementById('pendingDeleteSection');
+    if(sec) sec.classList.toggle('expanded', pendingExpanded);
+  });
+
+  document.getElementById('pendingList').addEventListener('click',function(e){
+    var approveBtn=e.target.closest('[data-approve]');
+    if(approveBtn){e.stopPropagation();approveDelete(approveBtn.dataset.approve);return;}
+    var rejectBtn=e.target.closest('[data-reject]');
+    if(rejectBtn){e.stopPropagation();rejectDelete(rejectBtn.dataset.reject);return;}
+    var cancelBtn=e.target.closest('[data-cancelreq]');
+    if(cancelBtn){e.stopPropagation();cancelOwnRequest(cancelBtn.dataset.cancelreq);return;}
+  });
+
   document.getElementById('histSearch').addEventListener('input',function(e){
     histSearchQuery=e.target.value.trim();
     renderHistory();
@@ -2234,7 +2723,7 @@ function switchTab(t){
   document.querySelectorAll('.tab').forEach(function(c){c.classList.toggle('active',c.id==='tab-'+t);});
   if(t==='history')renderHistory();
   if(t==='family')renderFamilyTab();
-  if(t==='profile')updateBudgetDesc();
+  if(t==='profile'){updateBudgetDesc();updateSunInfoDisplay();}
 }
 
 function saveTx(){
@@ -2385,7 +2874,7 @@ function submitDeleteRequest(tx,reason){
     });
   }).then(function(){
     toast('تم إرسال الطلب');
-    sendTelegram((isAdminAction?'👑 <b>حذف مشرف</b>\n':'🗑️ <b>طلب حذف</b>\n')+'👤 من: <b>'+currentUser.name+'</b>\n📦 '+(tx.description||'')+'\n💰 '+fmt(tx.amount)+' ج.م\n📝 '+reason);
+    sendTelegram((isAdminAction?'👑 <b>طلب حذف مشرف</b>\n':'🗑️ <b>طلب حذف</b>\n')+'👤 من: <b>'+currentUser.name+'</b>\n📦 '+(tx.description||'')+'\n💰 '+fmt(tx.amount)+' ج.م\n📝 '+reason);
   }).catch(function(e){
     if(e&&e.message==='ALREADY_REQUESTED')toast('طلب حذف مرسل بالفعل','warn');
     else toast('فشل الإرسال','err');
@@ -2497,6 +2986,248 @@ function submitEdit(tx,newAmount,newNote,oldNote,reason){
   });
 }
 
+function approveDelete(reqId){
+  if(!isAdmin(currentUser.id)){toast('صلاحية المشرف فقط','err');return;}
+  var req = allDeleteRequests.find(function(r){return r.id===reqId;});
+  if(!req){toast('الطلب غير موجود','err');return;}
+  if(req.status!=='pending'){toast('تمت مراجعة الطلب','warn');return;}
+
+  modal({
+    title:'موافقة على الحذف',
+    message:'سيتم حذف العملية نهائياً من السجل:\n\n'+esc(req.txSnapshot.description||'')+'\n'+fmt(req.txSnapshot.amount)+' ج.م\n\nهل أنت متأكد؟',
+    danger:true,
+    confirmText:'موافقة وحذف',
+    cancelText:'رجوع',
+    onConfirm:function(){doApproveDelete(req);}
+  });
+}
+
+function doApproveDelete(req){
+  if(!isAuthReady||!docRef)return;
+  db.runTransaction(function(transaction){
+    return transaction.get(docRef).then(function(snap){
+      if(!snap.exists) throw new Error('doc_not_found');
+      var d = snap.data() || {};
+      var txs = d.transactions || [];
+      var reqs = d.deleteRequests || [];
+      var now = Date.now();
+      var found = false;
+      for(var i=0;i<txs.length;i++){
+        if(txs[i].id === req.txId){
+          txs[i].deleted = true;
+          txs[i].deletedAt = now;
+          txs[i].deletedBy = currentUser.id;
+          txs[i].deletedByName = currentUser.name;
+          txs[i].deleteReason = req.reason;
+          found = true;
+          break;
+        }
+      }
+      for(var j=0;j<reqs.length;j++){
+        if(reqs[j].id === req.id){
+          reqs[j].status = 'approved';
+          reqs[j].approvedAt = now;
+          reqs[j].approvedBy = currentUser.id;
+          reqs[j].approvedByName = currentUser.name;
+          break;
+        }
+      }
+      transaction.set(docRef, {transactions: txs, deleteRequests: reqs}, {merge:true});
+      return {found:found};
+    });
+  }).then(function(){
+    toast('✓ تم حذف العملية');
+    sendTelegram('✅ <b>موافقة على حذف</b>\n👑 '+currentUser.name+'\n📦 '+(req.txSnapshot.description||'')+'\n💰 '+fmt(req.txSnapshot.amount)+' ج.م\n📝 سبب الطلب: '+req.reason);
+  }).catch(function(e){
+    console.error('Approve error:',e);
+    toast('فشل الحذف','err');
+  });
+}
+
+function rejectDelete(reqId){
+  if(!isAdmin(currentUser.id)){toast('صلاحية المشرف فقط','err');return;}
+  var req = allDeleteRequests.find(function(r){return r.id===reqId;});
+  if(!req){toast('الطلب غير موجود','err');return;}
+  if(req.status!=='pending'){toast('تمت مراجعة الطلب','warn');return;}
+
+  modal({
+    title:'رفض طلب الحذف',
+    message:'سيتم الاحتفاظ بالعملية في السجل:\n\n'+esc(req.txSnapshot.description||'')+'\n'+fmt(req.txSnapshot.amount)+' ج.م',
+    confirmText:'رفض الطلب',
+    cancelText:'رجوع',
+    input:true,
+    inputPlaceholder:'سبب الرفض (اختياري)',
+    inputStyle:'font-size:13px;padding:12px;text-align:right;font-weight:600',
+    onConfirm:function(reason){doRejectDelete(req, (reason||'').trim());}
+  });
+}
+
+function doRejectDelete(req, reason){
+  if(!isAuthReady||!docRef)return;
+  db.runTransaction(function(transaction){
+    return transaction.get(docRef).then(function(snap){
+      if(!snap.exists) throw new Error('doc_not_found');
+      var d = snap.data() || {};
+      var reqs = d.deleteRequests || [];
+      var now = Date.now();
+      for(var j=0;j<reqs.length;j++){
+        if(reqs[j].id === req.id){
+          reqs[j].status = 'rejected';
+          reqs[j].rejectedAt = now;
+          reqs[j].rejectedBy = currentUser.id;
+          reqs[j].rejectedByName = currentUser.name;
+          if(reason) reqs[j].rejectionReason = reason;
+          break;
+        }
+      }
+      transaction.set(docRef, {deleteRequests: reqs}, {merge:true});
+    });
+  }).then(function(){
+    toast('تم رفض الطلب');
+    sendTelegram('❌ <b>رفض حذف</b>\n👑 '+currentUser.name+'\n📦 '+(req.txSnapshot.description||'')+'\n💰 '+fmt(req.txSnapshot.amount)+' ج.م'+(reason?'\n📝 '+reason:''));
+  }).catch(function(e){
+    console.error('Reject error:',e);
+    toast('فشل الرفض','err');
+  });
+}
+
+function cancelOwnRequest(reqId){
+  var req = allDeleteRequests.find(function(r){return r.id===reqId;});
+  if(!req){toast('الطلب غير موجود','err');return;}
+  if(req.requestedBy !== currentUser.id && !isAdmin(currentUser.id)){toast('لا تملك صلاحية','err');return;}
+  if(req.status!=='pending'){toast('تمت مراجعة الطلب','warn');return;}
+
+  modal({
+    title:'سحب طلب الحذف',
+    message:'سيتم إلغاء طلب حذف هذه العملية:\n\n'+esc(req.txSnapshot.description||'')+'\n'+fmt(req.txSnapshot.amount)+' ج.م',
+    confirmText:'سحب الطلب',
+    cancelText:'رجوع',
+    onConfirm:function(){doCancelRequest(req);}
+  });
+}
+
+function doCancelRequest(req){
+  if(!isAuthReady||!docRef)return;
+  db.runTransaction(function(transaction){
+    return transaction.get(docRef).then(function(snap){
+      if(!snap.exists) throw new Error('doc_not_found');
+      var d = snap.data() || {};
+      var reqs = d.deleteRequests || [];
+      var now = Date.now();
+      for(var j=0;j<reqs.length;j++){
+        if(reqs[j].id === req.id){
+          reqs[j].status = 'cancelled';
+          reqs[j].cancelledAt = now;
+          reqs[j].cancelledBy = currentUser.id;
+          reqs[j].cancelledByName = currentUser.name;
+          break;
+        }
+      }
+      transaction.set(docRef, {deleteRequests: reqs}, {merge:true});
+    });
+  }).then(function(){
+    toast('تم سحب الطلب');
+  }).catch(function(e){
+    console.error('Cancel error:',e);
+    toast('فشل السحب','err');
+  });
+}
+
+function renderPendingDeletes(){
+  var section = document.getElementById('pendingDeleteSection');
+  var listEl = document.getElementById('pendingList');
+  var countEl = document.getElementById('pendingHeaderCount');
+  var subEl = document.getElementById('pendingHeaderSub');
+  var badgeEl = document.getElementById('navBadgeHistory');
+  if(!section || !listEl) return;
+
+  var allPending = allDeleteRequests.filter(function(r){ return r.status === 'pending'; });
+  var myPending = allPending.filter(function(r){ return r.requestedBy === currentUser.id; });
+  var visible = isAdmin(currentUser.id) ? allPending : myPending;
+
+  if(!visible.length){
+    section.classList.remove('show');
+    section.classList.remove('expanded');
+    if(badgeEl){badgeEl.classList.remove('show');}
+    return;
+  }
+
+  section.classList.add('show');
+  if(countEl) countEl.textContent = visible.length;
+  if(subEl) subEl.textContent = isAdmin(currentUser.id)
+    ? 'طلبات بانتظار موافقتك — اضغط للعرض'
+    : 'طلباتك بانتظار مراجعة المشرف';
+
+  if(badgeEl){
+    badgeEl.textContent = visible.length;
+    badgeEl.classList.add('show');
+  }
+
+  var sorted = visible.slice().sort(function(a,b){ return (b.requestedAt||0) - (a.requestedAt||0); });
+
+  listEl.innerHTML = sorted.map(function(r){
+    var tx = r.txSnapshot || {};
+    var requester = null;
+    Object.values(USERS).forEach(function(x){if(x.id===r.requestedBy)requester=x;});
+    var ownerId = tx.createdBy || 'ans';
+    var owner = null;
+    Object.values(USERS).forEach(function(x){if(x.id===ownerId)owner=x;});
+    var ownerIsAdmin = isAdmin(ownerId);
+    var time = new Date(r.requestedAt||Date.now()).toLocaleString('ar-EG',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
+    var canApprove = isAdmin(currentUser.id);
+    var isRequester = r.requestedBy === currentUser.id;
+
+    var actions = '';
+    if(canApprove){
+      actions = '<div class="pending-actions">'+
+        '<button class="pending-btn approve" data-approve="'+r.id+'">'+
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>'+
+          'موافقة على الحذف'+
+        '</button>'+
+        '<button class="pending-btn reject" data-reject="'+r.id+'">'+
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>'+
+          'رفض'+
+        '</button>'+
+      '</div>';
+    } else if(isRequester){
+      actions = '<div class="pending-actions">'+
+        '<div style="flex:1;display:flex;align-items:center;justify-content:center">'+
+          '<span class="pending-status">'+
+            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="M12 6v6l4 2"/></svg>'+
+            'قيد المراجعة'+
+          '</span>'+
+        '</div>'+
+        '<button class="pending-btn cancel-req" data-cancelreq="'+r.id+'">'+
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>'+
+          'سحب الطلب'+
+        '</button>'+
+      '</div>';
+    }
+
+    return '<div class="pending-card">'+
+      '<div class="pending-top">'+
+        '<div class="pending-avatar av-'+ownerId+(ownerIsAdmin?' is-admin':'')+'">'+
+          (owner?owner.emoji:'؟')+
+        '</div>'+
+        '<div class="pending-info">'+
+          '<div class="pending-desc">'+esc(tx.description || '—')+'</div>'+
+          '<div class="pending-meta">'+
+            '<span>👤 مقدّم الطلب: <strong style="color:var(--text-primary)">'+(requester?requester.name:'—')+'</strong></span>'+
+            '<span>·</span>'+
+            '<span>🕐 '+time+'</span>'+
+          '</div>'+
+        '</div>'+
+        '<div class="pending-amount">'+fmt(tx.amount||0)+' ج.م</div>'+
+      '</div>'+
+      '<div class="pending-reason">'+
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>'+
+        '<div><strong>السبب:</strong> '+esc(r.reason||'—')+'</div>'+
+      '</div>'+
+      actions+
+    '</div>';
+  }).join('');
+}
+
 function filterByPeriod(list,period){
   var today=isoDate(),yesterday=yesterdayISO();
   if(period==='today')return list.filter(function(t){return t._isoDate===today;});
@@ -2544,12 +3275,12 @@ function renderHistoryHero(list){
 }
 
 function renderHistory(){
+  renderPendingDeletes();
+
   var list=filterByPeriod(cachedTx,currentPeriod);
-  /* Filter by user */
   if(histUserFilter!=='all'){
     list=list.filter(function(t){return t.createdBy===histUserFilter;});
   }
-  /* Filter by search query */
   if(histSearchQuery){
     var q=histSearchQuery.toLowerCase();
     list=list.filter(function(t){
@@ -2858,11 +3589,22 @@ function notifyReminder(title,body){
   if(!('Notification' in window))return;
   if(Notification.permission==='granted'){
     try{
-      new Notification(title,{
-        body:body,
-        icon:'data:image/svg+xml;charset=utf-8,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192"><rect width="192" height="192" rx="42" fill="#4F46E5"/></svg>'),
-        dir:'rtl',lang:'ar'
-      });
+      /* Prefer SW notification if available (works in background) */
+      if(swRegistration && swRegistration.showNotification){
+        swRegistration.showNotification(title,{
+          body:body,
+          icon:'data:image/svg+xml;charset=utf-8,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192"><rect width="192" height="192" rx="42" fill="#4F46E5"/></svg>'),
+          dir:'rtl',lang:'ar',vibrate:[200,100,200],tag:'hani-reminder'
+        }).catch(function(){
+          try{new Notification(title,{body:body,dir:'rtl',lang:'ar'});}catch(e){}
+        });
+      }else{
+        new Notification(title,{
+          body:body,
+          icon:'data:image/svg+xml;charset=utf-8,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192"><rect width="192" height="192" rx="42" fill="#4F46E5"/></svg>'),
+          dir:'rtl',lang:'ar'
+        });
+      }
     }catch(e){}
   }
   sendTelegram('🔔 <b>'+title+'</b>\n'+body);
@@ -2956,6 +3698,7 @@ function renderAll(){
   updateBudgetDesc();
   updatePeriodCounts();
   if(currentTab==='history')renderHistory();
+  else renderPendingDeletes();
   if(currentTab==='family')renderFamilyTab();
 }
 
@@ -3048,7 +3791,7 @@ function setApiKeyModal(){
 }
 
 function bootstrap(){
-  console.log('🚀 Bootstrap V5.5 — Royal Edition');
+  console.log('🚀 Bootstrap V5.7 — Royal Edition');
   setTimeout(function(){
     var s=document.getElementById('splash');
     if(s&&s.style.display!=='none')s.style.display='none';
@@ -3104,13 +3847,21 @@ setTimeout(function(){
 })();
 
 window.__haniDebug=function(){
-  console.log('=== محل هاني V5.5 — Royal Edition ===');
+  console.log('=== محل هاني V5.7 — Royal Edition ===');
   console.log('currentUser:',currentUser?currentUser.name:'لا يوجد');
   console.log('isAdmin:',currentUser?isAdmin(currentUser.id):false);
-  console.log('ADMINS:',ADMINS);
+  console.log('themeMode:',themeMode,'| isDark:',isDark);
   console.log('isAuthReady:',isAuthReady);
   console.log('cachedTx:',cachedTx.length);
+  console.log('pending requests:',cachedDeleteRequests.length);
+  console.log('FCM enabled:',fcmEnabled);
+  console.log('FCM token:',localStorage.getItem(FCM_TOKEN_LS) ? localStorage.getItem(FCM_TOKEN_LS).slice(0,20)+'...' : 'none');
   console.log('Notif permission:',typeof Notification!=='undefined'?Notification.permission:'N/A');
+  try{
+    var times = getSunTimes(new Date(), CAIRO_LAT, CAIRO_LNG);
+    console.log('Sunrise:',times.sunrise.toLocaleTimeString('ar-EG',{timeZone:CAIRO_TZ}));
+    console.log('Sunset:',times.sunset.toLocaleTimeString('ar-EG',{timeZone:CAIRO_TZ}));
+  }catch(e){}
 };
 </script>
 </body>
