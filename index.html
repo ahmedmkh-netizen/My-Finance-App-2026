@@ -10583,7 +10583,6 @@ const safeClone = (obj) => {
                 </span>
               );
             });
-
 const DayGroupHeader = memo(({ label, total, count }) => (
   <div className="lux-day-header">
     <div className="lux-day-header__left">
@@ -10596,7 +10595,6 @@ const DayGroupHeader = memo(({ label, total, count }) => (
     </div>
   </div>
 ));
-
             /* ═══════════════ BOTTOM SHEETS ═══════════════ */
             const BottomSheet = memo(
               ({ isOpen, onClose, title, children, maxHeight = "88dvh" }) => {
@@ -11645,256 +11643,239 @@ const DayGroupHeader = memo(({ label, total, count }) => (
             const getCategoryIcon = (category) => CATEGORY_ICON_MAP[category] || "📌";
 
             /* ═══════════════ CATEGORY CARD ═══════════════ */
-            const CategoryCard = memo(function CategoryCard({
-              category,
-              items,
-              isOpen,
-              onToggle,
-              isMonthClosedFlag,
-              onApproveOne,
-              onReopenOne,
-              onEditOne,
-              onDeleteOne,
-              onApproveAll,
-              onDeleteAll,
-              pendingDeleteIds,
-              addNotification,
-              dispatch,
-            }) {
-              const total = useMemo(
-                () => items.reduce((s, t) => s + safeNumber(t.amount), 0),
-                [items],
-              );
-              const pendingCount = useMemo(
-                () => items.filter((t) => t.status !== "paid").length,
-                [items],
-              );
-              const count = items.length;
-              const color = CATEGORY_COLORS[category] || "#635BFF";
-              const icon = getCategoryIcon(category);
-              const isIncome = items[0]?.type === "income";
+const CategoryCard = memo(function CategoryCard({
+  category,
+  items,
+  isOpen,
+  onToggle,
+  isMonthClosedFlag,
+  onApproveOne,
+  onReopenOne,
+  onEditOne,
+  onDeleteOne,
+  onApproveAll,
+  onDeleteAll,
+  pendingDeleteIds,
+  addNotification,
+  dispatch,
+}) {
+  const total = useMemo(
+    () => items.reduce((s, t) => s + safeNumber(t.amount), 0),
+    [items],
+  );
+  const pendingCount = useMemo(
+    () => items.filter((t) => t.status !== "paid").length,
+    [items],
+  );
+  const count = items.length;
+  const color = CATEGORY_COLORS[category] || "#635BFF";
+  const icon = getCategoryIcon(category);
+  const isIncome = items[0]?.type === "income";
 
-              return (
-                <div className="category-card">
-                  <div
-                    className="category-card__header"
-                    onClick={onToggle}
-                    role="button"
-                    tabIndex={0}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        onToggle();
-                      }
-                    }}
-                  >
-                    <span
-                      className="category-card__stripe"
-                      style={{ background: color }}
-                    />
-                    <div
-                      className="category-card__icon"
-                      style={{ background: `${color}20`, color }}
-                    >
-                      <span aria-hidden="true">{icon}</span>
-                    </div>
-                    <div className="category-card__info">
-                      <div className="category-card__title">
-                        {category}
-                        {pendingCount > 0 && (
-                          <span className="badge badge-warning text-[10px] py-0.5 px-2">
-                            <Clock size={9} /> {pendingCount}
-                          </span>
-                        )}
-                      </div>
-                      <div className="category-card__meta">
-                        <span>
-                          📊 {count} {count === 1 ? "عملية" : "عمليات"}
-                        </span>
-                        {isMonthClosedFlag && (
-                          <span className="text-amber-600">🔒 مغلق</span>
-                        )}
-                      </div>
-                    </div>
-                    <div className="category-card__amounts">
-                      <div
-                        className="category-card__total"
-                        style={{
-                          color: isIncome ? "var(--success)" : "var(--text-primary)",
-                        }}
-                      >
-                        {isIncome ? "+" : "−"}
-                        {fmt(total)}
-                        <span
-                          style={{
-                            fontSize: "10px",
-                            color: "var(--text-muted)",
-                            marginRight: "3px",
-                          }}
-                        >
-                          ج.م
-                        </span>
-                      </div>
-                    </div>
-                    <div
-                      className={`category-card__toggle ${isOpen ? "open" : ""}`}
-                      aria-hidden="true"
-                    >
-                      <ChevronDown size={16} />
-                    </div>
+  return (
+    <div className="lux-card">
+      <div
+        className="lux-card__header"
+        onClick={onToggle}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onToggle();
+          }
+        }}
+      >
+        <div className="lux-card__icon-wrap">
+          <div className="lux-card__icon-glow" style={{ background: color }} />
+          <div
+            className="lux-card__icon"
+            style={{
+              background: `linear-gradient(135deg, ${color}30, ${color}15)`,
+              color: color,
+              border: `1px solid ${color}30`,
+            }}
+          >
+            <span aria-hidden="true">{icon}</span>
+          </div>
+        </div>
+
+        <div className="lux-card__info">
+          <div className="lux-card__title">
+            <span>{category}</span>
+            {pendingCount > 0 && (
+              <span className="lux-badge lux-badge--pending">
+                <Clock size={9} /> {pendingCount}
+              </span>
+            )}
+            {isMonthClosedFlag && (
+              <span className="lux-badge lux-badge--locked">
+                <Lock size={9} /> مغلق
+              </span>
+            )}
+          </div>
+          <div className="lux-card__meta">
+            <span>{count} {count === 1 ? "معاملة" : "معاملات"}</span>
+          </div>
+        </div>
+
+        <div className={`lux-card__amount ${isIncome ? "lux-card__amount--income" : ""}`}>
+          <span className="lux-card__amount-value">
+            {isIncome ? "+" : "−"}
+            {fmt(total)}
+          </span>
+          <span className="lux-card__amount-currency">ج.م</span>
+        </div>
+
+        <div className={`lux-card__chevron ${isOpen ? "open" : ""}`}>
+          <ChevronDown size={16} strokeWidth={2.5} />
+        </div>
+      </div>
+
+      {isOpen && (
+        <div className="lux-card__body">
+          {items.map((t) => {
+            const isPending = t.status !== "paid";
+            const dotColor = isPending
+              ? "#D97706"
+              : t.type === "income"
+                ? "#10B981"
+                : color;
+            const time = formatTxTime(t.createdAt);
+            const member = getFamilyMember(t);
+
+            return (
+              <div key={t.id} className="lux-tx">
+                <span className="lux-tx__dot" style={{ background: dotColor }} />
+
+                <div className="lux-tx__content">
+                  <div className="lux-tx__title">
+                    <span>{t.description || t.category}</span>
+                    {t.quantity && Number(t.quantity) > 1 && (
+                      <span className="lux-badge lux-badge--pending">
+                        ×{t.quantity}
+                      </span>
+                    )}
+                    <PendingDeleteBadge tx={t} pendingDeleteIds={pendingDeleteIds} />
+                    <FamilyBadge tx={t} />
+                    <SmsBadge tx={t} />
+                    <HanySettleBadge tx={t} />
+                    <CardPaymentBadge tx={t} />
                   </div>
+                  <div className="lux-tx__sub">
+                    {time && <span>{time}</span>}
+                    {time && member && <span className="lux-card__meta-dot" />}
+                    {member && <span>{member.name}</span>}
+                    <span className="lux-card__meta-dot" />
+                    <span>{getPaymentMethodShort(t.method)}</span>
+                  </div>
+                </div>
 
-                  {isOpen && (
-                    <div className="category-card__body">
-                      {items.map((t) => {
-                        const isPending = t.status !== "paid";
-                        const dotColor = isPending
-                          ? "var(--warning)"
-                          : t.type === "income"
-                            ? "var(--success)"
-                            : color;
-                        const amtClass =
-                          t.type === "income" ? "text-emerald-600" : "text-red-600";
-                        const time = formatTxTime(t.createdAt);
-                        const member = getFamilyMember(t);
-                        return (
-                          <div key={t.id} className="tx-mini-row">
-                            <span
-                              className="tx-mini-row__dot"
-                              style={{ background: dotColor }}
-                            />
-                            <div className="tx-mini-row__info">
-                              <div className="tx-mini-row__desc">
-                                <span className="truncate">
-                                  {t.description || t.category}
-                                </span>
-                                {t.quantity && Number(t.quantity) > 1 && (
-                                  <span className="badge badge-accent text-[9px] py-0.5 px-1.5">
-                                    ×{t.quantity}
-                                  </span>
-                                )}
-                                <PendingDeleteBadge
-                                  tx={t}
-                                  pendingDeleteIds={pendingDeleteIds}
-                                />
-                                <FamilyBadge tx={t} />
-                                <SmsBadge tx={t} />
-                                <HanySettleBadge tx={t} />
-                                <CardPaymentBadge tx={t} />
-                              </div>
-                              <div className="tx-mini-row__sub">
-                                {time && <span>{time}</span>}
-                                {member && <span>· {member.name}</span>}
-                                <span>· {getPaymentMethodShort(t.method)}</span>
-                                {isPending && (
-                                  <span className="text-amber-600 font-bold">
-                                    · ⏳ معلق
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                            <div className={`tx-mini-row__amount ${amtClass}`}>
-                              {t.type === "income" ? "+" : "−"}
-                              {fmt(t.amount)}
-                            </div>
-                            <div className="tx-mini-row__actions">
-                              {isPending && !isMonthClosedFlag && (
-                                <button
-                                  type="button"
-                                  className="tx-mini-btn tx-mini-btn--approve"
-                                  title="اعتماد"
-                                  aria-label="اعتماد"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    onApproveOne(t);
-                                  }}
-                                >
-                                  <CheckCircle2 size={13} />
-                                </button>
-                              )}
-                              {!isPending && !isMonthClosedFlag && (
-  <button
-    type="button"
-    className="tx-mini-btn tx-mini-btn--reopen"
-    title="إعادة تعليق"
-    aria-label="إعادة تعليق"
-    onClick={(e) => {
-      e.stopPropagation();
-      onReopenOne(t);
-    }}
-  >
-    <Undo2 size={13} />
-  </button>
-)}
-                              {!isMonthClosedFlag && (
-                                <button
-                                  type="button"
-                                  className="tx-mini-btn tx-mini-btn--edit"
-                                  title="تعديل"
-                                  aria-label="تعديل"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    onEditOne(t);
-                                  }}
-                                >
-                                  <Edit size={13} />
-                                </button>
-                              )}
-                              {!isMonthClosedFlag && (
-                                <button
-                                  type="button"
-                                  className="tx-mini-btn tx-mini-btn--delete"
-                                  title="حذف"
-                                  aria-label="حذف"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    onDeleteOne(t);
-                                  }}
-                                >
-                                  <Trash2 size={13} />
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
+                <div
+                  className={`lux-tx__amount ${
+                    t.type === "income"
+                      ? "lux-tx__amount--income"
+                      : "lux-tx__amount--expense"
+                  }`}
+                >
+                  {t.type === "income" ? "+" : "−"}
+                  {fmt(t.amount)}
+                </div>
 
-                      <div className="category-card__actions">
-                        {pendingCount > 0 && !isMonthClosedFlag && (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onApproveAll(items.filter((t) => t.status !== "paid"));
-                            }}
-                            className="btn btn-primary text-[11px] py-1.5 px-3 font-black flex-1 min-w-[120px]"
-                          >
-                            <CheckCircle2 size={12} /> اعتماد الكل ({pendingCount})
-                          </button>
-                        )}
-                        {!isMonthClosedFlag && (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onDeleteAll(items);
-                            }}
-                            className="btn btn-secondary text-[11px] py-1.5 px-3 font-black text-red-600 flex-1 min-w-[100px]"
-                          >
-                            <Trash2 size={12} /> حذف الكل
-                          </button>
-                        )}
-                        {isMonthClosedFlag && (
-                          <span className="badge badge-success text-[10px] px-2.5 py-1">
-                            <Lock size={10} /> الشهر مغلق
-                          </span>
-                        )}
-                      </div>
-                    </div>
+                <div className="lux-tx__actions">
+                  {isPending && !isMonthClosedFlag && (
+                    <button
+                      type="button"
+                      className="lux-action lux-action--approve"
+                      title="اعتماد"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onApproveOne(t);
+                      }}
+                    >
+                      <CheckCircle2 size={15} />
+                    </button>
+                  )}
+
+                  {!isPending && !isMonthClosedFlag && (
+                    <button
+                      type="button"
+                      className="lux-action lux-action--reopen"
+                      title="إعادة تعليق"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onReopenOne(t);
+                      }}
+                    >
+                      <Undo2 size={15} />
+                    </button>
+                  )}
+
+                  {!isMonthClosedFlag && (
+                    <button
+                      type="button"
+                      className="lux-action lux-action--edit"
+                      title="تعديل"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onEditOne(t);
+                      }}
+                    >
+                      <Edit size={15} />
+                    </button>
+                  )}
+
+                  {!isMonthClosedFlag && (
+                    <button
+                      type="button"
+                      className="lux-action lux-action--delete"
+                      title="حذف"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onDeleteOne(t);
+                      }}
+                    >
+                      <Trash2 size={15} />
+                    </button>
                   )}
                 </div>
-              );
-            });
+              </div>
+            );
+          })}
+
+          {(pendingCount > 0 || !isMonthClosedFlag) && (
+            <div className="lux-card__footer">
+              {pendingCount > 0 && !isMonthClosedFlag && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onApproveAll(items.filter((t) => t.status !== "paid"));
+                  }}
+                  className="lux-btn lux-btn--primary"
+                >
+                  <CheckCircle2 size={14} /> اعتماد الكل ({pendingCount})
+                </button>
+              )}
+              {!isMonthClosedFlag && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDeleteAll(items);
+                  }}
+                  className="lux-btn lux-btn--danger"
+                >
+                  <Trash2 size={14} /> حذف الكل
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+});
 
             /* ═══════════════ TX DATE CONFIRM MODAL ═══════════════ */
             const TxDateConfirmModal = memo(function TxDateConfirmModal({
