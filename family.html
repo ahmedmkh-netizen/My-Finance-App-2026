@@ -16,7 +16,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
 <style>
-/* ══════════ DESIGN SYSTEM v5.7 — Auto Theme Edition ══════════ */
+/* ══════════ DESIGN SYSTEM v5.8 — Fast & Split Layout ══════════ */
 :root{
   --bg-app:#F4F6FA; --bg-card:#FFFFFF; --bg-muted:#EEF2F8; --bg-elevated:#FFFFFF;
   --border-subtle:rgba(15,27,51,0.06); --border-default:rgba(15,27,51,0.10);
@@ -187,11 +187,19 @@ body.dark .admin-badge{color:#FBBF24}
 .ramadan-title{font-size:12px;font-weight:800;color:var(--text-secondary);margin-bottom:2px}
 .ramadan-days{font-size:18px;font-weight:900;color:var(--gold);font-variant-numeric:tabular-nums;line-height:1.2}
 .ramadan-days span{font-size:12px;font-weight:800;color:var(--text-muted);margin-right:4px}
-.ramadan-quote{font-size:11.5px;font-weight:700;color:var(--text-secondary);margin-top:4px;
-  font-style:italic;line-height:1.5}
-.ramadan-quote::before{content:'"';color:var(--gold);font-weight:900}
-.ramadan-quote::after{content:'"';color:var(--gold);font-weight:900}
 body.dark .ramadan-strip{background:linear-gradient(135deg, rgba(212,168,87,.1), rgba(212,168,87,.03))}
+
+/* ══════════ MOTIVATIONAL QUOTE CARD ══════════ */
+.quote-card{margin:0 16px 14px;padding:16px 18px;border-radius:18px;
+  background:var(--bg-card);border:1.5px solid var(--border-subtle);
+  box-shadow:var(--shadow-2);display:flex;align-items:center;gap:14px;position:relative;overflow:hidden}
+.quote-icon{width:36px;height:36px;border-radius:10px;flex-shrink:0;
+  background:var(--accent-soft);color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:18px}
+.quote-content{flex:1}
+.quote-text{font-size:13px;font-weight:800;color:var(--text-primary);line-height:1.6}
+.quote-text::before{content:'"';color:var(--accent);font-weight:900;font-size:18px}
+.quote-text::after{content:'"';color:var(--accent);font-weight:900;font-size:18px}
+.quote-author{font-size:10px;font-weight:700;color:var(--text-muted);margin-top:4px}
 
 .family-strip{display:flex;gap:8px;overflow-x:auto;padding:4px 16px 14px;scrollbar-width:none}
 .family-strip::-webkit-scrollbar{display:none}
@@ -868,7 +876,15 @@ body.dark .auto-status-pill.light-pill{color:#FBBF24}
     <div class="ramadan-content">
       <div class="ramadan-title" id="ramadanTitle">باقي على رمضان</div>
       <div class="ramadan-days" id="ramadanDays">— <span>يوم</span></div>
-      <div class="ramadan-quote" id="ramadanQuote">—</div>
+    </div>
+  </div>
+
+  <!-- ══════════ MOTIVATIONAL QUOTE CARD ══════════ -->
+  <div class="quote-card">
+    <div class="quote-icon">💡</div>
+    <div class="quote-content">
+      <div class="quote-text" id="dailyQuote">—</div>
+      <div class="quote-author">جملة تحفيزية لليوم</div>
     </div>
   </div>
 
@@ -881,7 +897,7 @@ body.dark .auto-status-pill.light-pill{color:#FBBF24}
         <span class="balance-label">إجمالي النهاردة</span>
         <span class="balance-brand">HANI · FAMILY</span>
       </div>
-      <div class="balance-amount loading" id="heroValue">
+      <div class="balance-amount" id="heroValue">
         <span class="num" id="heroToday">—</span>
         <span class="cur">ج.م</span>
       </div>
@@ -1339,7 +1355,7 @@ body.dark .auto-status-pill.light-pill{color:#FBBF24}
       </div>
 
       <div class="card" style="text-align:center;padding:18px;color:var(--text-muted);font-size:11px;font-weight:700;line-height:1.9">
-        🌸 محل هاني · نسخة العيلة · V5.7<br>
+        🌸 محل هاني · نسخة العيلة · V5.8<br>
         🔗 مرتبط بمحفظتي V85 · ☁️ Google Drive<br>
         🌗 الوضع التلقائي حسب شروق/غروب القاهرة<br>
         💰 الجنيه المصري فقط
@@ -1411,7 +1427,7 @@ function canManageTx(tx){
 var CATEGORY_NAME = 'مسحوبات محل هاني';
 var AUTO_LOCK_MS = 4 * 60 * 1000;
 var DUPLICATE_WINDOW_MS = 60000;
-var CLOUD_TIMEOUT_MS = 12000;
+var CLOUD_TIMEOUT_MS = 5000; // تم تقليله لـ 5 ثواني
 var WHISPER_MODEL = 'whisper-1';
 var API_KEY_LS = 'hani_openai_key';
 var REMINDERS_LAST_CHECK = 'hani_reminders_last';
@@ -1711,12 +1727,6 @@ function updateRamadanCountdown(){
   var icon = document.getElementById('ramadanIcon');
   var title = document.getElementById('ramadanTitle');
   var daysEl = document.getElementById('ramadanDays');
-  var quoteEl = document.getElementById('ramadanQuote');
-  
-  if(quoteEl) {
-    var dayIndex = now.getDate() % MOTIVATIONAL_QUOTES.length;
-    quoteEl.textContent = MOTIVATIONAL_QUOTES[dayIndex];
-  }
   
   if(days > 0) {
     strip.style.display = 'flex';
@@ -1740,6 +1750,15 @@ function updateRamadanCountdown(){
       if(daysEl) daysEl.innerHTML = '<strong>' + nextDiff + '</strong> <span>يوم</span>';
     }
   }
+}
+
+/* ══════════ MOTIVATIONAL QUOTE ══════════ */
+function updateDailyQuote(){
+  var quoteEl = document.getElementById('dailyQuote');
+  if(!quoteEl) return;
+  var now = new Date();
+  var dayIndex = now.getDate() % MOTIVATIONAL_QUOTES.length;
+  quoteEl.textContent = MOTIVATIONAL_QUOTES[dayIndex];
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -1848,10 +1867,8 @@ function applyTheme(isTransition){
   if(meta)meta.content=isDark?'#050A14':'#F4F6FA';
   if(isTransition){
     document.body.classList.add('theme-transition');
-    /* Remove transition class after animation completes to avoid slowness */
     setTimeout(function(){document.body.classList.remove('theme-transition');},600);
   }
-  /* Update theme segmented control */
   document.querySelectorAll('.theme-seg').forEach(function(seg){
     seg.classList.toggle('on', seg.dataset.mode === themeMode);
   });
@@ -1866,7 +1883,6 @@ function setThemeMode(mode){
   themeMode = mode;
   localStorage.setItem(THEME_MODE_LS_KEY, mode);
   if(mode === 'auto'){
-    /* Apply auto state right away */
     try{
       var now = new Date();
       var times = getSunTimes(now, CAIRO_LAT, CAIRO_LNG);
@@ -1887,12 +1903,10 @@ function setThemeMode(mode){
 
 function startAutoThemeWatcher(){
   if(themeCheckInterval) clearInterval(themeCheckInterval);
-  /* Apply immediately */
   if(themeMode === 'auto') applyAutoTheme();
   updateSunInfoDisplay();
   updateThemeModeDot();
   updateAutoStatusPill();
-  /* Then every 5 minutes */
   themeCheckInterval = setInterval(function(){
     if(themeMode === 'auto') applyAutoTheme();
     updateSunInfoDisplay();
@@ -1923,14 +1937,24 @@ function startAutoThemeWatcher(){
   }catch(e){}
 })();
 
-/* ═══════════════ FIREBASE INIT ═══════════════ */
+/* ═══════════════ FIREBASE INIT & OFFLINE PERSISTENCE ═══════════════ */
 var db=null,docRef=null,auth=null;
 try{
   if(!firebase.apps.length)firebase.initializeApp(FIREBASE_CONFIG);
   db=firebase.firestore();
+  
+  // تحسين مهم: تفعيل الحفظ المؤقت (Offline Persistence) للسرعة القصوى
+  db.enablePersistence({synchronizeTabs: true}).catch(function(err) {
+      if (err.code == 'failed-precondition') {
+          console.log("Persistence failed: Multiple tabs open");
+      } else if (err.code == 'unimplemented') {
+          console.log("Persistence failed: Browser not supported");
+      }
+  });
+
   try{db.settings({ignoreUndefinedProperties:true},{merge:true});}catch(e){}
   auth=firebase.auth();
-  console.log('✅ Firebase initialized');
+  console.log('✅ Firebase initialized with Persistence');
 }catch(e){console.error('FB init:',e);}
 
 function initFirebaseAuth(){
@@ -2139,18 +2163,17 @@ function init(){
   var authPromise=initFirebaseAuth();
   var azkarPromise=showAzkar();
   Promise.all([authPromise,azkarPromise]).then(function(){
-    showMainApp();setupSync();subscribe();startSmartReminders();startAutoThemeWatcher();autoRequestNotifications();updateRamadanCountdown();
+    showMainApp();setupSync();subscribe();startSmartReminders();startAutoThemeWatcher();autoRequestNotifications();updateRamadanCountdown();updateDailyQuote();
   }).catch(function(err){
     console.warn('بدون Firebase:',err);
     showMainApp();
     document.getElementById('heroValue').classList.remove('loading');
-    document.getElementById('heroToday').textContent='—';
+    document.getElementById('heroToday').textContent='0';
     document.getElementById('heroSub').textContent='تحقق من الإنترنت وأعد التحميل';
     var syncText=document.getElementById('syncStripText');
     if(syncText)syncText.textContent='غير متصل';
-    /* Still start auto theme watcher even offline */
     startAutoThemeWatcher();
-    updateRamadanCountdown();
+    updateRamadanCountdown();updateDailyQuote();
   });
 }
 
@@ -2160,41 +2183,59 @@ function hideSplash(){
   setTimeout(function(){s.style.display='none';},300);
 }
 
+/* ══════════ SHOW MAIN APP (تعديل لظهور فوري) ══════════ */
 function showMainApp(){
   var main=document.getElementById('mainApp');if(!main)return;
   main.classList.add('show');
+  
+  // تعيين البيانات الأساسية فوراً
   var headerUserName=document.getElementById('headerUserName');
   if(headerUserName)headerUserName.textContent=currentUser.name;
+  
   var headerAvatar=document.getElementById('headerAvatar');
   if(headerAvatar){
     headerAvatar.textContent=initials(currentUser.name);
     if(isAdmin(currentUser.id))headerAvatar.classList.add('admin');
   }
+  
   var headerAdminBadge=document.getElementById('headerAdminBadge');
   if(headerAdminBadge){
     headerAdminBadge.style.display=isAdmin(currentUser.id)?'inline-flex':'none';
   }
+  
   var profileName=document.getElementById('profileName');
   if(profileName){
     profileName.innerHTML=esc(currentUser.name)+' '+(isAdmin(currentUser.id)?'<span class="admin-badge">👑 مشرف</span>':'');
   }
+  
   var profileAv=document.getElementById('profileAv');
   if(profileAv){
     profileAv.textContent=initials(currentUser.name);
     if(isAdmin(currentUser.id))profileAv.classList.add('admin');
   }
+  
   var userPin=Object.keys(USERS).find(function(k){return USERS[k].id===currentUser.id;});
   var profileSub=document.getElementById('profileSub');
   if(profileSub&&userPin)profileSub.textContent='رمز: '+userPin.replace(/(\d)/g,'•');
+  
   var adminInfoCard=document.getElementById('adminInfoCard');
   if(adminInfoCard)adminInfoCard.style.display=isAdmin(currentUser.id)?'block':'none';
+  
   loadData();
   renderCats();renderItems();renderFavs();
+  
+  // إخفاء حالة التحميل وإظهار البيانات (سواء من الكاش أو أصفار)
+  document.getElementById('heroValue').classList.remove('loading');
+  var heroToday=document.getElementById('heroToday');
+  if(heroToday) heroToday.textContent='0';
+  var heroSub=document.getElementById('heroSub');
+  if(heroSub) heroSub.textContent='جارٍ التحديث من السيرفر...';
+  
   try{bindEvents();}catch(e){console.error('bindEvents:',e);}
+  
   updateDateQuickButtons();
   updateApiKeyStatus();
   updateNotifStatus();
-  /* Apply theme state to segmented control */
   document.querySelectorAll('.theme-seg').forEach(function(seg){
     seg.classList.toggle('on', seg.dataset.mode === themeMode);
   });
@@ -2202,9 +2243,12 @@ function showMainApp(){
   updateAutoStatusPill();
   updateSunInfoDisplay();
   updateRamadanCountdown();
+  updateDailyQuote();
+  
   var ci=document.getElementById('customDateInput');
   if(ci)ci.max=isoDate();
   resetLock();setupSync();setupInstall();
+  
   setTimeout(function(){
     var ib=document.getElementById('items');
     if(ib&&ib.innerHTML.trim()===''){renderCats();renderItems();}
@@ -2369,7 +2413,6 @@ function buildFeedItem(t){
   var canManage = isMe || isAdmin(currentUser.id);
   var ownerIsAdmin = u && isAdmin(u.id);
   
-  // تعديل: إظهار التاريخ إذا لم تكن العملية من اليوم
   var today = isoDate();
   var timeStr = new Date(t.createdAt||Date.now()).toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'});
   var displayTime = timeStr;
@@ -2420,7 +2463,6 @@ function buildFeedItem(t){
 }
 
 function renderFeed(){
-  // تعديل: جلب آخر 5 عمليات بغض النظر عن التاريخ
   var recentList = cachedTx.slice(0, 5); 
   var box=document.getElementById('feed');if(!box)return;
   var count=document.getElementById('feedCount');
@@ -2547,14 +2589,12 @@ function bindEvents(){
     renderHistory();
   });
 
-  /* Theme button cycles through modes */
   document.getElementById('themeBtn').addEventListener('click',function(){
     var order = ['auto','dark','light'];
     var i = order.indexOf(themeMode);
     setThemeMode(order[(i+1) % order.length]);
   });
 
-  /* Segmented control */
   document.getElementById('themeSegmented').addEventListener('click',function(e){
     var seg = e.target.closest('.theme-seg');
     if(!seg) return;
@@ -3405,7 +3445,7 @@ function subscribe(){
   initialSnapshotTimeout=setTimeout(function(){
     if(isFirstLoad){
       var hv=document.getElementById('heroValue');if(hv)hv.classList.remove('loading');
-      document.getElementById('heroToday').textContent='—';
+      document.getElementById('heroToday').textContent='0';
       document.getElementById('heroSub').textContent='تعذر تحميل البيانات';
       toast('تعذر تحميل البيانات','err');
       isFirstLoad=false;
@@ -3513,7 +3553,7 @@ function setApiKeyModal(){
 }
 
 function bootstrap(){
-  console.log('🚀 Bootstrap V5.7 — Auto Theme Edition');
+  console.log('🚀 Bootstrap V5.8 — Fast & Split Layout');
   setTimeout(function(){
     var s=document.getElementById('splash');
     if(s&&s.style.display!=='none')s.style.display='none';
@@ -3550,6 +3590,7 @@ function bootstrap(){
     if(pinScreenEl3)pinScreenEl3.style.display='flex';
   }
   updateRamadanCountdown();
+  updateDailyQuote();
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bootstrap);
 else bootstrap();
@@ -3569,7 +3610,7 @@ setTimeout(function(){
 })();
 
 window.__haniDebug=function(){
-  console.log('=== محل هاني V5.7 — Auto Theme Edition ===');
+  console.log('=== محل هاني V5.8 — Fast & Split Layout ===');
   console.log('currentUser:',currentUser?currentUser.name:'لا يوجد');
   console.log('themeMode:',themeMode,'| isDark now:',isDark);
   console.log('isAuthReady:',isAuthReady);
