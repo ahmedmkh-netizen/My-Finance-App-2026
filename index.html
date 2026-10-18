@@ -21319,60 +21319,108 @@ const BankCard3D = memo(
                         </p>
                       ) : (
                         <div className="space-y-2 max-h-[60vh] overflow-y-auto scroll-hide">
-                          {agendaItems.map((item) => {
-                            const Icon = item.icon || Calendar;
-                            const typeCls =
-                              item.type === "danger"
-                                ? "text-red-600 bg-red-50 dark:bg-red-950/30"
-                                : item.type === "warning"
-                                  ? "text-amber-600 bg-amber-50 dark:bg-amber-950/30"
-                                  : item.type === "success"
-                                    ? "text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30"
-                                    : "text-blue-600 bg-blue-50 dark:bg-blue-950/30";
-                            const daysLeft = calculateDaysLeft(item.date);
-                            return (
-                              <div
-                                key={item.id}
-                                className="flex items-center gap-3 p-3 rounded-lg"
-                                style={{ background: "var(--bg-muted)" }}
-                              >
-                                <div
-                                  className={`p-2 rounded-lg flex-shrink-0 ${typeCls}`}
-                                >
-                                  <Icon size={14} />
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <p className="font-bold text-xs truncate">
-                                    {item.title}
-                                  </p>
-                                  <p
-                                    className="text-[10px] mt-0.5"
-                                    style={{ color: "var(--text-muted)" }}
-                                  >
-                                    {item.date} • {item.desc || ""}
-                                    {daysLeft !== null && (
-                                      <span
-                                        className={`mr-2 font-black ${daysLeft < 0 ? "text-red-500" : daysLeft <= 3 ? "text-amber-600" : ""}`}
-                                      >
-                                        {daysLeft < 0
-                                          ? `متأخر ${Math.abs(daysLeft)} يوم`
-                                          : daysLeft === 0
-                                            ? "اليوم"
-                                            : daysLeft === 1
-                                              ? "غداً"
-                                              : `بعد ${daysLeft} يوم`}
-                                      </span>
-                                    )}
-                                  </p>
-                                </div>
-                                <span
-                                  className={`font-black text-sm flex-shrink-0 money tabular ${item.type === "success" ? "text-emerald-600" : "text-red-600"}`}
-                                >
-                                  {fmt(item.amount)}
-                                </span>
-                              </div>
-                            );
-                          })}
+{agendaItems.map((item) => {
+  const Icon = item.icon || Calendar;
+  const typeCls =
+    item.type === "danger"
+      ? "text-red-600 bg-red-50 dark:bg-red-950/30"
+      : item.type === "warning"
+        ? "text-amber-600 bg-amber-50 dark:bg-amber-950/30"
+        : item.type === "success"
+          ? "text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30"
+          : "text-blue-600 bg-blue-50 dark:bg-blue-950/30";
+  const daysLeft = calculateDaysLeft(item.date);
+  
+  return (
+    <div
+      key={item.id}
+      className="flex items-center gap-3 p-3 rounded-lg"
+      style={{ background: "var(--bg-muted)" }}
+    >
+      <div className={`p-2 rounded-lg flex-shrink-0 ${typeCls}`}>
+        <Icon size={14} />
+      </div>
+      
+      <div className="flex-1 min-w-0">
+        <p className="font-bold text-xs truncate">
+          {item.title}
+        </p>
+        <p
+          className="text-[10px] mt-0.5"
+          style={{ color: "var(--text-muted)" }}
+        >
+          {item.date} • {item.desc || ""}
+          {daysLeft !== null && (
+            <span
+              className={`mr-2 font-black ${daysLeft < 0 ? "text-red-500" : daysLeft <= 3 ? "text-amber-600" : ""}`}
+            >
+              {daysLeft < 0
+                ? `متأخر ${Math.abs(daysLeft)} يوم`
+                : daysLeft === 0
+                  ? "اليوم"
+                  : daysLeft === 1
+                    ? "غداً"
+                    : `بعد ${daysLeft} يوم`}
+            </span>
+          )}
+        </p>
+      </div>
+
+      {/* ✅ الزرار الجديد هنا */}
+      <button
+        onClick={async (e) => {
+          e.stopPropagation();
+          const newDate = await showInputModal({
+            title: "تعديل تاريخ الالتزام",
+            message: `تعديل تاريخ: ${item.title}\n(اكتب التاريخ بالشكل ده: 2026-10-25)`,
+            icon: "📅",
+            inputValue: item.date,
+            numeric: false, 
+            confirmText: "تحديث",
+          });
+          
+          if (newDate && newDate !== item.date) {
+            const txToUpdate = transactions.find(t => 
+              t.status !== 'paid' && 
+              (
+                (item.itemType === 'card' && t.linkedCardId === item.originalId) ||
+                (item.itemType === 'loan' && t.linkedLoanId === item.originalId)
+              ) &&
+              t.month === selectedMonth && t.year === selectedYear
+            );
+
+            if (txToUpdate) {
+              saveHistory();
+              dispatch({
+                type: "UPDATE_TRANSACTIONS",
+                payload: transactions.map(t => 
+                  t.id === txToUpdate.id ? { ...t, date: newDate } : t
+                )
+              });
+              addNotification({ type: "success", title: "تم تحديث التاريخ" });
+            } else {
+                addNotification({ 
+                  type: "info", 
+                  title: "لا توجد معاملة معلقة", 
+                  message: "لازم تضيف المعاملة كمعلقة الأول عشان تعدل تاريخها." 
+                });
+            }
+          }
+        }}
+        className="btn btn-ghost p-1.5"
+        title="تعديل التاريخ"
+      >
+        <Edit size={14} />
+      </button>
+
+      <span
+        className={`font-black text-sm flex-shrink-0 money tabular ${item.type === "success" ? "text-emerald-600" : "text-red-600"}`}
+      >
+        {fmt(item.amount)}
+      </span>
+    </div>
+  );
+})}
                         </div>
                       )}
                     </div>
@@ -26734,8 +26782,6 @@ const saveHistory = useCallback(
                 return true;
               }, []);
 
-              const getAgendaItems = useCallback(
-                (targetYear, targetMonth) => {
                   try {
                     const items = [];
                     const y = targetYear || new Date().getFullYear();
@@ -26745,20 +26791,35 @@ const saveHistory = useCallback(
                     const mName = targetMonth || ALL_MONTHS[mIdx];
                     const pad = (n) => String(n).padStart(2, "0");
 
+                    // دالة مساعدة بتدور على تاريخ المعلقة
+                    const getPendingDateFor = (matchFn) => {
+                      const pendingTx = (transactions || []).find(
+                        (t) => t.status !== "paid" && matchFn(t) && t.month === mName && (t.year || y) === y
+                      );
+                      return pendingTx ? pendingTx.date : null;
+                    };
+
                     cards.forEach((c) => {
                       const liveDebt = Math.max(0, computeCardDebt(data, c));
                       if (liveDebt <= 0.01) return;
+                      
+                      const pendingDate = getPendingDateFor((t) => t.linkedCardId === c.id && t.category === "الالتزامات البنكية والتمويلية");
+                      
                       const d = parseInt(c.dueDate) || 5;
                       const maxDay = new Date(y, mIdx + 1, 0).getDate();
                       const safeDay = Math.min(d, maxDay);
+                      const defaultDate = `${y}-${pad(mIdx + 1)}-${pad(safeDay)}`;
+
                       items.push({
                         id: `ag-card-${c.id}-${y}-${mIdx}`,
                         title: `سداد ${c.bank} - ${c.name}`,
-                        date: `${y}-${pad(mIdx + 1)}-${pad(safeDay)}`,
+                        date: pendingDate || defaultDate,
                         amount: liveDebt,
                         type: "warning",
                         icon: CreditCard,
-                        desc: "استحقاق دوري",
+                        desc: pendingDate ? "📌 تاريخ من المعلقات" : "استحقاق دوري",
+                        originalId: c.id,
+                        itemType: 'card'
                       });
                     });
 
@@ -26769,18 +26830,24 @@ const saveHistory = useCallback(
                         !l.autoGenerated &&
                         !l.isReceivable
                       ) {
+                        const pendingDate = getPendingDateFor((t) => t.linkedLoanId === l.id);
+                        
                         const d = parseInt(l.dueDay) || 1;
                         const maxDay = new Date(y, mIdx + 1, 0).getDate();
                         const safeDay = Math.min(d, maxDay);
+                        const defaultDate = `${y}-${pad(mIdx + 1)}-${pad(safeDay)}`;
+
                         if (isLoanActiveInMonth(l, y, mName)) {
                           items.push({
                             id: `ag-loan-${l.id}-${y}-${mIdx}`,
                             title: `قسط ${l.name}`,
-                            date: `${y}-${pad(mIdx + 1)}-${pad(safeDay)}`,
+                            date: pendingDate || defaultDate,
                             amount: safeNumber(l.monthlyInstallment),
                             type: "danger",
                             icon: Banknote,
-                            desc: l.description || "قسط شهري",
+                            desc: pendingDate ? "📌 تاريخ من المعلقات" : (l.description || "قسط شهري"),
+                            originalId: l.id,
+                            itemType: 'loan'
                           });
                         }
                       }
@@ -26851,7 +26918,7 @@ const saveHistory = useCallback(
                     return [];
                   }
                 },
-                [cards, updatedLoans, recurringItems, data, isLoanActiveInMonth],
+                [cards, updatedLoans, recurringItems, data, transactions, isLoanActiveInMonth],
               );
 
               const openWalletForm = useCallback((walletKey, kind) => {
