@@ -173,6 +173,26 @@ body.dark .admin-badge{color:#FBBF24}
 .sync-dot{width:7px;height:7px;border-radius:50%;background:currentColor;animation:dotPulse 1.6s infinite}
 @keyframes dotPulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.85)}}
 
+/* ══════════ RAMADAN COUNTDOWN ══════════ */
+.ramadan-strip{margin:0 16px 14px;padding:14px 16px;border-radius:18px;
+  background:linear-gradient(135deg, rgba(212,168,87,.15), rgba(212,168,87,.05));
+  border:1.5px solid rgba(212,168,87,.4);display:flex;align-items:center;gap:12px;
+  box-shadow:0 4px 16px -4px rgba(212,168,87,.2);position:relative;overflow:hidden}
+.ramadan-strip::before{content:'';position:absolute;top:-50%;right:-10%;width:50%;height:200%;
+  background:radial-gradient(circle, rgba(212,168,87,.2) 0%, transparent 60%);pointer-events:none}
+.ramadan-icon{width:42px;height:42px;border-radius:12px;flex-shrink:0;
+  background:linear-gradient(135deg,#D4A857,#B8860B);display:flex;align-items:center;justify-content:center;
+  color:#fff;font-size:20px;box-shadow:0 4px 12px -2px rgba(212,168,87,.5);position:relative;z-index:1}
+.ramadan-content{flex:1;position:relative;z-index:1}
+.ramadan-title{font-size:12px;font-weight:800;color:var(--text-secondary);margin-bottom:2px}
+.ramadan-days{font-size:18px;font-weight:900;color:var(--gold);font-variant-numeric:tabular-nums;line-height:1.2}
+.ramadan-days span{font-size:12px;font-weight:800;color:var(--text-muted);margin-right:4px}
+.ramadan-quote{font-size:11.5px;font-weight:700;color:var(--text-secondary);margin-top:4px;
+  font-style:italic;line-height:1.5}
+.ramadan-quote::before{content:'"';color:var(--gold);font-weight:900}
+.ramadan-quote::after{content:'"';color:var(--gold);font-weight:900}
+body.dark .ramadan-strip{background:linear-gradient(135deg, rgba(212,168,87,.1), rgba(212,168,87,.03))}
+
 .family-strip{display:flex;gap:8px;overflow-x:auto;padding:4px 16px 14px;scrollbar-width:none}
 .family-strip::-webkit-scrollbar{display:none}
 .fam-pill{flex-shrink:0;display:flex;align-items:center;gap:8px;padding:7px 14px 7px 8px;
@@ -842,6 +862,16 @@ body.dark .auto-status-pill.light-pill{color:#FBBF24}
     <span id="syncStripText">متزامن مع المحفظة</span>
   </div>
 
+  <!-- ══════════ RAMADAN COUNTDOWN STRIP ══════════ -->
+  <div class="ramadan-strip" id="ramadanStrip" style="display:none">
+    <div class="ramadan-icon" id="ramadanIcon">🌙</div>
+    <div class="ramadan-content">
+      <div class="ramadan-title" id="ramadanTitle">باقي على رمضان</div>
+      <div class="ramadan-days" id="ramadanDays">— <span>يوم</span></div>
+      <div class="ramadan-quote" id="ramadanQuote">—</div>
+    </div>
+  </div>
+
   <div class="family-strip" id="familyStrip"></div>
 
   <div class="tab active" id="tab-home">
@@ -1021,9 +1051,10 @@ body.dark .auto-status-pill.light-pill{color:#FBBF24}
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
             <path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="9.5"/>
           </svg>
-          آخر العمليات
+          أحدث العمليات (سجل سريع)
         </div>
-        <span class="badge" id="feedCount" style="font-size:10px;font-weight:900;padding:4px 10px;border-radius:999px;background:var(--accent-soft);color:var(--accent)"></span>
+        <button class="section-action" onclick="switchTab('history')">عرض الكل</button>
+        <span class="badge" id="feedCount" style="display:none"></span>
       </div>
       <div class="card">
         <div id="feed">
@@ -1391,6 +1422,9 @@ var CAIRO_LAT = 30.0444;
 var CAIRO_LNG = 31.2357;
 var THEME_CHECK_INTERVAL_MS = 5 * 60 * 1000; /* 5 دقائق */
 
+/* موعد بدء شهر رمضان 1447 هـ (متوقع) */
+var RAMADAN_START = new Date('2026-02-18T00:00:00');
+
 var AZKAR = [
   { text: 'سُبْحَانَ اللَّهِ وَبِحَمْدِهِ، سُبْحَانَ اللَّهِ الْعَظِيمِ', icon: '📿' },
   { text: 'لَا حَوْلَ وَلَا قُوَّةَ إِلَّا بِاللَّهِ الْعَلِيِّ الْعَظِيمِ', icon: '🤲' },
@@ -1402,6 +1436,34 @@ var AZKAR = [
   { text: 'الْحَمْدُ لِلَّهِ رَبِّ الْعَالَمِينَ', icon: '◇' },
   { text: 'حَسْبِيَ اللَّهُ وَنِعْمَ الْوَكِيلُ', icon: '🤲' },
   { text: 'اللَّهُمَّ صَلِّ عَلَى نَبِيِّنَا مُحَمَّدٍ', icon: '☾' }
+];
+
+/* جمل تحفيزية متنوعة (بما فيها المذاكرة والتعليم) */
+var MOTIVATIONAL_QUOTES = [
+  'العلم نور والجهل ظلام — ذاكر بجد وحلمك قريب',
+  'كل صفحة بتذاكرها هي خطوة لحلمك',
+  'المذاكرة مش صعبة، بس محتاجة إرادة',
+  'اجتهد اليوم عشان تفتخر بنفسك بكرة',
+  'النجاح بيبدأ بخطوة — خطوتك الأولى ابدأها دلوقتي',
+  'التعب شوية أحسن من الندم كتير',
+  'أنت أقدر مما تتخيل، جرب وابهر نفسك',
+  'التعليم هو أقوى سلاح تقدر تغير بيه حياتك',
+  'كل دقيقة مذاكرة هي استثمار في مستقبلك',
+  'اللي بيجتهد دايمًا بيلاقي طريقه للنور',
+  'مش مهم تبدأ امتى، المهم إنك تبدأ',
+  'العقل السليم في الجسم السليم — ذاكر وارتاح',
+  'الأمل موجود، بس محتاج تعب عشان توصل',
+  'خلي هدفك قدام عينك، وهتوصل',
+  'المستقبل بيبدأ من دلوقتي — ذاكر بذكاء',
+  'النجاح رحلة مش محطة، استمر',
+  'ذاكر كأنك بتزرع، واحصد النتيجة بعدين',
+  'كل حاجة صعبة في الأول، وبعدين تبقى سهلة',
+  'لا تيأس، فربما تكون على بعد خطوة من النجاح',
+  'العلم يرفع بيتاً لا عماد له، والجهل يهدم بيت العز والشرف',
+  'من جد وجد، ومن زرع حصد',
+  'اطلب العلم من المهد إلى اللحد',
+  'التعليم هو مفتاح الحياة الناجحة',
+  'قيمة الإنسان ما يعرفه، فازدد معرفة تزداد قيمة'
 ];
 
 var CATEGORIES = {
@@ -1637,6 +1699,43 @@ function updateApiKeyStatus(){
   }
 }
 
+/* ══════════ RAMADAN COUNTDOWN ══════════ */
+function updateRamadanCountdown(){
+  var strip = document.getElementById('ramadanStrip');
+  if(!strip) return;
+  
+  var now = new Date();
+  var diffMs = RAMADAN_START.getTime() - now.getTime();
+  var days = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+  
+  var icon = document.getElementById('ramadanIcon');
+  var title = document.getElementById('ramadanTitle');
+  var daysEl = document.getElementById('ramadanDays');
+  var quoteEl = document.getElementById('ramadanQuote');
+  
+  if(quoteEl) {
+    var dayIndex = now.getDate() % MOTIVATIONAL_QUOTES.length;
+    quoteEl.textContent = MOTIVATIONAL_QUOTES[dayIndex];
+  }
+  
+  if(days > 0) {
+    strip.style.display = 'flex';
+    if(icon) icon.textContent = '🌙';
+    if(title) title.textContent = 'باقي على شهر رمضان';
+    if(daysEl) daysEl.innerHTML = '<strong>' + days + '</strong> <span>يوم</span>';
+  } else {
+    var ramadanDay = Math.floor(Math.abs(diffMs) / (1000 * 60 * 60 * 24)) + 1;
+    if(ramadanDay <= 30) {
+      strip.style.display = 'flex';
+      if(icon) icon.textContent = '🌙';
+      if(title) title.textContent = 'رمضان كريم — اليوم';
+      if(daysEl) daysEl.innerHTML = '<strong>' + ramadanDay + '</strong> <span>من رمضان</span>';
+    } else {
+      strip.style.display = 'none';
+    }
+  }
+}
+
 /* ═══════════════════════════════════════════════════════════════
    SUNRISE / SUNSET CALCULATION
    خوارزمية فلكية (NOAA Simplified / SunCalc-like)
@@ -1792,6 +1891,7 @@ function startAutoThemeWatcher(){
     if(themeMode === 'auto') applyAutoTheme();
     updateSunInfoDisplay();
     updateAutoStatusPill();
+    updateRamadanCountdown();
   }, THEME_CHECK_INTERVAL_MS);
 }
 
@@ -2033,7 +2133,7 @@ function init(){
   var authPromise=initFirebaseAuth();
   var azkarPromise=showAzkar();
   Promise.all([authPromise,azkarPromise]).then(function(){
-    showMainApp();setupSync();subscribe();startSmartReminders();startAutoThemeWatcher();autoRequestNotifications();
+    showMainApp();setupSync();subscribe();startSmartReminders();startAutoThemeWatcher();autoRequestNotifications();updateRamadanCountdown();
   }).catch(function(err){
     console.warn('بدون Firebase:',err);
     showMainApp();
@@ -2044,6 +2144,7 @@ function init(){
     if(syncText)syncText.textContent='غير متصل';
     /* Still start auto theme watcher even offline */
     startAutoThemeWatcher();
+    updateRamadanCountdown();
   });
 }
 
@@ -2094,6 +2195,7 @@ function showMainApp(){
   updateThemeModeDot();
   updateAutoStatusPill();
   updateSunInfoDisplay();
+  updateRamadanCountdown();
   var ci=document.getElementById('customDateInput');
   if(ci)ci.max=isoDate();
   resetLock();setupSync();setupInstall();
@@ -2260,7 +2362,15 @@ function buildFeedItem(t){
   var isMe=t.createdBy===currentUser.id;
   var canManage = isMe || isAdmin(currentUser.id);
   var ownerIsAdmin = u && isAdmin(u.id);
-  var time=new Date(t.createdAt||Date.now()).toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'});
+  
+  // تعديل: إظهار التاريخ إذا لم تكن العملية من اليوم
+  var today = isoDate();
+  var timeStr = new Date(t.createdAt||Date.now()).toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'});
+  var displayTime = timeStr;
+  if (t._isoDate && t._isoDate !== today) {
+    displayTime = formatDateLabel(t._isoDate) + ' · ' + timeStr;
+  }
+
   var hasPending=hasPendingDeleteRequest(t.id);
   var pendingReq=getDeleteRequestForTx(t.id);
   var editedBadge=t.editedAt?'<span class="edited-badge">✏️ معدّلة</span>':'';
@@ -2298,23 +2408,23 @@ function buildFeedItem(t){
     '<div class="feed-avatar av-'+(u?u.id:'ans')+(ownerIsAdmin?' is-admin':'')+'">'+(u?u.emoji:'؟')+'</div>'+
     '<div class="feed-body">'+
       '<div class="feed-name">'+adminBadge+editedBadge+transferBadge+pendingBadge+' '+esc(t.description||t.category)+'</div>'+
-      '<div class="feed-time">'+(u?u.name:'—')+' · '+time+'</div>'+
+      '<div class="feed-time">'+(u?u.name:'—')+' · '+displayTime+'</div>'+
     '</div>'+
     '<div class="feed-amount">- '+fmt(t.amount)+' ج.م</div>'+actionBtn+'</div>';
 }
 
 function renderFeed(){
-  var today=isoDate();
-  var todayList=cachedTx.filter(function(t){return t._isoDate===today;}).slice(0,5);
+  // تعديل: جلب آخر 5 عمليات بغض النظر عن التاريخ
+  var recentList = cachedTx.slice(0, 5); 
   var box=document.getElementById('feed');if(!box)return;
   var count=document.getElementById('feedCount');
-  if(!todayList.length){
+  if(!recentList.length){
     if(count)count.textContent='';
-    box.innerHTML='<div class="empty"><span class="empty-emoji"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 6h12M9 12h12M9 18h12"/></svg></span>لا توجد عمليات اليوم</div>';
+    box.innerHTML='<div class="empty"><span class="empty-emoji"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 6h12M9 12h12M9 18h12"/></svg></span>لا توجد عمليات مسجلة</div>';
     return;
   }
-  if(count)count.textContent=todayList.length+' عملية';
-  box.innerHTML=todayList.map(buildFeedItem).join('');
+  if(count)count.textContent=recentList.length+' عملية';
+  box.innerHTML=recentList.map(buildFeedItem).join('');
 }
 
 function renderQuickStats(){
@@ -3320,6 +3430,7 @@ function renderAll(){
   renderFamilyStrip();renderFeed();renderQuickStats();updateBudgetDesc();updatePeriodCounts();
   if(currentTab==='history')renderHistory();else renderPendingDeletes();
   if(currentTab==='family')renderFamilyTab();
+  updateRamadanCountdown();
 }
 function doLogout(){
   modal({
@@ -3432,6 +3543,7 @@ function bootstrap(){
     var pinScreenEl3=document.getElementById('pinScreen');
     if(pinScreenEl3)pinScreenEl3.style.display='flex';
   }
+  updateRamadanCountdown();
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bootstrap);
 else bootstrap();
