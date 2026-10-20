@@ -6668,22 +6668,15 @@ const parseISODate = (iso) => {
               const openCycle =
                 openCycles.length > 0 ? openCycles[openCycles.length - 1] : null;
 
-      return {
-        cycles,
-        currentStatement,
-        openCycle,
-        // ⚠️ للاستخدام الداخلي فقط — عرض دورة الكشف.
-        // ⛔ لا تستخدمه في الواجهة أو التنبؤات.
-        // ✅ استخدم computeCardDebt(data, card) للحصول على المديونية الحقيقية.
-        _cycleRunningBalance: runningBalance,
-        _cycleClosingBalance: cycles.length > 0
-          ? cycles[cycles.length - 1].closingBalance
-          : openingDebt,
-        installmentsInfo: instInfo,
-        cycleParams: getCardCycleParams(card),
-        openingDebt,
-        openingDate,
-      };
+return {
+  cycles,
+  currentStatement,
+  openCycle,
+  installmentsInfo: instInfo,
+  cycleParams: getCardCycleParams(card),
+  openingDebt,
+  openingDate,
+};
             };
 
             const computeCardPaymentPrediction = (
@@ -8707,20 +8700,6 @@ const cardsFilteredDefaults = DEFAULT_CARDS.filter(
                 });
             };
 
-            const getTxDisplay = (t) => {
-              if (!t) return "";
-              const base = t.description || t.category || "بدون وصف";
-              if (
-                t.quantity &&
-                Number(t.quantity) >= 1 &&
-                t.unitPrice &&
-                !String(base).includes("×")
-              ) {
-                return `${base} (${t.quantity} × ${t.unitPrice})`;
-              }
-              return base;
-            };
-
             const getTxDisplayText = (t) => {
               if (!t) return "";
               const base = t.description || t.category || "بدون وصف";
@@ -9899,13 +9878,24 @@ const cardsFilteredDefaults = DEFAULT_CARDS.filter(
                     const ok = await verifyPin(next);
                     if (ok) {
                       setSuccess(true);
-                      if (navigator.vibrate) navigator.vibrate([10, 30, 10]);
-                      try {
-                        await savePinSession(next);
-                      } catch (e) {}
-                      if (navTimerRef.current) clearTimeout(navTimerRef.current);
-                      navTimerRef.current = setTimeout(() => onSuccess(next), 450);
-                    } else {
+if (ok) {
+  setSuccess(true);
+  if (navigator.vibrate) navigator.vibrate([10, 30, 10]);
+  try {
+    await savePinSession(next);
+  } catch (e) {}
+  if (navTimerRef.current) clearTimeout(navTimerRef.current);
+  navTimerRef.current = setTimeout(async () => {
+    try {
+      await onSuccess(next);
+    } catch (e) {
+      console.error("onSuccess failed:", e);
+      setSuccess(false);
+      setError(true);
+      setPin("");
+    }
+  }, 450);
+} else {
                       setError(true);
                       if (navigator.vibrate) navigator.vibrate([40, 40, 40]);
                       setAttempts((a) => a + 1);
@@ -12448,26 +12438,8 @@ const categoryGroups = useMemo(() => {
     }));
 }, [displayedList]);
 
-              const getDayLabel = useCallback((date) => {
-                const today = getLocalISODate();
-                const yest = new Date();
-                yest.setDate(yest.getDate() - 1);
-                const yestISO = getLocalISODate(yest);
-                if (date === today) return "📅 النهاردة";
-                if (date === yestISO) return "📅 امبارح";
-                const d = parseISODate(date);
-                if (!d) return "📅 " + date;
-                const ds = d.toLocaleDateString("ar-EG", {
-                  weekday: "long",
-                  day: "numeric",
-                  month: "long",
-                });
-                const ys =
-                  d.getFullYear() !== new Date().getFullYear()
-                    ? " " + d.getFullYear()
-                    : "";
-                return "📅 " + ds + ys;
-              }, []);
+  if (date === yestISO) return "📅 امبارح";
+
 
               const openConfirmDate = useCallback(
                 (tx) => setConfirmState({ tx, bulk: false }),
@@ -17070,7 +17042,7 @@ const BankCard3D = memo(
                                     >
                                       <div className="min-w-0 flex-1">
                                         <p className="font-bold text-xs truncate flex items-center gap-1 flex-wrap">
-                                          {getTxDisplay(t)}{" "}
+                                          {getTxDisplayText(t)}{" "}
                                           <TxTimeChip createdAt={t.createdAt} />
                                           <CardPaymentBadge tx={t} />
                                           <SmsBadge tx={t} /> <TeldaBadge tx={t} />{" "}
@@ -26443,12 +26415,12 @@ return saveQueueRef.current;
                   }
                 }
                 // eslint-disable-next-line react-hooks/exhaustive-deps
-              }, [
-                isAuthenticated,
-                data?.recurringItems?.length,
-                data?.transactions?.length,
-                data?.loans,
-              ]);
+}, [
+  isAuthenticated,
+  data?.recurringItems?.length,
+  data?.transactions?.length,
+  loansHash,
+]);
 
               useEffect(() => {
                 if (!isAuthenticated || cloudSyncStatus !== "offline") return;
