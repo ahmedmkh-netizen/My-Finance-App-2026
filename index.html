@@ -7393,6 +7393,7 @@
                           <p className="text-sm font-black text-purple-600 mt-0.5 money tabular">{fmt(stats.average)}</p>
                         </div>
                       </div>
+                      <CardsPaymentPredictions data={data} dispatch={dispatch} targetCardId={card.id} />
                       <div className="flex gap-1.5 flex-wrap mb-3">
                         <div className="relative flex-1 min-w-[140px]">
                           <Search className="absolute right-2.5 top-1/2 -translate-y-1/2" size={12} style={{ color: "var(--text-muted)" }} />
@@ -11553,10 +11554,18 @@
             });
 
             /* ═══════════════ CARDS PAYMENT PREDICTIONS ═══════════════ */
-            const CardsPaymentPredictions = memo(({ data, dispatch }) => {
-              const summary = useMemo(() => computeTotalMonthlyObligation(data), [data]);
-              const [expandedCard, setExpandedCard] = useState(null);
-              if (summary.predictions.length === 0) return null;
+const CardsPaymentPredictions = memo(({ data, dispatch, targetCardId = null }) => {
+  const summary = useMemo(
+    () => computeTotalMonthlyObligation(data),
+    [data],
+  );
+  const [expandedCard, setExpandedCard] = useState(targetCardId);
+
+  const predictionsToShow = targetCardId
+    ? summary.predictions.filter((p) => p.cardId === targetCardId)
+    : summary.predictions;
+
+  if (predictionsToShow.length === 0) return null;
 
               const urgentCount = summary.predictions.filter((p) => p.urgency === "urgent" || p.urgency === "overdue").length;
 
@@ -11601,7 +11610,7 @@
                   </div>
 
                   <div className="space-y-1.5">
-                    {summary.predictions.map((p) => {
+{predictionsToShow.map((p) => {
                       const isExpanded = expandedCard === p.cardId;
                       const urgencyCls = p.urgency === "overdue" ? "border-red-500 bg-red-50 dark:bg-red-950/30"
                         : p.urgency === "urgent" ? "border-amber-500 bg-amber-50 dark:bg-amber-950/30"
