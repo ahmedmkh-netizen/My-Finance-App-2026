@@ -3467,6 +3467,61 @@
               };
             };
 
+                    // 🔮 ميزة التنبؤ الذكي: إنشاء وتحديث معاملات السداد المتوقعة للبطاقات
+              useEffect(() => {
+                if (!data || !data.cards || !data.transactions) return;
+
+                let changed = false;
+                const newTxs = [...data.transactions];
+                const deletedIds = new Set(data.deletedTxIds || []);
+
+                data.cards.forEach(card => {
+                  // 🛑 استثناء بطاقة SWYPE
+                  if (card.id === 3 || card.name === 'SWYPE' || getCardMethod(card) === 'cib_swype') return; 
+
+                  const pred = computeCardPaymentPrediction(data, card);
+                  if (!pred) return;
+
+                  const targetDate = pred.nextCycleDueDate || new Date();
+                  const monthKey = makeMonthKey(targetDate.getFullYear(), ALL_MONTHS[targetDate.getMonth()]);
+                  const forecastId = `auto-forecast-card-${card.id}-${monthKey}`;
+
+                  if (deletedIds.has(forecastId)) return; 
+
+                  const existingIdx = newTxs.findIndex(t => t.id === forecastId);
+                  const estAmount = pred.nextCycleEstimate || 0;
+
+                  if (existingIdx > -1) {
+                    const existing = newTxs[existingIdx];
+                    if (existing.status === 'pending') {
+                      if (Math.abs(safeNumber(existing.amount) - estAmount) > 0.01) {
+                        if (estAmount <= 0.01) {
+                          newTxs.splice(existingIdx, 1); 
+                        } else {
+                          newTxs[existingIdx] = { ...existing, amount: estAmount, date: getLocalISODate(targetDate) };
+                        }
+                        changed = true;
+                      }
+                    }
+                  } else if (estAmount > 0.01) {
+                    newTxs.push({
+                      id: forecastId, type: 'expense', kind: KIND.FINANCIAL,
+                      category: 'الالتزامات البنكية والتمويلية', amount: estAmount,
+                      description: `سداد متوقع - ${card.bank} ${card.name} (تلقائي)`,
+                      method: getCardMethod(card), date: getLocalISODate(targetDate),
+                      month: ALL_MONTHS[targetDate.getMonth()], year: targetDate.getFullYear(),
+                      monthIndex: targetDate.getMonth(), subType: 'withdrawal',
+                      status: 'pending', linkedCardId: card.id, source: 'auto-card-forecast',
+                      createdAt: new Date().toISOString(),
+                    });
+                    changed = true;
+                  }
+                });
+
+                if (changed) {
+                  dispatch({ type: "UPDATE_TRANSACTIONS", payload: sortTransactions(newTxs) });
+                }
+              }, [data?.transactions, data?.cards]);
             const applyMaterialization = (data, asOfDateStr) => {
               const updated = materializeRecurringItems(data, asOfDateStr);
               if (!updated) return null;
@@ -8366,8 +8421,6 @@
               const dailyGroups = useMemo(() => groupTransactionsByDate(filteredTx), [filteredTx]);
   const prediction = useMemo(() => computeCardPaymentPrediction(data, card), [data, card]);
   if (!card) return null;
-              if (!card) return null;
-
               const liveDebt = computeCardDebt(data, card);
               // 🔴 [حرج #3] استخدام computeCardAvailable
               const liveAvailable = computeCardAvailable(data, card);
