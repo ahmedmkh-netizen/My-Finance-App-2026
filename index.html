@@ -4184,20 +4184,27 @@ const safeClone = (obj) => {
               }
             };
 
-            const parseISODate = (iso) => {
-              if (!iso) return null;
-              if (iso instanceof Date) return isNaN(iso) ? null : iso;
-              const s = String(iso).trim();
-              if (!s) return null;
-              const m = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(s);
-              if (m) {
-                const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
-                return isNaN(d) ? null : d;
-              }
-              const d = new Date(s);
-              return isNaN(d) ? null : d;
-            };
-
+const parseISODate = (iso) => {
+  if (!iso) return null;
+  if (iso instanceof Date) return isNaN(iso) ? null : iso;
+  const s = String(iso).trim();
+  if (!s) return null;
+  const m = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(s);
+  if (m) {
+    const y = Number(m[1]);
+    const mo = Number(m[2]) - 1;
+    const da = Number(m[3]);
+    const d = new Date(y, mo, da);
+    if (isNaN(d)) return null;
+    // ✅ رفض rollover: 2026-02-30 → 2 مارس، لازم null
+    if (d.getFullYear() !== y || d.getMonth() !== mo || d.getDate() !== da) {
+      return null;
+    }
+    return d;
+  }
+  const d = new Date(s);
+  return isNaN(d) ? null : d;
+};
             const getTxTimestamp = (t) => {
               if (!t) return 0;
               if (t.createdAt) {
@@ -7130,9 +7137,9 @@ const safeClone = (obj) => {
               const deletedSet = new Set(deletedDefaultIds);
 
               const incomingCards = Array.isArray(parsed.cards) ? parsed.cards : [];
-              const cardsFilteredDefaults = DEFAULT_CARDS.filter(
-                (c) => !deletedSet.has(c.id) || c.id === 4,
-              );
+const cardsFilteredDefaults = DEFAULT_CARDS.filter(
+  (c) => !deletedSet.has(c.id),
+);
               const mergedCards = mergeById(
                 migrateCards(incomingCards),
                 cardsFilteredDefaults,
@@ -11227,7 +11234,7 @@ const DayGroupHeader = memo(({ label, total, count }) => (
                   payload: {
                     type: "expense",
                     subType: "withdrawal",
-                    status: "paid",
+                    status: "pending",
                     category: HANY_TAB_CATEGORY,
                     method: HANY_TAB_METHOD,
                     affectsCash: false,
@@ -12885,10 +12892,10 @@ const toggleAll = useCallback(() => {
       <ArrowDownCircle size={16} strokeWidth={2.5} />
     </div>
     <div className="month-stats-cell__label">الدخل</div>
-    <div className="month-stats-cell__value">
-      {formatAdaptive(monthStats.inc)}
-      <span className="month-stats-cell__currency">ج.م</span>
-    </div>
+<div className="month-stats-cell__value">
+  {fmt(monthStats.inc)}
+  <span className="month-stats-cell__currency">ج.م</span>
+</div>
   </div>
 
   {/* Expense */}
@@ -12897,10 +12904,10 @@ const toggleAll = useCallback(() => {
       <ArrowUpCircle size={16} strokeWidth={2.5} />
     </div>
     <div className="month-stats-cell__label">المصروف</div>
-    <div className="month-stats-cell__value">
-      {formatAdaptive(monthStats.exp)}
-      <span className="month-stats-cell__currency">ج.م</span>
-    </div>
+<div className="month-stats-cell__value">
+  {fmt(monthStats.exp)}
+  <span className="month-stats-cell__currency">ج.م</span>
+</div>
   </div>
 
   {/* Net */}
@@ -25090,7 +25097,7 @@ const BankCard3D = memo(
                 }
 
                 case "ADD_TO_HISTORY": {
-                  const limited = [...state.history].slice(-19);
+                  const limited = [...state.history].slice(-4);
                   return {
                     ...state,
                     history: [...limited, action.payload],
