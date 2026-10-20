@@ -4184,27 +4184,20 @@ const safeClone = (obj) => {
               }
             };
 
-const parseISODate = (iso) => {
-  if (!iso) return null;
-  if (iso instanceof Date) return isNaN(iso) ? null : iso;
-  const s = String(iso).trim();
-  if (!s) return null;
-  const m = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(s);
-  if (m) {
-    const y = Number(m[1]);
-    const mo = Number(m[2]) - 1;
-    const da = Number(m[3]);
-    const d = new Date(y, mo, da);
-    if (isNaN(d)) return null;
-    // ✅ رفض rollover: 2026-02-30 → 2 مارس، لازم null
-    if (d.getFullYear() !== y || d.getMonth() !== mo || d.getDate() !== da) {
-      return null;
-    }
-    return d;
-  }
-  const d = new Date(s);
-  return isNaN(d) ? null : d;
-};
+            const parseISODate = (iso) => {
+              if (!iso) return null;
+              if (iso instanceof Date) return isNaN(iso) ? null : iso;
+              const s = String(iso).trim();
+              if (!s) return null;
+              const m = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(s);
+              if (m) {
+                const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+                return isNaN(d) ? null : d;
+              }
+              const d = new Date(s);
+              return isNaN(d) ? null : d;
+            };
+
             const getTxTimestamp = (t) => {
               if (!t) return 0;
               if (t.createdAt) {
@@ -5644,7 +5637,6 @@ const parseISODate = (iso) => {
                 if (t.source === "void") return;
                 if (isHanyPurchaseTx(t) || isHanySettleTx(t)) return;
                 if (t.method === HANY_TAB_METHOD) return;
-                if (t.installmentPlanId) return;
 
                 const d = parseISODate(t.date);
                 if (!d || d > upper) return;
@@ -6668,15 +6660,22 @@ const parseISODate = (iso) => {
               const openCycle =
                 openCycles.length > 0 ? openCycles[openCycles.length - 1] : null;
 
-return {
-  cycles,
-  currentStatement,
-  openCycle,
-  installmentsInfo: instInfo,
-  cycleParams: getCardCycleParams(card),
-  openingDebt,
-  openingDate,
-};
+      return {
+        cycles,
+        currentStatement,
+        openCycle,
+        // ⚠️ للاستخدام الداخلي فقط — عرض دورة الكشف.
+        // ⛔ لا تستخدمه في الواجهة أو التنبؤات.
+        // ✅ استخدم computeCardDebt(data, card) للحصول على المديونية الحقيقية.
+        _cycleRunningBalance: runningBalance,
+        _cycleClosingBalance: cycles.length > 0
+          ? cycles[cycles.length - 1].closingBalance
+          : openingDebt,
+        installmentsInfo: instInfo,
+        cycleParams: getCardCycleParams(card),
+        openingDebt,
+        openingDate,
+      };
             };
 
             const computeCardPaymentPrediction = (
@@ -6724,8 +6723,11 @@ return {
                 ? Math.ceil((dueDate.getTime() - now.getTime()) / 86400000)
                 : null;
 
-const limit = safeNumber(card.limit);
-const availableLimit = computeCardAvailable(data, card, asOfDate);   
+              const limit = safeNumber(card.limit);
+              const availableLimit = Math.max(
+                0,
+                limit - currentDebt - instInfo.totalRemaining,
+              );
 
               return {
                 cardId: card.id,
@@ -7128,9 +7130,9 @@ const availableLimit = computeCardAvailable(data, card, asOfDate);
               const deletedSet = new Set(deletedDefaultIds);
 
               const incomingCards = Array.isArray(parsed.cards) ? parsed.cards : [];
-const cardsFilteredDefaults = DEFAULT_CARDS.filter(
-  (c) => !deletedSet.has(c.id),
-);
+              const cardsFilteredDefaults = DEFAULT_CARDS.filter(
+                (c) => !deletedSet.has(c.id) || c.id === 4,
+              );
               const mergedCards = mergeById(
                 migrateCards(incomingCards),
                 cardsFilteredDefaults,
@@ -8700,6 +8702,20 @@ const cardsFilteredDefaults = DEFAULT_CARDS.filter(
                 });
             };
 
+            const getTxDisplay = (t) => {
+              if (!t) return "";
+              const base = t.description || t.category || "بدون وصف";
+              if (
+                t.quantity &&
+                Number(t.quantity) >= 1 &&
+                t.unitPrice &&
+                !String(base).includes("×")
+              ) {
+                return `${base} (${t.quantity} × ${t.unitPrice})`;
+              }
+              return base;
+            };
+
             const getTxDisplayText = (t) => {
               if (!t) return "";
               const base = t.description || t.category || "بدون وصف";
@@ -9878,24 +9894,13 @@ const cardsFilteredDefaults = DEFAULT_CARDS.filter(
                     const ok = await verifyPin(next);
                     if (ok) {
                       setSuccess(true);
-if (ok) {
-  setSuccess(true);
-  if (navigator.vibrate) navigator.vibrate([10, 30, 10]);
-  try {
-    await savePinSession(next);
-  } catch (e) {}
-  if (navTimerRef.current) clearTimeout(navTimerRef.current);
-  navTimerRef.current = setTimeout(async () => {
-    try {
-      await onSuccess(next);
-    } catch (e) {
-      console.error("onSuccess failed:", e);
-      setSuccess(false);
-      setError(true);
-      setPin("");
-    }
-  }, 450);
-} else {
+                      if (navigator.vibrate) navigator.vibrate([10, 30, 10]);
+                      try {
+                        await savePinSession(next);
+                      } catch (e) {}
+                      if (navTimerRef.current) clearTimeout(navTimerRef.current);
+                      navTimerRef.current = setTimeout(() => onSuccess(next), 450);
+                    } else {
                       setError(true);
                       if (navigator.vibrate) navigator.vibrate([40, 40, 40]);
                       setAttempts((a) => a + 1);
@@ -11222,7 +11227,7 @@ const DayGroupHeader = memo(({ label, total, count }) => (
                   payload: {
                     type: "expense",
                     subType: "withdrawal",
-                    status: "pending",
+                    status: "paid",
                     category: HANY_TAB_CATEGORY,
                     method: HANY_TAB_METHOD,
                     affectsCash: false,
@@ -12438,8 +12443,26 @@ const categoryGroups = useMemo(() => {
     }));
 }, [displayedList]);
 
-  if (date === yestISO) return "📅 امبارح";
-
+              const getDayLabel = useCallback((date) => {
+                const today = getLocalISODate();
+                const yest = new Date();
+                yest.setDate(yest.getDate() - 1);
+                const yestISO = getLocalISODate(yest);
+                if (date === today) return "📅 النهاردة";
+                if (date === yestISO) return "📅 امبارح";
+                const d = parseISODate(date);
+                if (!d) return "📅 " + date;
+                const ds = d.toLocaleDateString("ar-EG", {
+                  weekday: "long",
+                  day: "numeric",
+                  month: "long",
+                });
+                const ys =
+                  d.getFullYear() !== new Date().getFullYear()
+                    ? " " + d.getFullYear()
+                    : "";
+                return "📅 " + ds + ys;
+              }, []);
 
               const openConfirmDate = useCallback(
                 (tx) => setConfirmState({ tx, bulk: false }),
@@ -12862,10 +12885,10 @@ const toggleAll = useCallback(() => {
       <ArrowDownCircle size={16} strokeWidth={2.5} />
     </div>
     <div className="month-stats-cell__label">الدخل</div>
-<div className="month-stats-cell__value">
-  {fmt(monthStats.inc)}
-  <span className="month-stats-cell__currency">ج.م</span>
-</div>
+    <div className="month-stats-cell__value">
+      {formatAdaptive(monthStats.inc)}
+      <span className="month-stats-cell__currency">ج.م</span>
+    </div>
   </div>
 
   {/* Expense */}
@@ -12874,10 +12897,10 @@ const toggleAll = useCallback(() => {
       <ArrowUpCircle size={16} strokeWidth={2.5} />
     </div>
     <div className="month-stats-cell__label">المصروف</div>
-<div className="month-stats-cell__value">
-  {fmt(monthStats.exp)}
-  <span className="month-stats-cell__currency">ج.م</span>
-</div>
+    <div className="month-stats-cell__value">
+      {formatAdaptive(monthStats.exp)}
+      <span className="month-stats-cell__currency">ج.م</span>
+    </div>
   </div>
 
   {/* Net */}
@@ -15887,8 +15910,8 @@ const BankCard3D = memo(
                 if (isCard) {
                   balance = computeCardDebt(data, item);
                   const limit = safeNumber(item.limit);
- const available = computeCardAvailable(data, item)
-   label =
+                  const available = Math.max(0, limit - Math.max(0, balance));
+                  label =
                     item.displayName ||
                     `💳 ${item.bank} ${item.name} • ${item.last4}`;
                   sublabel = `متاح: ${formatAdaptive(available)} • حد: ${formatAdaptive(limit)}`;
@@ -16797,7 +16820,7 @@ const BankCard3D = memo(
                 if (!card) return null;
 
                 const liveDebt = computeCardDebt(data, card);
-                const liveAvailable = computeCardAvailable(data, card);
+                const liveAvailable = Math.max(0, safeNumber(card.limit) - liveDebt);
                 const usagePct =
                   safeNumber(card.limit) > 0
                     ? (Math.max(0, liveDebt) / safeNumber(card.limit)) * 100
@@ -17042,7 +17065,7 @@ const BankCard3D = memo(
                                     >
                                       <div className="min-w-0 flex-1">
                                         <p className="font-bold text-xs truncate flex items-center gap-1 flex-wrap">
-                                          {getTxDisplayText(t)}{" "}
+                                          {getTxDisplay(t)}{" "}
                                           <TxTimeChip createdAt={t.createdAt} />
                                           <CardPaymentBadge tx={t} />
                                           <SmsBadge tx={t} /> <TeldaBadge tx={t} />{" "}
@@ -17937,16 +17960,18 @@ const BankCard3D = memo(
                             </button>
                           </div>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-
                             {cards.map((card) => {
-  const liveDebt = computeCardDebt(data, card);
-  const liveAvailable = computeCardAvailable(data, card);   // ← التعديل
-  return (
-    <React.Fragment key={card.id}>
-      <BankCard3D
-        card={card}
-        liveDebt={liveDebt}
-        liveAvailable={liveAvailable}
+                              const liveDebt = computeCardDebt(data, card);
+                              const liveAvailable = Math.max(
+                                0,
+                                safeNumber(card.limit) - Math.max(0, liveDebt),
+                              );
+                              return (
+                                <React.Fragment key={card.id}>
+                                  <BankCard3D
+                                    card={card}
+                                    liveDebt={liveDebt}
+                                    liveAvailable={liveAvailable}
                                     onStatement={() =>
                                       dispatch({
                                         type: "SET_VIEWING_CARD_STATEMENT",
@@ -20391,23 +20416,22 @@ const BankCard3D = memo(
 
                 const recurringAgg = useMemo(() => {
                   const now = new Date();
-const recurringAgg = useMemo(() => {
-  const selectedYM = selectedYear * 12 + getMonthIndex(selectedMonth);
-  const active = (recurringItems || []).filter((r) => {
-    if (r.active === false) return false;
-    if (r.linkedLoanSystemId) return false;
-    if (r.startMonth) {
-      const [sy, sm] = r.startMonth.split("-").map(Number);
-      const startYM = sy * 12 + (sm - 1);
-      if (selectedYM < startYM) return false;
-    }
-    if (r.endMonth) {
-      const [ey, em] = r.endMonth.split("-").map(Number);
-      const endYM = ey * 12 + (em - 1);
-      if (selectedYM > endYM) return false;
-    }
-    return true;
-  });
+                  const currentYM = now.getFullYear() * 12 + now.getMonth();
+                  const active = (recurringItems || []).filter((r) => {
+                    if (r.active === false) return false;
+                    if (r.linkedLoanSystemId) return false;
+                    if (r.startMonth) {
+                      const [sy, sm] = r.startMonth.split("-").map(Number);
+                      const startYM = sy * 12 + (sm - 1);
+                      if (currentYM < startYM) return false;
+                    }
+                    if (r.endMonth) {
+                      const [ey, em] = r.endMonth.split("-").map(Number);
+                      const endYM = ey * 12 + (em - 1);
+                      if (currentYM > endYM) return false;
+                    }
+                    return true;
+                  });
                   const income = active
                     .filter((r) => r.type === "income")
                     .reduce((s, r) => s + safeNumber(r.amount), 0);
@@ -25066,7 +25090,7 @@ const recurringAgg = useMemo(() => {
                 }
 
                 case "ADD_TO_HISTORY": {
-                  const limited = [...state.history].slice(-4);
+                  const limited = [...state.history].slice(-19);
                   return {
                     ...state,
                     history: [...limited, action.payload],
@@ -26189,36 +26213,24 @@ const saveHistory = useCallback(
                         if (!silent) setTimeout(() => setIsSaving(false), 800);
                       }
                     })
-.catch(async (err) => {
-  console.error("❌ Queue save failed:", err);
-  const retries = cloudSaveRetriesRef.current + 1;
-  cloudSaveRetriesRef.current = retries;
-  if (retries <= 3) {
-    const backoff = Math.pow(2, retries) * 1000; // 2s, 4s, 8s
-    console.warn(`⏳ Retry ${retries}/3 after ${backoff}ms...`);
-    await new Promise((r) => setTimeout(r, backoff));
-    setIsSaving(false);
-    // ✅ نكسر سلسلة الـ promises بـ setTimeout عشان نتجنب
-    // circular dependency ونسمح بالـ retry الفعلي
-    setTimeout(() => {
-      saveQueueRef.current = Promise.resolve();
-      queueCloudSave(newData, options);
-    }, 0);
-    return;
-  }
-  cloudSaveRetriesRef.current = 0;
-  saveQueueRef.current = Promise.resolve();
-  setIsSaving(false);
-  addNotification({
-    type: "error",
-    title: "فشل الرفع بعد 3 محاولات",
-    message: "احفظ يدوياً",
-  });
-});
+                    .catch(async (err) => {
+                      console.error("❌ Queue save failed:", err);
+                      const retries = cloudSaveRetriesRef.current + 1;
+                      cloudSaveRetriesRef.current = retries;
+                      if (retries <= 3) {
+                        await new Promise((r) => setTimeout(r, 3000));
+                        setIsSaving(false);
+                        return;
+                      }
+                      cloudSaveRetriesRef.current = 0;
+                      saveQueueRef.current = Promise.resolve();
+                      setIsSaving(false);
+                    });
 
-return saveQueueRef.current;
-}, [isAuthenticated, addNotification],
-);
+                  return saveQueueRef.current;
+                },
+                [isAuthenticated],
+              );
 
               const docRef = useMemo(
                 () =>
@@ -26415,12 +26427,12 @@ return saveQueueRef.current;
                   }
                 }
                 // eslint-disable-next-line react-hooks/exhaustive-deps
-}, [
-  isAuthenticated,
-  data?.recurringItems?.length,
-  data?.transactions?.length,
-  loansHash,
-]);
+              }, [
+                isAuthenticated,
+                data?.recurringItems?.length,
+                data?.transactions?.length,
+                data?.loans,
+              ]);
 
               useEffect(() => {
                 if (!isAuthenticated || cloudSyncStatus !== "offline") return;
