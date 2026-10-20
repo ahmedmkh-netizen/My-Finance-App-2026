@@ -3466,62 +3466,6 @@
                 materializedRecurring: materialized,
               };
             };
-
-
-                    // 🔮 ميزة التنبؤ الذكي: إنشاء وتحديث معاملات السداد المتوقعة للبطاقات
-              useEffect(() => {
-                if (!data || !data.cards || !data.transactions) return;
-
-                let changed = false;
-                const newTxs = [...data.transactions];
-                const deletedIds = new Set(data.deletedTxIds || []);
-
-                data.cards.forEach(card => {
-                  if (card.id === 3 || card.name === 'SWYPE' || getCardMethod(card) === 'cib_swype') return; 
-
-                  const pred = computeCardPaymentPrediction(data, card);
-                  if (!pred) return;
-
-                  const targetDate = pred.nextCycleDueDate || new Date();
-                  const monthKey = makeMonthKey(targetDate.getFullYear(), ALL_MONTHS[targetDate.getMonth()]);
-                  const forecastId = `auto-forecast-card-${card.id}-${monthKey}`;
-
-                  if (deletedIds.has(forecastId)) return; 
-
-                  const existingIdx = newTxs.findIndex(t => t.id === forecastId);
-                  const estAmount = pred.nextCycleEstimate || 0;
-
-                  if (existingIdx > -1) {
-                    const existing = newTxs[existingIdx];
-                    if (existing.status === 'pending') {
-                      if (Math.abs(safeNumber(existing.amount) - estAmount) > 0.01) {
-                        if (estAmount <= 0.01) {
-                          newTxs.splice(existingIdx, 1); 
-                        } else {
-                          newTxs[existingIdx] = { ...existing, amount: estAmount, date: getLocalISODate(targetDate) };
-                        }
-                        changed = true;
-                      }
-                    }
-                  } else if (estAmount > 0.01) {
-                    newTxs.push({
-                      id: forecastId, type: 'expense', kind: KIND.FINANCIAL,
-                      category: 'الالتزامات البنكية والتمويلية', amount: estAmount,
-                      description: `سداد متوقع - ${card.bank} ${card.name} (تلقائي)`,
-                      method: getCardMethod(card), date: getLocalISODate(targetDate),
-                      month: ALL_MONTHS[targetDate.getMonth()], year: targetDate.getFullYear(),
-                      monthIndex: targetDate.getMonth(), subType: 'withdrawal',
-                      status: 'pending', linkedCardId: card.id, source: 'auto-card-forecast',
-                      createdAt: new Date().toISOString(),
-                    });
-                    changed = true;
-                  }
-                });
-
-                if (changed) {
-                  dispatch({ type: "UPDATE_TRANSACTIONS", payload: sortTransactions(newTxs) });
-                }
-              }, [data?.transactions, data?.cards]);
             const applyMaterialization = (data, asOfDateStr) => {
               const updated = materializeRecurringItems(data, asOfDateStr);
               if (!updated) return null;
@@ -13106,6 +13050,8 @@ const CardsPaymentPredictions = memo(({ data, dispatch, targetCardId = null }) =
               const budgetsRef = useRef({});
               const saveQueueRef = useRef(Promise.resolve());
               const cloudSaveRetriesRef = useRef(0);
+              const lastForecastSigRef = useRef("");
+              
 
               const {
                 data, activeTab, selectedYear, selectedMonth, transViewMode, catViewType,
@@ -13397,7 +13343,101 @@ const CardsPaymentPredictions = memo(({ data, dispatch, targetCardId = null }) =
                 data?.transactions?.length,
                 loansHash, // ← [أداء #4] بدل data?.loans
               ]);
+              /* 🔮 التنبؤ التلقائي بسداد البطاقات (Smart Card Payment Forecast) */
+              useEffect(() => {
+                if (!isAuthenticated) return;
+                if (!hasReceivedInitialSnapshot.current) return;
+                if (cloudSyncStatus === "pending") return;
+                if (!data?.cards?.length || !Array.isArray(data?.transactions)) return;
 
+                const forecastTxIds = (data.transactions || [])
+                  .filter((t) => t.source === "auto-card-forecast")
+                  .map((t) => `${t.id}:${t.amount}:${t.status}`)
+                  .sort()
+                  .join(",");
+
+                const cardStateSig = (data.cards || []).map((c) => {
+                  if (c.id === 3 || c.name === "SWYPE" || getCardMethod(c) === "cib_swype") return `${c.id}:skip`;
+                  const pred = computeCardPaymentPrediction(data, c);
+                  if (!pred) return `${c.id}:nopred`;
+                  const targetDate = pred.nextCycleDueDate || new Date();
+                  const mk = makeMonthKey(targetDate.getFullYear(), ALL_MONTHS[targetDate.getMonth()]);
+                  return `${c.id}:${roundMoney(pred.nextCycleEstimate || 0)}:${mk}`;
+                }).join("|");
+
+                const sig = `${cardStateSig}__${forecastTxIds}__${(data.deletedTxIds || []).slice(-30).join(",")}`;
+                if (lastForecastSigRef.current === sig) return;
+                lastForecastSigRef.current = sig;
+
+                const deletedIds = new Set(data.deletedTxIds || []);
+                const newTxs = [...(data.transactions || [])];
+                let changed = false;
+
+                (data.cards || []).forEach((card) => {
+                  if (card.id === 3 || card.name === "SWYPE" || getCardMethod(card) === "cib_swype") return;
+
+                  const pred = computeCardPaymentPrediction(data, card);
+                  if (!pred) return;
+
+                  const targetDate = pred.nextCycleDueDate || new Date();
+                  const monthKey = makeMonthKey(targetDate.getFullYear(), ALL_MONTHS[targetDate.getMonth()]);
+                  const forecastId = `auto-forecast-card-${card.id}-${monthKey}`;
+
+                  if (deletedIds.has(forecastId)) return;
+
+                  const existingIdx = newTxs.findIndex((t) => t.id === forecastId);
+                  const estAmount = roundMoney(pred.nextCycleEstimate || 0);
+
+                  if (existingIdx > -1) {
+                    const existing = newTxs[existingIdx];
+                    if (existing.status === "pending") {
+                      const diff = Math.abs(safeNumber(existing.amount) - estAmount);
+                      if (diff > 0.01) {
+                        if (estAmount <= 0.01) {
+                          newTxs.splice(existingIdx, 1);
+                        } else {
+                          newTxs[existingIdx] = {
+                            ...existing,
+                            amount: estAmount,
+                            date: getLocalISODate(targetDate),
+                          };
+                        }
+                        changed = true;
+                      }
+                    }
+                  } else if (estAmount > 0.01) {
+                    newTxs.push({
+                      id: forecastId,
+                      type: "expense",
+                      kind: KIND.FINANCIAL,
+                      category: "الالتزامات البنكية والتمويلية",
+                      amount: estAmount,
+                      description: `سداد متوقع - ${card.bank} ${card.name} (تلقائي)`,
+                      method: getCardMethod(card),
+                      date: getLocalISODate(targetDate),
+                      month: ALL_MONTHS[targetDate.getMonth()],
+                      year: targetDate.getFullYear(),
+                      monthIndex: targetDate.getMonth(),
+                      subType: "withdrawal",
+                      status: "pending",
+                      linkedCardId: card.id,
+                      source: "auto-card-forecast",
+                      createdAt: new Date().toISOString(),
+                    });
+                    changed = true;
+                  }
+                });
+
+                if (changed) {
+                  dispatch({ type: "UPDATE_TRANSACTIONS", payload: sortTransactions(newTxs) });
+                }
+                // eslint-disable-next-line react-hooks/exhaustive-deps
+              }, [
+                isAuthenticated,
+                cloudSyncStatus,
+                data?.cards?.length,
+                data?.transactions?.length,
+              ]);
               useEffect(() => {
                 if (!isAuthenticated || cloudSyncStatus !== "offline") return;
                 let cancelled = false;
