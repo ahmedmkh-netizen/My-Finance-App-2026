@@ -8364,7 +8364,8 @@
               }, [cardTx, card]);
 
               const dailyGroups = useMemo(() => groupTransactionsByDate(filteredTx), [filteredTx]);
-
+  const prediction = useMemo(() => computeCardPaymentPrediction(data, card), [data, card]);
+  if (!card) return null;
               if (!card) return null;
 
               const liveDebt = computeCardDebt(data, card);
@@ -8409,7 +8410,33 @@
                             style={{ width: `${Math.min(100, usagePct)}%` }}></div>
                         </div>
                       </div>
-
+                        {prediction && (
+                          <div className="p-3 rounded-xl mb-3 animate-fadeIn" style={{ background: "var(--accent-soft)", border: "1px solid var(--accent)" }}>
+                            <div className="flex justify-between items-center mb-2">
+                              <h4 className="text-xs font-black flex items-center gap-1 text-[color:var(--accent)]">
+                                🔮 التنبؤ بالدورة القادمة
+                              </h4>
+                              <span className="text-[10px] font-bold" style={{ color: "var(--accent)" }}>
+                                إصدار: {prediction.nextCycleDueDate ? getLocalISODate(prediction.nextCycleDueDate) : "—"}
+                              </span>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2 text-xs">
+                              <div className="p-2 rounded-lg bg-white/50 dark:bg-black/20">
+                                <span className="block text-[10px] font-bold" style={{ color: "var(--text-muted)" }}>المطلوب التقديري</span>
+                                <strong className="block text-sm money tabular text-[color:var(--accent)]">{fmt(prediction.nextCycleEstimate)} ج.م</strong>
+                              </div>
+                              <div className="p-2 rounded-lg bg-white/50 dark:bg-black/20">
+                                <span className="block text-[10px] font-bold" style={{ color: "var(--text-muted)" }}>أقساط الدورة</span>
+                                <strong className="block text-sm money tabular text-purple-600">{fmt(prediction.installmentsThisMonth)} ج.م</strong>
+                              </div>
+                            </div>
+                            {prediction.activeInstallments > 0 && (
+                              <p className="text-[10px] mt-2 font-bold text-amber-600 dark:text-amber-400">
+                                💡 يشمل {prediction.activeInstallments} خطة تقسيط نشطة.
+                              </p>
+                            )}
+                          </div>
+                        )}
                       <div className="grid grid-cols-4 gap-2 mb-3">
                         <div className="p-2.5 rounded-lg bg-red-50 dark:bg-red-950/30 text-center">
                           <p className="text-[10px] font-bold text-red-700 dark:text-red-400">مشتريات</p>
