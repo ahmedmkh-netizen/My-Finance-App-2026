@@ -7716,32 +7716,17 @@
 
               const isCredit = liveDebt < 0;
               const [bgImage, setBgImage] = useState(null);
-
               useEffect(() => {
                 if (!card) { setBgImage(null); return; }
-                let baseName = null;
-                if (card.bank === "CIB" && card.name === "Titanium") baseName = "CIBCARD";
-                else if (card.bank === "CIB" && card.name === "SWYPE") baseName = "CIBSW12";
-                else if (card.bank === "AAIB") baseName = "AAIBCard";
-                else if (card.bank === "ADIB Egypt") baseName = "ADIBSiqCard";
+                let imageUrl = null;
+                
+                // تحديد الامتداد الصحيح مباشرة لتجنب أخطاء 404
+                if (card.bank === "CIB" && card.name === "Titanium") imageUrl = `${LOGO_BASE_URL}CIBCARD.png?v=4`;
+                else if (card.bank === "CIB" && card.name === "SWYPE") imageUrl = `${LOGO_BASE_URL}CIBSW12.png?v=4`;
+                else if (card.bank === "AAIB") imageUrl = `${LOGO_BASE_URL}AAIBCard.jpg?v=4`;
+                else if (card.bank === "ADIB Egypt") imageUrl = `${LOGO_BASE_URL}ADIBSiqCard.jpeg?v=4`;
 
-                if (!baseName) { setBgImage(null); return; }
-
-                const extensions = [".jpg", ".jpeg", ".png", ".webp"];
-                let currentIdx = 0;
-                let cancelled = false;
-
-                const tryNext = () => {
-                  if (cancelled) return;
-                  if (currentIdx >= extensions.length) { setBgImage(null); return; }
-                  const url = `${LOGO_BASE_URL}${baseName}${extensions[currentIdx]}?v=3`;
-                  const img = new Image();
-                  img.onload = () => { if (!cancelled) setBgImage(url); };
-                  img.onerror = () => { currentIdx++; tryNext(); };
-                  img.src = url;
-                };
-                tryNext();
-                return () => { cancelled = true; };
+                setBgImage(imageUrl);
               }, [card]);
 
               const handleMove = (clientX, clientY) => {
