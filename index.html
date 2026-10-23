@@ -2066,19 +2066,38 @@
             };
 
 const isCardPaymentTx = (t, cardId) => {
+  if (!t || !cardId) return false;
+  if (isHanyPurchaseTx(t) || isHanySettleTx(t)) return false;
+  if (t.method === HANY_TAB_METHOD) return false;
+  if (t.source === "card-payment-plan") return t.linkedCardId === cardId;
+  if (t.source === "payment-console" && t.linkedCardId === cardId) return true;
+  if (
+    t.category === "الالتزامات البنكية والتمويلية" &&
+    t.type === "expense" &&
+    t.linkedCardId === cardId &&
+    !t.linkedLoanId &&
+    !t.sourceRecurringId
+  ) return true;
+  
+  if (t.type === "income" && t.linkedCardId === cardId && !String(t.description || "").includes("Cash Back")) {
+    return true;
+  }
+  
+  return false;
+};
 
-            let _appReady = false;
-            setTimeout(() => { _appReady = true; }, 150);
+let _appReady = false;
+setTimeout(() => { _appReady = true; }, 150);
 
-            /* 🟠 [أداء #2] كاش computeCardDebt */
-            const _cardDebtCache = new Map();
-            const _cardDebtKey = (data, card, asOf) => {
-              const txHash = (data?.transactions || [])
-                .map((t) => `${t.id}:${t.amount}:${t.type}:${t.status}:${t.linkedCardId || ""}:${t.method}:${t.installmentPlanId || ""}`)
-                .join("|");
-              const asOfTs = asOf ? new Date(asOf).getTime() : "now";
-              return `${card.id}_${card.openingDebt}_${card.openingDebtDate || ""}_${txHash}_${asOfTs}`;
-            };
+/* 🟠 [أداء #2] كاش computeCardDebt */
+const _cardDebtCache = new Map();
+const _cardDebtKey = (data, card, asOf) => {
+  const txHash = (data?.transactions || [])
+    .map((t) => `${t.id}:${t.amount}:${t.type}:${t.status}:${t.linkedCardId || ""}:${t.method}:${t.installmentPlanId || ""}`)
+    .join("|");
+  const asOfTs = asOf ? new Date(asOf).getTime() : "now";
+  return `${card.id}_${card.openingDebt}_${card.openingDebtDate || ""}_${txHash}_${asOfTs}`;
+};
 
             const computeCardDebt = (data, card, asOfDate = null) => {
               if (!card) return 0;
