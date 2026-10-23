@@ -2203,16 +2203,13 @@
               };
             };
 
-            const computeCardAvailable = (data, card, asOfDate = null) => {
-              if (!card) return 0;
-              const debt = computeCardDebt(data, card, asOfDate);
-              const limit = safeNumber(card.limit);
-              const instInfo = computeCardInstallmentsInfo(
-                data, card, asOfDate ? new Date(asOfDate) : new Date(),
-              );
-              // ✅ نخصم الأقساط المتبقية لأن البنك بيحجزها من الحد
-              return Math.max(0, limit - Math.max(0, debt) - instInfo.totalRemaining);
-            };
+const computeCardAvailable = (data, card, asOfDate = null) => {
+  if (!card) return 0;
+  const debt = computeCardDebt(data, card, asOfDate);
+  const limit = safeNumber(card.limit);
+  // ✅ التعديل: البنك بيحسب المتاح = الحد - المديونية (بدون خصم التقسيط مرتين، وبدون تجاهل الرصيد الدائن)
+  return Math.max(0, limit - debt);
+};
 
             const computeTotalCardDebtNet = (data, asOfDate = null) => {
               const sum = (data?.cards || []).reduce((s, c) => s + computeCardDebt(data, c, asOfDate), 0);
