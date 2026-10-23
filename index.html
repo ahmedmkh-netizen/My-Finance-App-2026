@@ -2077,8 +2077,9 @@
                 t.linkedCardId === cardId &&
                 !t.linkedLoanId &&
                 !t.sourceRecurringId
-              ) return true;
-              return false;
+  if (t.type === "income" && t.linkedCardId === cardId && !String(t.description || "").includes("Cash Back")) {
+    return true;
+  }              return false;
             };
 
             let _appReady = false;
@@ -2207,7 +2208,7 @@ const computeCardAvailable = (data, card, asOfDate = null) => {
   if (!card) return 0;
   const debt = computeCardDebt(data, card, asOfDate);
   const limit = safeNumber(card.limit);
-  // ✅ التعديل: البنك بيحسب المتاح = الحد - المديونية (بدون خصم التقسيط مرتين، وبدون تجاهل الرصيد الدائن)
+  // ✅ التعديل ليتطابق مع البنك: المتاح = الحد - المديونية (بدون خصم التقسيط مرتين)
   return Math.max(0, limit - debt);
 };
 
