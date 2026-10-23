@@ -8296,6 +8296,7 @@ const nextCycleEstimate = openCycle
             const CardStatementModal = memo(({ card, data, transactions, onClose, addNotification, dispatch }) => {
               const [filterType, setFilterType] = useState("all");
               const [searchTerm, setSearchTerm] = useState("");
+              const [expandedDays, setExpandedDays] = useState({});
 
               const cardMethod = getCardMethod(card);
               const subCards = Array.isArray(card.subCardLast4) ? card.subCardLast4 : [];
@@ -8464,38 +8465,68 @@ const nextCycleEstimate = openCycle
                           <p className="font-semibold text-xs" style={{ color: "var(--text-muted)" }}>لا توجد معاملات</p>
                         </div>
                       ) : (
-                        <div className="space-y-2 max-h-[45vh] overflow-y-auto scroll-hide">
-                          {dailyGroups.map((group) => (
-                            <div key={group.date}>
-                              <DayGroupHeader label={group.label} total={group.total} count={group.items.length} />
-                              <div className="space-y-1.5">
-                                {group.items.map((t) => (
-                                  <div key={t.id} className="flex justify-between items-center gap-2 p-2.5 rounded-lg"
-                                    style={{ background: "var(--bg-card)", border: "1px solid var(--border-subtle)" }}>
-                                    <div className="min-w-0 flex-1">
-                                      <p className="font-bold text-xs truncate flex items-center gap-1 flex-wrap">
-                                        {getTxDisplayText(t)} <TxTimeChip createdAt={t.createdAt} />
-                                        <CardPaymentBadge tx={t} /> <SmsBadge tx={t} /> <TeldaBadge tx={t} />
-                                        <RecurringBadge tx={t} /> <ReconciliationBadge tx={t} /> <InstallmentBadge tx={t} />
-                                      </p>
-                                      <p className="text-[10px] font-semibold mt-0.5" style={{ color: "var(--text-muted)" }}>
-                                        {t.category}{t.cardLast4 && <span className="font-mono"> • ••••{t.cardLast4}</span>}
-                                      </p>
-                                    </div>
-                                    <span className={`font-black text-xs flex-shrink-0 money tabular ${
-                                      t.type === "income" ? "text-emerald-600"
-                                        : isCardPaymentTx(t, card.id) ? "text-purple-600" : "text-red-600"
-                                    }`}>
-                                      {t.type === "income" ? "+" : "−"}{fmt(t.amount)}
-                                    </span>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
+                  <div className="space-y-2 max-h-[50vh] overflow-y-auto scroll-hide pb-2">
+  {dailyGroups.map((group, index) => {
+    const isExpanded = expandedDays[group.date] !== undefined 
+      ? expandedDays[group.date] 
+      : index === 0; // أول يوم بيفتح تلقائياً
+
+    return (
+      <div key={group.date} className="mb-2 rounded-xl overflow-hidden border shadow-sm" 
+           style={{ borderColor: 'var(--border-subtle)' }}>
+        {/* رأس اليوم (الزرار اللي بيفتح ويقفل) */}
+        <button
+          type="button"
+          onClick={() => setExpandedDays(prev => ({ ...prev, [group.date]: !isExpanded }))}
+          className="w-full flex justify-between items-center p-3 transition-colors hover:opacity-80"
+          style={{ background: 'var(--bg-muted)' }}
+        >
+          <div className="flex items-center gap-2">
+            <CalendarDays size={14} className="text-[color:var(--accent)]" />
+            <span className="font-bold text-xs">{group.label}</span>
+            <span className="text-[10px] px-2 py-0.5 rounded-full font-bold" 
+                  style={{ background: 'var(--bg-card)', color: 'var(--text-secondary)' }}>
+              {group.items.length} عمليات
+            </span>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="font-black text-xs money tabular text-red-600">
+              {fmt(group.total)} ج.م
+            </span>
+            <ChevronDown size={16} className={`transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`} />
+          </div>
+        </button>
+
+        {/* تفاصيل اليوم (بتظهر بس لو الزرار مفتوح) */}
+        {isExpanded && (
+          <div className="p-2 space-y-1.5 animate-fadeIn" style={{ background: 'var(--bg-card)' }}>
+            {group.items.map((t) => (
+              <div key={t.id} className="flex justify-between items-center gap-2 p-2.5 rounded-lg"
+                style={{ background: "var(--bg-muted)", border: "1px solid var(--border-subtle)" }}>
+                <div className="min-w-0 flex-1">
+                  <p className="font-bold text-xs truncate flex items-center gap-1 flex-wrap">
+                    {getTxDisplayText(t)} <TxTimeChip createdAt={t.createdAt} />
+                    <CardPaymentBadge tx={t} /> <SmsBadge tx={t} /> <TeldaBadge tx={t} />
+                    <RecurringBadge tx={t} /> <ReconciliationBadge tx={t} /> <InstallmentBadge tx={t} />
+                  </p>
+                  <p className="text-[10px] font-semibold mt-0.5" style={{ color: "var(--text-muted)" }}>
+                    {t.category}{t.cardLast4 && <span className="font-mono"> • ••••{t.cardLast4}</span>}
+                  </p>
+                </div>
+                <span className={`font-black text-xs flex-shrink-0 money tabular ${
+                  t.type === "income" ? "text-emerald-600"
+                    : isCardPaymentTx(t, card.id) ? "text-purple-600" : "text-red-600"
+                }`}>
+                  {t.type === "income" ? "+" : "−"}{fmt(t.amount)}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  })}
+</div>
                     <div className="generic-modal-footer">
                       <button onClick={() => dispatch({ type: "SET_CARD_PAYMENT_MODAL", payload: { cardId: card.id } })}
                         className="btn flex-1 text-sm"
