@@ -18198,6 +18198,7 @@ const deletePlan = (plan) => {
             );
 
             /* ═══════════════ CARD PAYMENT MODAL ═══════════════ */
+            /* ═══════════════ CARD PAYMENT MODAL ═══════════════ */
             const CardPaymentModal = memo(
               ({ cardId, data, dispatch, saveHistory, addNotification, onClose }) => {
                 const cards = data?.cards || [];
@@ -18213,17 +18214,20 @@ const deletePlan = (plan) => {
                 const [feeAmount, setFeeAmount] = useState("");
                 const [submitting, setSubmitting] = useState(false);
                 const [linkedPlanId, setLinkedPlanId] = useState("");
+
                 const selectedCard = cards.find((c) => c.id === selectedCardId);
                 const cardInfo = useMemo(
                   () =>
                     selectedCard ? computeCardPaymentInfo(data, selectedCard) : null,
                   [data, selectedCard],
                 );
-const activePlans = useMemo(() => {
-  if (!selectedCard) return [];
-  return computeCardInstallmentsInfo(data, selectedCard).plans
-    .filter((p) => !p.completed && p.status !== "cancelled");
-}, [data, selectedCard]);
+
+                const activePlans = useMemo(() => {
+                  if (!selectedCard) return [];
+                  return computeCardInstallmentsInfo(data, selectedCard).plans
+                    .filter((p) => !p.completed && p.status !== "cancelled");
+                }, [data, selectedCard]);
+
                 const liveBalances = useMemo(() => computeBalancesAsOf(data), [data]);
                 const sourceBalance = safeNumber(liveBalances[sourceMethod]);
 
@@ -18343,6 +18347,7 @@ const activePlans = useMemo(() => {
                     size="lg"
                   >
                     <div className="space-y-4">
+                      {/* 1. الكارت البنفسجي */}
                       <div className="card-payment-hero">
                         <p className="text-[11px] font-bold opacity-90 mb-1">
                           المديونية الحالية
@@ -18362,40 +18367,9 @@ const activePlans = useMemo(() => {
                         )}
                       </div>
 
+                      {/* 2. اختيار البطاقة */}
                       {!cardId && cards.length > 1 && (
-                    {activePlans.length > 0 && (
-  <div>
-    <label
-      className="text-[11px] font-black block mb-2"
-      style={{ color: "var(--accent)" }}
-    >
-      🔁 سداد قسط من خطة (اختياري)
-    </label>
-    <select
-      className="input-field text-sm py-2.5"
-      value={linkedPlanId}
-      onChange={(e) => {
-        const planId = e.target.value;
-        setLinkedPlanId(planId);
-        if (!planId) return;
-        const plan = activePlans.find((p) => p.id === planId);
-        if (plan) {
-          setAmount(String(plan.monthlyAmount));
-          setNote(`قسط خطة ${plan.note || plan.id.slice(0, 6)}`);
-        }
-      }}
-    >
-      <option value="">— سداد عادي (بدون ربط) —</option>
-      {activePlans.map((p) => (
-        <option key={p.id} value={p.id}>
-          {p.note || `خطة ${fmtShort(p.totalAmount)}`} — قسط {fmt(p.monthlyAmount)} ج.م
-          (متبقي {fmtShort(p.remainingAmount)})
-        </option>
-      ))}
-    </select>
-  </div>
-)}   
-                    <div>
+                        <div>
                           <label
                             className="text-[11px] font-black block mb-2"
                             style={{ color: "var(--text-muted)" }}
@@ -18413,6 +18387,7 @@ const activePlans = useMemo(() => {
                                   onClick={() => {
                                     setSelectedCardId(c.id);
                                     setAmount("");
+                                    setLinkedPlanId("");
                                   }}
                                   className={`payment-card-option ${isSel ? "selected" : ""}`}
                                 >
@@ -18460,6 +18435,44 @@ const activePlans = useMemo(() => {
                         </div>
                       )}
 
+                      {/* 3. اختيار الخطة — بلوك منفصل */}
+                      {activePlans.length > 0 && (
+                        <div>
+                          <label
+                            className="text-[11px] font-black block mb-2"
+                            style={{ color: "var(--accent)" }}
+                          >
+                            🔁 سداد قسط من خطة (اختياري)
+                          </label>
+                          <select
+                            className="input-field text-sm py-2.5"
+                            value={linkedPlanId}
+                            onChange={(e) => {
+                              const planId = e.target.value;
+                              setLinkedPlanId(planId);
+                              if (!planId) return;
+                              const plan = activePlans.find((p) => p.id === planId);
+                              if (plan) {
+                                setAmount(String(plan.monthlyAmount));
+                                setNote(
+                                  `قسط خطة ${plan.note || plan.id.slice(0, 6)}`,
+                                );
+                              }
+                            }}
+                          >
+                            <option value="">— سداد عادي (بدون ربط) —</option>
+                            {activePlans.map((p) => (
+                              <option key={p.id} value={p.id}>
+                                {p.note || `خطة ${fmtShort(p.totalAmount)}`} — قسط{" "}
+                                {fmt(p.monthlyAmount)} ج.م (متبقي{" "}
+                                {fmtShort(p.remainingAmount)})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+
+                      {/* 4. المبلغ */}
                       <div>
                         <label
                           className="text-[11px] font-black block mb-2"
@@ -18533,6 +18546,7 @@ const activePlans = useMemo(() => {
                         )}
                       </div>
 
+                      {/* 5. الحساب المصدر */}
                       <div>
                         <label
                           className="text-[11px] font-black block mb-2"
@@ -18583,6 +18597,7 @@ const activePlans = useMemo(() => {
                         </div>
                       </div>
 
+                      {/* 6. التاريخ والملاحظة */}
                       <div className="grid grid-cols-2 gap-2">
                         <div>
                           <label
@@ -18614,6 +18629,7 @@ const activePlans = useMemo(() => {
                         </div>
                       </div>
 
+                      {/* 7. حالة السداد */}
                       <div
                         className="p-3 rounded-xl"
                         style={{ background: "var(--bg-muted)" }}
@@ -18657,6 +18673,7 @@ const activePlans = useMemo(() => {
                         )}
                       </div>
 
+                      {/* 8. الرسوم */}
                       <div>
                         <div
                           className={`fee-toggle-row ${withFee ? "active" : ""}`}
@@ -18704,6 +18721,7 @@ const activePlans = useMemo(() => {
                         )}
                       </div>
 
+                      {/* 9. الملخص */}
                       {parsedAmount > 0 && (
                         <div
                           className="p-3 rounded-xl"
@@ -18750,6 +18768,7 @@ const activePlans = useMemo(() => {
                         </div>
                       )}
 
+                      {/* 10. الأزرار */}
                       <div className="flex gap-2 pt-1">
                         <button
                           type="button"
@@ -18796,7 +18815,6 @@ const activePlans = useMemo(() => {
                 );
               },
             );
-
             /* ═══════════════ RECONCILIATION MODAL ═══════════════ */
             const ReconciliationModal = memo(
               ({
