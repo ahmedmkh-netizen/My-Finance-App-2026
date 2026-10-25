@@ -29095,20 +29095,55 @@ const handleSaveTransaction = useCallback(
                                     >
                                       الفئة *
                                     </label>
-                                    <select
-                                      className={`input-field font-bold text-sm py-2.5 ${formErrors.category ? "error" : ""}`}
-                                      value={formData.category}
-                                      onChange={(e) =>
-                                        dispatch({
-                                          type: "SET_FORM_DATA",
-                                          payload: {
-                                            ...formData,
-                                            category: e.target.value,
-                                          },
-                                        })
-                                      }
-                                      required
-                                    >
+<select
+  className={`input-field font-bold text-sm py-2.5 ${formErrors.category ? "error" : ""}`}
+  value={formData.category}
+  onChange={(e) => {
+    const newCategory = e.target.value;
+    
+    // 🎯 التصحيح التلقائي الفوري
+    let autoPatch = { category: newCategory };
+    
+    if (isHanyShopCategory(newCategory)) {
+      autoPatch.method = HANY_TAB_METHOD;
+      autoPatch.affectsCash = false;
+      autoPatch.hanyEffect = "purchase";
+      autoPatch.kind = KIND.OPERATIONAL;
+      
+      // تنبيه المستخدم
+      if (formData.method !== HANY_TAB_METHOD) {
+        addNotification({
+          type: "info",
+          title: "🛒 تصحيح تلقائي",
+          message: "تم تحويل طريقة الدفع لدفتر هاني",
+          duration: 3000,
+        });
+      }
+    } else if (isHanySettleCategory(newCategory)) {
+      autoPatch.hanyEffect = "settle";
+      autoPatch.affectsCash = true;
+      autoPatch.kind = KIND.FINANCIAL;
+      // ملاحظة: method بتاعت السداد تفضل زي ما المستخدم اختار
+      // (cash / cib / aaib / fawry / etisalat)
+      if (!HANY_SETTLE_ALLOWED_METHODS.includes(formData.method)) {
+        autoPatch.method = "cash";  // ← افتراضي معقول
+      }
+    } else {
+      // لو المستخدم غيّر من هاني لفئة عادية، نظّف الحقول
+      if (isHanyShopCategory(formData.category) || isHanySettleCategory(formData.category)) {
+        autoPatch.hanyEffect = undefined;
+        autoPatch.affectsCash = true;
+        autoPatch.kind = undefined;
+      }
+    }
+    
+    dispatch({
+      type: "SET_FORM_DATA",
+      payload: { ...formData, ...autoPatch },
+    });
+  }}
+  required
+>
                                       <option value="">اختر...</option>
                                       {Object.entries(
                                         CATEGORY_GROUPS[formData.type],
@@ -29294,25 +29329,31 @@ const handleSaveTransaction = useCallback(
                                     >
                                       الدفع
                                     </label>
-                                    <select
-                                      className="input-field text-[11px] font-bold py-2.5"
-                                      value={formData.method}
-                                      onChange={(e) =>
-                                        dispatch({
-                                          type: "SET_FORM_DATA",
-                                          payload: {
-                                            ...formData,
-                                            method: e.target.value,
-                                          },
-                                        })
-                                      }
-                                    >
-                                      {PAYMENT_METHODS.map((m) => (
-                                        <option key={m.id} value={m.id}>
-                                          {m.label}
-                                        </option>
-                                      ))}
-                                    </select>
+<select
+  className="input-field text-[11px] font-bold py-2.5"
+  value={formData.method}
+  disabled={isHanyShopCat}   // ← يقفل الحقل في حالة مشتريات هاني
+  onChange={(e) =>
+    dispatch({
+      type: "SET_FORM_DATA",
+      payload: {
+        ...formData,
+        method: e.target.value,
+      },
+    })
+  }
+  style={isHanyShopCat ? { opacity: 0.7, cursor: "not-allowed" } : {}}
+>
+  {isHanyShopCat ? (
+    <option value={HANY_TAB_METHOD}>🛒 دفتر محل هاني (تلقائي)</option>
+  ) : (
+    PAYMENT_METHODS.map((m) => (
+      <option key={m.id} value={m.id}>
+        {m.label}
+      </option>
+    ))
+  )}
+</select>
                                   </div>
                                 </div>
                               </div>
