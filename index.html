@@ -11294,6 +11294,30 @@ const DayGroupHeader = memo(({ label, total, count }) => (
                     });
                     return;
                   }
+                  // ═══════════════ HANY AUTO-METHOD GUARD ═══════════════
+let finalMethod = formData.method;
+let finalAffectsCash = formData.affectsCash !== false;
+let finalHanyEffect = formData.hanyEffect;
+let finalKind = formData.kind;
+
+if (isHanyShopCategory(formData.category)) {
+  if (formData.method !== HANY_TAB_METHOD && formMode === "add") {
+    addNotification({
+      type: "info",
+      title: "🛒 تصحيح تلقائي",
+      message: "مشتريات محل هاني تُسجّل تلقائياً على دفتر هاني",
+      duration: 4000,
+    });
+  }
+  finalMethod = HANY_TAB_METHOD;
+  finalAffectsCash = false;
+  finalHanyEffect = "purchase";
+  finalKind = KIND.OPERATIONAL;
+} else if (isHanySettleCategory(formData.category)) {
+  finalHanyEffect = "settle";
+  finalAffectsCash = true;
+  finalKind = KIND.FINANCIAL;
+}
                   const liveBalances = computeBalancesAsOf(data);
                   if (safeNumber(liveBalances[settleMethod]) < amount - 0.005) {
                     addNotification({
@@ -27190,40 +27214,26 @@ const getAgendaItems = useCallback(
                       const isHany = isHanyShopCategory(formData.category);
                       const isHanySettle = isHanySettleCategory(formData.category);
                       const { __skipDupCheck, ...cleanFormData } = formData;
-                      const newTx = {
-                        ...cleanFormData,
-                        id: formMode === "edit" ? formData.id : getSafeId(),
-                        amount,
-                        month: txMonth,
-                        year: txYear,
-                        monthIndex: d.getMonth(),
-                        date: formData.date,
-                        subType: finalSubType,
-                        status,
-                        linkedCardId: syncLinkedCardId,
-                        cardLast4: syncCardLast4,
-                        quantity: formData.quantity
-                          ? Number(formData.quantity)
-                          : undefined,
-                        unitPrice: formData.unitPrice
-                          ? Number(formData.unitPrice)
-                          : undefined,
-                        createdAt: formData.createdAt || new Date().toISOString(),
-                        ...(isHany
-                          ? {
-                              method: HANY_TAB_METHOD,
-                              affectsCash: false,
-                              hanyEffect: "purchase",
-                            }
-                          : {}),
-                        ...(isHanySettle
-                          ? {
-                              hanyEffect: "settle",
-                              affectsCash: true,
-                              kind: KIND.FINANCIAL,
-                            }
-                          : {}),
-                      };
+const newTx = {
+  ...cleanFormData,
+  id: formMode === "edit" ? formData.id : getSafeId(),
+  amount,
+  month: txMonth,
+  year: txYear,
+  monthIndex: d.getMonth(),
+  date: formData.date,
+  subType: finalSubType,
+  status,
+  method: finalMethod,
+  affectsCash: finalAffectsCash,
+  hanyEffect: finalHanyEffect,
+  kind: finalKind || cleanFormData.kind,
+  linkedCardId: syncLinkedCardId,
+  cardLast4: syncCardLast4,
+  quantity: formData.quantity ? Number(formData.quantity) : undefined,
+  unitPrice: formData.unitPrice ? Number(formData.unitPrice) : undefined,
+  createdAt: formData.createdAt || new Date().toISOString(),
+};
 
                       const next =
                         formMode === "add"
