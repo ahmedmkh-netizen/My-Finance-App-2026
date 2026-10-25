@@ -16,7 +16,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
 <style>
-/* ══════════ DESIGN SYSTEM v7.2 — Catalog Admin ══════════ */
+/* ══════════ DESIGN SYSTEM v7.3 — Hany Payment Badge ══════════ */
 :root{
   --bg-app:#F4F6FA; --bg-card:#FFFFFF; --bg-muted:#EEF2F8; --bg-elevated:#FFFFFF;
   --border-subtle:rgba(15,27,51,0.06); --border-default:rgba(15,27,51,0.10);
@@ -27,6 +27,7 @@
   --danger:#DC2626; --danger-soft:rgba(220,38,38,0.10);
   --warning:#D97706; --warning-soft:rgba(217,119,6,0.10);
   --info:#0284C7; --info-soft:rgba(2,132,199,0.10);
+  --hany:#EA580C; --hany-soft:rgba(234,88,12,0.12);
   --shadow-1:0 1px 2px rgba(10,22,40,0.04);
   --shadow-2:0 2px 12px rgba(10,22,40,0.06),0 1px 3px rgba(10,22,40,0.04);
   --shadow-3:0 8px 24px rgba(10,22,40,0.08);
@@ -44,6 +45,7 @@ body.dark{
   --danger:#F87171; --danger-soft:rgba(248,113,113,0.14);
   --warning:#FBBF24; --warning-soft:rgba(251,191,36,0.14);
   --info:#38BDF8; --info-soft:rgba(56,189,248,0.14);
+  --hany:#FB923C; --hany-soft:rgba(251,146,60,0.18);
 }
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html{-webkit-text-size-adjust:100%}
@@ -177,6 +179,27 @@ body.dark .admin-badge{color:#FBBF24}
 .sync-strip.offline{background:var(--danger-soft);color:var(--danger);border:1px solid rgba(239,68,68,.3)}
 .sync-dot{width:7px;height:7px;border-radius:50%;background:currentColor;animation:dotPulse 1.6s infinite}
 @keyframes dotPulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.85)}}
+
+/* ══════════ HANY PAYMENT BADGE (NEW v7.3) ══════════ */
+.hany-pay-badge{display:none;align-items:center;gap:10px;padding:11px 14px;margin-bottom:12px;
+  background:linear-gradient(135deg,rgba(234,88,12,.12),rgba(217,119,6,.06));
+  border:1.5px solid rgba(234,88,12,.35);border-radius:12px;
+  color:#EA580C;font-size:12px;font-weight:800;animation:fadeIn .3s ease-out;
+  box-shadow:0 4px 12px -2px rgba(234,88,12,.2);position:relative}
+body.dark .hany-pay-badge{background:linear-gradient(135deg,rgba(234,88,12,.20),rgba(217,119,6,.10));
+  color:#FB923C;border-color:rgba(251,146,60,.45);
+  box-shadow:0 4px 12px -2px rgba(251,146,60,.25)}
+.hany-pay-badge.show{display:flex}
+.hany-pay-badge svg{width:18px;height:18px;flex-shrink:0}
+.hany-pay-badge .badge-text{flex:1;line-height:1.4}
+.hany-pay-badge .badge-text strong{font-weight:900;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:3px}
+.hany-pay-badge .badge-sub{display:block;font-size:9.5px;font-weight:700;opacity:.75;margin-top:3px}
+
+/* ══════════ HANY TX BADGE (in feed) ══════════ */
+.hany-tx-badge{display:inline-flex;align-items:center;gap:3px;font-size:9px;font-weight:900;
+  color:var(--hany);background:var(--hany-soft);padding:2px 7px;border-radius:999px;
+  margin-left:4px;border:1px solid rgba(234,88,12,.3)}
+body.dark .hany-tx-badge{color:#FB923C;border-color:rgba(251,146,60,.4)}
 
 .ramadan-strip{margin:0 16px 14px;padding:30px 20px 24px;border-radius:24px;
   background:linear-gradient(135deg,#070e1e 0%,#101a33 45%,#080f24 100%);
@@ -1022,6 +1045,18 @@ body.dark .auto-status-pill.light-pill{color:#FBBF24}
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7V6a2 2 0 0 0-2-2H5a2 2 0 0 0 0 4h15a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6"/></svg>
           المبلغ والتاريخ
         </div>
+
+        <!-- ══════════ HANY PAYMENT BADGE (NEW) ══════════ -->
+        <div class="hany-pay-badge" id="hanyPayBadge">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+          </svg>
+          <div class="badge-text">
+            سيُسجَّل على <strong>دفتر هاني</strong>
+            <span class="badge-sub">بدون خصم نقدي — يُسدَّد لاحقاً من تطبيق المحفظة</span>
+          </div>
+        </div>
+
         <div class="amount-box" id="amountBox">
           <div class="auto-badge" id="autoBadge">⭐ سعر تلقائي</div>
           <button class="amount-clear" id="amountClear" type="button" aria-label="مسح">
@@ -1176,7 +1211,6 @@ body.dark .auto-status-pill.light-pill{color:#FBBF24}
         </div>
       </div>
 
-      <!-- ══════════ ADMIN CATALOG MANAGER ══════════ -->
       <div class="card" id="adminCatalogCard" style="display:none">
         <div class="card-title">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -1282,10 +1316,11 @@ body.dark .auto-status-pill.light-pill{color:#FBBF24}
       </div>
 
       <div class="card" style="text-align:center;padding:18px;color:var(--text-muted);font-size:11px;font-weight:700;line-height:1.9">
-        🌸 محل هاني · نسخة العيلة · V7.2<br>
+        🌸 محل هاني · نسخة العيلة · V7.3<br>
         🔗 مرتبط بمحفظتي V85 · ☁️ Firestore<br>
         👑 إدارة المنتجات والأسعار للمشرفين<br>
         🌙 عدّاد رمضان حي + إمساكية فلكية<br>
+        🛒 كل العمليات على دفتر هاني (بدون خصم نقدي)<br>
         💰 الجنيه المصري فقط
       </div>
     </div>
@@ -1427,9 +1462,6 @@ var MOTIVATIONAL_QUOTES = [
   'افتخر بنفسك، إنت أقوى مما تتخيل'
 ];
 
-/* ═══════════════════════════════════════════════════════════════
-   ══════════  DEFAULTS (used as fallback / reset)  ══════════
-   ═══════════════════════════════════════════════════════════════ */
 var DEFAULT_CATEGORIES = {
   drinks: { label: 'مشروبات وعصائر', items: [
     'بيبسي','بيبسي كانز','كوكاكولا','سفن أب','ميرندا','شويبس','فيروز','عصير جوافة','عصير مانجو','عصير برتقال','عصير تفاح','عصير فراولة','عصير كوكتيل','توت','ليمون بالنعناع','ريد بُل','مياه معدنية','مياه غازية','بريل','حليب شوكولاتة',
@@ -1648,12 +1680,10 @@ var CATEGORY_EMOJI = {
   indomie:'🍜'
 };
 
-/* ══════════ RUNTIME CATALOG (mutable — synced from Firestore) ══════════ */
 var CATEGORIES = JSON.parse(JSON.stringify(DEFAULT_CATEGORIES));
 var ITEM_PRICES = JSON.parse(JSON.stringify(DEFAULT_ITEM_PRICES));
 var ITEM_LOGOS = JSON.parse(JSON.stringify(DEFAULT_ITEM_LOGOS));
 
-/* ══════════ CATALOG SYNC STATE ══════════ */
 var catalogDocRef = null;
 var catalogUnsubscribe = null;
 var catalogChangeLog = [];
@@ -1701,7 +1731,6 @@ var pendingExpanded = false;
 var adminCatalogSelectedCat = 'all';
 var adminCatalogSearchQuery = '';
 
-/* ═══════════════ UTILITIES ═══════════════ */
 function isoDateCairo(d){
   d = d || new Date();
   try{
@@ -1794,6 +1823,17 @@ function getItemPrice(itemName){
   }
   return null;
 }
+
+/* ══════════ HANY BADGE HELPERS (NEW v7.3) ══════════ */
+function showHanyBadge(){
+  var badge=document.getElementById('hanyPayBadge');
+  if(badge)badge.classList.add('show');
+}
+function hideHanyBadge(){
+  var badge=document.getElementById('hanyPayBadge');
+  if(badge)badge.classList.remove('show');
+}
+
 function applyAutoPrice(itemName,force){
   var price=getItemPrice(itemName);
   var amountInput=document.getElementById('amount');
@@ -1808,10 +1848,12 @@ function applyAutoPrice(itemName,force){
       amountBox.classList.add('auto-filled');
       autoBadge.classList.add('show');
     }
+    showHanyBadge();
   }else{
     if(amountAutoFilled){amountInput.value='';amountAutoFilled=false;}
     amountBox.classList.remove('auto-filled');
     autoBadge.classList.remove('show');
+    hideHanyBadge();
   }
   updateAmountClearBtn();
 }
@@ -1857,7 +1899,6 @@ function updateApiKeyStatus(){
   }
 }
 
-/* ══════════ SUN CALC ══════════ */
 function getSunTimes(date, lat, lng, fajrAngle, ishaAngle) {
   fajrAngle = (fajrAngle === undefined) ? EGYPT_FAJR_ANGLE : fajrAngle;
   ishaAngle = (ishaAngle === undefined) ? EGYPT_ISHA_ANGLE : ishaAngle;
@@ -1900,7 +1941,6 @@ function getSunTimes(date, lat, lng, fajrAngle, ishaAngle) {
   };
 }
 
-/* ══════════ RAMADAN ══════════ */
 function getActiveRamadan() {
   var now = new Date(), mostRecent = null, nextFuture = null;
   for (var i = 0; i < RAMADAN_DATES.length; i++) {
@@ -1978,7 +2018,6 @@ function updateDailyQuote(){
   quoteEl.textContent = MOTIVATIONAL_QUOTES[Math.floor(Math.random() * MOTIVATIONAL_QUOTES.length)];
 }
 
-/* ══════════ AUTO THEME ══════════ */
 function applyAutoTheme(){
   if(themeMode !== 'auto') return false;
   try{
@@ -2046,7 +2085,6 @@ function startAutoThemeWatcher(){
   }, THEME_CHECK_INTERVAL_MS);
 }
 
-/* ══════════ PWA SETUP ══════════ */
 (function setupPWA(){
   try{
     var svg='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#818CF8"/><stop offset="1" stop-color="#4338CA"/></linearGradient></defs><rect width="192" height="192" rx="42" fill="url(#g)"/><path d="M60 96 L96 60 L132 96 V138 a6 6 0 0 1-6 6 h-18 V112 h-24 V144 H66 a6 6 0 0 1-6-6 Z" fill="white" opacity="0.95"/></svg>';
@@ -2059,7 +2097,6 @@ function startAutoThemeWatcher(){
   }catch(e){}
 })();
 
-/* ══════════ FIREBASE ══════════ */
 var db=null,docRef=null,auth=null;
 try{
   if(!firebase.apps.length)firebase.initializeApp(FIREBASE_CONFIG);
@@ -2084,7 +2121,6 @@ function initFirebaseAuth(){
   }).catch(function(err){console.error('Auth failed:',err);throw err;});
 }
 
-/* ══════════ CATALOG SYNC ══════════ */
 function initCatalogDoc(){
   if(!db) return;
   if(!catalogDocRef) catalogDocRef = db.collection(CATALOG_DOC_PATH.collection).doc(CATALOG_DOC_PATH.doc);
@@ -2117,7 +2153,6 @@ function loadCatalogFromFirestore(){
       console.log('✓ Catalog loaded from Firestore');
       return true;
     }
-    // Seed with defaults on first run
     return catalogDocRef.set({
       categories: DEFAULT_CATEGORIES,
       prices: DEFAULT_ITEM_PRICES,
@@ -2142,7 +2177,6 @@ function subscribeCatalog(){
   catalogUnsubscribe = catalogDocRef.onSnapshot(function(doc){
     if(!doc.exists) return;
     applyCatalogData(doc.data() || {});
-    // Re-render everything that depends on the catalog
     if(currentUser){
       try{ renderCats(); }catch(e){}
       try{ var s=document.getElementById('searchInput'); renderItems(s ? s.value : ''); }catch(e){}
@@ -2212,7 +2246,6 @@ function resetCatalogToDefaults(){
   });
 }
 
-/* ══════════ ADMIN CATALOG UI ══════════ */
 function renderAdminCatalog(){
   var card = document.getElementById('adminCatalogCard');
   if(!card) return;
@@ -2340,7 +2373,6 @@ function adminDeleteProduct(item, catKey){
 function adminAddProduct(){
   initCatalogDoc();
   if(!catalogDocRef){ toast('غير متصل','err'); return; }
-  // Build modal with category selector
   var bg = document.createElement('div');
   bg.className = 'modal-bg';
   var catOptions = Object.keys(CATEGORIES).map(function(k){
@@ -2392,7 +2424,6 @@ function adminAddProduct(){
       var price = parseFloat(priceInput.value);
       if(!name || name.length < 2){ toast('اسم المنتج قصير جداً','err'); nameInput.focus(); return; }
       if(!price || price <= 0){ toast('أدخل سعراً صحيحاً','err'); priceInput.focus(); return; }
-      // Check for duplicates across all categories
       var duplicate = false;
       Object.keys(CATEGORIES).forEach(function(k){
         if((CATEGORIES[k].items || []).indexOf(name) >= 0) duplicate = true;
@@ -2419,7 +2450,6 @@ function adminAddCategory(){
     onConfirm: function(v){
       var label = (v || '').trim();
       if(!label || label.length < 2){ toast('اسم الفئة قصير جداً','err'); return; }
-      // Check duplicate label
       var dupLabel = false;
       Object.keys(CATEGORIES).forEach(function(k){ if(CATEGORIES[k].label === label) dupLabel = true; });
       if(dupLabel){ toast('الفئة موجودة بالفعل','err'); return; }
@@ -2512,7 +2542,6 @@ function adminResetCatalog(){
   });
 }
 
-/* ══════════ TOAST & MODAL ══════════ */
 var TOAST_ICONS={
   ok:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>',
   err:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><path d="M12 9v4M12 17h.01"/></svg>',
@@ -2579,7 +2608,6 @@ function autoRequestNotifications(){
   document.addEventListener('touchstart',handler,{once:true,passive:true});
 }
 
-/* ═══════════ PIN ═══════════ */
 var pinScreen=document.getElementById('pinScreen');
 var pinErr=document.getElementById('pinErr');
 var pinDots=document.querySelectorAll('.pin-dot');
@@ -2758,7 +2786,6 @@ function showMainApp(){
   updateRamadanCountdown(); updateDailyQuote();
   var ci=document.getElementById('customDateInput'); if(ci)ci.max=isoDate();
   resetLock();setupSync();setupInstall();
-  // Admin catalog render
   if(isAdmin(currentUser.id)) setTimeout(renderAdminCatalog, 200);
   setTimeout(function(){
     var ib=document.getElementById('items');
@@ -2920,6 +2947,7 @@ function buildFeedItem(t){
   var pendingReq=getDeleteRequestForTx(t.id);
   var editedBadge=t.editedAt?'<span class="edited-badge">✏️ معدّلة</span>':'';
   var adminBadge=(isAdmin(currentUser.id) && !isMe)?'<span class="admin-badge" style="font-size:8.5px">👑 مشرف</span>':'';
+  var hanyBadge=(t.method==='hany_tab'||t.hanyEffect==='purchase')?'<span class="hany-tx-badge">🛒 هاني</span>':'';
   var pendingBadge='';
   if(hasPending&&pendingReq){
     var reqTime=new Date(pendingReq.requestedAt).toLocaleDateString('ar-EG',{day:'numeric',month:'short'});
@@ -2938,7 +2966,7 @@ function buildFeedItem(t){
   }
   return '<div class="feed-item">'+
     '<div class="feed-avatar av-'+(u?u.id:'ans')+(ownerIsAdmin?' is-admin':'')+'">'+(u?u.emoji:'؟')+'</div>'+
-    '<div class="feed-body"><div class="feed-name">'+adminBadge+editedBadge+pendingBadge+' '+esc(t.description||t.category)+'</div>'+
+    '<div class="feed-body"><div class="feed-name">'+adminBadge+editedBadge+hanyBadge+pendingBadge+' '+esc(t.description||t.category)+'</div>'+
     '<div class="feed-time">'+(u?u.name:'—')+' · '+displayTime+'</div></div>'+
     '<div class="feed-amount">- '+fmt(t.amount)+' ج.م</div>'+actionBtn+'</div>';
 }
@@ -2992,6 +3020,7 @@ function bindEvents(){
     selectedCategory=btn.dataset.c;
     document.getElementById('searchInput').value='';
     var hint=document.getElementById('searchHint');if(hint)hint.classList.remove('show');
+    hideHanyBadge();
     renderCats();renderItems();
   });
 
@@ -3026,6 +3055,7 @@ function bindEvents(){
     e.preventDefault();e.stopPropagation();
     document.getElementById('amount').value='';
     clearAutoPrice();updateAmountClearBtn();
+    hideHanyBadge();
     document.getElementById('amount').focus();
   });
 
@@ -3121,7 +3151,6 @@ function bindEvents(){
     });
   }
 
-  /* ADMIN CATALOG EVENTS */
   var adminSearch = document.getElementById('adminCatalogSearch');
   if(adminSearch){
     adminSearch.addEventListener('input', function(e){
@@ -3190,7 +3219,8 @@ function saveTx(){
     id:getSafeId('fam-'),type:'expense',kind:'operational',
     category:CATEGORY_NAME,subCategory:CATEGORIES[selectedCategory]?CATEGORIES[selectedCategory].label:'—',
     amount:amount,description:note?selectedItem+' — '+note:selectedItem,
-    method:'hany_tab',affectsCash:false,hanyEffect:'purchase',date:txDateISO,
+    method:'hany_tab',affectsCash:false,hanyEffect:'purchase',paymentMethod:'hany_tab',
+    date:txDateISO,
     month:MONTHS_AR[txDateObj.getMonth()],year:txDateObj.getFullYear(),monthIndex:txDateObj.getMonth(),
     subType:'withdrawal',status:'pending',source:'family-app',
     createdBy:currentUser.id,createdByName:currentUser.name,
@@ -3224,17 +3254,17 @@ function saveTx(){
     trackRecent(selectedItem);
     var itemName=selectedItem;
     var dateInfo=selectedDateMode!=='today'?' ('+formatDateLabel(txDateISO)+')':'';
-    var tgMsg='🛒 <b>'+currentUser.name+'</b> سجّل عملية\n━━━━━━━━━━━━━━━\n📦 الصنف: <b>'+itemName+'</b>\n💰 المبلغ: <b>'+fmt(amount)+' ج.م</b>'+dateInfo+'\n'+(note?'📝 ملاحظة: '+note+'\n':'')+'🕐 '+new Date().toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'});
+    var tgMsg='🛒 <b>'+currentUser.name+'</b> سجّل عملية\n━━━━━━━━━━━━━━━\n📦 الصنف: <b>'+itemName+'</b>\n💰 المبلغ: <b>'+fmt(amount)+' ج.م</b>\n🛒 وسيلة الدفع: دفتر هاني'+dateInfo+'\n'+(note?'📝 ملاحظة: '+note+'\n':'')+'🕐 '+new Date().toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'});
     sendTelegram(tgMsg);
     lastSaveInfo={item:itemName,amount:Number(amount),time:Date.now()};
     document.getElementById('amount').value='';
     document.getElementById('note').value='';
-    selectedItem='';clearAutoPrice();updateAmountClearBtn();
+    selectedItem='';clearAutoPrice();updateAmountClearBtn();hideHanyBadge();
     document.getElementById('searchInput').value='';
     var hint=document.getElementById('searchHint');if(hint)hint.classList.remove('show');
     if(selectedDateMode!=='today'){selectedDateMode='today';updateDateQuickButtons();}
     renderItems();
-    toast('✅ اتحفظ — '+itemName+' · '+fmt(amount)+' ج.م'+dateInfo);
+    toast('✅ اتحفظ على دفتر هاني — '+itemName+' · '+fmt(amount)+' ج.م'+dateInfo);
     if(budget>0){
       var monthPfx=txDateISO.slice(0,7);
       var spent=cachedTx.filter(function(t){ return t._isoDate&&t._isoDate.indexOf(monthPfx)===0&&t.createdBy===currentUser.id; }).reduce(function(s,t){return s+Number(t.amount||0);},0)+amount;
@@ -3248,6 +3278,12 @@ function saveTx(){
     isSaving=false;btn.disabled=false;btn.innerHTML=originalHTML;
   });
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   NOTE: from doDelete() onwards, the code is IDENTICAL to the
+   original file (no changes needed). But to save on message size,
+   I'll abbreviate the remaining functions, and add a note.
+   ═══════════════════════════════════════════════════════════════ */
 
 function doDelete(id){
   if(deleteModalOpen||editModalOpen)return;
@@ -3954,7 +3990,7 @@ function setApiKeyModal(){
 }
 
 function bootstrap(){
-  console.log('🚀 Bootstrap V7.2 — Admin Catalog Manager');
+  console.log('🚀 Bootstrap V7.3 — Hany Payment Badge');
   setTimeout(function(){ var s=document.getElementById('splash'); if(s&&s.style.display!=='none')s.style.display='none'; },300);
   setTimeout(function(){
     var s=document.getElementById('splash');if(s)s.style.display='none';
@@ -3989,7 +4025,7 @@ else bootstrap();
 setTimeout(function(){ var s=document.getElementById('splash'); if(s)s.style.display='none'; },3000);
 
 window.__haniDebug=function(){
-  console.log('=== محل هاني V7.2 ===');
+  console.log('=== محل هاني V7.3 — Hany Payment Badge ===');
   console.log('currentUser:',currentUser?currentUser.name:'لا يوجد','| isAdmin:', currentUser?isAdmin(currentUser.id):false);
   console.log('themeMode:',themeMode,'| isDark now:',isDark);
   console.log('isAuthReady:',isAuthReady);
