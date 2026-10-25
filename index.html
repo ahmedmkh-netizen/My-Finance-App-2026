@@ -5602,7 +5602,14 @@ const safeClone = (obj) => {
               if (_appReady && typeof computeCardInstallmentsInfo === "function") {
                 try {
                   const instInfo = computeCardInstallmentsInfo(data, card, upper);
-                  debt += instInfo.totalDueSoFar;
+                  instInfo.plans.forEach((plan) => {
+                    if (plan.status === "cancelled") return;
+                    if (plan.linkedTxIds && plan.linkedTxIds.length > 0) return;
+                    const dueNow = safeNumber(plan.dueAmount);
+                    const paidNow = safeNumber(plan.paidAmount);
+                    const net = Math.max(0, dueNow - paidNow);
+                    debt += net;
+                  });
                 } catch (e) {
                   console.warn("instInfo failed:", e);
                 }
@@ -6310,50 +6317,53 @@ const safeClone = (obj) => {
             };
 
             /* ═══════════════ CARD INSTALLMENTS ENGINE ═══════════════ */
-            const computeInstallmentProgress = (plan, asOfDate = new Date()) => {
-              if (!plan || !plan.months || plan.months <= 0) {
-                return {
-                  monthsElapsed: 0,
-                  dueAmount: 0,
-                  remainingAmount: 0,
-                  remainingMonths: 0,
-                  completed: false,
-                  monthlyAmount: 0,
-                  progressPct: 0,
-                };
-              }
-              const startMonthIdx = getMonthIndex(plan.startMonth);
-              const startYM =
-                safeNumber(plan.startYear, 2026) * 12 +
-                (startMonthIdx >= 0 ? startMonthIdx : 0);
-              const nowYM = asOfDate.getFullYear() * 12 + asOfDate.getMonth();
+const getPlanPaidAmount = (plan, data) => {
+  if (!plan || !plan.id) return 0;
+  return (data?.transactions || [])
+    .filter(
+      (t) =>
+        t.status === "paid" &&
+        (t.linkedPlanId === plan.id || t.installmentPlanId === plan.id) &&
+        t.source === "card-payment-plan"
+    )
+    .reduce((s, t) => s + safeNumber(t.amount), 0);
+};
 
-              let monthsElapsed = Math.max(0, nowYM - startYM + 1);
-              monthsElapsed = Math.min(monthsElapsed, plan.months);
+const computeInstallmentProgress = (plan, asOfDate = new Date(), data = null) => {
+  if (!plan || !plan.months || plan.months <= 0) {
+    return {
+      monthsElapsed: 0, dueAmount: 0, remainingAmount: 0,
+      remainingMonths: 0, completed: false,
+      monthlyAmount: 0, progressPct: 0, paidAmount: 0,
+    };
+  }
+  const startMonthIdx = getMonthIndex(plan.startMonth);
+  const startYM = safeNumber(plan.startYear, 2026) * 12 + (startMonthIdx >= 0 ? startMonthIdx : 0);
+  const nowYM = asOfDate.getFullYear() * 12 + asOfDate.getMonth();
 
-              const monthlyAmount = safeNumber(
-                plan.monthlyAmount,
-                safeNumber(plan.totalAmount) / plan.months,
-              );
-              const dueAmount = monthsElapsed * monthlyAmount;
-              const remainingAmount = Math.max(
-                0,
-                safeNumber(plan.totalAmount) - dueAmount,
-              );
-              const remainingMonths = Math.max(0, plan.months - monthsElapsed);
-              const progressPct =
-                plan.months > 0 ? (monthsElapsed / plan.months) * 100 : 0;
+  let monthsElapsed = Math.max(0, nowYM - startYM + 1);
+  monthsElapsed = Math.min(monthsElapsed, plan.months);
 
-              return {
-                monthsElapsed,
-                dueAmount,
-                remainingAmount,
-                remainingMonths,
-                monthlyAmount,
-                completed: monthsElapsed >= plan.months,
-                progressPct,
-              };
-            };
+  const monthlyAmount = safeNumber(plan.monthlyAmount, safeNumber(plan.totalAmount) / plan.months);
+  const dueAmount = monthsElapsed * monthlyAmount;
+
+  const paidAmount = data
+    ? getPlanPaidAmount(plan, data)
+    : safeNumber(plan.paidAmount);
+
+  const remainingAmount = Math.max(0, safeNumber(plan.totalAmount) - paidAmount);
+  const remainingMonths = Math.max(0, plan.months - monthsElapsed);
+  const progressPct = safeNumber(plan.totalAmount) > 0
+    ? (paidAmount / safeNumber(plan.totalAmount)) * 100
+    : 0;
+
+  return {
+    monthsElapsed, dueAmount, remainingAmount,
+    remainingMonths, monthlyAmount,
+    completed: paidAmount >= safeNumber(plan.totalAmount) - 0.005,
+    progressPct, paidAmount,
+  };
+};
 
             const computeCardInstallmentsInfo = (
               data,
@@ -6375,7 +6385,7 @@ const safeClone = (obj) => {
                 totalRemaining = 0,
                 currentMonthly = 0;
               const enriched = plans.map((p) => {
-                const prog = computeInstallmentProgress(p, asOfDate);
+                const prog = computeInstallmentProgress(p, asOfDate, data);
                 totalDueSoFar += prog.dueAmount;
                 totalRemaining += prog.remainingAmount;
                 if (!prog.completed) currentMonthly += prog.monthlyAmount;
@@ -16538,65 +16548,72 @@ const BankCard3D = memo(
                   [data, card],
                 );
 
-                const cancelPlan = (plan) => {
-                  dispatch({
-                    type: "SHOW_CONFIRM",
-                    danger: true,
-                    title: "إلغاء خطة التقسيط",
-                    message: "سيتم إلغاء الخطة فقط، المعاملات الأصلية لن تتأثر.",
-                    onConfirm: () => {
-                      saveHistory();
-                      const newPlans = (data.cardInstallments || []).map((p) =>
-                        p.id === plan.id
-                          ? {
-                              ...p,
-                              status: "cancelled",
-                              cancelledAt: new Date().toISOString(),
-                            }
-                          : p,
-                      );
-                      dispatch({
-                        type: "SET_DATA",
-                        payload: { ...data, cardInstallments: newPlans },
-                      });
-                      addNotification({ type: "success", title: "تم إلغاء الخطة" });
-                      dispatch({ type: "HIDE_CONFIRM" });
-                    },
-                    onCancel: () => dispatch({ type: "HIDE_CONFIRM" }),
-                  });
-                };
+const cancelPlan = (plan) => {
+  const info = computeInstallmentProgress(plan, new Date(), data);
+  dispatch({
+    type: "SHOW_CONFIRM",
+    danger: true,
+    title: "إلغاء الخطة",
+    message: info.paidAmount > 0.005
+      ? `الخطة فيها ${fmt(info.paidAmount)} ج.م مدفوعة. سيتم إيقاف الأقساط المتبقية فقط، والمبالغ المدفوعة هتفضل في السجل.`
+      : "سيتم إلغاء الخطة فقط، المعاملات الأصلية لن تتأثر.",
+    onConfirm: () => {
+      saveHistory();
+      const newPlans = (data.cardInstallments || []).map((p) =>
+        p.id === plan.id
+          ? { ...p, status: "cancelled", cancelledAt: new Date().toISOString() }
+          : p
+      );
+      dispatch({
+        type: "SET_DATA",
+        payload: { ...data, cardInstallments: newPlans },
+      });
+      addNotification({ type: "success", title: "تم إلغاء الخطة" });
+      dispatch({ type: "HIDE_CONFIRM" });
+    },
+    onCancel: () => dispatch({ type: "HIDE_CONFIRM" }),
+  });
+};
 
-                const deletePlan = (plan) => {
-                  dispatch({
-                    type: "SHOW_CONFIRM",
-                    danger: true,
-                    title: "حذف الخطة نهائياً",
-                    message: "سيتم حذف الخطة واستعادة المعاملات المرتبطة.",
-                    onConfirm: () => {
-                      saveHistory();
-                      const newPlans = (data.cardInstallments || []).filter(
-                        (p) => p.id !== plan.id,
-                      );
-                      const newTxs = (data.transactions || []).map((t) =>
-                        t.installmentPlanId === plan.id
-                          ? { ...t, installmentPlanId: undefined }
-                          : t,
-                      );
-                      dispatch({
-                        type: "SET_DATA",
-                        payload: {
-                          ...data,
-                          cardInstallments: newPlans,
-                          transactions: newTxs,
-                        },
-                      });
-                      addNotification({ type: "success", title: "تم الحذف" });
-                      dispatch({ type: "HIDE_CONFIRM" });
-                    },
-                    onCancel: () => dispatch({ type: "HIDE_CONFIRM" }),
-                  });
-                };
+const deletePlan = (plan) => {
+  const info = computeInstallmentProgress(plan, new Date(), data);
+  const hasPaid = info.paidAmount > 0.005;
 
+  if (hasPaid) {
+    addNotification({
+      type: "warning",
+      title: "⚠️ لا يمكن الحذف",
+      message: `الخطة فيها ${fmt(info.paidAmount)} ج.م مدفوعة. استخدم "إلغاء" للحفاظ على التاريخ.`,
+      duration: 7000,
+    });
+    return;
+  }
+
+  dispatch({
+    type: "SHOW_CONFIRM",
+    danger: true,
+    title: "حذف الخطة نهائياً",
+    message: "سيتم حذف الخطة واستعادة المعاملات المرتبطة.",
+    onConfirm: () => {
+      saveHistory();
+      const newPlans = (data.cardInstallments || []).filter(
+        (p) => p.id !== plan.id
+      );
+      const newTxs = (data.transactions || []).map((t) =>
+        t.installmentPlanId === plan.id
+          ? { ...t, installmentPlanId: undefined }
+          : t
+      );
+      dispatch({
+        type: "SET_DATA",
+        payload: { ...data, cardInstallments: newPlans, transactions: newTxs },
+      });
+      addNotification({ type: "success", title: "تم الحذف" });
+      dispatch({ type: "HIDE_CONFIRM" });
+    },
+    onCancel: () => dispatch({ type: "HIDE_CONFIRM" }),
+  });
+};
                 return (
                   <div className="space-y-2">
                     <div className="flex justify-between items-center flex-wrap gap-2">
@@ -18195,14 +18212,18 @@ const BankCard3D = memo(
                 const [withFee, setWithFee] = useState(false);
                 const [feeAmount, setFeeAmount] = useState("");
                 const [submitting, setSubmitting] = useState(false);
-
+                const [linkedPlanId, setLinkedPlanId] = useState("");
                 const selectedCard = cards.find((c) => c.id === selectedCardId);
                 const cardInfo = useMemo(
                   () =>
                     selectedCard ? computeCardPaymentInfo(data, selectedCard) : null,
                   [data, selectedCard],
                 );
-
+const activePlans = useMemo(() => {
+  if (!selectedCard) return [];
+  return computeCardInstallmentsInfo(data, selectedCard).plans
+    .filter((p) => !p.completed && p.status !== "cancelled");
+}, [data, selectedCard]);
                 const liveBalances = useMemo(() => computeBalancesAsOf(data), [data]);
                 const sourceBalance = safeNumber(liveBalances[sourceMethod]);
 
@@ -18264,6 +18285,7 @@ const BankCard3D = memo(
                       withFee,
                       feeAmount: parsedFee,
                       status: paymentStatus,
+                      linkedPlanId: linkedPlanId || null,
                     },
                   });
 
@@ -18341,7 +18363,39 @@ const BankCard3D = memo(
                       </div>
 
                       {!cardId && cards.length > 1 && (
-                        <div>
+                    {activePlans.length > 0 && (
+  <div>
+    <label
+      className="text-[11px] font-black block mb-2"
+      style={{ color: "var(--accent)" }}
+    >
+      🔁 سداد قسط من خطة (اختياري)
+    </label>
+    <select
+      className="input-field text-sm py-2.5"
+      value={linkedPlanId}
+      onChange={(e) => {
+        const planId = e.target.value;
+        setLinkedPlanId(planId);
+        if (!planId) return;
+        const plan = activePlans.find((p) => p.id === planId);
+        if (plan) {
+          setAmount(String(plan.monthlyAmount));
+          setNote(`قسط خطة ${plan.note || plan.id.slice(0, 6)}`);
+        }
+      }}
+    >
+      <option value="">— سداد عادي (بدون ربط) —</option>
+      {activePlans.map((p) => (
+        <option key={p.id} value={p.id}>
+          {p.note || `خطة ${fmtShort(p.totalAmount)}`} — قسط {fmt(p.monthlyAmount)} ج.م
+          (متبقي {fmtShort(p.remainingAmount)})
+        </option>
+      ))}
+    </select>
+  </div>
+)}   
+                    <div>
                           <label
                             className="text-[11px] font-black block mb-2"
                             style={{ color: "var(--text-muted)" }}
@@ -25196,6 +25250,7 @@ const BankCard3D = memo(
                     status: paymentStatus,
                     source: "card-payment-plan",
                     linkedCardId: card.id,
+                    linkedPlanId: action.payload.linkedPlanId || undefined,
                     cardLast4: card.last4,
                     createdAt: new Date().toISOString(),
                   };
@@ -25241,11 +25296,26 @@ const BankCard3D = memo(
                     }),
                   ];
 
+                  const linkedPlanId = action.payload.linkedPlanId;
+                  const updatedPlans = linkedPlanId
+                    ? (state.data.cardInstallments || []).map((p) =>
+                        p.id === linkedPlanId
+                          ? {
+                              ...p,
+                              paidAmount:
+                                safeNumber(p.paidAmount) +
+                                safeNumber(amount),
+                            }
+                          : p
+                      )
+                    : state.data.cardInstallments;
+
                   return {
                     ...state,
                     data: {
                       ...state.data,
                       transactions: allTxs,
+                      cardInstallments: updatedPlans,
                       auditLog: [
                         ...auditEntries,
                         ...(state.data.auditLog || []),
