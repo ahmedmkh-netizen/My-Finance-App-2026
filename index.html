@@ -6697,11 +6697,117 @@ const computeInstallmentProgress = (plan, asOfDate = new Date(), data = null) =>
       };
             };
 
-            const computeCardPaymentPrediction = (
-              data,
-              card,
-              asOfDate = new Date(),
-            ) => {
+
+      const computeCardPaymentPrediction = (
+  data,
+  card,
+  asOfDate = new Date(),
+) => {
+  if (!card) return null;
+  const engine = buildCardStatementEngine(card, data, asOfDate);
+  const now = new Date(asOfDate);
+
+  const currentDebtFromTx = Math.max(0, computeCardDebt(data, card, asOfDate));
+  const instInfo = engine.installmentsInfo || {
+    currentMonthly: 0,
+    totalRemaining: 0,
+    activeCount: 0,
+    plans: [],
+  };
+  const currentDebt = currentDebtFromTx + instInfo.totalRemaining;  // ✅
+
+  const currentStatement = engine.currentStatement;
+  const openCycle = engine.openCycle;
+
+  let statementBalance = currentStatement ? Math.max(0, currentStatement.closingBalance) : 0;
+  let installmentsThisMonth = currentStatement ? currentStatement.installmentsDueThisCycle : 0;
+  let minBase = currentStatement ? currentStatement.minBase : 0;
+  let minPayment = currentStatement ? currentStatement.minDue : 0;
+  let totalMandatory = currentStatement ? currentStatement.totalDue : 0;
+
+  // ✅ لو مفيش statement، اعتمد على الخطط النشطة
+  const activePlans = (instInfo.plans || []).filter(
+    (p) => !p.completed && p.status !== "cancelled"
+  );
+
+  if (!currentStatement && activePlans.length > 0) {
+    installmentsThisMonth = activePlans.reduce(
+      (s, p) => s + safeNumber(p.monthlyAmount),
+      0
+    );
+    minPayment = installmentsThisMonth;
+    totalMandatory = installmentsThisMonth;
+    statementBalance = instInfo.totalRemaining;
+  }
+
+  const nextCycleEstimate = openCycle
+    ? Math.max(0, openCycle.closingBalance) + openCycle.installmentsDueThisCycle
+    : (activePlans.length > 0 ? installmentsThisMonth : 0);
+  const nextCycleDueDate = openCycle ? openCycle.dueDate : null;
+
+  let dueDate = currentStatement
+    ? currentStatement.dueDate
+    : openCycle
+      ? openCycle.dueDate
+      : null;
+
+  // ✅ لو مفيش dueDate، احسبها من الخطط
+  if (!dueDate && activePlans.length > 0) {
+    const { dueDay } = getCardCycleParams(card);
+    const d = new Date(now);
+    d.setDate(dueDay);
+    if (d < now) d.setMonth(d.getMonth() + 1);
+    dueDate = d;
+  }
+
+  const daysUntilDue = dueDate
+    ? Math.ceil((dueDate.getTime() - now.getTime()) / 86400000)
+    : null;
+
+  const limit = safeNumber(card.limit);
+  const availableLimit = Math.max(
+    0,
+    limit - currentDebt - instInfo.totalRemaining,
+  );
+
+  return {
+    cardId: card.id,
+    cardName: `${card.bank} - ${card.name}`,
+    last4: card.last4,
+    currentDebt,
+    statementBalance,
+    installmentsThisMonth,
+    minBase,
+    minPayment,
+    totalMandatory,
+    nextCycleEstimate,
+    nextCycleDueDate,
+    fullPayment: currentDebt + instInfo.totalRemaining,
+    nextDueDate: dueDate,
+    nextDueDateISO: dueDate ? getLocalISODate(dueDate) : null,
+    daysUntilDue,
+    urgency:
+      daysUntilDue === null
+        ? "normal"
+        : daysUntilDue <= 0
+          ? "overdue"
+          : daysUntilDue <= 3
+            ? "urgent"
+            : daysUntilDue <= 7
+              ? "soon"
+              : "normal",
+    activeInstallments: instInfo.activeCount,
+    installmentsRemainingTotal: instInfo.totalRemaining,
+    availableLimit,
+    limit,
+    plans: instInfo.plans,
+    cycles: engine.cycles,
+    currentStatement,
+    openCycle,
+    cycleParams: engine.cycleParams,
+    usingPlansOnly: !currentStatement && activePlans.length > 0,
+  };
+};
               if (!card) return null;
               const engine = buildCardStatementEngine(card, data, asOfDate);
               const now = new Date(asOfDate);
@@ -15950,10 +16056,13 @@ const BankCard3D = memo(
                 let isNegative = false;
                 let iconElement = null;
 
+
                 if (isCard) {
-                  balance = computeCardDebt(data, item);
-                  const limit = safeNumber(item.limit);
-                  const available = Math.max(0, limit - Math.max(0, balance));
+  const txDebt = computeCardDebt(data, item);
+  const instInfoForItem = computeCardInstallmentsInfo(data, item);
+  balance = txDebt + instInfoForItem.totalRemaining;  // ✅
+  const limit = safeNumber(item.limit);
+  const available = Math.max(0, limit - Math.max(0, balance));
                   label =
                     item.displayName ||
                     `💳 ${item.bank} ${item.name} • ${item.last4}`;
@@ -16869,13 +16978,15 @@ const deletePlan = (plan) => {
 
                 if (!card) return null;
 
-                const liveDebt = computeCardDebt(data, card);
-                const liveAvailable = Math.max(0, safeNumber(card.limit) - liveDebt);
-                const usagePct =
-                  safeNumber(card.limit) > 0
-                    ? (Math.max(0, liveDebt) / safeNumber(card.limit)) * 100
-                    : 0;
-                const isCredit = liveDebt < 0;
+const liveDebtFromTx = computeCardDebt(data, card);
+const instInfoForDebt = computeCardInstallmentsInfo(data, card);
+const liveDebt = liveDebtFromTx + instInfoForDebt.totalRemaining;  // ✅ الإجمالي الحقيقي
+const liveAvailable = Math.max(0, safeNumber(card.limit) - liveDebt);
+const usagePct =
+  safeNumber(card.limit) > 0
+    ? (Math.max(0, liveDebt) / safeNumber(card.limit)) * 100
+    : 0;
+const isCredit = liveDebt < 0;
 
                 return (
                   <div
@@ -18010,18 +18121,21 @@ const deletePlan = (plan) => {
                             </button>
                           </div>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {cards.map((card) => {
-                              const liveDebt = computeCardDebt(data, card);
-                              const liveAvailable = Math.max(
-                                0,
-                                safeNumber(card.limit) - Math.max(0, liveDebt),
-                              );
-                              return (
-                                <React.Fragment key={card.id}>
-                                  <BankCard3D
-                                    card={card}
-                                    liveDebt={liveDebt}
-                                    liveAvailable={liveAvailable}
+{cards.map((card) => {
+  const txDebt = computeCardDebt(data, card);
+  const instInfoForCard = computeCardInstallmentsInfo(data, card);
+  const liveDebt = txDebt + instInfoForCard.totalRemaining;  // ✅
+  const liveAvailable = Math.max(
+    0,
+    safeNumber(card.limit) - Math.max(0, liveDebt),
+  );
+  return (
+    <React.Fragment key={card.id}>
+      <BankCard3D
+        card={card}
+        liveDebt={liveDebt}
+        liveAvailable={liveAvailable}
+                            
                                     onStatement={() =>
                                       dispatch({
                                         type: "SET_VIEWING_CARD_STATEMENT",
@@ -25355,7 +25469,7 @@ const updatedPlans = linkedPlanId
       
       const newPaid = safeNumber(p.paidAmount) + safeNumber(amount);
       const total = safeNumber(p.totalAmount);
-      const isCompleted = newPaid >= total - 0.005;  // ✅ فرق 0.005 للتسامح
+      const isCompleted = newPaid >= total - 0.005;
       
       return {
         ...p,
