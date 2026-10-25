@@ -5572,7 +5572,7 @@ const safeClone = (obj) => {
                 if (isHanyPurchaseTx(t) || isHanySettleTx(t)) return;
                 if (t.method === HANY_TAB_METHOD) return;
                 if (t.installmentPlanId) return;
-
+                if (t.linkedPlanId) return
                 const d = parseISODate(t.date);
                 if (!d) return;
                 if (cutoffDay && d < cutoffDay) return;
@@ -5604,7 +5604,16 @@ const safeClone = (obj) => {
                   const instInfo = computeCardInstallmentsInfo(data, card, upper);
                   instInfo.plans.forEach((plan) => {
                     if (plan.status === "cancelled") return;
-                    if (plan.linkedTxIds && plan.linkedTxIds.length > 0) return;
+// ✅ تحقق مزدوج: linkedTxIds أو معاملة فعلية بـ installmentPlanId
+const hasLinkedTx =
+  (plan.linkedTxIds && plan.linkedTxIds.length > 0) ||
+  (data?.transactions || []).some(
+    (t) =>
+      t.installmentPlanId === plan.id &&
+      t.status === "paid" &&
+      t.type === "expense"
+  );
+if (hasLinkedTx) return;
                     const dueNow = safeNumber(plan.dueAmount);
                     const paidNow = safeNumber(plan.paidAmount);
                     const net = Math.max(0, dueNow - paidNow);
@@ -5644,7 +5653,7 @@ const safeClone = (obj) => {
                 if (t.source === "void") return;
                 if (isHanyPurchaseTx(t) || isHanySettleTx(t)) return;
                 if (t.method === HANY_TAB_METHOD) return;
-
+                if (t.linkedPlanId) return;
                 const d = parseISODate(t.date);
                 if (!d || d > upper) return;
 
@@ -25293,6 +25302,7 @@ const deletePlan = (plan) => {
                     source: "card-payment-plan",
                     linkedCardId: card.id,
                     linkedPlanId: action.payload.linkedPlanId || undefined,
+                    affectsCardDebt: action.payload.linkedPlanId ? false : true,
                     cardLast4: card.last4,
                     createdAt: new Date().toISOString(),
                   };
@@ -25338,19 +25348,23 @@ const deletePlan = (plan) => {
                     }),
                   ];
 
-                  const linkedPlanId = action.payload.linkedPlanId;
-                  const updatedPlans = linkedPlanId
-                    ? (state.data.cardInstallments || []).map((p) =>
-                        p.id === linkedPlanId
-                          ? {
-                              ...p,
-                              paidAmount:
-                                safeNumber(p.paidAmount) +
-                                safeNumber(amount),
-                            }
-                          : p
-                      )
-                    : state.data.cardInstallments;
+const linkedPlanId = action.payload.linkedPlanId;
+const updatedPlans = linkedPlanId
+  ? (state.data.cardInstallments || []).map((p) => {
+      if (p.id !== linkedPlanId) return p;
+      
+      const newPaid = safeNumber(p.paidAmount) + safeNumber(amount);
+      const total = safeNumber(p.totalAmount);
+      const isCompleted = newPaid >= total - 0.005;  // ✅ فرق 0.005 للتسامح
+      
+      return {
+        ...p,
+        paidAmount: newPaid,
+        status: isCompleted ? "completed" : p.status,
+        completedAt: isCompleted ? new Date().toISOString() : p.completedAt,
+      };
+    })
+  : state.data.cardInstallments;
 
                   return {
                     ...state,
