@@ -27083,199 +27083,194 @@ const getAgendaItems = useCallback(
                 (k) => openWalletForm(k, "withdrawal"),
                 [openWalletForm],
               );
+const handleSaveTransaction = useCallback(
+  (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (isProcessing || saveLockRef.current) return;
+    saveLockRef.current = true;
+    const errors = {};
 
-              const handleSaveTransaction = useCallback(
-                (e) => {
-                  if (e && e.preventDefault) e.preventDefault();
-                  if (isProcessing || saveLockRef.current) return;
-                  saveLockRef.current = true;
-                  const errors = {};
+    const amountCheck = validateAmount(formData.amount, {
+      min: 0.01,
+      max: 10000000,
+      label: "المبلغ",
+    });
+    if (!amountCheck.valid) errors.amount = amountCheck.error;
+    if (!formData.category) errors.category = "اختر الفئة";
+    if (!formData.date) errors.date = "اختر التاريخ";
 
-                  const amountCheck = validateAmount(formData.amount, {
-                    min: 0.01,
-                    max: 10000000,
-                    label: "المبلغ",
-                  });
-                  if (!amountCheck.valid) errors.amount = amountCheck.error;
-                  if (!formData.category) errors.category = "اختر الفئة";
-                  if (!formData.date) errors.date = "اختر التاريخ";
+    if (Object.keys(errors).length > 0) {
+      saveLockRef.current = false;
+      dispatch({ type: "SET_FORM_ERRORS", payload: errors });
+      addNotification({
+        type: "error",
+        title: "خطأ",
+        message: Object.values(errors)[0],
+      });
+      return;
+    }
 
-                  if (Object.keys(errors).length > 0) {
-                    saveLockRef.current = false;
-                    dispatch({ type: "SET_FORM_ERRORS", payload: errors });
-                    addNotification({
-                      type: "error",
-                      title: "خطأ",
-                      message: Object.values(errors)[0],
-                    });
-                    return;
-                  }
+    const amount = roundMoney(amountCheck.value);
+    const d = parseISODate(formData.date);
+    if (!d) {
+      saveLockRef.current = false;
+      addNotification({ type: "error", title: "تاريخ غير صالح" });
+      return;
+    }
+    const txYear = d.getFullYear(),
+      txMonth = ALL_MONTHS[d.getMonth()];
 
-                  const amount = roundMoney(amountCheck.value);
-                  const d = parseISODate(formData.date);
-                  if (!d) {
-                    saveLockRef.current = false;
-                    addNotification({ type: "error", title: "تاريخ غير صالح" });
-                    return;
-                  }
-                  const txYear = d.getFullYear(),
-                    txMonth = ALL_MONTHS[d.getMonth()];
+    if (formMode === "edit") {
+      const orig = transactions.find((t) => t.id === formData.id);
+      if (orig && isMonthClosed(data, orig.year || 2026, orig.month)) {
+        saveLockRef.current = false;
+        addNotification({ type: "error", title: "محظور" });
+        return;
+      }
+    }
+    if (isMonthClosed(data, txYear, txMonth)) {
+      saveLockRef.current = false;
+      addNotification({
+        type: "error",
+        title: "محظور",
+        message: `شهر ${txMonth} مغلق`,
+      });
+      return;
+    }
 
-                  if (formMode === "edit") {
-                    const orig = transactions.find((t) => t.id === formData.id);
-                    if (orig && isMonthClosed(data, orig.year || 2026, orig.month)) {
-                      saveLockRef.current = false;
-                      addNotification({ type: "error", title: "محظور" });
-                      return;
-                    }
-                  }
-                  if (isMonthClosed(data, txYear, txMonth)) {
-                    saveLockRef.current = false;
-                    addNotification({
-                      type: "error",
-                      title: "محظور",
-                      message: `شهر ${txMonth} مغلق`,
-                    });
-                    return;
-                  }
+    // ═══════════════ التعديل بتاعنا بيبدأ هنا ═══════════════
+    let finalMethod = formData.method;
+    let finalAffectsCash = formData.affectsCash !== false;
+    let finalHanyEffect = formData.hanyEffect;
+    let finalKind = formData.kind;
 
-                  if (formMode === "add" && !formData.__skipDupCheck) {
-                    const dup = transactions.find(
-                      (t) =>
-                        t.status === "pending" &&
-                        t.date === formData.date &&
-                        t.type === formData.type &&
-                        t.category === formData.category &&
-                        t.method === formData.method &&
-                        Math.abs(safeNumber(t.amount) - amount) < 0.005,
-                    );
-                    if (dup) {
-                      saveLockRef.current = false;
-                      dispatch({
-                        type: "SHOW_CONFIRM",
-                        danger: false,
-                        title: "⚠️ معاملة مشابهة موجودة",
-                        message: `في معاملة معلقة بنفس المبلغ والفئة والطريقة بتاريخ ${formData.date}.`,
-                        onConfirm: () => {
-                          dispatch({ type: "HIDE_CONFIRM" });
-                          dispatch({
-                            type: "SET_FORM_DATA",
-                            payload: { ...formData, __skipDupCheck: true },
-                          });
-                          setTimeout(() => {
-                            const form = document.querySelector(
-                              'form[data-form="main"]',
-                            );
-                            if (form) form.requestSubmit();
-                          }, 100);
-                        },
-                        onCancel: () => dispatch({ type: "HIDE_CONFIRM" }),
-                      });
-                      return;
-                    }
-                  }
+    if (isHanyShopCategory(formData.category)) {
+      if (formData.method !== HANY_TAB_METHOD && formMode === "add") {
+        addNotification({
+          type: "info",
+          title: "🛒 تصحيح تلقائي",
+          message: "مشتريات محل هاني تُسجّل تلقائياً على دفتر هاني",
+          duration: 4000,
+        });
+      }
+      finalMethod = HANY_TAB_METHOD; 
+      finalAffectsCash = false;
+      finalHanyEffect = "purchase";
+      finalKind = KIND.OPERATIONAL;
+    } else if (isHanySettleCategory(formData.category)) {
+      finalHanyEffect = "settle";
+      finalAffectsCash = true;
+      finalKind = KIND.FINANCIAL;
+    }
+    // ═══════════════ التعديل بتاعنا بيخلص هنا ═══════════════
 
-                  if (
-                    PAYMENT_METHODS_WITHOUT_ACCOUNT.has(formData.method) &&
-                    formData.status === "paid"
-                  ) {
-                    addNotification({
-                      type: "warning",
-                      title: "⚠️ طريقة دفع بلا حساب",
-                      message: `${getPaymentMethodShort(formData.method)} لا يُخصم من أي رصيد.`,
-                      duration: 8000,
-                    });
-                  }
+    if (formMode === "add" && !formData.__skipDupCheck) {
+      const dup = transactions.find(
+        (t) =>
+          t.status === "pending" &&
+          t.date === formData.date &&
+          t.type === formData.type &&
+          t.category === formData.category &&
+          t.method === formData.method &&
+          Math.abs(safeNumber(t.amount) - amount) < 0.005,
+      );
+      if (dup) {
+        saveLockRef.current = false;
+        dispatch({
+          type: "SHOW_CONFIRM",
+          danger: false,
+          title: "⚠️ معاملة مشابهة موجودة",
+          message: `في معاملة معلقة بنفس المبلغ والفئة والطريقة بتاريخ ${formData.date}.`,
+          onConfirm: () => {
+            dispatch({ type: "HIDE_CONFIRM" });
+            dispatch({
+              type: "SET_FORM_DATA",
+              payload: { ...formData, __skipDupCheck: true },
+            });
+            setTimeout(() => {
+              const form = document.querySelector('form[data-form="main"]');
+              if (form) form.requestSubmit();
+            }, 100);
+          },
+          onCancel: () => dispatch({ type: "HIDE_CONFIRM" }),
+        });
+        return;
+      }
+    }
 
-                  dispatch({ type: "SET_IS_PROCESSING", payload: true });
-                  processingTimeoutRef.current = setTimeout(() => {
-                    try {
-                      saveHistory();
-                      const finalSubType =
-                        formData.subType ||
-                        (formData.type === "income" ? "deposit" : "withdrawal");
-                      const status = formData.status || "pending";
-                      let syncLinkedCardId = formData.linkedCardId;
-                      let syncCardLast4 = formData.cardLast4;
+    dispatch({ type: "SET_IS_PROCESSING", payload: true });
+    processingTimeoutRef.current = setTimeout(() => {
+      try {
+        saveHistory();
+        const finalSubType =
+          formData.subType || (formData.type === "income" ? "deposit" : "withdrawal");
+        const status = formData.status || "pending";
+        let syncLinkedCardId = formData.linkedCardId;
+        let syncCardLast4 = formData.cardLast4;
 
-                      if (CREDIT_CARD_METHOD_IDS.includes(formData.method)) {
-                        const matchingCard = cards.find(
-                          (c) => getCardMethod(c) === formData.method,
-                        );
-                        if (matchingCard && syncLinkedCardId !== matchingCard.id) {
-                          syncLinkedCardId = matchingCard.id;
-                          syncCardLast4 = undefined;
-                        }
-                      } else {
-                        syncLinkedCardId = undefined;
-                        syncCardLast4 = undefined;
-                      }
+        if (CREDIT_CARD_METHOD_IDS.includes(formData.method)) {
+          const matchingCard = cards.find((c) => getCardMethod(c) === formData.method);
+          if (matchingCard && syncLinkedCardId !== matchingCard.id) {
+            syncLinkedCardId = matchingCard.id;
+            syncCardLast4 = undefined;
+          }
+        } else {
+          syncLinkedCardId = undefined;
+          syncCardLast4 = undefined;
+        }
 
-                      const isHany = isHanyShopCategory(formData.category);
-                      const isHanySettle = isHanySettleCategory(formData.category);
-                      const { __skipDupCheck, ...cleanFormData } = formData;
-const newTx = {
-  ...cleanFormData,
-  id: formMode === "edit" ? formData.id : getSafeId(),
-  amount,
-  month: txMonth,
-  year: txYear,
-  monthIndex: d.getMonth(),
-  date: formData.date,
-  subType: finalSubType,
-  status,
-  method: finalMethod,
-  affectsCash: finalAffectsCash,
-  hanyEffect: finalHanyEffect,
-  kind: finalKind || cleanFormData.kind,
-  linkedCardId: syncLinkedCardId,
-  cardLast4: syncCardLast4,
-  quantity: formData.quantity ? Number(formData.quantity) : undefined,
-  unitPrice: formData.unitPrice ? Number(formData.unitPrice) : undefined,
-  createdAt: formData.createdAt || new Date().toISOString(),
-};
+        const { __skipDupCheck, ...cleanFormData } = formData;
+        
+        // هنا بنستخدم القيم اللي ظبطناها فوق (finalMethod)
+        const newTx = {
+          ...cleanFormData,
+          id: formMode === "edit" ? formData.id : getSafeId(),
+          amount,
+          month: txMonth,
+          year: txYear,
+          monthIndex: d.getMonth(),
+          date: formData.date,
+          subType: finalSubType,
+          status,
+          method: finalMethod,
+          affectsCash: finalAffectsCash,
+          hanyEffect: finalHanyEffect,
+          kind: finalKind || cleanFormData.kind,
+          linkedCardId: syncLinkedCardId,
+          cardLast4: syncCardLast4,
+          quantity: formData.quantity ? Number(formData.quantity) : undefined,
+          unitPrice: formData.unitPrice ? Number(formData.unitPrice) : undefined,
+          createdAt: formData.createdAt || new Date().toISOString(),
+        };
 
-                      const next =
-                        formMode === "add"
-                          ? sortTransactions([...transactions, newTx])
-                          : sortTransactions(
-                              transactions.map((t) =>
-                                t.id === newTx.id ? { ...newTx } : t,
-                              ),
-                            );
-
-                      dispatch({ type: "UPDATE_TRANSACTIONS", payload: next });
-                      dispatch({ type: "SET_FORM_OPEN", payload: false });
-                      addNotification({
-                        type: "success",
-                        title:
-                          status === "paid" ? "تم الحفظ والاعتماد" : "تم الحفظ كمعلق",
-                      });
-                    } catch (err) {
-                      console.error("Save transaction error:", err);
-                      addNotification({
-                        type: "error",
-                        title: "فشل الحفظ",
-                        message: err.message || "خطأ غير متوقع",
-                      });
-                    }
-                    saveLockRef.current = false;
-                    dispatch({ type: "SET_IS_PROCESSING", payload: false });
-                    processingTimeoutRef.current = null;
-                  }, 300);
-                },
-                [
-                  formData,
-                  formMode,
-                  transactions,
-                  data,
-                  saveHistory,
-                  addNotification,
-                  isProcessing,
-                  cards,
-                ],
+        const next =
+          formMode === "add"
+            ? sortTransactions([...transactions, newTx])
+            : sortTransactions(
+                transactions.map((t) => (t.id === newTx.id ? { ...newTx } : t)),
               );
 
+        dispatch({ type: "UPDATE_TRANSACTIONS", payload: next });
+        dispatch({ type: "SET_FORM_OPEN", payload: false });
+        addNotification({
+          type: "success",
+          title: status === "paid" ? "تم الحفظ والاعتماد" : "تم الحفظ كمعلق",
+        });
+      } catch (err) {
+        console.error("Save transaction error:", err);
+        addNotification({
+          type: "error",
+          title: "فشل الحفظ",
+          message: err.message || "خطأ غير متوقع",
+        });
+      }
+      saveLockRef.current = false;
+      dispatch({ type: "SET_IS_PROCESSING", payload: false });
+      processingTimeoutRef.current = null;
+    }, 300);
+  },
+  [formData, formMode, transactions, data, saveHistory, addNotification, isProcessing, cards],
+);
               const handleReconcile = useCallback(
                 (payload) => {
                   saveHistory();
