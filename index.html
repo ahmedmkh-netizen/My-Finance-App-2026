@@ -3625,22 +3625,32 @@ const YEARS_CONFIG = {
         return { comprehensive, withoutWallets, walletsOnly };
       };
 
-      const isCardPaymentTx = (t, cardId) => {
-        if (!t || !cardId) return false;
-        if (isHanyPurchaseTx(t) || isHanySettleTx(t)) return false;
-        if (t.method === HANY_TAB_METHOD) return false;
-        if (t.source === "card-payment-plan") return t.linkedCardId === cardId;
-        if (t.source === "payment-console" && t.linkedCardId === cardId) return true;
-        if (
-          t.category === "الالتزامات البنكية والتمويلية" &&
-          t.type === "expense" &&
-          t.linkedCardId === cardId &&
-          !t.linkedLoanId &&
-          !t.sourceRecurringId
-        )
-          return true;
-        return false;
-      };
+const isCardPaymentTx = (t, cardId) => {
+  if (!t || !cardId) return false;
+  if (isHanyPurchaseTx(t) || isHanySettleTx(t)) return false;
+  if (t.method === HANY_TAB_METHOD) return false;
+  if (t.source === "card-payment-plan") return t.linkedCardId === cardId;
+  if (t.source === "payment-console" && t.linkedCardId === cardId) return true;
+  if (
+    t.category === "الالتزامات البنكية والتمويلية" &&
+    t.type === "expense" &&
+    t.linkedCardId === cardId &&
+    !t.linkedLoanId &&
+    !t.sourceRecurringId
+  )
+    return true;
+    
+  // 🆕 التعديل الجديد: اعتبار الإيداعات في كشف البطاقة سداداً
+  if (
+    t.type === "income" &&
+    t.linkedCardId === cardId &&
+    (t.description || "").match(/(Deposit|Payment|سداد|إيداع)/i)
+  ) {
+    return true;
+  }
+  
+  return false;
+};
 
       let _appReady = false;
       setTimeout(() => { _appReady = true; }, 150);
@@ -3945,6 +3955,7 @@ const computeCardAvailable = (data, card, asOfDate = null) =>
 
         if (t.source === "card-payment-plan") return FLOW.CARD_PAYMENT;
         if (t.source === "payment-console" && t.linkedCardId) return FLOW.CARD_PAYMENT;
+		if (t.type === "income" && t.linkedCardId && (t.description || "").match(/(Deposit|Payment|سداد|إيداع)/i)) return FLOW.CARD_PAYMENT;
         if (
           t.category === "الالتزامات البنكية والتمويلية" &&
           t.type === "expense" && t.linkedCardId &&
