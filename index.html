@@ -4638,9 +4638,15 @@ const computeCardInstallmentsInfo = (data, card, asOfDate = new Date()) => {
           ? Math.max(0, currentStatement.minDue - paymentsAfterStatement)
           : 0;
 
-        let totalMandatory = currentStatement
-          ? Math.max(0, currentStatement.totalDue - paymentsAfterStatement)
-          : 0;
+let totalMandatory = currentStatement
+  ? Math.max(0, currentStatement.totalDue - paymentsAfterStatement)
+  : 0;
+
+// التعديل الجديد: عشان نمنع التطبيق إنه يجمع الأقساط مرتين
+if (currentStatement) {
+  // بنشيل الأقساط اللي التطبيق ضافها بالغلط جوه الكشف
+  totalMandatory = Math.max(0, totalMandatory - installmentsDueSoFar);
+}
 
         const activePlans = (instInfo.plans || []).filter(
           (p) => !p.completed && p.status !== "cancelled",
