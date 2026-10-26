@@ -3759,7 +3759,7 @@
        */
 const computeCardLiveFigures = (data, card) => {
   if (!card) return { liveDebt: 0, liveAvailable: 0, notYetDue: 0, txDebt: 0, instInfo: null };
-  const txDebt = Math.max(0, computeCardDebt(data, card));
+  const txDebt = computeCardDebt(data, card);
   const instInfo = computeCardInstallmentsInfo(data, card);
   const limit = safeNumber(card.limit);
   const isReversal = isReversalInstallmentBank(card);
@@ -3769,11 +3769,10 @@ const computeCardLiveFigures = (data, card) => {
     : txDebt + (instInfo.totalRemaining || 0);
 
   const notYetDue = 0;
-  const liveAvailable = Math.max(0, limit - liveDebt);
+  const liveAvailable = Math.max(0, limit - Math.max(0, liveDebt));
 
   return { liveDebt, liveAvailable, notYetDue, txDebt, instInfo, limit, isReversal };
 };
-
 const computeCardAvailable = (data, card, asOfDate = null) =>
   computeCardLiveFigures(data, card).liveAvailable;
 
@@ -11382,13 +11381,15 @@ const cardsData = cards.map((card) => {
         let iconElement = null;
 
         if (isCard) {
-        const { liveDebt, liveAvailable } = computeCardLiveFigures(data, item);
-        const limit = safeNumber(item.limit);
-          label = item.displayName || `💳 ${item.bank} ${item.name} • ${item.last4}`;
-          sublabel = `متاح: ${formatAdaptive(available)} • حد: ${formatAdaptive(limit)}`;
-          isNegative = balance > 0;
-          iconElement = <span className="text-lg">💳</span>;
-        } else if (isAccount) {
+if (isCard) {
+  const { liveDebt, liveAvailable } = computeCardLiveFigures(data, item);
+  const limit = safeNumber(item.limit);
+  balance = liveDebt;
+  label = item.displayName || `💳 ${item.bank} ${item.name} • ${item.last4}`;
+  sublabel = `متاح: ${formatAdaptive(liveAvailable)} • حد: ${formatAdaptive(limit)}`;
+  isNegative = balance > 0;
+  iconElement = <span className="text-lg">💳</span>;
+} else if (isAccount) {
           balance = safeNumber(liveBalances[item.key]);
           label = item.label || ACCOUNT_SHORT_NAMES[item.key] || item.key;
           sublabel = item.last4 ? `•••• ${item.last4}` : "";
@@ -12068,11 +12069,6 @@ const usagePct =
     ? (Math.max(0, liveDebt) / safeNumber(card.limit)) * 100
     : 0;
 const isCredit = liveDebt < 0;
-          const usagePct =
-            safeNumber(card.limit) > 0
-              ? (Math.max(0, liveDebt) / safeNumber(card.limit)) * 100
-              : 0;
-          const isCredit = liveDebt < 0;
 
           return (
             <div
@@ -12863,16 +12859,8 @@ const isCredit = liveDebt < 0;
                       </button>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {cards.map((card) => {
-                        // ✅ الإصلاح 3: المديونية الحقيقية = مشتريات + أقساط مستحقة فقط
-                        const txDebt = computeCardDebt(data, card);
-                        const instInfoForCard = computeCardInstallmentsInfo(data, card);
-                        const liveDebt = txDebt + (instInfoForCard.totalDueSoFar || 0);
-                        const notYetDue = Math.max(
-                          0,
-                          (instInfoForCard.totalRemaining || 0) - (instInfoForCard.totalDueSoFar || 0),
-                        );
-                        const liveAvailable = Math.max(0, safeNumber(card.limit) - Math.max(0, liveDebt) - notYetDue);
+{cards.map((card) => {
+  const { liveDebt, liveAvailable } = computeCardLiveFigures(data, card);
                         return (
                           <React.Fragment key={card.id}>
                             <BankCard3D
@@ -13010,12 +12998,10 @@ const isCredit = liveDebt < 0;
         }, [data, selectedCard]);
 
         // ✅ إصلاح 7: استخدام totalDueSoFar في السداد
-        const liveDebt = useMemo(() => {
-          if (!selectedCard) return 0;
-          const txDebt = computeCardDebt(data, selectedCard);
-          const instInfo = computeCardInstallmentsInfo(data, selectedCard);
-          return txDebt + (instInfo.totalDueSoFar || 0);
-        }, [data, selectedCard]);
+const liveDebt = useMemo(() => {
+  if (!selectedCard) return 0;
+  return computeCardLiveFigures(data, selectedCard).liveDebt;
+}, [data, selectedCard]);
 
         const liveBalances = useMemo(() => computeBalancesAsOf(data), [data]);
         const sourceBalance = safeNumber(liveBalances[sourceMethod]);
@@ -13098,11 +13084,9 @@ const isCredit = liveDebt < 0;
                 <div>
                   <label className="text-[11px] font-black block mb-2" style={{ color: "var(--text-muted)" }}>اختر البطاقة</label>
                   <div className="space-y-2 max-h-40 overflow-y-auto scroll-hide">
-                    {cards.map((c) => {
-                      const cInfo = computeCardPaymentInfo(data, c);
-                      const cTxDebt = computeCardDebt(data, c);
-                      const cInst = computeCardInstallmentsInfo(data, c);
-                      const cDebt = cTxDebt + (cInst.totalDueSoFar || 0);
+{cards.map((c) => {
+  const cInfo = computeCardPaymentInfo(data, c);
+  const cDebt = computeCardLiveFigures(data, c).liveDebt;
                       const isSel = c.id === selectedCardId;
                       return (
                         <button
