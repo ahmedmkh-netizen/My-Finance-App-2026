@@ -4661,6 +4661,16 @@ const computeCardInstallmentsInfo = (data, card, asOfDate = new Date()) => {
           statementBalance = instInfo.totalDueSoFar || 0;
         }
 
+        // 🆕 إصلاح: إذا تم سداد الكشف بالكامل، نعرض التزامات الدورة القادمة (الشهرية) فقط
+        const isStatementPaid = totalMandatory <= 0.01 && activePlans.length > 0;
+        if (isStatementPaid) {
+          // حساب قسط الشهر القادم فقط
+          const nextMonthTotal = activePlans.reduce((s, p) => s + safeNumber(p.monthlyAmount), 0);
+          totalMandatory = nextMonthTotal;
+          minPayment = nextMonthTotal;
+          installmentsThisMonth = nextMonthTotal; 
+        }
+
         // 6. ✅ المديونية حسب نوع البنك
         const nextCycleEstimate = openCycle
           ? Math.max(0, openCycle.closingBalance) + openCycle.installmentsDueThisCycle
