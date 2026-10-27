@@ -4679,9 +4679,22 @@ const computeCardInstallmentsInfo = (data, card, asOfDate = new Date()) => {
             : 0;
         const nextCycleDueDate = openCycle ? openCycle.dueDate : null;
 
-        let dueDate = currentStatement
-          ? currentStatement.dueDate
-          : openCycle ? openCycle.dueDate : null;
+        let dueDate = null;
+        if (isStatementPaid) {
+          // ✅ الكشف مدفوع → احسب تاريخ الاستحقاق القادم بعد تاريخ الكشف المسدد
+          const { dueDay } = getCardCycleParams(card);
+          const baseDate = currentStatement ? new Date(currentStatement.dueDate) : new Date(now);
+          const nextDue = new Date(baseDate.getFullYear(), baseDate.getMonth(), dueDay);
+          // لف للأمام شهر بشهر لحد ما نتجاوز تاريخ الكشف المسدد
+          while (nextDue <= baseDate) {
+            nextDue.setMonth(nextDue.getMonth() + 1);
+          }
+          dueDate = nextDue;
+        } else if (currentStatement) {
+          dueDate = currentStatement.dueDate;
+        } else if (openCycle) {
+          dueDate = openCycle.dueDate;
+        }
 
         if (!dueDate && activePlans.length > 0) {
           const { dueDay } = getCardCycleParams(card);
