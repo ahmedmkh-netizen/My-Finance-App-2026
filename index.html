@@ -3494,9 +3494,17 @@ const YEARS_CONFIG = {
         return safeNumber(acc.balance);
       };
 const isReversalInstallmentBank = (card) => {
-  // 🆕 تم إيقاف هذه الميزة لبنك AAIB ليتطابق مع البنك في حجز كامل مبلغ التقسيط
-  const bank = String(card?.bank || "").toUpperCase();
-  return /ADIB|ABU\s*DHABI|ARAB\s*AFRICAN/i.test(bank); 
+  // البنوك العكسية: تقتطع المبلغ ثم تردّه عند التقسيط، وتحصّل أقساطاً شهرية
+  // AAIB (Arab African) + ADIB (Abu Dhabi) → عكسي
+  // CIB وأي بنك آخر → يقتطع كامل المبلغ ولا يردّه
+  if (!card) return false;
+  const provider = String(card.providerKey || "").toUpperCase();
+  const bank = String(card.bank || "").toUpperCase();
+  return (
+    provider === "AAIB" ||
+    provider === "ADIB" ||
+    /\bAAIB\b|ADIB|ABU\s*DHABI|ARAB\s*AFRICAN/i.test(bank)
+  );
 };
       const getCardMethod = (card) => {
         if (!card) return null;
@@ -3788,10 +3796,13 @@ const computeCardAvailable = (data, card, asOfDate = null) =>
   computeCardLiveFigures(data, card).liveAvailable;
 
       const computeTotalCardDebtNet = (data, asOfDate = null) => {
-        const sum = (data?.cards || []).reduce((s, c) => s + computeCardDebt(data, c, asOfDate), 0);
-        return Math.max(0, sum);
+        const sum = (data?.cards || []).reduce(
+          (s, c) => s + Math.max(0, computeCardLiveFigures(data, c).liveDebt),
+          0,
+        );
+        return sum;
       };
-
+		
       /**
        * ═══════════════════════════════════════════════════════════════
        * computeHanyPayable — رصيد دفتر هاني المستحق
@@ -4246,7 +4257,7 @@ const computeCardAvailable = (data, card, asOfDate = null) =>
         }
 
         const overusedCards = cards.filter((c) => {
-          const debt = computeCardDebt(data, c);
+          const debt = Math.max(0, computeCardLiveFigures(data, c).liveDebt);
           const limit = safeNumber(c.limit);
           return limit > 0 && debt / limit > 0.8;
         });
@@ -4665,9 +4676,12 @@ const computeCardInstallmentsInfo = (data, card, asOfDate = new Date()) => {
           statementBalance = instInfo.totalDueSoFar || 0;
         }
 
-        // 6. ✅ المديونية = مشتريات + الأقساط المستحقة فقط
+        // 6. ✅ المديونية حسب نوع البنك
         const installmentsDueSoFar = instInfo.totalDueSoFar || 0;
-        const currentDebt = currentDebtFromTx + installmentsDueSoFar;
+        const isReversal = isReversalInstallmentBank(card);
+        const currentDebt = isReversal
+          ? currentDebtFromTx + Math.max(0, installmentsDueSoFar - (instInfo.totalPaid || 0))
+          : currentDebtFromTx + (instInfo.totalRemaining || 0);
 
         const nextCycleEstimate = openCycle
           ? Math.max(0, openCycle.closingBalance) + openCycle.installmentsDueThisCycle
@@ -4695,10 +4709,9 @@ const computeCardInstallmentsInfo = (data, card, asOfDate = new Date()) => {
         const limit = safeNumber(card.limit);
 
         // 7. ✅ الحد المتاح = limit - المديونية - الأقساط المتبقية غير المستحقة
-        const installmentsNotYetDue = Math.max(
-          0,
-          (instInfo.totalRemaining || 0) - installmentsDueSoFar,
-        );
+        const installmentsNotYetDue = isReversal
+          ? 0
+          : Math.max(0, (instInfo.totalRemaining || 0) - installmentsDueSoFar);
         const availableLimit = Math.max(0, limit - currentDebt - installmentsNotYetDue);
 
         return {
@@ -4714,7 +4727,7 @@ const computeCardInstallmentsInfo = (data, card, asOfDate = new Date()) => {
           paymentsAfterStatement,           // 🆕
           nextCycleEstimate,
           nextCycleDueDate,
-          fullPayment: currentDebt + installmentsNotYetDue,
+          fullPayment: isReversal ? currentDebt : currentDebt + installmentsNotYetDue,
           nextDueDate: dueDate,
           nextDueDateISO: dueDate ? getLocalISODate(dueDate) : null,
           daysUntilDue,
@@ -6181,12 +6194,8 @@ const cardsData = cards.map((card) => {
             <thead><tr><th>البطاقة</th><th style="width:100px">الحد</th><th style="width:100px">المديونية</th><th style="width:100px">المتاح</th></tr></thead>
             <tbody>
               ${(data.cards || []).map((card) => {
-                const txDebt = computeCardDebt(data, card);
-                const instInfo = computeCardInstallmentsInfo(data, card);
-                const debt = txDebt + instInfo.totalDueSoFar;
-                const notYetDue = Math.max(0, instInfo.totalRemaining - instInfo.totalDueSoFar);
-                const avail = Math.max(0, safeNumber(card.limit) - Math.max(0, debt) - notYetDue);
-                return `<tr><td class="col-desc"><div class="desc-main">${escapeHtml(card.bank)} - ${escapeHtml(card.name)} ••••${escapeHtml(card.last4)}</div></td><td class="col-balance">${fmt(card.limit)}</td><td class="col-amount debit">${fmt(Math.max(0, debt))}</td><td class="col-amount credit">${fmt(avail)}</td></tr>`;
+                const { liveDebt, liveAvailable } = computeCardLiveFigures(data, card);
+                return `<tr><td class="col-desc"><div class="desc-main">${escapeHtml(card.bank)} - ${escapeHtml(card.name)} ••••${escapeHtml(card.last4)}</div></td><td class="col-balance">${fmt(card.limit)}</td><td class="col-amount debit">${fmt(Math.max(0, liveDebt))}</td><td class="col-amount credit">${fmt(liveAvailable)}</td></tr>`;
               }).join("")}
               <tr style="background:#FEF2F2"><td style="font-weight:900;color:#DC2626">إجمالي المديونية</td><td></td><td class="col-amount debit" style="font-weight:900">${fmt(netWorth.cardDebt)}</td><td></td></tr>
             </tbody>
@@ -10114,7 +10123,7 @@ const cardsData = cards.map((card) => {
           onSelectYear, onSelectMonth, monthCashback, bankFeesMonth, hanySummary, onBack,
         }) => {
           const totalCardDebt = useMemo(
-            () => cards.reduce((s, c) => s + Math.max(0, computeCardDebt(data, c)), 0),
+            () => cards.reduce((s, c) => s + Math.max(0, computeCardLiveFigures(data, c).liveDebt), 0),
             [cards, data],
           );
 
@@ -11459,9 +11468,7 @@ if (isCard) {
 
         const totalBalance = items.reduce((sum, item) => {
           if (item.type === "card") {
-            const txDebt = computeCardDebt(data, item);
-            const instInfo = computeCardInstallmentsInfo(data, item);
-            return sum + Math.max(0, txDebt + (instInfo.totalDueSoFar || 0));
+            return sum + Math.max(0, computeCardLiveFigures(data, item).liveDebt);
           }
           return sum + safeNumber(liveBalances[item.key]);
         }, 0);
@@ -13736,11 +13743,10 @@ const liveDebt = useMemo(() => {
         const receivables = useMemo(() => (updatedLoans || []).filter((l) => l.isReceivable), [updatedLoans]);
 
         const totalCards = useMemo(
-          () => cards.reduce((acc, c) => {
-            const txDebt = computeCardDebt(data, c);
-            const instInfo = computeCardInstallmentsInfo(data, c);
-            return acc + Math.max(0, txDebt + (instInfo.totalDueSoFar || 0));
-          }, 0),
+          () => cards.reduce(
+            (acc, c) => acc + Math.max(0, computeCardLiveFigures(data, c).liveDebt),
+            0,
+          ),
           [cards, data],
         );
 
