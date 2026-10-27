@@ -4703,7 +4703,7 @@ const availableLimit = Math.max(0, limit - currentDebt);
           paymentsAfterStatement,           // 🆕
           nextCycleEstimate,
           nextCycleDueDate,
-          fullPayment: isReversal ? currentDebt : currentDebt + installmentsNotYetDue,
+          fullPayment: currentDebt,
           nextDueDate: dueDate,
           nextDueDateISO: dueDate ? getLocalISODate(dueDate) : null,
           daysUntilDue,
@@ -10301,7 +10301,7 @@ const cardsData = cards.map((card) => {
           const [quote] = useState(() => DAILY_DHIKR[Math.floor(Math.random() * DAILY_DHIKR.length)]);
 
           const totalCardDebt = useMemo(
-            () => cards.reduce((s, c) => s + Math.max(0, computeCardDebt(data, c)), 0),
+            () => cards.reduce((s, c) => s + Math.max(0, computeCardLiveFigures(data, c).liveDebt), 0),
             [cards, data],
           );
           const totalLoanDebt = useMemo(
@@ -17798,7 +17798,7 @@ const liveDebt = useMemo(() => {
               };
 
               cards.forEach((c) => {
-                const liveDebt = Math.max(0, computeCardDebt(data, c));
+                const liveDebt = Math.max(0, computeCardLiveFigures(data, c).liveDebt);
                 if (liveDebt <= 0.01) return;
                 const pendingDate = getPendingDateFor(
                   (t) => t.linkedCardId === c.id && t.category === "الالتزامات البنكية والتمويلية",
