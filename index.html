@@ -3493,19 +3493,7 @@ const YEARS_CONFIG = {
           return safeNumber(acc.initialBalance);
         return safeNumber(acc.balance);
       };
-const isReversalInstallmentBank = (card) => {
-  // البنوك العكسية: تقتطع المبلغ ثم تردّه عند التقسيط، وتحصّل أقساطاً شهرية
-  // AAIB (Arab African) + ADIB (Abu Dhabi) → عكسي
-  // CIB وأي بنك آخر → يقتطع كامل المبلغ ولا يردّه
-  if (!card) return false;
-  const provider = String(card.providerKey || "").toUpperCase();
-  const bank = String(card.bank || "").toUpperCase();
-  return (
-    provider === "AAIB" ||
-    provider === "ADIB" ||
-    /\bAAIB\b|ADIB|ABU\s*DHABI|ARAB\s*AFRICAN/i.test(bank)
-  );
-};
+      const isReversalInstallmentBank = (card) => false;
       const getCardMethod = (card) => {
         if (!card) return null;
         if (card.bank === "CIB" && card.name === "SWYPE") return "cib_swype";
@@ -3781,16 +3769,9 @@ const computeCardLiveFigures = (data, card) => {
   const txDebt = computeCardDebt(data, card);
   const instInfo = computeCardInstallmentsInfo(data, card);
   const limit = safeNumber(card.limit);
-  const isReversal = isReversalInstallmentBank(card);
-
-  const liveDebt = isReversal
-    ? txDebt + Math.max(0, (instInfo.totalDueSoFar || 0) - (instInfo.totalPaid || 0))
-    : txDebt + (instInfo.totalRemaining || 0);
-
-  const notYetDue = 0;
+  const liveDebt = txDebt + (instInfo.totalRemaining || 0);
   const liveAvailable = Math.max(0, limit - Math.max(0, liveDebt));
-
-  return { liveDebt, liveAvailable, notYetDue, txDebt, instInfo, limit, isReversal };
+  return { liveDebt, liveAvailable, notYetDue: 0, txDebt, instInfo, limit, isReversal: false };
 };
 const computeCardAvailable = (data, card, asOfDate = null) =>
   computeCardLiveFigures(data, card).liveAvailable;
@@ -4677,12 +4658,6 @@ const computeCardInstallmentsInfo = (data, card, asOfDate = new Date()) => {
         }
 
         // 6. ✅ المديونية حسب نوع البنك
-        const installmentsDueSoFar = instInfo.totalDueSoFar || 0;
-        const isReversal = isReversalInstallmentBank(card);
-        const currentDebt = isReversal
-          ? currentDebtFromTx + Math.max(0, installmentsDueSoFar - (instInfo.totalPaid || 0))
-          : currentDebtFromTx + (instInfo.totalRemaining || 0);
-
         const nextCycleEstimate = openCycle
           ? Math.max(0, openCycle.closingBalance) + openCycle.installmentsDueThisCycle
           : activePlans.length > 0
@@ -4709,10 +4684,11 @@ const computeCardInstallmentsInfo = (data, card, asOfDate = new Date()) => {
         const limit = safeNumber(card.limit);
 
         // 7. ✅ الحد المتاح = limit - المديونية - الأقساط المتبقية غير المستحقة
-        const installmentsNotYetDue = isReversal
-          ? 0
-          : Math.max(0, (instInfo.totalRemaining || 0) - installmentsDueSoFar);
-        const availableLimit = Math.max(0, limit - currentDebt - installmentsNotYetDue);
+// 6. ✅ المديونية الموحدة لكل البنوك
+const installmentsDueSoFar = instInfo.totalDueSoFar || 0;
+const currentDebt = currentDebtFromTx + (instInfo.totalRemaining || 0);
+const installmentsNotYetDue = 0;
+const availableLimit = Math.max(0, limit - currentDebt);
 
         return {
           cardId: card.id,
