@@ -3626,7 +3626,11 @@ const isCardPaymentTx = (t, cardId) => {
   if (!t || !cardId) return false;
   if (isHanyPurchaseTx(t) || isHanySettleTx(t)) return false;
   if (t.method === HANY_TAB_METHOD) return false;
-  if (t.source === "card-payment-plan") return t.linkedCardId === cardId;
+  if (t.source === "card-payment-plan") {
+    // 🆕 إصلاح: قيود سداد الأقساط هي مصاريف على البطاقة وليست سدادات
+    if (t.description && t.description.includes("Installment repayment")) return false;
+    return t.linkedCardId === cardId;
+  }
   if (t.source === "payment-console" && t.linkedCardId === cardId) return true;
   if (
     t.category === "الالتزامات البنكية والتمويلية" &&
