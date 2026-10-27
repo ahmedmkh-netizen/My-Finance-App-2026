@@ -4661,8 +4661,10 @@ const computeCardInstallmentsInfo = (data, card, asOfDate = new Date()) => {
           statementBalance = instInfo.totalDueSoFar || 0;
         }
 
-        // 🆕 إصلاح: إذا تم سداد الكشف بالكامل، نعرض التزامات الدورة القادمة (الشهرية) فقط
+        // ✅ إصلاح: التحقق من سداد رصيد الكشف الأساسي (حتى لو تبقى أقساط)
+        const isStatementBasePaid = statementBalance <= 0.01;
         const isStatementPaid = totalMandatory <= 0.01 && activePlans.length > 0;
+        
         if (isStatementPaid) {
           // حساب قسط الشهر القادم فقط
           const nextMonthTotal = activePlans.reduce((s, p) => s + safeNumber(p.monthlyAmount), 0);
@@ -4680,13 +4682,14 @@ const computeCardInstallmentsInfo = (data, card, asOfDate = new Date()) => {
         const nextCycleDueDate = openCycle ? openCycle.dueDate : null;
 
         let dueDate = null;
-        if (isStatementPaid) {
-          // ✅ الكشف مدفوع → احسب تاريخ الاستحقاق القادم بعد تاريخ الكشف المسدد
+        // ✅ الإصلاح: نتحقق من (isStatementPaid) أو (isStatementBasePaid) لنقل التاريخ للمستقبل
+        if (isStatementPaid || isStatementBasePaid) {
           const { dueDay } = getCardCycleParams(card);
           const baseDate = currentStatement ? new Date(currentStatement.dueDate) : new Date(now);
           const nextDue = new Date(baseDate.getFullYear(), baseDate.getMonth(), dueDay);
-          // لف للأمام شهر بشهر لحد ما نتجاوز تاريخ الكشف المسدد
-          while (nextDue <= baseDate) {
+          
+          // لف للأمام شهر بشهر لحد ما نتجاوز تاريخ الكشف المسدد والنهاردة
+          while (nextDue <= baseDate || nextDue <= now) {
             nextDue.setMonth(nextDue.getMonth() + 1);
           }
           dueDate = nextDue;
