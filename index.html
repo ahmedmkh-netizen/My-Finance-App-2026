@@ -3770,12 +3770,11 @@ const computeCardLiveFigures = (data, card) => {
   const instInfo = computeCardInstallmentsInfo(data, card);
   const limit = safeNumber(card.limit);
   
-  // التعديل: المديونية هي رصيد الكشف فقط، لأن الأقساط هي خطط لسداد هذا الرصيد
-  const liveDebt = txDebt; 
+  // المديونية الحية = ديون المعاملات + كل الأقساط المتبقية (عشان تطابق البنك)
+  const liveDebt = txDebt + (instInfo.totalRemaining || 0);
   const liveAvailable = Math.max(0, limit - Math.max(0, liveDebt));
   
-  const notYetDue = Math.max(0, (instInfo.totalRemaining || 0) - (instInfo.totalDueSoFar || 0));
-  return { liveDebt, liveAvailable, notYetDue, txDebt, instInfo, limit, isReversal: false };
+  return { liveDebt, liveAvailable, notYetDue: instInfo.totalRemaining, txDebt, instInfo, limit, isReversal: false };
 };
 const computeCardAvailable = (data, card, asOfDate = null) =>
   computeCardLiveFigures(data, card).liveAvailable;
