@@ -4317,7 +4317,7 @@ const computeCardAvailable = (data, card, asOfDate = null) =>
         const monthlyAmount = safeNumber(plan.monthlyAmount, safeNumber(plan.totalAmount) / plan.months);
         const dueAmount = monthsElapsed * monthlyAmount;
 
-        const paidAmount = data ? getPlanPaidAmount(plan, data) : safeNumber(plan.paidAmount);
+        const paidAmount = Math.max(safeNumber(plan.paidAmount), data ? getPlanPaidAmount(plan, data) : 0);
 
         const remainingAmount = Math.max(0, safeNumber(plan.totalAmount) - paidAmount);
         const remainingMonths = Math.max(0, plan.months - monthsElapsed);
@@ -11604,7 +11604,7 @@ if (isCard) {
           const [startYear, setStartYear] = useState(getDefaultMonthYear().year);
           const [note, setNote] = useState("");
           const [selectedTxIds, setSelectedTxIds] = useState(new Set());
-
+          const [initialPaid, setInitialPaid] = useState(""); 
           const cardTxs = useMemo(() => {
             if (!card) return [];
             const method = getCardMethod(card);
@@ -11647,6 +11647,7 @@ if (isCard) {
               startYear: safeNumber(startYear, 2026),
               note: note.trim(),
               status: "active",
+			  paidAmount: roundMoney(parseNumberInput(initialPaid)),
               linkedTxIds: Array.from(selectedTxIds),
               createdAt: new Date().toISOString(),
             };
@@ -11765,7 +11766,19 @@ if (isCard) {
                     </div>
                   </div>
                 </div>
-
+                {/* الخانة الجديدة للمبلغ المدفوع مسبقاً */}
+                <div>
+                  <label className="text-[11px] font-black block mb-2" style={{ color: "var(--text-muted)" }}>
+                    المبلغ المدفوع مسبقاً (اختياري)
+                  </label>
+                  <input
+                    type="text" inputMode="decimal"
+                    className="input-field input-num text-base text-center font-black"
+                    style={{ color: "var(--success)" }}
+                    value={initialPaid} onChange={(e) => setInitialPaid(e.target.value)}
+                    placeholder="مثال: قيمة الأقساط القديمة"
+                  />
+                </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="text-[11px] font-black block mb-2" style={{ color: "var(--text-muted)" }}>شهر البداية</label>
