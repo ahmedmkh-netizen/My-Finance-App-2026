@@ -3541,22 +3541,18 @@ const YEARS_CONFIG = {
         t && (t.hanyEffect === "settle" || isHanySettleCategory(t.category));
 
       const _balanceCache = new Map();
-      const _balanceCacheKey = (data, asOfDate) => {
-        const txCount = data?.transactions?.length || 0;
-        const lastTxId = data?.transactions?.[0]?.id || "";
-        const txHash = (data?.transactions || [])
-          .map((t) => `${t.id}:${t.amount}:${t.method}:${t.type}:${t.status}:${t.affectsCash === false ? 0 : 1}`)
-          .join("|");
-        const accHash = Object.keys(data?.accountsData || {})
-          .sort()
-          .map((k) => {
-            const a = data.accountsData[k];
-            return `${k}:${a?.initialBalance}:${a?.initialDate || ""}`;
-          })
-          .join("|");
-        const asOf = asOfDate ? new Date(asOfDate).getTime() : "today";
-        return `${txCount}_${lastTxId}_${txHash}_${accHash}_${asOf}`;
-      };
+const _balanceCacheKey = (data, asOfDate) => {
+  const v = safeNumber(data?.__txVersion, 0);   // ← الجديد
+  const accHash = Object.keys(data?.accountsData || {})
+    .sort()
+    .map((k) => {
+      const a = data.accountsData[k];
+      return `${k}:${a?.initialBalance}:${a?.initialDate || ""}`;
+    })
+    .join("|");
+  const asOf = asOfDate ? new Date(asOfDate).getTime() : "today";
+  return `${v}_${accHash}_${asOf}`;
+};
 
       /**
        * ═══════════════════════════════════════════════════════════════
@@ -5208,6 +5204,7 @@ const availableLimit = Math.max(0, limit - currentDebt);
           ...rest,
           engineVersion: CURRENT_ENGINE_VERSION,
           recurringInitialized: true,
+		  __txVersion: safeNumber(parsed.__txVersion, 0),
           cards: mergedCards,
           loans: mergedLoans,
           recurringItems,
@@ -5270,6 +5267,7 @@ const availableLimit = Math.max(0, limit - currentDebt);
           recurringInitialized: true,
           defaultsSeeded: true,
           transactions: [],
+		  __txVersion: 0,
           loans: [],
           cards: JSON.parse(JSON.stringify(DEFAULT_CARDS)),
           accountsData: JSON.parse(JSON.stringify(DEFAULT_ACCOUNTS)),
@@ -16518,6 +16516,8 @@ const liveDebt = useMemo(() => {
             if (!Array.isArray(incoming.transactions)) incoming.transactions = [];
             incoming.transactions = sortTransactions(incoming.transactions);
             incoming.hanyPayableCache = computeHanyPayable(incoming);
+			  try { _balanceCache.clear(); } catch (e) {}
+			incoming.__txVersion = safeNumber(state.data.__txVersion, 0) + 1;
             return { ...state, data: incoming };
           }
 
@@ -16640,6 +16640,7 @@ const liveDebt = useMemo(() => {
             return {
               ...state,
               data: { ...state.data, transactions: newTxs, auditLog, hanyPayableCache },
+			  __txVersion: safeNumber(state.data.__txVersion, 0) + 1,
             };
           }
 
