@@ -3770,14 +3770,11 @@ const computeCardLiveFigures = (data, card) => {
   const instInfo = computeCardInstallmentsInfo(data, card);
   const limit = safeNumber(card.limit);
   
-  // الحسبة الجديدة: إجمالي الأقساط ناقص المستحق منها (لأن المستحق موجود أصلاً في رصيد الكشف)
-  const totalDueSoFar = instInfo.totalDueSoFar || 0;
-  const totalRemaining = instInfo.totalRemaining || 0;
-  const notYetDue = Math.max(0, totalRemaining - totalDueSoFar);
-  
-  const liveDebt = txDebt + notYetDue;
+  // التعديل: المديونية هي رصيد الكشف فقط، لأن الأقساط هي خطط لسداد هذا الرصيد
+  const liveDebt = txDebt; 
   const liveAvailable = Math.max(0, limit - Math.max(0, liveDebt));
   
+  const notYetDue = Math.max(0, (instInfo.totalRemaining || 0) - (instInfo.totalDueSoFar || 0));
   return { liveDebt, liveAvailable, notYetDue, txDebt, instInfo, limit, isReversal: false };
 };
 const computeCardAvailable = (data, card, asOfDate = null) =>
@@ -4719,7 +4716,7 @@ const computeCardInstallmentsInfo = (data, card, asOfDate = new Date()) => {
         // 7. ✅ الحد المتاح = limit - المديونية - الأقساط المتبقية غير المستحقة
 // 6. ✅ المديونية الموحدة لكل البنوك
 const installmentsDueSoFar = instInfo.totalDueSoFar || 0;
-const currentDebt = currentDebtFromTx + (instInfo.totalRemaining || 0);
+const currentDebt = currentDebtFromTx; 
 const installmentsNotYetDue = 0;
 const availableLimit = Math.max(0, limit - currentDebt);
 
