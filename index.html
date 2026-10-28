@@ -4715,9 +4715,9 @@ const computeCardInstallmentsInfo = (data, card, asOfDate = new Date()) => {
         // 7. ✅ الحد المتاح = limit - المديونية - الأقساط المتبقية غير المستحقة
 // 6. ✅ المديونية الموحدة لكل البنوك
 const installmentsDueSoFar = instInfo.totalDueSoFar || 0;
-const currentDebt = currentDebtFromTx; 
-const installmentsNotYetDue = 0;
-const availableLimit = Math.max(0, limit - currentDebt);
+const currentDebt = currentDebtFromTx + (instInfo.totalDueSoFar || 0);
+const installmentsNotYetDue = Math.max(0, (instInfo.totalRemaining || 0) - (instInfo.totalDueSoFar || 0));
+const availableLimit = Math.max(0, limit - (currentDebtFromTx + (instInfo.totalRemaining || 0)));
 
         return {
           cardId: card.id,
@@ -12710,10 +12710,10 @@ const isCredit = liveDebt < 0;
             return { expected, received, pending: expected - received };
           }, [data?.cashbackTrackers, selectedMonth, selectedYear]);
 
-          const totalCardDebt = useMemo(
-            () => cards.reduce((s, c) => s + Math.max(0, computeCardDebt(data, c)), 0),
-            [cards, data],
-          );
+const totalCardDebt = useMemo(
+  () => cards.reduce((s, c) => s + Math.max(0, computeCardLiveFigures(data, c).liveDebt), 0),
+  [cards, data],
+);
 
           const groupedData = useMemo(() => {
             const groups = {};
@@ -16207,7 +16207,7 @@ const liveDebt = useMemo(() => {
             {activeSection === "cards" && (
               <div className="space-y-3">
                 {localCards.map((card) => {
-                  const liveDebt = computeCardDebt(data, card);
+                  const liveDebt = computeCardLiveFigures(data, card).liveDebt;
                   const debtPct = safeNumber(card.limit) > 0 ? (Math.max(0, liveDebt) / safeNumber(card.limit)) * 100 : 0;
                   const subCards = Array.isArray(card.subCardLast4) ? card.subCardLast4 : [];
                   return (
