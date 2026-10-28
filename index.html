@@ -3769,9 +3769,16 @@ const computeCardLiveFigures = (data, card) => {
   const txDebt = computeCardDebt(data, card);
   const instInfo = computeCardInstallmentsInfo(data, card);
   const limit = safeNumber(card.limit);
-  const liveDebt = txDebt + (instInfo.totalRemaining || 0);
+  
+  // الحسبة الجديدة: إجمالي الأقساط ناقص المستحق منها (لأن المستحق موجود أصلاً في رصيد الكشف)
+  const totalDueSoFar = instInfo.totalDueSoFar || 0;
+  const totalRemaining = instInfo.totalRemaining || 0;
+  const notYetDue = Math.max(0, totalRemaining - totalDueSoFar);
+  
+  const liveDebt = txDebt + notYetDue;
   const liveAvailable = Math.max(0, limit - Math.max(0, liveDebt));
-  return { liveDebt, liveAvailable, notYetDue: 0, txDebt, instInfo, limit, isReversal: false };
+  
+  return { liveDebt, liveAvailable, notYetDue, txDebt, instInfo, limit, isReversal: false };
 };
 const computeCardAvailable = (data, card, asOfDate = null) =>
   computeCardLiveFigures(data, card).liveAvailable;
@@ -16258,7 +16265,7 @@ const liveDebt = useMemo(() => {
                       </div>
                       <div className="p-2 rounded-lg text-center mt-2" style={{ background: "var(--bg-muted)" }}>
                         <p className="text-[10px] font-semibold" style={{ color: "var(--text-muted)" }}>
-                          المديونية الحية {liveDebt < 0 && <span className="text-emerald-600">(دائن)</span>}
+                          المديونية الأساسية {liveDebt < 0 && <span className="text-emerald-600">(دائن)</span>}
                         </p>
                         <p className={`font-black text-sm money tabular ${liveDebt < 0 ? "text-emerald-600" : "text-red-600"}`}>
                           {fmt(Math.abs(liveDebt))} ج.م
