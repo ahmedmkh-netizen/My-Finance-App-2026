@@ -20367,3 +20367,340 @@ const liveDebt = useMemo(() => {
     </script>
   </body>
 </html>
+/**
+ * ═══════════════════════════════════════════════════════════════
+ * 🏦 V88.5.0 — ACCOUNTING CORE (Part 1)
+ * ═══════════════════════════════════════════════════════════════
+ * المنطق البنكي المعتمد:
+ * 1. المديونية = افتتاحي + مشتريات (خارج الخطط) - مرتجعات - سدادات + (أقساط مستحقة + غير مستحقة)
+ * 2. السداد المرتبط بخطة يُخصم كـ "سداد" فقط ولا يُخصم من الأقساط المستحقة مرة أخرى.
+ * 3. الأقساط المستحقة تُحسب زمنياً (monthsElapsed) بناءً على يوم الاستحقاق (dueDay).
+ * 4. دفتر هاني = مشتريات - سدادات (بدون مرتجعات).
+ */
+(function() {
+  "use strict";
+
+  // ─── Utilities (Mocked for standalone test) ───
+  const safeNumber = (v, f = 0) => { const n = Number(v); return isNaN(n) || !isFinite(n) ? f : n; };
+  const roundMoney = (v) => Math.round(safeNumber(v) * 100) / 100;
+  const parseISODate = (iso) => {
+    if (!iso) return null;
+    const d = new Date(iso);
+    return isNaN(d) ? null : d;
+  };
+  const getMonthIndex = (m) => ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"].indexOf(m);
+  const getCardCycleParams = (card) => {
+    const dueDayMatch = String(card?.dueDate || "25").match(/(\d{1,2})/);
+    const dueDay = Math.min(28, Math.max(1, dueDayMatch ? parseInt(dueDayMatch[1], 10) : 25));
+    let statementDay = safeNumber(card?.statementDay, 0);
+    if (statementDay < 1 || statementDay > 28) {
+      statementDay = dueDay > 20 ? dueDay - 20 : dueDay + 10;
+      statementDay = Math.min(28, Math.max(1, statementDay));
+    }
+    return { dueDay, statementDay };
+  };
+  const getCardMethod = (card) => {
+    if (!card) return null;
+    if (card.methodId) return card.methodId;
+    if (card.bank === "CIB" && card.name === "SWYPE") return "cib_swype";
+    if (card.bank === "AAIB") return "aaib_card";
+    if (card.bank === "ADIB Egypt" || card.name === "Tainum") return "adib_card";
+    return "cib_card";
+  };
+  const isHanyShopCategory = (cat) => cat === "مشتريات محل هاني";
+  const isHanySettleCategory = (cat) => cat === "سداد دفتر هاني";
+  const isHanyPurchaseTx = (t) => t && (t.hanyEffect === "purchase" || t.method === "hany_tab") && isHanyShopCategory(t.category) && t.hanyEffect !== "carryover-marker";
+  const isHanySettleTx = (t) => t && (t.hanyEffect === "settle" || isHanySettleCategory(t.category));
+  const isCarryoverMarker = (t) => t && (t.hanyEffect === "carryover-marker" || t.subCategory === "رصيد مرحل");
+  const isCardPaymentTx = (t, cardId) => {
+    if (!t || !cardId) return false;
+    if (isHanyPurchaseTx(t) || isHanySettleTx(t)) return false;
+    if (t.source === "card-payment-plan") return t.linkedCardId === cardId;
+    if (t.source === "payment-console" && t.linkedCardId === cardId) return true;
+    if (t.category === "الالتزامات البنكية والتمويلية" && t.type === "expense" && t.linkedCardId === cardId && !t.linkedLoanId) return true;
+    if (t.type === "income" && t.linkedCardId === cardId && (t.description || "").match(/(Deposit|Payment|سداد|إيداع)/i)) return true;
+    return false;
+  };
+
+  // ─── 1. دالة حساب حالة القسط المركزية ───
+  /**
+   * @param {Object} plan خطة التقسيط
+   * @param {Date} asOfDate تاريخ الحساب
+   * @param {Object} data بيانات التطبيق (لحساب السدادات)
+   * @param {Number} dueDay يوم الاستحقاق بالشهر
+   */
+  const getInstallmentStatus = (plan, asOfDate = new Date(), data = null, dueDay = 25) => {
+    if (!plan || !plan.months || plan.months <= 0) {
+      return { monthsElapsed: 0, dueAmount: 0, paidAmount: 0, overdueAmount: 0, notYetDueAmount: 0, remainingAmount: 0, isCompleted: false, progressPct: 0 };
+    }
+
+    const startMonthIdx = getMonthIndex(plan.startMonth);
+    const startYM = safeNumber(plan.startYear, 2026) * 12 + (startMonthIdx >= 0 ? startMonthIdx : 0);
+    const nowYM = asOfDate.getFullYear() * 12 + asOfDate.getMonth();
+
+    // مراعاة يوم الاستحقاق (لو إحنا قبل يوم الاستحقاق، الشهر ده لسه ما استحقش)
+    const beforeDue = dueDay ? (asOfDate.getDate() < dueDay ? 1 : 0) : 0;
+    let monthsElapsed = nowYM - startYM + 1 - beforeDue;
+    monthsElapsed = Math.max(0, Math.min(monthsElapsed, plan.months));
+
+    const total = safeNumber(plan.totalAmount);
+    const monthlyAmount = safeNumber(plan.monthlyAmount, total / plan.months);
+    const dueAmount = Math.min(total, monthsElapsed * monthlyAmount);
+
+    // المدفوع = الافتتاحي + السدادات المسجلة في المعاملات
+    const txPaid = (data?.transactions || [])
+      .filter(t => t.status === "paid" && t.source === "card-payment-plan" && (t.linkedPlanId === plan.id || t.installmentPlanId === plan.id))
+      .reduce((sum, t) => sum + safeNumber(t.amount), 0);
+    
+    const hasInit = plan.initialPaid !== undefined && plan.initialPaid !== null;
+    const initialPaid = hasInit ? safeNumber(plan.initialPaid) : Math.max(0, safeNumber(plan.paidAmount) - txPaid);
+    
+    const paidAmount = Math.min(total, initialPaid + txPaid);
+
+    const overdueAmount = Math.max(0, dueAmount - paidAmount);
+    const notYetDueAmount = Math.max(0, total - Math.max(dueAmount, paidAmount));
+    const remainingAmount = Math.max(0, total - paidAmount);
+
+    return {
+      monthsElapsed,
+      dueAmount: roundMoney(dueAmount),
+      paidAmount: roundMoney(paidAmount),
+      overdueAmount: roundMoney(overdueAmount),
+      notYetDueAmount: roundMoney(notYetDueAmount),
+      remainingAmount: roundMoney(remainingAmount),
+      isCompleted: paidAmount >= total - 0.005,
+      progressPct: total > 0 ? (paidAmount / total) * 100 : 0
+    };
+  };
+
+  // ─── 2. دالة المديونية المركزية للبطاقة ───
+  /**
+   * ترجع تفصيل كامل لمديونية البطاقة بناءً على المنطق البنكي
+   */
+  const getCardOutstanding = (card, data, asOfDate = new Date()) => {
+    if (!card) return { openingDebt: 0, txPurchases: 0, txRefunds: 0, txPayments: 0, installmentsDue: 0, installmentsNotDue: 0, totalDebt: 0, availableCredit: 0, creditBalance: 0 };
+
+    const method = getCardMethod(card);
+    const subCards = Array.isArray(card.subCardLast4) ? card.subCardLast4 : [];
+    const openingDebt = safeNumber(card.openingDebt);
+    const { dueDay } = getCardCycleParams(card);
+    const openingDate = parseISODate(card.openingDebtDate || card.openingDate) || new Date(0);
+
+    let txPurchases = 0;
+    let txRefunds = 0;
+    let txPayments = 0;
+
+    (data?.transactions || []).forEach(t => {
+      if (!t || t.status !== "paid" || t.source === "void" || isCarryoverMarker(t)) return;
+      if (isHanyPurchaseTx(t) || isHanySettleTx(t)) return;
+      
+      const d = parseISODate(t.date);
+      if (!d || d > asOfDate || d < openingDate) return;
+
+      const hasExplicitLink = t.linkedCardId !== undefined && t.linkedCardId !== null && t.linkedCardId !== "";
+      let belongsToCard = false;
+      if (hasExplicitLink) belongsToCard = t.linkedCardId === card.id;
+      else if (t.cardLast4 && subCards.includes(t.cardLast4)) belongsToCard = true;
+      else belongsToCard = t.method === method;
+      
+      if (!belongsToCard) return;
+
+      if (isCardPaymentTx(t, card.id)) {
+        txPayments += safeNumber(t.amount);
+      } else if (t.installmentPlanId || t.linkedPlanId) {
+        // مشتريات تحولت لخطة أقساط - لا تُحسب هنا لتجنب الازدواجية
+      } else if (t.type === "expense") {
+        txPurchases += safeNumber(t.amount);
+      } else if (t.type === "income") {
+        txRefunds += safeNumber(t.amount);
+      }
+    });
+
+    // حساب الأقساط
+    let installmentsDue = 0;
+    let installmentsNotDue = 0;
+    const plans = (data?.cardInstallments || []).filter(p => p.cardId === card.id && p.status !== "cancelled");
+
+    plans.forEach(p => {
+      const status = getInstallmentStatus(p, asOfDate, data, dueDay);
+      installmentsDue += status.overdueAmount;
+      installmentsNotDue += status.notYetDueAmount;
+    });
+
+    // المديونية الإجمالية
+    const totalDebt = openingDebt + txPurchases - txRefunds - txPayments + installmentsDue + installmentsNotDue;
+    const limit = safeNumber(card.limit);
+    const availableCredit = Math.max(0, limit - Math.max(0, totalDebt));
+    const creditBalance = totalDebt < 0 ? Math.abs(totalDebt) : 0;
+
+    return {
+      openingDebt: roundMoney(openingDebt),
+      txPurchases: roundMoney(txPurchases),
+      txRefunds: roundMoney(txRefunds),
+      txPayments: roundMoney(txPayments),
+      installmentsDue: roundMoney(installmentsDue),
+      installmentsNotDue: roundMoney(installmentsNotDue),
+      totalDebt: roundMoney(totalDebt),
+      availableCredit: roundMoney(availableCredit),
+      creditBalance: roundMoney(creditBalance)
+    };
+  };
+
+  // ─── 3. محرك الكشف (Statement Engine) ───
+  const buildCardStatementEngine = (card, data, asOfDate = new Date()) => {
+    const outstanding = getCardOutstanding(card, data, asOfDate);
+    const { dueDay, statementDay } = getCardCycleParams(card);
+    
+    // ملاحظة: في الجزء الثاني سيتم تفصيل الـ Cycles بشكل أدق، لكن هنا نضمن التوافق مع الأرقام المركزية
+    return {
+      cardId: card.id,
+      totalDebt: outstanding.totalDebt,
+      outstanding,
+      cycleParams: { dueDay, statementDay }
+    };
+  };
+
+  // ─── 4. التنبؤ بالسداد (Prediction) ───
+  const computeCardPaymentPrediction = (data, card, asOfDate = new Date()) => {
+    if (!card) return null;
+    const outstanding = getCardOutstanding(card, data, asOfDate);
+    const { dueDay } = getCardCycleParams(card);
+    const plans = (data?.cardInstallments || []).filter(p => p.cardId === card.id && p.status !== "cancelled");
+    
+    let installmentsThisMonth = 0;
+    plans.forEach(p => {
+      const status = getInstallmentStatus(p, asOfDate, data, dueDay);
+      if (status.overdueAmount > 0) installmentsThisMonth += status.overdueAmount;
+      else if (!status.isCompleted) installmentsThisMonth += Math.min(safeNumber(p.monthlyAmount), status.remainingAmount);
+    });
+
+    // المطلوب الأدنى = أقساط هذا الشهر + (5% من المديونية المتغيرة)
+    const revolvingDebt = Math.max(0, outstanding.totalDebt - outstanding.installmentsDue - outstanding.installmentsNotDue);
+    const minBase = revolvingDebt > 0 ? Math.max(100, revolvingDebt * 0.05) : 0;
+    const totalMandatory = outstanding.totalDebt;
+
+    return {
+      cardId: card.id,
+      currentDebt: outstanding.totalDebt,
+      statementBalance: outstanding.totalDebt, // مبسط في هذا الجزء
+      installmentsThisMonth: roundMoney(installmentsThisMonth),
+      minBase: roundMoney(minBase),
+      minPayment: roundMoney(Math.min(totalMandatory, minBase + installmentsThisMonth)),
+      totalMandatory: roundMoney(totalMandatory),
+      breakdown: outstanding
+    };
+  };
+
+  // ─── 5. دفتر هاني (بدون مرتجعات) ───
+  const computeHanyPayable = (data, asOfDate = new Date()) => {
+    let purchases = 0;
+    let settlements = 0;
+
+    (data?.transactions || []).forEach(t => {
+      if (!t || t.status === "void" || t.source === "void" || isCarryoverMarker(t)) return;
+      const d = parseISODate(t.date);
+      if (!d || d > asOfDate) return;
+
+      if (isHanyPurchaseTx(t)) {
+        purchases += safeNumber(t.amount);
+      } else if (isHanySettleTx(t) && t.status === "paid") {
+        settlements += safeNumber(t.amount);
+      }
+    });
+
+    return roundMoney(Math.max(0, purchases - settlements));
+  };
+
+  // ═══════════════════════════════════════════════════════════════
+  // 🧪 اختبارات المحاسبة (يجب أن تظهر كلها PASS)
+  // ═══════════════════════════════════════════════════════════════
+  const __runAccountingTests = () => {
+    console.log("🧪 بدء اختبارات V88.5.0 Accounting Core...");
+    let passed = 0; let failed = 0;
+
+    const assertEqual = (name, actual, expected) => {
+      if (Math.abs(actual - expected) < 0.01) {
+        console.log(`✅ ${name}: ${actual}`);
+        passed++;
+      } else {
+        console.error(`❌ ${name}: متوقع ${expected}، وجاء ${actual}`);
+        failed++;
+      }
+    };
+
+    const mockCard = { id: 1, limit: 10000, openingDebt: 0, dueDate: "25 من كل شهر", statementDay: 5, bank: "CIB", name: "Titanium" };
+    
+    // 1. بطاقة بلا أقساط + مشتريات + سداد
+    const data1 = {
+      transactions: [
+        { id: "t1", status: "paid", type: "expense", amount: 1000, method: "cib_card", date: "2026-10-01" },
+        { id: "t2", status: "paid", type: "expense", amount: 500, method: "cib_savings", source: "card-payment-plan", linkedCardId: 1, date: "2026-10-10" }
+      ],
+      cardInstallments: []
+    };
+    const out1 = getCardOutstanding(mockCard, data1, new Date("2026-10-15"));
+    assertEqual("1. بطاقة بلا أقساط (1000 - 500)", out1.totalDebt, 500);
+
+    // 2. بطاقة بخطة أقساط + سداد قسط
+    const data2 = {
+      transactions: [
+        { id: "t3", status: "paid", type: "expense", amount: 100, method: "cib_savings", source: "card-payment-plan", linkedCardId: 1, linkedPlanId: "p1", date: "2026-10-10" }
+      ],
+      cardInstallments: [
+        { id: "p1", cardId: 1, totalAmount: 1200, months: 12, monthlyAmount: 100, startMonth: "أكتوبر", startYear: 2026, initialPaid: 0 }
+      ]
+    };
+    // قسط أكتوبر استحق (100)، تم سداده (100). المتبقي 1100.
+    const out2 = getCardOutstanding(mockCard, data2, new Date("2026-10-15"));
+    assertEqual("2. خطة أقساط + سداد (1100)", out2.totalDebt, 1100);
+
+    // 3. كشف صادر غير مسدد + سداد جزئي
+    // (بناءً على المنطق: 1000 شراء، 200 سداد = 800)
+    const data3 = {
+      transactions: [
+        { id: "t4", status: "paid", type: "expense", amount: 1000, method: "cib_card", date: "2026-09-01" },
+        { id: "t5", status: "paid", type: "expense", amount: 200, method: "cib_savings", source: "card-payment-plan", linkedCardId: 1, date: "2026-10-05" }
+      ],
+      cardInstallments: []
+    };
+    const pred3 = computeCardPaymentPrediction(data3, mockCard, new Date("2026-10-15"));
+    assertEqual("3. رصيد الكشف (800)", pred3.totalMandatory, 800);
+
+    // 4. كشف مسدد + مشتريات جديدة (التنبؤ)
+    const data4 = {
+      transactions: [
+        { id: "t6", status: "paid", type: "expense", amount: 1000, method: "cib_card", date: "2026-09-01" },
+        { id: "t7", status: "paid", type: "expense", amount: 1000, method: "cib_savings", source: "card-payment-plan", linkedCardId: 1, date: "2026-10-01" },
+        { id: "t8", status: "paid", type: "expense", amount: 300, method: "cib_card", date: "2026-10-10" }
+      ],
+      cardInstallments: []
+    };
+    const out4 = getCardOutstanding(mockCard, data4, new Date("2026-10-15"));
+    assertEqual("4. كشف مسدد + مشتريات جديدة (300)", out4.totalDebt, 300);
+
+    // 5. دفتر هاني: مشتريات + سدادات
+    const data5 = {
+      transactions: [
+        { id: "h1", status: "paid", type: "expense", amount: 500, category: "مشتريات محل هاني", method: "hany_tab", date: "2026-10-01" },
+        { id: "h2", status: "paid", type: "expense", amount: 200, category: "سداد دفتر هاني", method: "cash", hanyEffect: "settle", date: "2026-10-05" }
+      ]
+    };
+    const hanyBal = computeHanyPayable(data5, new Date("2026-10-15"));
+    assertEqual("5. رصيد هاني (300)", hanyBal, 300);
+
+    console.log(`\n📊 النتيجة: ${passed} ناجح، ${failed} فاشل.`);
+    if (failed === 0) console.log("🎉 جميع الاختبارات ناجحة! المنطق المحاسبي سليم.");
+  };
+
+  // Expose to window
+  window.AccountingCore = {
+    getInstallmentStatus,
+    getCardOutstanding,
+    buildCardStatementEngine,
+    computeCardPaymentPrediction,
+    computeHanyPayable,
+    __runAccountingTests
+  };
+
+  console.log("✅ V88.5.0 Accounting Core (Part 1) محملة بنجاح. اكتب window.AccountingCore.__runAccountingTests() في الكونسول.");
+})();
