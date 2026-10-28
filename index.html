@@ -4710,12 +4710,13 @@ const totalDue = Math.max(0, closingBalance) + installmentsDueThisCycle;
 
         const limit = safeNumber(card.limit);
 
-        // 7. ✅ الحد المتاح = limit - المديونية - الأقساط المتبقية غير المستحقة
-// 6. ✅ المديونية الموحدة لكل البنوك
+// 7. ✅ الحد المتاح = limit - المديونية - الأقساط المتبقية غير المستحقة
+// توحيد المديونية مع computeCardLiveFigures عشان الأرقام تطابق بعضها
+const liveFigures = computeCardLiveFigures(data, card);
+const currentDebt = liveFigures.liveDebt;
 const installmentsDueSoFar = instInfo.totalDueSoFar || 0;
-const currentDebt = currentDebtFromTx + (instInfo.totalDueSoFar || 0);
-const installmentsNotYetDue = Math.max(0, (instInfo.totalRemaining || 0) - (instInfo.totalDueSoFar || 0));
-const availableLimit = Math.max(0, limit - (currentDebtFromTx + (instInfo.totalRemaining || 0)));
+const installmentsNotYetDue = Math.max(0, (instInfo.totalRemaining || 0) - installmentsDueSoFar);
+const availableLimit = Math.max(0, limit - currentDebt);
 
         return {
           cardId: card.id,
