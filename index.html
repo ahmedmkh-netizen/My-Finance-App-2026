@@ -16636,13 +16636,18 @@ const liveDebt = useMemo(() => {
             });
 
             const auditLog = [...auditEntries, ...(state.data.auditLog || [])].slice(0, 1000);
-            const hanyPayableCache = computeHanyPayable({ ...state.data, transactions: newTxs });
-            return {
-              ...state,
-              data: { ...state.data, transactions: newTxs, auditLog, hanyPayableCache },
-			  __txVersion: safeNumber(state.data.__txVersion, 0) + 1,
-            };
-          }
+  const hanyPayableCache = computeHanyPayable({ ...state.data, transactions: newTxs });
+  return {
+    ...state,
+    data: {
+      ...state.data,
+      transactions: newTxs,
+      auditLog,
+      hanyPayableCache,
+      __txVersion: safeNumber(state.data.__txVersion, 0) + 1,  // ✅ داخل data
+    },
+  };
+}
 
           case "UPDATE_LOANS":
             return { ...state, data: { ...state.data, loans: action.payload } };
