@@ -3506,11 +3506,13 @@ paymentsAfterStatement,
           openingDebt, openingDate,
         };
       };
-
       const computeCardPaymentPrediction = (data, card, asOfDate = new Date()) => {
         if (!card) return null;
         const engine = buildCardStatementEngine(card, data, asOfDate);
         const now = new Date(asOfDate);
+
+        // 🆕 نقل تعريف liveFigures لأول الدالة عشان نمنع خطأ الـ TDZ
+        const liveFigures = computeCardLiveFigures(data, card);
 
         const currentDebtFromTx = Math.max(0, computeCardDebt(data, card, asOfDate));
         const instInfo = engine.installmentsInfo || {
@@ -3555,7 +3557,7 @@ paymentsAfterStatement,
         );
 
         if (!currentStatement) {
-          // حساب التنبؤ الحقيقي بناءً على المديونية الحالية (اللي مش داخلة في أقساط)
+          // ✅ التنبؤ الجديد: بناءً على المديونية الحالية الفعلية
           const projectedTxDebt = liveFigures.txDebt;
           const projectedMinBase = projectedTxDebt > 0 ? Math.max(100, Math.round(projectedTxDebt * 0.05 * 100) / 100) : 0;
           const activePlansMonthly = activePlans.reduce((s, p) => s + safeNumber(p.monthlyAmount), 0);
@@ -3612,7 +3614,6 @@ paymentsAfterStatement,
 
         const limit = safeNumber(card.limit);
 
-        const liveFigures = computeCardLiveFigures(data, card);
         const currentDebt = liveFigures.liveDebt;
         const installmentsDueSoFar = instInfo.totalDueSoFar || 0;
         const installmentsNotYetDue = Math.max(0, (instInfo.totalRemaining || 0) - installmentsDueSoFar);
