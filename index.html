@@ -6838,7 +6838,7 @@
         );
       });
 
-      /* ═══════════════ HANY VIEW ═══════════════ */
+          /* ═══════════════ HANY VIEW ═══════════════ */
       const HanyView = memo(function HanyView(props) {
         const { data, dispatch, saveHistory, addNotification, selectedYear, selectedMonth } = props;
         const [showSettle, setShowSettle] = useState(false);
@@ -6900,6 +6900,29 @@
           return list;
         }, []);
 
+        /* 🆕 طباعة كشف هاني */
+        const handlePrintHany = useCallback((withMonthFilter = false) => {
+          try {
+            const opts = {
+              includePurchases: true,
+              includeSettlements: true,
+              includeRefunds: true,
+              includeGrouped: true,
+              includeWatermark: true,
+              monthFilter: withMonthFilter ? { month: selectedMonth, year: selectedYear } : null,
+            };
+            const html = generateHanyLedgerReport(data, opts);
+            const title = withMonthFilter
+              ? `كشف حساب هاني — ${selectedMonth} ${selectedYear}`
+              : `كشف حساب هاني — كل الفترات`;
+            openPrintWindow(html, title, { autoPrint: true });
+            addNotification({ type: "success", title: "جاري فتح نافذة الطباعة...", duration: 3000 });
+          } catch (err) {
+            console.error("Print hany failed:", err);
+            addNotification({ type: "error", title: "فشل فتح الطباعة", message: err.message });
+          }
+        }, [data, selectedMonth, selectedYear, addNotification]);
+
         const openQuickPurchase = (presetItem) => {
           dispatch({ type: "SET_FORM_MODE", payload: "add" });
           dispatch({
@@ -6933,24 +6956,12 @@
           settlingRef.current = true;
           try {
             const check = validateAmount(settleAmount, { min: 0.01, max: hanyPayable || 10000000, label: "المبلغ" });
-            if (!check.valid) {
-              addNotification({ type: "error", title: "خطأ", message: check.error });
-              return;
-            }
+            if (!check.valid) { addNotification({ type: "error", title: "خطأ", message: check.error }); return; }
             const amount = roundMoney(check.value);
-            if (amount > hanyPayable + 0.005) {
-              addNotification({ type: "error", title: "المبلغ أكبر من المستحق" });
-              return;
-            }
-            if (!HANY_SETTLE_ALLOWED_METHODS.includes(settleMethod)) {
-              addNotification({ type: "error", title: "قناة غير مسموحة" });
-              return;
-            }
+            if (amount > hanyPayable + 0.005) { addNotification({ type: "error", title: "المبلغ أكبر من المستحق" }); return; }
+            if (!HANY_SETTLE_ALLOWED_METHODS.includes(settleMethod)) { addNotification({ type: "error", title: "قناة غير مسموحة" }); return; }
             const d = parseISODate(settleDate);
-            if (!d) {
-              addNotification({ type: "error", title: "تاريخ غير صحيح" });
-              return;
-            }
+            if (!d) { addNotification({ type: "error", title: "تاريخ غير صحيح" }); return; }
             const txYear = d.getFullYear(), txMonth = ALL_MONTHS[d.getMonth()];
             if (isMonthClosed(data, txYear, txMonth)) {
               addNotification({ type: "error", title: "شهر مغلق", message: `${txMonth} ${txYear}` });
@@ -7016,6 +7027,32 @@
                       المشتريات اليومية والسدادات والمرتجعات
                     </p>
                   </div>
+                </div>
+
+                {/* 🆕 أزرار طباعة كشف هاني */}
+                <div className="flex gap-1.5 flex-wrap">
+                  <button
+                    onClick={() => handlePrintHany(false)}
+                    className="btn text-[11px] py-2 px-3 font-black focus-ring"
+                    style={{
+                      background: "linear-gradient(135deg, #EA580C 0%, #C2410C 100%)",
+                      color: "white",
+                      boxShadow: "0 6px 16px -4px rgba(234,88,12,0.5)",
+                    }}
+                  >
+                    <PrinterIcon size={12} /> طباعة الكل
+                  </button>
+                  <button
+                    onClick={() => handlePrintHany(true)}
+                    className="btn text-[11px] py-2 px-3 font-black focus-ring"
+                    style={{
+                      background: "white",
+                      color: "#EA580C",
+                      border: "2px solid #EA580C",
+                    }}
+                  >
+                    <Calendar size={12} /> طباعة {selectedMonth}
+                  </button>
                 </div>
               </div>
 
@@ -7273,9 +7310,7 @@
                     <label className="text-[11px] font-bold block mb-1.5" style={{ color: "var(--text-muted)" }}>مرتبط بشهر (اختياري)</label>
                     <select className="input-field text-sm" value={linkedHanyMonth} onChange={(e) => setLinkedHanyMonth(e.target.value)}>
                       <option value="">— غير محدد —</option>
-                      {availableMonths.map((m) => (
-                        <option key={m.key} value={m.label}>{m.label}</option>
-                      ))}
+                      {availableMonths.map((m) => (<option key={m.key} value={m.label}>{m.label}</option>))}
                     </select>
                   </div>
                   <div>
@@ -7284,11 +7319,7 @@
                   </div>
                   <div>
                     <label className="text-[11px] font-bold block mb-1.5" style={{ color: "var(--text-muted)" }}>ملاحظة (اختياري)</label>
-                    <input
-                      type="text" className="input-field text-sm" value={settleNote}
-                      onChange={(e) => setSettleNote(e.target.value)}
-                      placeholder="سداد مسحوبات شهر..."
-                    />
+                    <input type="text" className="input-field text-sm" value={settleNote} onChange={(e) => setSettleNote(e.target.value)} placeholder="سداد مسحوبات شهر..." />
                   </div>
                   <button onClick={executeSettle} className="btn btn-primary w-full py-3 text-sm">
                     <CheckCircle2 size={16} /> تسجيل السداد
@@ -8932,6 +8963,430 @@
                   );
                 })}
               </div>
+            )}
+          </div>
+        );
+      });
+		      /* ═══════════════ WALLETS AND CARDS VIEW ═══════════════ */
+      const WalletsAndCardsView = memo(({
+        cards, buildLedger, expandedLedgers, expandedCardsSection,
+        selectedMonth, selectedYear, dispatch, handleDelete,
+        handleAddWalletDeposit, handleAddWalletWithdrawal, walletVisibility,
+        liveBalances, saveHistory, addNotification, data, onReconcile,
+      }) => {
+        const [activeTab, setActiveTab] = useState("wallets");
+        const [showAddCard, setShowAddCard] = useState(false);
+        const [viewMode, setViewMode] = useState("grouped");
+        const [newCard, setNewCard] = useState({
+          name: "", bank: "", limit: "", last4: "", expiry: "", holderName: "",
+          dueDate: "05 من كل شهر", statementDay: 15, theme: "silver",
+          cashbackRate: 1, providerKey: "cib",
+        });
+
+        const cashbackSummary = useMemo(() => {
+          const trackers = (data?.cashbackTrackers || []).filter(
+            (t) => t.month === selectedMonth && (t.year || 2026) === selectedYear,
+          );
+          const expected = trackers.reduce((s, t) => s + safeNumber(t.expectedAmount), 0);
+          const received = trackers.reduce((s, t) => s + safeNumber(t.receivedAmount), 0);
+          return { expected, received, pending: expected - received };
+        }, [data?.cashbackTrackers, selectedMonth, selectedYear]);
+
+        const totalCardDebt = useMemo(
+          () => cards.reduce((s, c) => s + Math.max(0, computeCardLiveFigures(data, c).liveDebt), 0),
+          [cards, data],
+        );
+
+        const groupedData = useMemo(() => {
+          const groups = {};
+          Object.keys(PROVIDERS).forEach((pk) => { groups[pk] = []; });
+
+          ACCOUNT_KEYS.forEach((k) => {
+            const acc = data.accountsData?.[k] || DEFAULT_ACCOUNTS[k];
+            const pk = acc?.providerKey || "cash";
+            if (groups[pk]) {
+              groups[pk].push({
+                type: "account", key: k,
+                label: acc?.label || ACCOUNT_SHORT_NAMES[k],
+                balance: safeNumber(liveBalances[k]),
+                providerKey: pk,
+              });
+            }
+          });
+
+          (data.cards || []).forEach((card) => {
+            const pk = card.providerKey || "cib";
+            if (groups[pk]) groups[pk].push({ ...card, type: "card" });
+          });
+
+          return Object.keys(PROVIDERS)
+            .sort((a, b) => PROVIDERS[a].order - PROVIDERS[b].order)
+            .map((pk) => ({ providerKey: pk, items: groups[pk] }))
+            .filter((g) => g.items.length > 0);
+        }, [data.accountsData, data.cards, liveBalances]);
+
+        const addCard = () => {
+          if (!newCard.name || !newCard.bank) {
+            addNotification({ type: "error", title: "الاسم والبنك مطلوبان" });
+            return;
+          }
+          const limitCheck = validateAmount(newCard.limit, { min: 100, max: 10000000, label: "الحد" });
+          if (!limitCheck.valid) {
+            addNotification({ type: "error", title: "خطأ", message: limitCheck.error });
+            return;
+          }
+          saveHistory();
+          const provider = PROVIDERS[newCard.providerKey] || PROVIDERS.cib;
+          dispatch({
+            type: "UPDATE_CARDS",
+            payload: [
+              ...cards,
+              {
+                ...newCard, id: Date.now(),
+                displayName: `${provider.icon} ${newCard.bank} ${newCard.name} • ${newCard.last4}`,
+                limit: roundMoney(limitCheck.value),
+                availableBalance: roundMoney(limitCheck.value),
+                openingDebt: 0,
+                openingDebtDate: getLocalISODate(),
+                openingDate: getLocalISODate(),
+                cashbackRate: safeNumber(newCard.cashbackRate, 1),
+                statementDay: Math.min(28, Math.max(1, safeNumber(newCard.statementDay, 5))),
+                subCardLast4: [],
+              },
+            ],
+          });
+          setShowAddCard(false);
+          setNewCard({
+            name: "", bank: "", limit: "", last4: "", expiry: "", holderName: "",
+            dueDate: "05 من كل شهر", statementDay: 15, theme: "silver",
+            cashbackRate: 1, providerKey: "cib",
+          });
+          addNotification({ type: "success", title: "تمت الإضافة" });
+        };
+
+        const lp = (key) => ({
+          walletKey: key,
+          ledgerData: buildLedger ? buildLedger(key) : [],
+          liveBalance: safeNumber(liveBalances?.[key]),
+          isExpanded: expandedLedgers[key],
+          onToggle: () => dispatch({ type: "TOGGLE_LEDGER", payload: key }),
+          theme: WALLET_CONFIGS[key],
+          onAddDeposit: handleAddWalletDeposit,
+          onAddWithdrawal: handleAddWalletWithdrawal,
+          walletVisibility,
+          onToggleVisibility: (k) => dispatch({ type: "TOGGLE_WALLET_VISIBILITY", payload: k }),
+          onReconcile,
+        });
+
+        const handleItemClick = (item) => {
+          if (item.type === "card") dispatch({ type: "SET_VIEWING_CARD_STATEMENT", payload: item });
+          else if (item.type === "account") {
+            setViewMode("ledger");
+            if (WALLET_CONFIGS[item.key] && !expandedLedgers[item.key]) {
+              dispatch({ type: "TOGGLE_LEDGER", payload: item.key });
+            }
+          }
+        };
+
+        return (
+          <div className="space-y-4 animate-fadeIn pb-24">
+            <PageHeader
+              icon={<CreditCard size={20} />}
+              title="الحسابات"
+              subtitle={`${cards.length} بطاقة + ${Object.keys(WALLET_CONFIGS).length} حساب/محفظة`}
+              actions={
+                <div className="flex gap-1.5 flex-wrap">
+                  <button
+                    onClick={() => setViewMode("grouped")}
+                    className={`btn ${viewMode === "grouped" ? "btn-primary" : "btn-secondary"} text-[10px] py-1.5 px-2.5`}
+                  >
+                    <Layers size={11} /> مجموعات
+                  </button>
+                  <button
+                    onClick={() => setViewMode("ledger")}
+                    className={`btn ${viewMode === "ledger" ? "btn-primary" : "btn-secondary"} text-[10px] py-1.5 px-2.5`}
+                  >
+                    <Table size={11} /> كشوف
+                  </button>
+                  <button
+                    onClick={() => setShowAddCard(true)}
+                    className="btn btn-primary text-[10px] py-1.5 px-2.5"
+                  >
+                    <Plus size={11} /> بطاقة
+                  </button>
+                </div>
+              }
+            />
+
+            <div className="sub-tab-switcher">
+              <button
+                onClick={() => setActiveTab("wallets")}
+                className={`sub-tab-btn ${activeTab === "wallets" ? "active" : ""}`}
+              >
+                <CreditCard size={14} /> الحسابات والبطاقات
+              </button>
+              <button
+                onClick={() => setActiveTab("cashback")}
+                className={`sub-tab-btn ${activeTab === "cashback" ? "active" : ""}`}
+              >
+                <Gift size={14} /> الكاش باك
+                {cashbackSummary.received > 0 && (
+                  <span className="badge badge-success text-[9px] px-1.5 py-0 money tabular">
+                    {formatAdaptive(cashbackSummary.received)}
+                  </span>
+                )}
+              </button>
+            </div>
+
+            {activeTab === "cashback" ? (
+              <CashbackView
+                data={data} dispatch={dispatch} saveHistory={saveHistory}
+                addNotification={addNotification} cards={cards}
+                selectedYear={selectedYear} selectedMonth={selectedMonth}
+              />
+            ) : (
+              <React.Fragment>
+                {cards.length > 0 && (
+                  <button
+                    onClick={() => dispatch({ type: "SET_CARD_PAYMENT_MODAL", payload: { cardId: null } })}
+                    className="card w-full text-right active:scale-[0.99] transition-transform"
+                    style={{
+                      background: "linear-gradient(135deg, rgba(99,91,255,0.1), rgba(74,66,229,0.08))",
+                      borderColor: "rgba(99,91,255,0.3)",
+                    }}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div
+                        className="p-2.5 rounded-xl text-white"
+                        style={{ background: "linear-gradient(135deg, #635BFF 0%, #4A42E5 100%)" }}
+                      >
+                        <Banknote size={18} />
+                      </div>
+                      <div className="flex-1">
+                        <h3 className="font-black text-sm">💳 سداد بطاقة سريع</h3>
+                        <p className="text-[10px] mt-0.5" style={{ color: "var(--text-muted)" }}>
+                          المديونية الإجمالية:{" "}
+                          <span className="money tabular font-bold text-red-600">
+                            {formatAdaptive(totalCardDebt)}
+                          </span>{" "}
+                          ج.م
+                        </p>
+                      </div>
+                      <ChevronLeft size={16} style={{ color: "var(--text-muted)" }} />
+                    </div>
+                  </button>
+                )}
+
+                {viewMode === "grouped" ? (
+                  <div className="space-y-3">
+                    {groupedData.map(({ providerKey, items }) => (
+                      <ProviderGroupCard
+                        key={providerKey}
+                        providerKey={providerKey}
+                        items={items}
+                        liveBalances={liveBalances}
+                        data={data}
+                        dispatch={dispatch}
+                        onItemClick={handleItemClick}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <React.Fragment>
+                    <div className="card py-2">
+                      <div className="flex items-center gap-2 px-2">
+                        <Signal size={14} className="text-blue-500" />
+                        <h3 className="font-black text-xs">📱 المحافظ الإلكترونية</h3>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      {["fawry", "etisalat"].map((k) => (
+                        <GenericLedgerComponent key={k} {...lp(k)} />
+                      ))}
+                    </div>
+
+                    <div className="card py-2">
+                      <div className="flex items-center gap-2 px-2">
+                        <BuildingBank size={14} className="text-purple-500" />
+                        <h3 className="font-black text-xs">🏦 الحسابات البنكية</h3>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      {["cib_savings", "aaib_savings"].map((k) => (
+                        <GenericLedgerComponent key={k} {...lp(k)} />
+                      ))}
+                    </div>
+
+                    <div className="card py-2">
+                      <div className="flex items-center gap-2 px-2">
+                        <Wallet size={14} className="text-emerald-500" />
+                        <h3 className="font-black text-xs">💵 الكاش</h3>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <GenericLedgerComponent {...lp("cash")} />
+                    </div>
+                  </React.Fragment>
+                )}
+
+                <div className="card">
+                  <div className="flex justify-between items-center mb-3">
+                    <h3 className="font-black text-sm flex items-center gap-2">
+                      <CreditCard size={14} className="text-purple-500" /> كل البطاقات ({cards.length})
+                    </h3>
+                    <button
+                      onClick={() => setShowAddCard(true)}
+                      className="btn btn-primary text-[10px] py-1.5 px-2.5"
+                    >
+                      <Plus size={11} /> جديدة
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {cards.map((card) => {
+                      const { liveDebt, liveAvailable } = computeCardLiveFigures(data, card);
+                      return (
+                        <React.Fragment key={card.id}>
+                          <BankCard3D
+                            card={card}
+                            liveDebt={liveDebt}
+                            liveAvailable={liveAvailable}
+                            onStatement={() =>
+                              dispatch({ type: "SET_VIEWING_CARD_STATEMENT", payload: card })
+                            }
+                            onEdit={() => dispatch({ type: "SET_EDITING_CARD", payload: card })}
+                            onPay={() =>
+                              dispatch({ type: "SET_CARD_PAYMENT_MODAL", payload: { cardId: card.id } })
+                            }
+                          />
+                          <details
+                            className="p-3 rounded-xl mt-2"
+                            style={{ background: "var(--bg-muted)" }}
+                          >
+                            <summary className="cursor-pointer list-none flex items-center justify-between">
+                              <span className="flex items-center gap-1.5 text-[11px] font-black">
+                                <Repeat size={12} className="text-[color:var(--accent)]" /> خطط التقسيط
+                              </span>
+                              <ChevronDown size={12} style={{ color: "var(--text-muted)" }} />
+                            </summary>
+                            <div className="mt-3">
+                              <CardInstallmentsPanel
+                                card={card}
+                                data={data}
+                                dispatch={dispatch}
+                                saveHistory={saveHistory}
+                                addNotification={addNotification}
+                              />
+                            </div>
+                          </details>
+                        </React.Fragment>
+                      );
+                    })}
+                  </div>
+                </div>
+              </React.Fragment>
+            )}
+
+            {showAddCard && (
+              <Modal
+                isOpen={true}
+                onClose={() => setShowAddCard(false)}
+                title="كارت ائتماني جديد"
+                icon="💳"
+              >
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[11px] font-bold block mb-1.5" style={{ color: "var(--text-muted)" }}>
+                        الاسم *
+                      </label>
+                      <input
+                        className="input-field text-sm"
+                        value={newCard.name}
+                        onChange={(e) => setNewCard({ ...newCard, name: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-bold block mb-1.5" style={{ color: "var(--text-muted)" }}>
+                        البنك *
+                      </label>
+                      <input
+                        className="input-field text-sm"
+                        value={newCard.bank}
+                        onChange={(e) => setNewCard({ ...newCard, bank: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-bold block mb-1.5" style={{ color: "var(--text-muted)" }}>
+                      المزود *
+                    </label>
+                    <select
+                      className="input-field text-sm"
+                      value={newCard.providerKey}
+                      onChange={(e) => setNewCard({ ...newCard, providerKey: e.target.value })}
+                    >
+                      <option value="cib">🏦 CIB</option>
+                      <option value="aaib">🏦 AAIB</option>
+                      <option value="adib">🏦 ADIB</option>
+                    </select>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[11px] font-bold block mb-1.5" style={{ color: "var(--text-muted)" }}>
+                        الحد *
+                      </label>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        className="input-field input-num text-sm"
+                        value={newCard.limit}
+                        onChange={(e) => setNewCard({ ...newCard, limit: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-bold block mb-1.5" style={{ color: "var(--text-muted)" }}>
+                        آخر 4
+                      </label>
+                      <input
+                        maxLength="4"
+                        className="input-field mono text-center text-sm"
+                        value={newCard.last4}
+                        onChange={(e) => setNewCard({ ...newCard, last4: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[11px] font-bold block mb-1.5" style={{ color: "var(--text-muted)" }}>
+                        كاش باك %
+                      </label>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        className="input-field input-num text-center font-black text-amber-600 text-sm"
+                        value={newCard.cashbackRate}
+                        onChange={(e) => setNewCard({ ...newCard, cashbackRate: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-bold block mb-1.5" style={{ color: "var(--text-muted)" }}>
+                        يوم إصدار الكشف
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="28"
+                        className="input-field input-num text-center text-sm"
+                        value={newCard.statementDay}
+                        onChange={(e) => setNewCard({ ...newCard, statementDay: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                  <button onClick={addCard} className="btn btn-primary w-full py-2.5 text-sm">
+                    إضافة
+                  </button>
+                </div>
+              </Modal>
             )}
           </div>
         );
