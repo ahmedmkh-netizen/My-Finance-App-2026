@@ -11647,301 +11647,423 @@ if (isCard) {
 
       /* ═══════════════ INSTALLMENT PLAN MODAL ═══════════════ */
       const InstallmentPlanModal = memo(
-        ({ card, data, onClose, dispatch, saveHistory, addNotification }) => {
-          const [totalAmount, setTotalAmount] = useState("");
-          const [months, setMonths] = useState("12");
-          const [startMonth, setStartMonth] = useState(getDefaultMonthYear().month);
-          const [startYear, setStartYear] = useState(getDefaultMonthYear().year);
-          const [note, setNote] = useState("");
-          const [selectedTxIds, setSelectedTxIds] = useState(new Set());
-          const [initialPaid, setInitialPaid] = useState(""); 
-          const cardTxs = useMemo(() => {
-            if (!card) return [];
-            const method = getCardMethod(card);
-            const subCards = Array.isArray(card.subCardLast4) ? card.subCardLast4 : [];
-            return (data.transactions || [])
-              .filter((t) => {
-                if (t.status !== "paid" || t.type !== "expense") return false;
-                if (t.installmentPlanId) return false;
-                if (isCardPaymentTx(t, card.id)) return false;
-                if (isHanyPurchaseTx(t) || isHanySettleTx(t)) return false;
-                if (t.method === HANY_TAB_METHOD) return false;
-                if (t.method !== method && t.linkedCardId !== card.id && !(t.cardLast4 && subCards.includes(t.cardLast4))) return false;
-                return true;
-              })
-              .sort(compareTransactions)
-              .slice(0, 50);
-          }, [data.transactions, card]);
+  ({ card, data, onClose, dispatch, saveHistory, addNotification, editingPlan = null }) => {
+    const isEdit = !!editingPlan;
 
-          const parsedTotal = parseNumberInput(totalAmount);
-          const parsedMonths = Math.max(1, Math.min(60, parseInt(months, 10) || 12));
-          const monthlyAmount = parsedTotal > 0 ? roundMoney(parsedTotal / parsedMonths) : 0;
-
-const handleCreate = () => {
-  if (parsedTotal <= 0) {
-    addNotification({ type: "error", title: "أدخل مبلغ صحيح" });
-    return;
-  }
-  const startIdx = getMonthIndex(startMonth);
-  if (startIdx < 0) {
-    addNotification({ type: "error", title: "شهر بداية غير صالح" });
-    return;
-  }
-
-  // ═══ V88.4.1 FIX: منع الاحتساب المزدوج عند الإنشاء ═══
-  let finalSelectedIds = new Set(selectedTxIds);
-  let isNewPurchase = false;
-  let autoLinkedInfo = null;
-
-  if (finalSelectedIds.size === 0) {
-    const candidates = cardTxs.filter(
-      (t) => !t.installmentPlanId && !t.linkedPlanId
+    const [totalAmount, setTotalAmount] = useState(isEdit ? String(editingPlan.totalAmount) : "");
+    const [months, setMonths] = useState(isEdit ? String(editingPlan.months) : "12");
+    const [startMonth, setStartMonth] = useState(
+      isEdit ? editingPlan.startMonth : getDefaultMonthYear().month
     );
-    const exactMatch = candidates.find(
-      (t) => Math.abs(safeNumber(t.amount) - parsedTotal) < 0.01
+    const [startYear, setStartYear] = useState(
+      isEdit ? editingPlan.startYear : getDefaultMonthYear().year
+    );
+    const [note, setNote] = useState(isEdit ? (editingPlan.note || "") : "");
+    const [initialPaid, setInitialPaid] = useState(
+      isEdit ? String(editingPlan.paidAmount || "") : ""
     );
 
-    if (exactMatch) {
-      finalSelectedIds.add(exactMatch.id);
-      autoLinkedInfo = exactMatch.description || exactMatch.category;
-    } else {
-      isNewPurchase = true;
-    }
-  }
+    const lockedLinkedIds = useMemo(
+      () => new Set(Array.isArray(editingPlan?.linkedTxIds) ? editingPlan.linkedTxIds : []),
+      [editingPlan]
+    );
 
-  const plan = {
-    id: getSafeId(),
-    cardId: card.id,
-    totalAmount: roundMoney(parsedTotal),
-    months: parsedMonths,
-    monthlyAmount,
-    startMonth,
-    startYear: safeNumber(startYear, 2026),
-    note: note.trim(),
-    status: "active",
-    paidAmount: roundMoney(parseNumberInput(initialPaid)),
-    linkedTxIds: Array.from(finalSelectedIds),
-    isNewPurchase,
-    createdAt: new Date().toISOString(),
-  };
+    const [selectedTxIds, setSelectedTxIds] = useState(
+      () => new Set(Array.isArray(editingPlan?.linkedTxIds) ? editingPlan.linkedTxIds : [])
+    );
 
-  saveHistory();
-  const newPlans = [...(data.cardInstallments || []), plan];
-  const newTxs =
-    finalSelectedIds.size > 0
-      ? (data.transactions || []).map((t) =>
-          finalSelectedIds.has(t.id) ? { ...t, installmentPlanId: plan.id } : t,
-        )
-      : data.transactions || [];
+    const cardTxs = useMemo(() => {
+      if (!card) return [];
+      const method = getCardMethod(card);
+      const subCards = Array.isArray(card.subCardLast4) ? card.subCardLast4 : [];
+      return (data.transactions || [])
+        .filter((t) => {
+          if (t.status !== "paid" || t.type !== "expense") return false;
+          if (t.installmentPlanId && t.installmentPlanId !== editingPlan?.id) return false;
+          if (isCardPaymentTx(t, card.id)) return false;
+          if (isHanyPurchaseTx(t) || isHanySettleTx(t)) return false;
+          if (t.method === HANY_TAB_METHOD) return false;
+          if (
+            t.method !== method &&
+            t.linkedCardId !== card.id &&
+            !(t.cardLast4 && subCards.includes(t.cardLast4))
+          )
+            return false;
+          return true;
+        })
+        .sort(compareTransactions)
+        .slice(0, 50);
+    }, [data.transactions, card, editingPlan]);
 
-  dispatch({
-    type: "SET_DATA",
-    payload: { ...data, cardInstallments: newPlans, transactions: newTxs },
-  });
+    const parsedTotal = parseNumberInput(totalAmount);
+    const parsedMonths = Math.max(1, Math.min(60, parseInt(months, 10) || 12));
+    const monthlyAmount = parsedTotal > 0 ? roundMoney(parsedTotal / parsedMonths) : 0;
 
-  const linkMsg = autoLinkedInfo
-    ? `🔗 تم ربط الخطة تلقائياً بـ: ${autoLinkedInfo}`
-    : isNewPurchase
-      ? `🆕 الخطة مُسجّلة كمشتريات جديدة (لن يتم احتسابها مرتين)`
-      : `🔗 تم ربط الخطة بـ ${finalSelectedIds.size} معاملة`;
+    const toggleTx = (id) => {
+      if (lockedLinkedIds.has(id)) {
+        addNotification({
+          type: "info",
+          title: "🔒 مقفول",
+          message: "لا يمكن فكّ ربط معاملات موجودة — استخدم إلغاء الخطة بدلاً من ذلك",
+          duration: 4000,
+        });
+        return;
+      }
+      setSelectedTxIds((prev) => {
+        const n = new Set(prev);
+        if (n.has(id)) n.delete(id);
+        else n.add(id);
+        return n;
+      });
+    };
 
-  addNotification({
-    type: "success",
-    title: "✅ تم إنشاء خطة التقسيط",
-    message: `${fmt(parsedTotal)} ج.م على ${parsedMonths} شهر (${fmt(monthlyAmount)} ج.م/شهر)\n${linkMsg}`,
-    duration: 8000,
-  });
-  onClose();
-};
-			
-          const toggleTx = (id) =>
-            setSelectedTxIds((prev) => {
-              const n = new Set(prev);
-              if (n.has(id)) n.delete(id);
-              else n.add(id);
-              return n;
-            });
+    const handleSubmit = () => {
+      if (parsedTotal <= 0) {
+        addNotification({ type: "error", title: "أدخل مبلغ صحيح" });
+        return;
+      }
+      const startIdx = getMonthIndex(startMonth);
+      if (startIdx < 0) {
+        addNotification({ type: "error", title: "شهر بداية غير صالح" });
+        return;
+      }
+      const newPaidAmount = roundMoney(parseNumberInput(initialPaid));
+      if (newPaidAmount > parsedTotal + 0.005) {
+        addNotification({
+          type: "error",
+          title: "خطأ",
+          message: "المبلغ المدفوع مسبقاً أكبر من الإجمالي",
+        });
+        return;
+      }
 
-          const autoFillFromSelected = () => {
-            const sum = cardTxs
-              .filter((t) => selectedTxIds.has(t.id))
-              .reduce((s, t) => s + safeNumber(t.amount), 0);
-            if (sum > 0) setTotalAmount(String(roundMoney(sum)));
-          };
+      // ═══ وضع التعديل ═══
+      if (isEdit) {
+        const oldLinked = new Set(editingPlan.linkedTxIds || []);
+        const newLinked = new Set(selectedTxIds);
+        const removedLinks = [...oldLinked].filter((id) => !newLinked.has(id));
 
-          return (
-            <Modal isOpen={true} onClose={onClose} title="خطة تقسيط جديدة" icon="📅" size="lg">
-              <div className="space-y-4">
-                <div className="p-3 rounded-xl" style={{ background: "var(--accent-soft)", border: "1px solid var(--accent)" }}>
-                  <p className="text-[11px] font-bold" style={{ color: "var(--accent)" }}>
-                    💳 {card.bank} - {card.name} • ••••{card.last4}
-                  </p>
-                  <p className="text-[10px] mt-1" style={{ color: "var(--text-secondary)" }}>
-                    الحد: {fmt(card.limit)} ج.م • المديونية: {fmt(computeCardDebt(data, card))} ج.م
-                  </p>
-                </div>
+        if (removedLinks.length > 0) {
+          addNotification({
+            type: "error",
+            title: "غير مسموح",
+            message: "لا يمكن فكّ ربط معاملات موجودة — ألغِ الخطة وأنشئ واحدة جديدة",
+          });
+          return;
+        }
 
-                <div>
-                  <label className="text-[11px] font-black block mb-2" style={{ color: "var(--text-muted)" }}>
-                    اختر المعاملات لضمها (اختياري)
-                  </label>
-                  {cardTxs.length === 0 ? (
-                    <p className="text-[11px] p-2 rounded-lg" style={{ background: "var(--bg-muted)", color: "var(--text-muted)" }}>
-                      لا توجد معاملات مؤهلة
-                    </p>
-                  ) : (
-                    <div className="space-y-1.5 max-h-40 overflow-y-auto scroll-hide p-2 rounded-lg" style={{ background: "var(--bg-muted)" }}>
-                      {cardTxs.slice(0, 20).map((t) => (
-                        <label key={t.id} className="flex items-center gap-2 p-1.5 rounded cursor-pointer hover:bg-[color:var(--bg-card)]">
-                          <input
-                            type="checkbox" checked={selectedTxIds.has(t.id)}
-                            onChange={() => toggleTx(t.id)} className="w-3.5 h-3.5 accent-[color:var(--accent)]"
-                          />
-                          <span className="text-[10px] font-bold flex-1 truncate">{t.description || t.category}</span>
-                          <span className="text-[10px] font-black money tabular">{fmt(t.amount)}</span>
-                        </label>
-                      ))}
-                      {selectedTxIds.size > 0 && (
-                        <button
-                          type="button" onClick={autoFillFromSelected}
-                          className="btn btn-secondary w-full text-[10px] py-1.5 mt-1"
-                        >
-                          <Sparkles size={11} /> استخدم مجموع المحدد (
-                          {fmt(cardTxs.filter((t) => selectedTxIds.has(t.id)).reduce((s, t) => s + safeNumber(t.amount), 0))})
-                        </button>
-                      )}
-                    </div>
-                  )}
+        const updatedPlan = {
+          ...editingPlan,
+          totalAmount: roundMoney(parsedTotal),
+          months: parsedMonths,
+          monthlyAmount,
+          startMonth,
+          startYear: safeNumber(startYear, 2026),
+          note: note.trim(),
+          paidAmount: newPaidAmount,
+          linkedTxIds: Array.from(selectedTxIds),
+          isNewPurchase: selectedTxIds.size === 0 ? true : editingPlan.isNewPurchase,
+          updatedAt: new Date().toISOString(),
+        };
 
-                  {/* 🆕 V88.4.1 — تنبيه ربط تلقائي عند عدم اختيار معاملات */}
-                  {selectedTxIds.size === 0 && (
-                    <div className="p-2.5 rounded-lg flex items-start gap-2 mt-2"
-                         style={{ background: "var(--info-soft)", border: "1px dashed var(--info)" }}>
-                      <Info size={14} className="mt-0.5 flex-shrink-0" style={{ color: "var(--info)" }} />
-                      <p className="text-[10px] font-bold leading-relaxed" style={{ color: "var(--info)" }}>
-                        💡 لم تختر معاملات — هنبحث تلقائياً عن معاملة بمبلغ مطابق.
-                        إن لم نجد، ستُسجَّل الخطة كـ <strong>"مشتريات جديدة"</strong> (لن تُحتسب مرتين).
-                      </p>
-                    </div>
-                  )}
-                </div>
-				  
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-[11px] font-black block mb-2" style={{ color: "var(--text-muted)" }}>
-                      إجمالي المبلغ *
+        const newTxs = (data.transactions || []).map((t) => {
+          if (selectedTxIds.has(t.id) && !oldLinked.has(t.id)) {
+            return { ...t, installmentPlanId: editingPlan.id };
+          }
+          return t;
+        });
+
+        const newPlans = (data.cardInstallments || []).map((p) =>
+          p.id === editingPlan.id ? updatedPlan : p
+        );
+
+        saveHistory();
+        dispatch({
+          type: "SET_DATA",
+          payload: { ...data, cardInstallments: newPlans, transactions: newTxs },
+        });
+
+        addNotification({
+          type: "success",
+          title: "✅ تم تحديث الخطة",
+          message: `${fmt(parsedTotal)} ج.م على ${parsedMonths} شهر (${fmt(monthlyAmount)} ج.م/شهر)`,
+          duration: 6000,
+        });
+        onClose();
+        return;
+      }
+
+      // ═══ وضع الإنشاء ═══
+      let finalSelectedIds = new Set(selectedTxIds);
+      let isNewPurchase = false;
+      let autoLinkedInfo = null;
+
+      if (finalSelectedIds.size === 0) {
+        const candidates = cardTxs.filter((t) => !t.installmentPlanId && !t.linkedPlanId);
+        const exactMatch = candidates.find(
+          (t) => Math.abs(safeNumber(t.amount) - parsedTotal) < 0.01
+        );
+        if (exactMatch) {
+          finalSelectedIds.add(exactMatch.id);
+          autoLinkedInfo = exactMatch.description || exactMatch.category;
+        } else {
+          isNewPurchase = true;
+        }
+      }
+
+      const plan = {
+        id: getSafeId(),
+        cardId: card.id,
+        totalAmount: roundMoney(parsedTotal),
+        months: parsedMonths,
+        monthlyAmount,
+        startMonth,
+        startYear: safeNumber(startYear, 2026),
+        note: note.trim(),
+        status: "active",
+        paidAmount: newPaidAmount,
+        linkedTxIds: Array.from(finalSelectedIds),
+        isNewPurchase,
+        createdAt: new Date().toISOString(),
+      };
+
+      saveHistory();
+      const newPlans = [...(data.cardInstallments || []), plan];
+      const newTxs =
+        finalSelectedIds.size > 0
+          ? (data.transactions || []).map((t) =>
+              finalSelectedIds.has(t.id) ? { ...t, installmentPlanId: plan.id } : t
+            )
+          : data.transactions || [];
+
+      dispatch({
+        type: "SET_DATA",
+        payload: { ...data, cardInstallments: newPlans, transactions: newTxs },
+      });
+
+      const linkMsg = autoLinkedInfo
+        ? `🔗 تم ربط الخطة تلقائياً بـ: ${autoLinkedInfo}`
+        : isNewPurchase
+        ? `🆕 الخطة مُسجّلة كمشتريات جديدة (لن تُحتسب مرتين)`
+        : `🔗 تم ربط الخطة بـ ${finalSelectedIds.size} معاملة`;
+
+      addNotification({
+        type: "success",
+        title: "✅ تم إنشاء خطة التقسيط",
+        message: `${fmt(parsedTotal)} ج.م على ${parsedMonths} شهر (${fmt(monthlyAmount)} ج.م/شهر)\n${linkMsg}`,
+        duration: 8000,
+      });
+      onClose();
+    };
+
+    return (
+      <Modal
+        isOpen={true}
+        onClose={onClose}
+        title={isEdit ? "تعديل خطة التقسيط" : "خطة تقسيط جديدة"}
+        icon={isEdit ? "✏️" : "📅"}
+        size="lg"
+      >
+        <div className="space-y-4">
+          <div className="p-3 rounded-xl" style={{ background: "var(--accent-soft)", border: "1px solid var(--accent)" }}>
+            <p className="text-[11px] font-bold" style={{ color: "var(--accent)" }}>
+              💳 {card.bank} - {card.name} • ••••{card.last4}
+            </p>
+            <p className="text-[10px] mt-1" style={{ color: "var(--text-secondary)" }}>
+              الحد: {fmt(card.limit)} ج.م • المديونية الحية:{" "}
+              {fmt(computeCardLiveFigures(data, card).liveDebt)} ج.م
+            </p>
+          </div>
+
+          {isEdit && lockedLinkedIds.size > 0 && (
+            <div className="p-2.5 rounded-lg flex items-start gap-2" style={{ background: "var(--info-soft)", border: "1px dashed var(--info)" }}>
+              <Info size={14} className="mt-0.5 flex-shrink-0" style={{ color: "var(--info)" }} />
+              <p className="text-[10px] font-bold leading-relaxed" style={{ color: "var(--info)" }}>
+                🔒 الخطة دي مرتبطة بـ {lockedLinkedIds.size} معاملة. المعاملات المرتبطة مقفولة ومش هتقدر تفكّها من هنا.
+              </p>
+            </div>
+          )}
+
+          <div>
+            <label className="text-[11px] font-black block mb-2" style={{ color: "var(--text-muted)" }}>
+              اختر المعاملات لضمها {isEdit ? "(إضافة معاملات جديدة فقط)" : "(اختياري)"}
+            </label>
+            {cardTxs.length === 0 ? (
+              <p className="text-[11px] p-2 rounded-lg" style={{ background: "var(--bg-muted)", color: "var(--text-muted)" }}>
+                لا توجد معاملات مؤهلة
+              </p>
+            ) : (
+              <div className="space-y-1.5 max-h-40 overflow-y-auto scroll-hide p-2 rounded-lg" style={{ background: "var(--bg-muted)" }}>
+                {cardTxs.slice(0, 20).map((t) => {
+                  const isLocked = lockedLinkedIds.has(t.id);
+                  return (
+                    <label
+                      key={t.id}
+                      className={`flex items-center gap-2 p-1.5 rounded ${isLocked ? "opacity-70" : "cursor-pointer hover:bg-[color:var(--bg-card)]"}`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedTxIds.has(t.id)}
+                        onChange={() => toggleTx(t.id)}
+                        disabled={isLocked}
+                        className="w-3.5 h-3.5 accent-[color:var(--accent)]"
+                      />
+                      <span className="text-[10px] font-bold flex-1 truncate">
+                        {isLocked && "🔒 "}
+                        {t.description || t.category}
+                      </span>
+                      <span className="text-[10px] font-black money tabular">{fmt(t.amount)}</span>
                     </label>
-                    <input
-                      type="text" inputMode="decimal"
-                      className="input-field input-num text-base text-center font-black"
-                      style={{ color: "var(--accent)" }}
-                      value={totalAmount} onChange={(e) => setTotalAmount(e.target.value)}
-                      placeholder="0.00"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[11px] font-black block mb-2" style={{ color: "var(--text-muted)" }}>
-                      عدد الأشهر *
-                    </label>
-                    <input
-                      type="number" min="1" max="60"
-                      className="input-field text-base text-center font-black"
-                      value={months} onChange={(e) => setMonths(e.target.value)}
-                    />
-                    <div className="flex gap-1 mt-1.5">
-                      {[3, 6, 12, 18, 24, 36].map((m) => (
-                        <button
-                          key={m} type="button" onClick={() => setMonths(String(m))}
-                          className={`quick-chip flex-1 text-[9px] py-1 ${months === String(m) ? "bg-[color:var(--accent)] text-white" : ""}`}
-                        >
-                          {m}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-                {/* الخانة الجديدة للمبلغ المدفوع مسبقاً */}
-                <div>
-                  <label className="text-[11px] font-black block mb-2" style={{ color: "var(--text-muted)" }}>
-                    المبلغ المدفوع مسبقاً (اختياري)
-                  </label>
-                  <input
-                    type="text" inputMode="decimal"
-                    className="input-field input-num text-base text-center font-black"
-                    style={{ color: "var(--success)" }}
-                    value={initialPaid} onChange={(e) => setInitialPaid(e.target.value)}
-                    placeholder="مثال: قيمة الأقساط القديمة"
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-[11px] font-black block mb-2" style={{ color: "var(--text-muted)" }}>شهر البداية</label>
-                    <select className="input-field text-sm py-2" value={startMonth} onChange={(e) => setStartMonth(e.target.value)}>
-                      {getMonthsForYear(startYear).map((m) => (
-                        <option key={m} value={m}>{m}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-[11px] font-black block mb-2" style={{ color: "var(--text-muted)" }}>السنة</label>
-                    <select className="input-field text-sm py-2" value={startYear} onChange={(e) => setStartYear(Number(e.target.value))}>
-                      {YEARS_LIST.map((y) => (
-                        <option key={y} value={y}>{y}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                {parsedTotal > 0 && (
-                  <div
-                    className="p-3 rounded-xl text-center"
-                    style={{ background: "linear-gradient(135deg, rgba(99,91,255,0.12), rgba(74,66,229,0.08))", border: "1px solid var(--accent)" }}
-                  >
-                    <p className="text-[11px] font-bold" style={{ color: "var(--accent)" }}>القسط الشهري</p>
-                    <p className="text-2xl font-black money tabular" style={{ color: "var(--accent)" }}>{fmt(monthlyAmount)}</p>
-                    <p className="text-[10px] mt-1" style={{ color: "var(--text-secondary)" }}>
-                      ج.م/شهر × {parsedMonths} شهر = {fmt(parsedTotal)} ج.م
-                    </p>
-                  </div>
-                )}
-
-                <div>
-                  <label className="text-[11px] font-black block mb-2" style={{ color: "var(--text-muted)" }}>ملاحظة (اختياري)</label>
-                  <input
-                    type="text" className="input-field text-sm"
-                    value={note} onChange={(e) => setNote(e.target.value)}
-                    placeholder="مثال: تقسيط تلفزيون"
-                  />
-                </div>
-
-                <div className="p-2.5 rounded-lg flex items-start gap-2" style={{ background: "var(--warning-soft)" }}>
-                  <Info size={14} className="text-amber-600 mt-0.5 flex-shrink-0" />
-                  <p className="text-[10px] font-bold text-amber-700 dark:text-amber-400 leading-relaxed">
-                    💡 البنك يحجز {parsedTotal > 0 ? fmt(parsedTotal) : "المبلغ"} من الحد المتاح، لكن المديونية تُحسب قسطاً بقسط في كل دورة.
-                  </p>
-                </div>
-
-                <div className="flex gap-2 pt-1">
-                  <button type="button" onClick={onClose} className="btn btn-secondary flex-1 py-3 text-sm">
-                    إلغاء
-                  </button>
-                  <button
-                    type="button" onClick={handleCreate} disabled={parsedTotal <= 0}
-                    className="btn flex-1 py-3 text-sm font-black"
-                    style={{
-                      background: parsedTotal > 0 ? "linear-gradient(135deg, #635BFF 0%, #4A42E5 100%)" : "var(--bg-muted)",
-                      color: parsedTotal > 0 ? "white" : "var(--text-muted)",
-                    }}
-                  >
-                    <CheckCircle2 size={16} /> إنشاء الخطة
-                  </button>
-                </div>
+                  );
+                })}
               </div>
-            </Modal>
-          );
-        },
-      );
+            )}
+          </div>
 
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-[11px] font-black block mb-2" style={{ color: "var(--text-muted)" }}>
+                إجمالي المبلغ *
+              </label>
+              <input
+                type="text"
+                inputMode="decimal"
+                className="input-field input-num text-base text-center font-black"
+                style={{ color: "var(--accent)" }}
+                value={totalAmount}
+                onChange={(e) => setTotalAmount(e.target.value)}
+                placeholder="0.00"
+              />
+            </div>
+            <div>
+              <label className="text-[11px] font-black block mb-2" style={{ color: "var(--text-muted)" }}>
+                عدد الأشهر *
+              </label>
+              <input
+                type="number"
+                min="1"
+                max="60"
+                className="input-field text-base text-center font-black"
+                value={months}
+                onChange={(e) => setMonths(e.target.value)}
+              />
+              <div className="flex gap-1 mt-1.5">
+                {[3, 6, 12, 18, 24, 36].map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => setMonths(String(m))}
+                    className={`quick-chip flex-1 text-[9px] py-1 ${months === String(m) ? "bg-[color:var(--accent)] text-white" : ""}`}
+                  >
+                    {m}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <label className="text-[11px] font-black block mb-2" style={{ color: "var(--text-muted)" }}>
+              المبلغ المدفوع مسبقاً (اختياري)
+            </label>
+            <input
+              type="text"
+              inputMode="decimal"
+              className="input-field input-num text-base text-center font-black"
+              style={{ color: "var(--success)" }}
+              value={initialPaid}
+              onChange={(e) => setInitialPaid(e.target.value)}
+              placeholder="مثال: قيمة الأقساط القديمة"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-[11px] font-black block mb-2" style={{ color: "var(--text-muted)" }}>
+                شهر البداية
+              </label>
+              <select className="input-field text-sm py-2" value={startMonth} onChange={(e) => setStartMonth(e.target.value)}>
+                {getMonthsForYear(startYear).map((m) => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-[11px] font-black block mb-2" style={{ color: "var(--text-muted)" }}>
+                السنة
+              </label>
+              <select
+                className="input-field text-sm py-2"
+                value={startYear}
+                onChange={(e) => setStartYear(Number(e.target.value))}
+              >
+                {YEARS_LIST.map((y) => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {parsedTotal > 0 && (
+            <div
+              className="p-3 rounded-xl text-center"
+              style={{
+                background: "linear-gradient(135deg, rgba(99,91,255,0.12), rgba(74,66,229,0.08))",
+                border: "1px solid var(--accent)",
+              }}
+            >
+              <p className="text-[11px] font-bold" style={{ color: "var(--accent)" }}>
+                القسط الشهري
+              </p>
+              <p className="text-2xl font-black money tabular" style={{ color: "var(--accent)" }}>
+                {fmt(monthlyAmount)}
+              </p>
+              <p className="text-[10px] mt-1" style={{ color: "var(--text-secondary)" }}>
+                ج.م/شهر × {parsedMonths} شهر = {fmt(parsedTotal)} ج.م
+              </p>
+            </div>
+          )}
+
+          <div>
+            <label className="text-[11px] font-black block mb-2" style={{ color: "var(--text-muted)" }}>
+              ملاحظة (اختياري)
+            </label>
+            <input
+              type="text"
+              className="input-field text-sm"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="مثال: تقسيط تلفزيون"
+            />
+          </div>
+
+          <div className="flex gap-2 pt-1">
+            <button type="button" onClick={onClose} className="btn btn-secondary flex-1 py-3 text-sm">
+              إلغاء
+            </button>
+            <button
+              type="button"
+              onClick={handleSubmit}
+              disabled={parsedTotal <= 0}
+              className="btn flex-1 py-3 text-sm font-black"
+              style={{
+                background: parsedTotal > 0
+                  ? isEdit
+                    ? "linear-gradient(135deg, #0EA5E9 0%, #0284C7 100%)"
+                    : "linear-gradient(135deg, #635BFF 0%, #4A42E5 100%)"
+                  : "var(--bg-muted)",
+                color: parsedTotal > 0 ? "white" : "var(--text-muted)",
+              }}
+            >
+              {isEdit ? <Edit size={16} /> : <CheckCircle2 size={16} />}
+              {isEdit ? "حفظ التعديلات" : "إنشاء الخطة"}
+            </button>
+          </div>
+        </div>
+      </Modal>
+    );
+  }
+);
       const CardInstallmentsPanel = memo(({ card, data, dispatch, saveHistory, addNotification }) => {
         const [showCreate, setShowCreate] = useState(false);
         const info = useMemo(() => computeCardInstallmentsInfo(data, card), [data, card]);
@@ -12173,340 +12295,575 @@ const handleCreate = () => {
 
       /* ═══════════════ CARD STATEMENT MODAL (إصلاح 5-6-7) ═══════════════ */
       const CardStatementModal = memo(
-        ({ card, data, transactions, onClose, addNotification, dispatch }) => {
-          const [filterType, setFilterType] = useState("all");
-          const [searchTerm, setSearchTerm] = useState("");
+  ({ card, data, transactions, onClose, addNotification, dispatch }) => {
+    const [activeTab, setActiveTab] = useState("overview");
+    const [filterType, setFilterType] = useState("all");
+    const [searchTerm, setSearchTerm] = useState("");
+    const [sortBy, setSortBy] = useState("date-desc");
+    const [showPending, setShowPending] = useState(false);
+    const [expandedCycle, setExpandedCycle] = useState(null);
 
-          const cardMethod = getCardMethod(card);
-          const subCards = Array.isArray(card.subCardLast4) ? card.subCardLast4 : [];
+    const cardMethod = getCardMethod(card);
+    const subCards = Array.isArray(card.subCardLast4) ? card.subCardLast4 : [];
 
-          // 🆕 V88.4.0 — حساب التنبؤ
-          const prediction = useMemo(
-            () => (card ? computeCardPaymentPrediction(data, card) : null),
-            [data, card],
-          );
+    const prediction = useMemo(
+      () => (card ? computeCardPaymentPrediction(data, card) : null),
+      [data, card]
+    );
 
-          const cardTx = useMemo(() => {
-            if (!card) return [];
-            const cutoffISO = card.openingDebtDate || card.openingDate;
-            const parsed = cutoffISO ? parseISODate(cutoffISO) : null;
-            const cutoffDay = parsed ? dayStart(parsed) : null;
-            return (transactions || [])
-              .filter((t) => {
-                if (t.status !== "paid") return false;
-                if (t.source === "carryover") return false;
-                if (isCarryoverMarker(t)) return false;
-                if (t.source === "card-forecast") return false; // 🆕 استبعاد التنبؤات
-                if (isHanyPurchaseTx(t) || isHanySettleTx(t)) return false;
-                if (t.method === HANY_TAB_METHOD) return false;
-                const d = parseISODate(t.date);
-                if (!d) return false;
-                if (cutoffDay && d < cutoffDay) return false;
-                const hasExplicitCardLink =
-                  t.linkedCardId !== undefined && t.linkedCardId !== null && t.linkedCardId !== "";
-                if (hasExplicitCardLink) return t.linkedCardId === card.id;
-                if (t.cardLast4 && subCards.includes(t.cardLast4)) return true;
-                return t.method === cardMethod;
-              })
-              .sort(compareTransactions);
-          }, [transactions, card, cardMethod, subCards]);
+    const engine = useMemo(
+      () => (card ? buildCardStatementEngine(card, data) : null),
+      [card, data]
+    );
 
-          const filteredTx = useMemo(() => {
-            let arr = cardTx;
-            if (filterType === "expense") arr = arr.filter((t) => t.type === "expense" && !isCardPaymentTx(t, card.id));
-            if (filterType === "income") arr = arr.filter((t) => t.type === "income");
-            if (filterType === "payment") arr = arr.filter((t) => isCardPaymentTx(t, card.id));
-            if (searchTerm.trim()) {
-              const term = normalizeText(searchTerm);
-              arr = arr.filter(
-                (t) => normalizeText(t.description).includes(term) || normalizeText(t.category).includes(term),
-              );
-            }
-            return [...arr].sort(compareTransactions);
-          }, [cardTx, filterType, searchTerm, card]);
+    const cardTx = useMemo(() => {
+      if (!card) return [];
+      const cutoffISO = card.openingDebtDate || card.openingDate;
+      const parsed = cutoffISO ? parseISODate(cutoffISO) : null;
+      const cutoffDay = parsed ? dayStart(parsed) : null;
+      return (transactions || [])
+        .filter((t) => {
+          if (showPending ? false : t.status !== "paid") return false;
+          if (t.source === "carryover") return false;
+          if (isCarryoverMarker(t)) return false;
+          if (t.source === "card-forecast") return false;
+          if (isHanyPurchaseTx(t) || isHanySettleTx(t)) return false;
+          if (t.method === HANY_TAB_METHOD) return false;
+          const d = parseISODate(t.date);
+          if (!d) return false;
+          if (cutoffDay && d < cutoffDay) return false;
+          const hasExplicitCardLink =
+            t.linkedCardId !== undefined && t.linkedCardId !== null && t.linkedCardId !== "";
+          if (hasExplicitCardLink) return t.linkedCardId === card.id;
+          if (t.cardLast4 && subCards.includes(t.cardLast4)) return true;
+          return t.method === cardMethod;
+        })
+        .sort(compareTransactions);
+    }, [transactions, card, cardMethod, subCards, showPending]);
 
-          const stats = useMemo(() => {
-            let purchases = 0, refunds = 0, payments = 0;
-            cardTx.forEach((t) => {
-              if (isCardPaymentTx(t, card.id)) payments += safeNumber(t.amount);
-              else if (t.type === "expense") purchases += safeNumber(t.amount);
-              else if (t.type === "income") refunds += safeNumber(t.amount);
-            });
-            return {
-              purchases, refunds, payments,
-              expenses: purchases,
-              incomes: refunds + payments,
-              total: purchases - refunds - payments,
-              count: cardTx.length,
-            };
-          }, [cardTx, card]);
+    const filteredTx = useMemo(() => {
+      let arr = [...cardTx];
+      if (filterType === "expense")
+        arr = arr.filter((t) => t.type === "expense" && !isCardPaymentTx(t, card.id));
+      if (filterType === "income") arr = arr.filter((t) => t.type === "income");
+      if (filterType === "payment") arr = arr.filter((t) => isCardPaymentTx(t, card.id));
+      if (searchTerm.trim()) {
+        const term = normalizeText(searchTerm);
+        arr = arr.filter(
+          (t) =>
+            normalizeText(t.description).includes(term) ||
+            normalizeText(t.category).includes(term)
+        );
+      }
+      if (sortBy === "amount-desc") arr.sort((a, b) => safeNumber(b.amount) - safeNumber(a.amount));
+      else if (sortBy === "amount-asc") arr.sort((a, b) => safeNumber(a.amount) - safeNumber(b.amount));
+      else if (sortBy === "date-asc") arr.sort(compareTransactions).reverse();
+      else arr.sort(compareTransactions);
+      return arr;
+    }, [cardTx, filterType, searchTerm, sortBy, card]);
 
-          const dailyGroups = useMemo(() => groupTransactionsByDate(filteredTx), [filteredTx]);
+    const txWithBalance = useMemo(() => {
+      const sortedAsc = [...filteredTx].sort((a, b) => {
+        const da = parseISODate(a.date)?.getTime() || 0;
+        const db = parseISODate(b.date)?.getTime() || 0;
+        if (da !== db) return da - db;
+        return (getTxTimestamp(a) || 0) - (getTxTimestamp(b) || 0);
+      });
+      let running = safeNumber(card?.openingDebt);
+      const withBalance = sortedAsc.map((t) => {
+        if (isCardPaymentTx(t, card.id)) running -= safeNumber(t.amount);
+        else if (t.type === "expense") running += safeNumber(t.amount);
+        else if (t.type === "income") running -= safeNumber(t.amount);
+        return { ...t, __runningBalance: running };
+      });
+      return withBalance.reverse();
+    }, [filteredTx, card]);
 
-          if (!card) return null;
+    const stats = useMemo(() => {
+      let purchases = 0, refunds = 0, payments = 0, pendingCount = 0;
+      cardTx.forEach((t) => {
+        if (t.status !== "paid") { pendingCount++; return; }
+        if (isCardPaymentTx(t, card.id)) payments += safeNumber(t.amount);
+        else if (t.type === "expense") purchases += safeNumber(t.amount);
+        else if (t.type === "income") refunds += safeNumber(t.amount);
+      });
+      return {
+        purchases, refunds, payments, pendingCount,
+        total: purchases - refunds - payments,
+        count: cardTx.length,
+      };
+    }, [cardTx, card]);
 
-          // ✅ الإصلاح 5: المديونية الحقيقية = مشتريات + أقساط مستحقة فقط
-const { liveDebt, liveAvailable, notYetDue } = computeCardLiveFigures(data, card);
-const usagePct =
-  safeNumber(card.limit) > 0
-    ? (Math.max(0, liveDebt) / safeNumber(card.limit)) * 100
-    : 0;
-const isCredit = liveDebt < 0;
+    const dailyGroups = useMemo(() => groupTransactionsByDate(txWithBalance), [txWithBalance]);
 
-          return (
-            <div
-              className="modal-backdrop no-print"
-              onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-            >
-              <div className="generic-modal max-w-3xl">
-                <div className="generic-modal-header">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <div className="p-2 rounded-lg flex-shrink-0 bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400">
-                      <CreditCard size={18} />
+    if (!card) return null;
+
+    const { liveDebt, liveAvailable, notYetDue } = computeCardLiveFigures(data, card);
+    const usagePct =
+      safeNumber(card.limit) > 0
+        ? (Math.max(0, liveDebt) / safeNumber(card.limit)) * 100
+        : 0;
+    const isCredit = liveDebt < 0;
+
+    const approvePending = (tx) => {
+      if (isMonthClosed(data, tx.year || 2026, tx.month)) {
+        addNotification({ type: "error", title: "الشهر مغلق" });
+        return;
+      }
+      const next = transactions.map((t) => (t.id === tx.id ? { ...t, status: "paid" } : t));
+      dispatch({ type: "UPDATE_TRANSACTIONS", payload: next });
+      addNotification({ type: "success", title: "تم الاعتماد", duration: 2500 });
+    };
+
+    const editTx = (tx) => {
+      if (isMonthClosed(data, tx.year || 2026, tx.month)) {
+        addNotification({ type: "error", title: "الشهر مغلق" });
+        return;
+      }
+      dispatch({ type: "SET_FORM_MODE", payload: "edit" });
+      dispatch({ type: "SET_FORM_DATA", payload: tx });
+      dispatch({ type: "SET_FORM_OPEN", payload: true });
+      onClose();
+    };
+
+    return (
+      <div
+        className="modal-backdrop no-print"
+        onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      >
+        <div className="generic-modal max-w-3xl">
+          <div className="generic-modal-header">
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="p-2 rounded-lg flex-shrink-0 bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400">
+                <CreditCard size={18} />
+              </div>
+              <div className="min-w-0">
+                <h3 className="text-base font-black truncate">{card.bank} - {card.name}</h3>
+                <p className="text-[11px] font-semibold" style={{ color: "var(--text-muted)" }}>
+                  •••• {card.last4} • {stats.count} معاملة
+                </p>
+              </div>
+            </div>
+            <button onClick={onClose} className="btn btn-ghost p-1.5">
+              <X size={16} />
+            </button>
+          </div>
+
+          <div className="p-2" style={{ borderBottom: "1px solid var(--border-subtle)" }}>
+            <div className="transfer-type-tabs">
+              {[
+                { id: "overview", label: "📊 ملخص", icon: Activity },
+                { id: "cycles", label: "📅 كشوف دورية", icon: Calendar },
+                { id: "transactions", label: "📋 حركات", icon: Receipt },
+              ].map((tab) => {
+                const Icon = tab.icon;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`transfer-type-tab ${activeTab === tab.id ? "active" : ""}`}
+                  >
+                    <Icon size={12} /> {tab.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="generic-modal-body">
+            {activeTab === "overview" && (
+              <div className="space-y-3">
+                {prediction && (
+                  <div className={`card-statement-prediction urgency-${prediction.urgency}`}>
+                    <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
+                      <h3 className="font-black text-sm flex items-center gap-2 text-[color:var(--accent)]">
+                        <TrendingUp size={14} /> 🔮 التنبؤ بالسداد
+                      </h3>
+                      <span
+                        className={`badge text-[10px] ${
+                          prediction.urgency === "overdue" ? "badge-danger"
+                          : prediction.urgency === "urgent" ? "badge-warning"
+                          : prediction.urgency === "soon" ? "badge-info"
+                          : "badge-neutral"
+                        }`}
+                      >
+                        {prediction.urgency === "overdue" ? "⚠️ متأخر"
+                          : prediction.urgency === "urgent" ? "🔴 عاجل"
+                          : prediction.urgency === "soon" ? "🟡 قريب"
+                          : "🟢 طبيعي"}
+                      </span>
                     </div>
-                    <div className="min-w-0">
-                      <h3 className="text-base font-black truncate">{card.bank} - {card.name}</h3>
-                      <p className="text-[11px] font-semibold" style={{ color: "var(--text-muted)" }}>
-                        •••• {card.last4} • {stats.count} معاملة
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-2">
+                      <div className="p-2 rounded-lg bg-white/60 dark:bg-black/20 text-center">
+                        <p className="text-[9px] font-bold" style={{ color: "var(--text-muted)" }}>إجمالي المطلوب</p>
+                        <p className="text-sm font-black text-red-600 money tabular mt-0.5">{fmt(prediction.totalMandatory)}</p>
+                      </div>
+                      <div className="p-2 rounded-lg bg-white/60 dark:bg-black/20 text-center">
+                        <p className="text-[9px] font-bold" style={{ color: "var(--text-muted)" }}>الحد الأدنى</p>
+                        <p className="text-sm font-black text-amber-600 money tabular mt-0.5">{fmt(prediction.minPayment)}</p>
+                      </div>
+                      <div className="p-2 rounded-lg bg-white/60 dark:bg-black/20 text-center">
+                        <p className="text-[9px] font-bold" style={{ color: "var(--text-muted)" }}>رصيد الكشف</p>
+                        <p className="text-sm font-black text-emerald-600 money tabular mt-0.5">{fmt(prediction.statementBalance)}</p>
+                      </div>
+                      <div className="p-2 rounded-lg bg-white/60 dark:bg-black/20 text-center">
+                        <p className="text-[9px] font-bold" style={{ color: "var(--text-muted)" }}>الاستحقاق</p>
+                        <p className="text-[11px] font-black mt-0.5">
+                          {prediction.daysUntilDue === null ? "—"
+                            : prediction.daysUntilDue <= 0 ? "متأخر!"
+                            : prediction.daysUntilDue === 0 ? "اليوم"
+                            : `${prediction.daysUntilDue} يوم`}
+                        </p>
+                      </div>
+                    </div>
+                    {prediction.paymentsAfterStatement > 0 && (
+                      <div className="p-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 mb-2">
+                        <p className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 leading-relaxed">
+                          ✅ تم سداد <span className="money tabular">{fmt(prediction.paymentsAfterStatement)}</span> ج.م بعد إصدار الكشف
+                        </p>
+                      </div>
+                    )}
+                    {prediction.totalMandatory > 0.01 && prediction.nextDueDateISO && (
+                      <button
+                        onClick={() => handleGenerateNextMonthForecast(prediction, dispatch, data, addNotification)}
+                        className="btn btn-primary w-full text-xs py-2"
+                      >
+                        <Plus size={12} /> إنشاء قيد في الشهر التالي
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                <div className="p-3 rounded-xl" style={{ background: "var(--bg-muted)" }}>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="text-center">
+                      <p className="text-[10px] font-bold" style={{ color: "var(--text-muted)" }}>
+                        {isCredit ? "رصيد دائن" : "المديونية الحية"}
+                      </p>
+                      <p className={`text-base font-black mt-0.5 money tabular ${isCredit ? "text-emerald-600" : "text-red-600"}`}>
+                        {isCredit ? `+${fmt(Math.abs(liveDebt))}` : fmt(liveDebt)}
                       </p>
                     </div>
+                    <div className="text-center">
+                      <p className="text-[10px] font-bold" style={{ color: "var(--text-muted)" }}>المتاح</p>
+                      <p className="text-base font-black text-emerald-600 mt-0.5 money tabular">{fmt(liveAvailable)}</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-[10px] font-bold" style={{ color: "var(--text-muted)" }}>الحد الكلي</p>
+                      <p className="text-base font-black text-blue-600 mt-0.5 money tabular">{fmt(card.limit)}</p>
+                    </div>
                   </div>
-                  <button onClick={onClose} className="btn btn-ghost p-1.5">
-                    <X size={16} />
+                  {notYetDue > 0 && (
+                    <p className="text-[10px] text-center mt-2 font-bold" style={{ color: "var(--text-muted)" }}>
+                      🔒 محجوز للأقساط: {fmt(notYetDue)} ج.م
+                    </p>
+                  )}
+                  <div className="w-full rounded-full h-1.5 overflow-hidden mt-2" style={{ background: "var(--bg-card)" }}>
+                    <div
+                      className={`h-full ${usagePct > 70 ? "bg-red-500" : usagePct > 40 ? "bg-amber-500" : "bg-emerald-500"}`}
+                      style={{ width: `${Math.min(100, usagePct)}%` }}
+                    ></div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-4 gap-2">
+                  <div className="p-2.5 rounded-lg bg-red-50 dark:bg-red-950/30 text-center">
+                    <p className="text-[10px] font-bold text-red-700 dark:text-red-400">مشتريات</p>
+                    <p className="text-sm font-black text-red-600 mt-0.5 money tabular">{formatAdaptive(stats.purchases)}</p>
+                  </div>
+                  <div className="p-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 text-center">
+                    <p className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400">مرتجعات</p>
+                    <p className="text-sm font-black text-emerald-600 mt-0.5 money tabular">{formatAdaptive(stats.refunds)}</p>
+                  </div>
+                  <div className="p-2.5 rounded-lg bg-purple-50 dark:bg-purple-950/30 text-center">
+                    <p className="text-[10px] font-bold text-purple-700 dark:text-purple-400">سدادات</p>
+                    <p className="text-sm font-black text-purple-600 mt-0.5 money tabular">{formatAdaptive(stats.payments)}</p>
+                  </div>
+                  <div className="p-2.5 rounded-lg bg-blue-50 dark:bg-blue-950/30 text-center">
+                    <p className="text-[10px] font-bold text-blue-700 dark:text-blue-400">الصافي</p>
+                    <p className={`text-sm font-black mt-0.5 money tabular ${stats.total >= 0 ? "text-blue-600" : "text-emerald-600"}`}>
+                      {formatAdaptive(Math.abs(stats.total))}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeTab === "cycles" && engine && (
+              <div className="space-y-2">
+                {engine.cycles.length === 0 ? (
+                  <div className="text-center py-8">
+                    <Calendar size={32} className="mx-auto mb-2" style={{ color: "var(--text-muted)" }} />
+                    <p className="font-semibold text-xs" style={{ color: "var(--text-muted)" }}>لا توجد كشوف دورية بعد</p>
+                  </div>
+                ) : (
+                  [...engine.cycles].reverse().map((cycle) => {
+                    const isOpen = expandedCycle === cycle.cycleKey;
+                    const statusColor =
+                      cycle.status === "paid" ? "#10B981"
+                      : cycle.status === "overdue" ? "#DC2626"
+                      : cycle.status === "closed" ? "#D97706"
+                      : "#635BFF";
+                    const statusLabel =
+                      cycle.status === "paid" ? "✅ مسدد"
+                      : cycle.status === "overdue" ? "🔴 متأخر"
+                      : cycle.status === "closed" ? "📋 كشف مغلق"
+                      : "🟦 مفتوح";
+                    return (
+                      <div key={cycle.cycleKey} className="rounded-xl overflow-hidden" style={{ border: `2px solid ${statusColor}40`, background: "var(--bg-card)" }}>
+                        <button
+                          type="button"
+                          onClick={() => setExpandedCycle(isOpen ? null : cycle.cycleKey)}
+                          className="w-full p-3 text-right transition-colors hover:bg-[color:var(--bg-muted)]"
+                        >
+                          <div className="flex items-center justify-between gap-2 flex-wrap mb-1">
+                            <span className="badge text-[10px]" style={{ background: `${statusColor}20`, color: statusColor }}>
+                              {statusLabel}
+                            </span>
+                            <span className="text-[10px] font-mono font-bold" style={{ color: "var(--text-muted)" }}>
+                              {cycle.cycleKey}
+                            </span>
+                          </div>
+                          <div className="grid grid-cols-3 gap-2 mt-1.5 text-[10px]">
+                            <div>
+                              <p className="font-bold" style={{ color: "var(--text-muted)" }}>الكشف</p>
+                              <p className="font-mono font-black">{cycle.statementDateISO}</p>
+                            </div>
+                            <div>
+                              <p className="font-bold" style={{ color: "var(--text-muted)" }}>الاستحقاق</p>
+                              <p className="font-mono font-black">{cycle.dueDateISO}</p>
+                            </div>
+                            <div>
+                              <p className="font-bold" style={{ color: "var(--text-muted)" }}>الرصيد الختامي</p>
+                              <p className={`money tabular font-black ${cycle.closingBalance > 0.01 ? "text-red-600" : "text-emerald-600"}`}>
+                                {fmt(cycle.closingBalance)}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex justify-end mt-1">
+                            <ChevronDown
+                              size={14}
+                              className={`transition-transform ${isOpen ? "rotate-180" : ""}`}
+                              style={{ color: "var(--text-muted)" }}
+                            />
+                          </div>
+                        </button>
+                        {isOpen && (
+                          <div className="p-3 space-y-2 animate-fadeIn" style={{ borderTop: "1px solid var(--border-subtle)" }}>
+                            <div className="grid grid-cols-2 gap-2">
+                              <div className="p-2 rounded-lg" style={{ background: "var(--bg-muted)" }}>
+                                <p className="text-[9px] font-bold" style={{ color: "var(--text-muted)" }}>رصيد افتتاحي</p>
+                                <p className="text-xs font-black money tabular">{fmt(cycle.openingBalance)}</p>
+                              </div>
+                              <div className="p-2 rounded-lg" style={{ background: "rgba(220,38,38,0.08)" }}>
+                                <p className="text-[9px] font-bold text-red-600">مشتريات</p>
+                                <p className="text-xs font-black text-red-600 money tabular">+{fmt(cycle.purchases)}</p>
+                              </div>
+                              <div className="p-2 rounded-lg" style={{ background: "rgba(16,185,129,0.08)" }}>
+                                <p className="text-[9px] font-bold text-emerald-600">مرتجعات</p>
+                                <p className="text-xs font-black text-emerald-600 money tabular">−{fmt(cycle.refunds)}</p>
+                              </div>
+                              <div className="p-2 rounded-lg" style={{ background: "rgba(139,92,246,0.08)" }}>
+                                <p className="text-[9px] font-bold text-purple-600">سدادات</p>
+                                <p className="text-xs font-black text-purple-600 money tabular">−{fmt(cycle.paymentsInCycle)}</p>
+                              </div>
+                            </div>
+                            <div className="p-2 rounded-lg" style={{ background: "var(--accent-soft)" }}>
+                              <div className="flex justify-between items-center text-[10px]">
+                                <span className="font-bold" style={{ color: "var(--text-muted)" }}>أقساط مستحقة هذه الدورة</span>
+                                <span className="font-black text-[color:var(--accent)] money tabular">{fmt(cycle.installmentsDueThisCycle)}</span>
+                              </div>
+                              <div className="flex justify-between items-center text-[10px] mt-1">
+                                <span className="font-bold" style={{ color: "var(--text-muted)" }}>الحد الأدنى للسداد</span>
+                                <span className="font-black text-amber-600 money tabular">{fmt(cycle.minDue)}</span>
+                              </div>
+                              <div className="flex justify-between items-center text-[11px] mt-1 pt-1" style={{ borderTop: "1px dashed var(--accent)" }}>
+                                <span className="font-black text-[color:var(--accent)]">إجمالي المطلوب</span>
+                                <span className="font-black text-[color:var(--accent)] money tabular">{fmt(cycle.totalDue)}</span>
+                              </div>
+                            </div>
+                            {cycle.transactions.length > 0 && (
+                              <div>
+                                <p className="text-[10px] font-black mb-1" style={{ color: "var(--text-muted)" }}>
+                                  {cycle.txCount} معاملة في هذه الدورة
+                                </p>
+                                <div className="max-h-32 overflow-y-auto space-y-1 scroll-hide">
+                                  {cycle.transactions.map((t) => (
+                                    <div key={t.id} className="flex justify-between text-[10px] p-1.5 rounded" style={{ background: "var(--bg-muted)" }}>
+                                      <span className="truncate flex-1 font-bold">{t.description || t.category}</span>
+                                      <span className={`font-black money tabular ${t.type === "income" ? "text-emerald-600" : "text-red-600"}`}>
+                                        {t.type === "income" ? "+" : "−"}{fmt(t.amount)}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            )}
+
+            {activeTab === "transactions" && (
+              <div className="space-y-3">
+                <div className="flex gap-1.5 flex-wrap">
+                  <div className="relative flex-1 min-w-[140px]">
+                    <Search className="absolute right-2.5 top-1/2 -translate-y-1/2" size={12} style={{ color: "var(--text-muted)" }} />
+                    <input
+                      type="text"
+                      placeholder="ابحث..."
+                      className="input-field pr-8 text-[11px] py-2"
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                  </div>
+                  <select
+                    className="input-field text-[11px] py-2 w-auto"
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value)}
+                  >
+                    <option value="date-desc">📅 الأحدث</option>
+                    <option value="date-asc">📅 الأقدم</option>
+                    <option value="amount-desc">💰 الأعلى</option>
+                    <option value="amount-asc">💰 الأقل</option>
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => setShowPending((v) => !v)}
+                    className={`badge text-[10px] px-2.5 py-1.5 cursor-pointer ${showPending ? "badge-warning" : "badge-neutral"}`}
+                  >
+                    <Clock size={10} /> المعلقات {stats.pendingCount > 0 && `(${stats.pendingCount})`}
                   </button>
                 </div>
-                <div className="generic-modal-body">
-                  {/* 🆕 V88.4.0 — إصلاح 5+6: قسم التنبؤ بالسداد */}
-                  {prediction && (
-                    <div className={`card-statement-prediction urgency-${prediction.urgency} mb-3`}>
-                      <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
-                        <h3 className="font-black text-sm flex items-center gap-2 text-[color:var(--accent)]">
-                          <TrendingUp size={14} /> 🔮 التنبؤ بالسداد
-                        </h3>
-                        <span
-                          className={`badge text-[10px] ${
-                            prediction.urgency === "overdue" ? "badge-danger"
-                              : prediction.urgency === "urgent" ? "badge-warning"
-                              : prediction.urgency === "soon" ? "badge-info"
-                              : "badge-neutral"
-                          }`}
-                        >
-                          {prediction.urgency === "overdue" ? "⚠️ متأخر"
-                            : prediction.urgency === "urgent" ? "🔴 عاجل"
-                            : prediction.urgency === "soon" ? "🟡 قريب"
-                            : "🟢 طبيعي"}
-                        </span>
-                      </div>
 
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-2">
-                        <div className="p-2 rounded-lg bg-white/60 dark:bg-black/20 text-center">
-                          <p className="text-[9px] font-bold" style={{ color: "var(--text-muted)" }}>إجمالي المطلوب</p>
-                          <p className="text-sm font-black text-red-600 money tabular mt-0.5">{fmt(prediction.totalMandatory)}</p>
-                        </div>
-                        <div className="p-2 rounded-lg bg-white/60 dark:bg-black/20 text-center">
-                          <p className="text-[9px] font-bold" style={{ color: "var(--text-muted)" }}>الحد الأدنى</p>
-                          <p className="text-sm font-black text-amber-600 money tabular mt-0.5">{fmt(prediction.minPayment)}</p>
-                        </div>
-                        <div className="p-2 rounded-lg bg-white/60 dark:bg-black/20 text-center">
-                          <p className="text-[9px] font-bold" style={{ color: "var(--text-muted)" }}>
-                            {prediction.paymentsAfterStatement > 0 ? "سُدّد بعد الكشف" : "رصيد الكشف"}
-                          </p>
-                          <p className="text-sm font-black text-emerald-600 money tabular mt-0.5">
-                            {fmt(prediction.paymentsAfterStatement > 0 ? prediction.paymentsAfterStatement : prediction.statementBalance)}
-                          </p>
-                        </div>
-                        <div className="p-2 rounded-lg bg-white/60 dark:bg-black/20 text-center">
-                          <p className="text-[9px] font-bold" style={{ color: "var(--text-muted)" }}>الاستحقاق</p>
-                          <p className="text-[11px] font-black mt-0.5">
-                            {prediction.daysUntilDue === null ? "—"
-                              : prediction.daysUntilDue <= 0 ? "متأخر!"
-                              : prediction.daysUntilDue === 0 ? "اليوم"
-                              : `${prediction.daysUntilDue} يوم`}
-                          </p>
-                        </div>
-                      </div>
+                <div className="flex p-0.5 rounded-lg" style={{ background: "var(--bg-muted)" }}>
+                  {[
+                    { id: "all", label: "الكل" },
+                    { id: "expense", label: "مشتريات" },
+                    { id: "payment", label: "سدادات" },
+                    { id: "income", label: "مرتجعات" },
+                  ].map((f) => (
+                    <button
+                      key={f.id}
+                      type="button"
+                      onClick={() => setFilterType(f.id)}
+                      className={`px-2.5 py-1.5 rounded-md text-[10px] font-bold flex-1 ${filterType === f.id ? "shadow-sm" : ""}`}
+                      style={
+                        filterType === f.id
+                          ? {
+                              background: "var(--bg-card)",
+                              color:
+                                f.id === "expense" ? "var(--danger)"
+                                : f.id === "income" ? "var(--success)"
+                                : f.id === "payment" ? "var(--accent)"
+                                : "var(--text-primary)",
+                            }
+                          : { color: "var(--text-muted)" }
+                      }
+                    >
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
 
-                      {prediction.paymentsAfterStatement > 0 && (
-                        <div className="p-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 mb-2">
-                          <p className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 leading-relaxed">
-                            ✅ تم سداد <span className="money tabular">{fmt(prediction.paymentsAfterStatement)}</span> ج.م بعد إصدار الكشف — التنبؤ محدَّث تلقائياً
-                          </p>
-                        </div>
-                      )}
-
-                      {prediction.installmentsDueSoFar > 0 && (
-                        <div className="p-2 rounded-lg bg-purple-50 dark:bg-purple-950/30 mb-2">
-                          <p className="text-[10px] font-bold text-purple-700 dark:text-purple-400 leading-relaxed">
-                            📅 أقساط مستحقة: <span className="money tabular">{fmt(prediction.installmentsDueSoFar)}</span> ج.م
-                            {prediction.installmentsNotYetDue > 0 && ` • مؤجلة: ${fmt(prediction.installmentsNotYetDue)} ج.م`}
-                          </p>
-                        </div>
-                      )}
-
-                      {/* 🆕 إصلاح 7: زر إنشاء قيد في الشهر التالي */}
-                      {prediction.totalMandatory > 0.01 && prediction.nextDueDateISO && (
-                        <button
-                          onClick={() => {
-                            handleGenerateNextMonthForecast(prediction, dispatch, data, addNotification);
-                          }}
-                          className="btn btn-primary w-full text-xs py-2"
-                        >
-                          <Plus size={12} /> إنشاء قيد في الشهر التالي
-                        </button>
-                      )}
-                    </div>
-                  )}
-
-                  <div className="p-3 rounded-xl mb-3" style={{ background: "var(--bg-muted)" }}>
-                    <div className="grid grid-cols-3 gap-2">
-                      <div className="text-center">
-                        <p className="text-[10px] font-bold" style={{ color: "var(--text-muted)" }}>
-                          {isCredit ? "رصيد دائن" : "المديونية الحية"}
-                        </p>
-                        <p className={`text-base font-black mt-0.5 money tabular ${isCredit ? "text-emerald-600" : "text-red-600"}`}>
-                          {isCredit ? `+${fmt(Math.abs(liveDebt))}` : fmt(liveDebt)}
-                        </p>
-                      </div>
-                      <div className="text-center">
-                        <p className="text-[10px] font-bold" style={{ color: "var(--text-muted)" }}>المتاح</p>
-                        <p className="text-base font-black text-emerald-600 mt-0.5 money tabular">{fmt(liveAvailable)}</p>
-                      </div>
-                      <div className="text-center">
-                        <p className="text-[10px] font-bold" style={{ color: "var(--text-muted)" }}>الحد الكلي</p>
-                        <p className="text-base font-black text-blue-600 mt-0.5 money tabular">{fmt(card.limit)}</p>
-                      </div>
-                    </div>
-                    {notYetDue > 0 && (
-                      <p className="text-[10px] text-center mt-2 font-bold" style={{ color: "var(--text-muted)" }}>
-                        🔒 محجوز للأقساط: {fmt(notYetDue)} ج.م
-                      </p>
-                    )}
-                    <div className="w-full rounded-full h-1.5 overflow-hidden mt-2" style={{ background: "var(--bg-card)" }}>
-                      <div
-                        className={`h-full ${usagePct > 70 ? "bg-red-500" : usagePct > 40 ? "bg-amber-500" : "bg-emerald-500"}`}
-                        style={{ width: `${Math.min(100, usagePct)}%` }}
-                      ></div>
-                    </div>
+                {filteredTx.length === 0 ? (
+                  <div className="text-center py-8">
+                    <CreditCard size={32} className="mx-auto mb-2" style={{ color: "var(--text-muted)" }} />
+                    <p className="font-semibold text-xs" style={{ color: "var(--text-muted)" }}>لا توجد معاملات</p>
                   </div>
-
-                  <div className="grid grid-cols-4 gap-2 mb-3">
-                    <div className="p-2.5 rounded-lg bg-red-50 dark:bg-red-950/30 text-center">
-                      <p className="text-[10px] font-bold text-red-700 dark:text-red-400">مشتريات</p>
-                      <p className="text-sm font-black text-red-600 mt-0.5 money tabular">{formatAdaptive(stats.purchases)}</p>
-                    </div>
-                    <div className="p-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 text-center">
-                      <p className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400">مرتجعات</p>
-                      <p className="text-sm font-black text-emerald-600 mt-0.5 money tabular">{formatAdaptive(stats.refunds)}</p>
-                    </div>
-                    <div className="p-2.5 rounded-lg bg-purple-50 dark:bg-purple-950/30 text-center">
-                      <p className="text-[10px] font-bold text-purple-700 dark:text-purple-400">سدادات</p>
-                      <p className="text-sm font-black text-purple-600 mt-0.5 money tabular">{formatAdaptive(stats.payments)}</p>
-                    </div>
-                    <div className="p-2.5 rounded-lg bg-blue-50 dark:bg-blue-950/30 text-center">
-                      <p className="text-[10px] font-bold text-blue-700 dark:text-blue-400">الصافي</p>
-                      <p className={`text-sm font-black mt-0.5 money tabular ${stats.total >= 0 ? "text-blue-600" : "text-emerald-600"}`}>
-                        {formatAdaptive(Math.abs(stats.total))}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex gap-1.5 flex-wrap mb-3">
-                    <div className="relative flex-1 min-w-[140px]">
-                      <Search className="absolute right-2.5 top-1/2 -translate-y-1/2" size={12} style={{ color: "var(--text-muted)" }} />
-                      <input
-                        type="text" placeholder="ابحث..." className="input-field pr-8 text-[11px] py-2"
-                        value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
-                      />
-                    </div>
-                    <div className="flex p-0.5 rounded-lg" style={{ background: "var(--bg-muted)" }}>
-                      <button
-                        type="button" onClick={() => setFilterType("all")}
-                        className={`px-2.5 py-1.5 rounded-md text-[10px] font-bold ${filterType === "all" ? "shadow-sm" : ""}`}
-                        style={filterType === "all" ? { background: "var(--bg-card)", color: "var(--accent)" } : { color: "var(--text-muted)" }}
-                      >
-                        الكل
-                      </button>
-                      <button
-                        type="button" onClick={() => setFilterType("expense")}
-                        className={`px-2.5 py-1.5 rounded-md text-[10px] font-bold ${filterType === "expense" ? "shadow-sm" : ""}`}
-                        style={filterType === "expense" ? { background: "var(--bg-card)", color: "var(--danger)" } : { color: "var(--text-muted)" }}
-                      >
-                        مشتريات
-                      </button>
-                      <button
-                        type="button" onClick={() => setFilterType("payment")}
-                        className={`px-2.5 py-1.5 rounded-md text-[10px] font-bold ${filterType === "payment" ? "shadow-sm" : ""}`}
-                        style={filterType === "payment" ? { background: "var(--bg-card)", color: "var(--accent)" } : { color: "var(--text-muted)" }}
-                      >
-                        سدادات
-                      </button>
-                      <button
-                        type="button" onClick={() => setFilterType("income")}
-                        className={`px-2.5 py-1.5 rounded-md text-[10px] font-bold ${filterType === "income" ? "shadow-sm" : ""}`}
-                        style={filterType === "income" ? { background: "var(--bg-card)", color: "var(--success)" } : { color: "var(--text-muted)" }}
-                      >
-                        مرتجعات
-                      </button>
-                    </div>
-                  </div>
-
-                  {filteredTx.length === 0 ? (
-                    <div className="text-center py-8">
-                      <CreditCard size={32} className="mx-auto mb-2" style={{ color: "var(--text-muted)" }} />
-                      <p className="font-semibold text-xs" style={{ color: "var(--text-muted)" }}>لا توجد معاملات</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-2 max-h-[45vh] overflow-y-auto scroll-hide">
-                      {dailyGroups.map((group) => (
-                        <div key={group.date}>
-                          <DayGroupHeader label={group.label} total={group.total} count={group.items.length} />
-                          <div className="space-y-1.5">
-                            {group.items.map((t) => (
+                ) : (
+                  <div className="space-y-2 max-h-[50vh] overflow-y-auto scroll-hide">
+                    {dailyGroups.map((group) => (
+                      <div key={group.date}>
+                        <DayGroupHeader label={group.label} total={group.total} count={group.items.length} />
+                        <div className="space-y-1.5">
+                          {group.items.map((t) => {
+                            const isPending = t.status !== "paid";
+                            return (
                               <div
                                 key={t.id}
-                                className="flex justify-between items-center gap-2 p-2.5 rounded-lg"
-                                style={{ background: "var(--bg-card)", border: "1px solid var(--border-subtle)" }}
+                                className={`flex justify-between items-center gap-2 p-2.5 rounded-lg ${isPending ? "border-2 border-dashed border-amber-400" : ""}`}
+                                style={{ background: "var(--bg-card)", border: isPending ? undefined : "1px solid var(--border-subtle)" }}
                               >
                                 <div className="min-w-0 flex-1">
                                   <p className="font-bold text-xs truncate flex items-center gap-1 flex-wrap">
-                                    {getTxDisplay(t)} <TxTimeChip createdAt={t.createdAt} />
-                                    <CardPaymentBadge tx={t} /> <SmsBadge tx={t} /> <TeldaBadge tx={t} />
-                                    <RecurringBadge tx={t} /> <ReconciliationBadge tx={t} /> <InstallmentBadge tx={t} />
+                                    {getTxDisplay(t)}
+                                    <TxTimeChip createdAt={t.createdAt} />
+                                    {isPending && <span className="badge badge-warning text-[8px]">⏳ معلق</span>}
+                                    <CardPaymentBadge tx={t} />
+                                    <SmsBadge tx={t} />
+                                    <TeldaBadge tx={t} />
+                                    <RecurringBadge tx={t} />
+                                    <InstallmentBadge tx={t} />
                                   </p>
                                   <p className="text-[10px] font-semibold mt-0.5" style={{ color: "var(--text-muted)" }}>
                                     {t.category}
                                     {t.cardLast4 && <span className="font-mono"> • ••••{t.cardLast4}</span>}
+                                    <span className="font-mono mr-2 opacity-70">
+                                      • رصيد: {fmt(t.__runningBalance)}
+                                    </span>
                                   </p>
                                 </div>
-                                <span
-                                  className={`font-black text-xs flex-shrink-0 money tabular ${t.type === "income" ? "text-emerald-600" : isCardPaymentTx(t, card.id) ? "text-purple-600" : "text-red-600"}`}
-                                >
-                                  {t.type === "income" ? "+" : "−"}{fmt(t.amount)}
-                                </span>
+                                <div className="flex items-center gap-1 flex-shrink-0">
+                                  <span
+                                    className={`font-black text-xs money tabular ${
+                                      t.type === "income" ? "text-emerald-600"
+                                      : isCardPaymentTx(t, card.id) ? "text-purple-600"
+                                      : "text-red-600"
+                                    }`}
+                                  >
+                                    {t.type === "income" ? "+" : "−"}{fmt(t.amount)}
+                                  </span>
+                                  {isPending ? (
+                                    <button
+                                      onClick={() => approvePending(t)}
+                                      className="btn btn-ghost p-1 text-emerald-500"
+                                      title="اعتماد"
+                                    >
+                                      <CheckCircle2 size={12} />
+                                    </button>
+                                  ) : (
+                                    <button
+                                      onClick={() => editTx(t)}
+                                      className="btn btn-ghost p-1 text-blue-500"
+                                      title="تعديل"
+                                    >
+                                      <Edit size={12} />
+                                    </button>
+                                  )}
+                                </div>
                               </div>
-                            ))}
-                          </div>
+                            );
+                          })}
                         </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                <div className="generic-modal-footer">
-                  <button
-                    onClick={() => dispatch({ type: "SET_CARD_PAYMENT_MODAL", payload: { cardId: card.id } })}
-                    className="btn flex-1 text-sm"
-                    style={{ background: "linear-gradient(135deg, #635BFF 0%, #4A42E5 100%)", color: "white" }}
-                  >
-                    <Banknote size={14} /> سداد
-                  </button>
-                  <button onClick={onClose} className="btn btn-secondary flex-1 text-sm">إغلاق</button>
-                </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-            </div>
-          );
-        },
-      );
+            )}
+          </div>
 
+          <div className="generic-modal-footer">
+            <button
+              onClick={() => dispatch({ type: "SET_CARD_PAYMENT_MODAL", payload: { cardId: card.id } })}
+              className="btn flex-1 text-sm"
+              style={{ background: "linear-gradient(135deg, #635BFF 0%, #4A42E5 100%)", color: "white" }}
+            >
+              <Banknote size={14} /> سداد
+            </button>
+            <button onClick={onClose} className="btn btn-secondary flex-1 text-sm">إغلاق</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+);
       /* ═══════════════ CASHBACK VIEW ═══════════════ */
       const CashbackView = memo(({ data, dispatch, saveHistory, addNotification, cards, selectedYear, selectedMonth }) => {
         const [showAdd, setShowAdd] = useState(false);
