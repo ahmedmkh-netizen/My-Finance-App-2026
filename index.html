@@ -3554,11 +3554,16 @@ paymentsAfterStatement,
           (p) => !p.completed && p.status !== "cancelled",
         );
 
-        if (!currentStatement && activePlans.length > 0) {
-          installmentsThisMonth = activePlans.reduce((s, p) => s + safeNumber(p.monthlyAmount), 0);
-          minPayment = installmentsThisMonth;
-          totalMandatory = installmentsThisMonth;
-          statementBalance = instInfo.totalDueSoFar || 0;
+        if (!currentStatement) {
+          // حساب التنبؤ الحقيقي بناءً على المديونية الحالية (اللي مش داخلة في أقساط)
+          const projectedTxDebt = liveFigures.txDebt;
+          const projectedMinBase = projectedTxDebt > 0 ? Math.max(100, Math.round(projectedTxDebt * 0.05 * 100) / 100) : 0;
+          const activePlansMonthly = activePlans.reduce((s, p) => s + safeNumber(p.monthlyAmount), 0);
+          
+          installmentsThisMonth = activePlansMonthly;
+          minPayment = projectedMinBase + activePlansMonthly;
+          totalMandatory = projectedTxDebt + activePlansMonthly;
+          statementBalance = projectedTxDebt;
         }
 
         const isStatementBasePaid = statementBalance <= 0.01;
