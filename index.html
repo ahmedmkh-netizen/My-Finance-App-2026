@@ -3450,14 +3450,25 @@
           const closingBalance = openingBalance + purchases - refunds - paymentsInCycle;
           runningBalance = closingBalance;
 
-          const minBase = closingBalance > 0 ? Math.max(100, Math.round(closingBalance * 0.05 * 100) / 100) : 0;
+          // 🆕 FIX: احسب السدادات اللي اتعملت بعد تاريخ الكشف (عشان نعرف هل الدورة دي اتدفعت)
+          const paymentsAfterStatement = allTxs
+            .filter((t) => {
+              const d = parseISODate(t.date);
+              return d && d.getTime() > cycleEndTs && isCardPaymentTx(t, card.id);
+            })
+            .reduce((s, t) => s + safeNumber(t.amount), 0);
+
+          const isPaid = (closingBalance - paymentsAfterStatement) <= 0.01;
+          const effectiveClosingBalance = Math.max(0, closingBalance - paymentsAfterStatement);
+
+          const minBase = effectiveClosingBalance > 0 ? Math.max(100, Math.round(effectiveClosingBalance * 0.05 * 100) / 100) : 0;
           const minDue = minBase + installmentsDueThisCycle;
-          const totalDue = Math.max(0, closingBalance) + installmentsDueThisCycle;
+          const totalDue = Math.max(0, effectiveClosingBalance) + installmentsDueThisCycle;
 
           let status = "open";
           if (upperTime > cycleEndTs && upperTime > statementTs) status = "closed";
-          if (upperTime > dueTs && closingBalance > 0.01) status = "overdue";
-          if (closingBalance <= 0.01 && upperTime > cycleEndTs) status = "paid";
+          if (upperTime > dueTs && !isPaid) status = "overdue";
+          if (isPaid && upperTime > cycleEndTs) status = "paid";
 
           const daysUntilDue = Math.ceil((dueTs - upperTime) / 86400000);
 
@@ -3469,7 +3480,9 @@
             closingBalance, installmentsDueThisCycle, minDue, totalDue, minBase,
             status, daysUntilDue, txCount: cycleTxs.length,
             transactions: cycleTxs,
-            isPaid: closingBalance <= 0.01,
+            isPaid,
+            effectiveClosingBalance,
+            paymentsAfterStatement,
           });
         });
 
@@ -10770,9 +10783,10 @@
                                   <p className="font-mono font-black">{cycle.dueDateISO}</p>
                                 </div>
                                 <div>
-                                  <p className="font-bold" style={{ color: "var(--text-muted)" }}>الرصيد الختامي</p>
-                                  <p className={`money tabular font-black ${cycle.closingBalance > 0.01 ? "text-red-600" : "text-emerald-600"}`}>
-                                    {fmt(cycle.closingBalance)}
+                              <div>
+                                  <p className="font-bold" style={{ color: "var(--text-muted)" }}>الرصيد المتبقي</p>
+                                  <p className={`money tabular font-black ${cycle.effectiveClosingBalance > 0.01 ? "text-red-600" : "text-emerald-600"}`}>
+                                    {fmt(cycle.effectiveClosingBalance)}
                                   </p>
                                 </div>
                               </div>
@@ -10786,6 +10800,10 @@
                                   <div className="p-2 rounded-lg" style={{ background: "var(--bg-muted)" }}>
                                     <p className="text-[9px] font-bold" style={{ color: "var(--text-muted)" }}>رصيد افتتاحي</p>
                                     <p className="text-xs font-black money tabular">{fmt(cycle.openingBalance)}</p>
+                                  </div>
+									                                  <div className="p-2 rounded-lg" style={{ background: "var(--bg-muted)" }}>
+                                    <p className="text-[9px] font-bold" style={{ color: "var(--text-muted)" }}>الرصيد الختامي الأصلي</p>
+                                    <p className="text-xs font-black money tabular">{fmt(cycle.closingBalance)}</p>
                                   </div>
                                   <div className="p-2 rounded-lg" style={{ background: "rgba(220,38,38,0.08)" }}>
                                     <p className="text-[9px] font-bold text-red-600">مشتريات</p>
