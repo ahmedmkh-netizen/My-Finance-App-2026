@@ -5672,35 +5672,36 @@
         );
       });
 
-      const StatusBar = memo(({ isOnline, syncStatus, isSaving, custodyBalance, hanyPayable = 0 }) => {
+      const StatusBar = memo(({ isOnline, syncStatus, isSaving }) => {
         const netDot = isOnline ? "online" : "offline";
-        const netLabel = isOnline ? "نت" : "بدون نت";
-        let syncDot = "online", syncLabel = "متزامن", syncTitle = "البيانات متزامنة مع السحابة";
+        const netLabel = isOnline ? "متصل" : "منقطع";
+        const netTitle = isOnline ? "متصل بالإنترنت" : "لا يوجد اتصال";
+
+        let syncDot = "online";
+        let syncLabel = "محدّث";
+        let syncTitle = "البيانات محدّثة مع السحابة";
+
         if (!isOnline || syncStatus === "offline") {
-          syncDot = "offline"; syncLabel = "محلي"; syncTitle = "التغييرات محفوظة محلياً فقط";
+          syncDot = "offline";
+          syncLabel = "محلي";
+          syncTitle = "التغييرات محفوظة محلياً فقط";
         } else if (syncStatus === "error") {
-          syncDot = "error"; syncLabel = "خطأ"; syncTitle = "فشل المزامنة — أعد المحاولة";
+          syncDot = "error";
+          syncLabel = "فشل";
+          syncTitle = "فشل المزامنة — أعد المحاولة";
         } else if (isSaving || syncStatus === "syncing" || syncStatus === "pending") {
-          syncDot = "syncing"; syncLabel = "حفظ..."; syncTitle = "جاري الحفظ والمزامنة";
-        } else if (syncStatus === "ready") {
-          syncDot = "online"; syncLabel = "متزامن"; syncTitle = "البيانات متزامنة بنجاح";
+          syncDot = "syncing";
+          syncLabel = "حفظ";
+          syncTitle = "جاري الحفظ والمزامنة";
         }
 
         return (
           <div className="status-bar no-print">
-            <div className={`status-dot ${netDot}`} title={netLabel}></div>
+            <div className={`status-dot ${netDot}`} title={netTitle} aria-label={netLabel}></div>
             <span>{netLabel}</span>
             <span style={{ color: "var(--border-strong)" }}>•</span>
-            <div className={`status-dot ${syncDot}`} title={syncTitle}></div>
+            <div className={`status-dot ${syncDot}`} title={syncTitle} aria-label={syncLabel}></div>
             <span>{syncLabel}</span>
-            {hanyPayable > 0 && (
-              <React.Fragment>
-                <span style={{ color: "var(--border-strong)" }}>•</span>
-                <span className="text-orange-600 dark:text-orange-400 text-[10px] font-black money tabular">
-                  هاني: {fmtShort(hanyPayable)}
-                </span>
-              </React.Fragment>
-            )}
           </div>
         );
       });
@@ -5954,7 +5955,6 @@
                     isOnline={isOnline}
                     syncStatus={syncStatus}
                     isSaving={isSaving}
-                    hanyPayable={hanyPayable}
                   />
                 </div>
               </div>
@@ -16854,7 +16854,6 @@
                     isOnline={isOnline}
                     syncStatus={cloudSyncStatus}
                     isSaving={isSaving}
-                    hanyPayable={netWorthData.hanyPayable}
                     onOpenSidebar={() => dispatch({ type: "SET_SIDEBAR_OPEN", payload: true })}
                     onForceSync={forcePullFromCloud}
                     forceSaveState={forceSaveState}
