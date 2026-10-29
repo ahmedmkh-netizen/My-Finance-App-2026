@@ -3496,18 +3496,10 @@ const YEARS_CONFIG = {
       const isReversalInstallmentBank = (card) => false;
       const getCardMethod = (card) => {
         if (!card) return null;
-        if (card && card.methodId) return card.methodId; // 🆕 يدعم أكتر من كارت لنفس البنك
         if (card.bank === "CIB" && card.name === "SWYPE") return "cib_swype";
         if (card.bank === "AAIB") return "aaib_card";
         if (card.bank === "ADIB Egypt" || card.name === "Tainum") return "adib_card";
         return "cib_card";
-      };
-
-      // 🆕 الحساب اللي بيتسدد منه الكارت (لا يمكن أن يكون الكارت نفسه)
-      const getCardPaymentSourceMethod = (card) => {
-        if (card?.linkedAccountKey && ACCOUNT_KEYS.includes(card.linkedAccountKey)) return card.linkedAccountKey;
-        if (card?.bank === "AAIB" && ACCOUNT_KEYS.includes("aaib_savings")) return "aaib_savings";
-        return "cib_savings";
       };
 
       const hasCashEffect = (t) => {
@@ -3734,6 +3726,7 @@ const isCardPaymentTx = (t, cardId) => {
         (data?.transactions || []).forEach((t) => {
           if (!t || t.status !== "paid" || isCarryoverMarker(t)) return;
           if (t.source === "void") return;
+          if (t.source === "card-forecast") return;
           if (isHanyPurchaseTx(t) || isHanySettleTx(t)) return;
           if (t.method === HANY_TAB_METHOD) return;
           if (t.linkedPlanId) return;
@@ -3771,16 +3764,16 @@ const isCardPaymentTx = (t, cardId) => {
        * 🧮 = limit - المديونية - الأقساط المتبقية غير المستحقة
        * ⚠️ البنك يحجز كل المتبقي من الحد (سواء استحق أو لا)
        */
-const computeCardLiveFigures = (data, card, asOfDate = new Date()) => {
+const computeCardLiveFigures = (data, card) => {
   if (!card) return { liveDebt: 0, liveAvailable: 0, notYetDue: 0, txDebt: 0, instInfo: null };
   const txDebt = computeCardDebt(data, card);
-  const instInfo = computeCardInstallmentsInfo(data, card, asOfDate);
+  const instInfo = computeCardInstallmentsInfo(data, card);
   const limit = safeNumber(card.limit);
-
-  // المديونية الحية = ديون المعاملات + كل الأقساط المتبقية (البنك يحجزها كلها من الحد)
+  
+  // المديونية الحية = ديون المعاملات + كل الأقساط المتبقية (عشان تطابق البنك)
   const liveDebt = txDebt + (instInfo.totalRemaining || 0);
   const liveAvailable = Math.max(0, limit - Math.max(0, liveDebt));
-
+  
   return { liveDebt, liveAvailable, notYetDue: instInfo.totalRemaining, txDebt, instInfo, limit, isReversal: false };
 };
 const computeCardAvailable = (data, card, asOfDate = null) =>
@@ -4276,14 +4269,13 @@ const computeCardAvailable = (data, card, asOfDate = null) =>
         return { issues, score };
       };
 
-      /* ═══════════════ CARD INSTALLMENTS ENGINE (V88.5 — fixed) ═══════════════ */
+      /* ═══════════════ CARD INSTALLMENTS ENGINE ═══════════════ */
       const getPlanPaidAmount = (plan, data) => {
         if (!plan || !plan.id) return 0;
         return (data?.transactions || [])
           .filter(
             (t) =>
               t.status === "paid" &&
-              t.source !== "void" &&
               (t.linkedPlanId === plan.id || t.installmentPlanId === plan.id) &&
               t.source === "card-payment-plan",
           )
@@ -4291,43 +4283,26 @@ const computeCardAvailable = (data, card, asOfDate = null) =>
       };
 
       /**
-       * 🆕 المدفوع على الخطة = مبلغ افتتاحي (قبل التطبيق) + سدادات مسجلة فعلاً.
-       * خطط قديمة بدون initialPaid: نرجع للسلوك القديم max(paidAmount, tx) إلى أن تُرحَّل.
-       */
-      const getPlanPaidSplit = (plan, data) => {
-        const tx = data ? getPlanPaidAmount(plan, data) : 0;
-        const hasInit = plan.initialPaid !== undefined && plan.initialPaid !== null && plan.initialPaid !== "";
-        const initial = hasInit
-          ? Math.max(0, safeNumber(plan.initialPaid))
-          : Math.max(0, safeNumber(plan.paidAmount) - tx);
-        const total = Math.min(safeNumber(plan.totalAmount), initial + tx);
-        return { initial, tx, total };
-      };
-
-      /** 🆕 قيمة القسط رقم k (0-based) — آخر قسط يمتص فروق التقريب */
-      const getPlanInstallmentAmount = (plan, k) => {
-        const months = safeNumber(plan.months);
-        const total = safeNumber(plan.totalAmount);
-        const monthly = safeNumber(plan.monthlyAmount, months > 0 ? total / months : 0);
-        if (months > 0 && k === months - 1) {
-          return Math.max(0, roundMoney(total - roundMoney(monthly * (months - 1))));
-        }
-        return monthly;
-      };
-
-      /**
+       * ═══════════════════════════════════════════════════════════════
        * computeInstallmentProgress
-       * dueAmount       : ما استحق فعلاً (تاريخ الاستحقاق عدّى) — يُحسب بـ dueDay إن وُجد
-       * paidAmount      : المدفوع الفعلي (افتتاحي + سدادات)
-       * overdueAmount   : المستحق غير المسدد  = max(0, due - paid)   🆕
-       * notYetDueAmount : لم يستحق بعد       = total - max(due, paid) 🆕
-       * remainingAmount : المتبقي كله        = overdue + notYetDue
+       * ═══════════════════════════════════════════════════════════════
+       * 🎯 الغرض: حساب تقدم خطة تقسيط
+       * 📤 المخرجات:
+       *   monthsElapsed: الشهور المنقضية من بداية الخطة
+       *   dueAmount:     المستحق حتى الآن = monthsElapsed × monthlyAmount
+       *   remainingAmount: المتبقي = totalAmount - paidAmount
+       *   remainingMonths: الشهور المتبقية
+       *   completed: هل الخطة اكتملت؟
+       *   progressPct: نسبة التقدم
+       * ⚠️ حرج — لا تخلط:
+       *   - dueAmount: ما استحق (يُحسب في المديونية)
+       *   - remainingAmount: ما تبقى كله (يحجز من الحد فقط)
        */
-      const computeInstallmentProgress = (plan, asOfDate = new Date(), data = null, dueDay = null) => {
+      const computeInstallmentProgress = (plan, asOfDate = new Date(), data = null) => {
         if (!plan || !plan.months || plan.months <= 0) {
           return {
-            monthsElapsed: 0, dueAmount: 0, remainingAmount: 0, overdueAmount: 0, notYetDueAmount: 0,
-            remainingMonths: 0, completed: false, initialPaid: 0,
+            monthsElapsed: 0, dueAmount: 0, remainingAmount: 0,
+            remainingMonths: 0, completed: false,
             monthlyAmount: 0, progressPct: 0, paidAmount: 0,
           };
         }
@@ -4335,61 +4310,54 @@ const computeCardAvailable = (data, card, asOfDate = null) =>
         const startYM = safeNumber(plan.startYear, 2026) * 12 + (startMonthIdx >= 0 ? startMonthIdx : 0);
         const nowYM = asOfDate.getFullYear() * 12 + asOfDate.getMonth();
 
-        // القسط يُعتبر مستحقاً لما يوم الاستحقاق يعدّي (لو dueDay متاح)، وإلا من أول الشهر (السلوك القديم)
-        const beforeDue = dueDay ? (asOfDate.getDate() < dueDay ? 1 : 0) : 0;
-        let monthsElapsed = nowYM - startYM + 1 - beforeDue;
-        monthsElapsed = Math.max(0, Math.min(monthsElapsed, plan.months));
+        let monthsElapsed = Math.max(0, nowYM - startYM + 1);
+        monthsElapsed = Math.min(monthsElapsed, plan.months);
 
-        const total = safeNumber(plan.totalAmount);
-        const monthlyAmount = safeNumber(plan.monthlyAmount, total / plan.months);
-        const dueAmount = Math.min(total, monthsElapsed * monthlyAmount);
+        const monthlyAmount = safeNumber(plan.monthlyAmount, safeNumber(plan.totalAmount) / plan.months);
+        const dueAmount = monthsElapsed * monthlyAmount;
 
-        const split = getPlanPaidSplit(plan, data);
-        const paidAmount = split.total;
+        const paidAmount = Math.max(safeNumber(plan.paidAmount), data ? getPlanPaidAmount(plan, data) : 0);
 
-        const remainingAmount = Math.max(0, total - paidAmount);
-        const overdueAmount = Math.max(0, dueAmount - paidAmount);
-        const notYetDueAmount = Math.max(0, total - Math.max(dueAmount, paidAmount));
+        const remainingAmount = Math.max(0, safeNumber(plan.totalAmount) - paidAmount);
         const remainingMonths = Math.max(0, plan.months - monthsElapsed);
-        const progressPct = total > 0 ? (paidAmount / total) * 100 : 0;
+        const progressPct = safeNumber(plan.totalAmount) > 0
+          ? (paidAmount / safeNumber(plan.totalAmount)) * 100
+          : 0;
 
         return {
-          monthsElapsed, dueAmount, remainingAmount, overdueAmount, notYetDueAmount, remainingMonths,
-          monthlyAmount, initialPaid: split.initial,
-          completed: paidAmount >= total - 0.005,
+          monthsElapsed, dueAmount, remainingAmount, remainingMonths,
+          monthlyAmount,
+          completed: paidAmount >= safeNumber(plan.totalAmount) - 0.005,
           progressPct, paidAmount,
         };
       };
 
-      const computeCardInstallmentsInfo = (data, card, asOfDate = new Date()) => {
-        if (!card)
-          return {
-            plans: [], activeCount: 0, totalDueSoFar: 0, totalOverdue: 0, totalNotYetDue: 0,
-            totalRemaining: 0, currentMonthly: 0, totalPaid: 0,
-          };
-        const plans = (data?.cardInstallments || []).filter(
-          (p) => p && p.cardId === card.id && p.status !== "cancelled",
-        );
-        const { dueDay } = getCardCycleParams(card);
-        let totalDueSoFar = 0, totalOverdue = 0, totalNotYetDue = 0;
-        let totalRemaining = 0, currentMonthly = 0, totalPaid = 0;
-        const enriched = plans.map((p) => {
-          const prog = computeInstallmentProgress(p, asOfDate, data, dueDay);
-          totalDueSoFar += prog.dueAmount;
-          totalOverdue += prog.overdueAmount;
-          totalNotYetDue += prog.notYetDueAmount;
-          totalRemaining += prog.remainingAmount;
-          totalPaid += prog.paidAmount;
-          if (!prog.completed) currentMonthly += Math.min(prog.monthlyAmount, prog.remainingAmount);
-          return { ...p, ...prog };
-        });
-        return {
-          plans: enriched,
-          activeCount: enriched.filter((p) => !p.completed).length,
-          totalDueSoFar, totalOverdue, totalNotYetDue, totalRemaining, currentMonthly,
-          totalPaid,
-        };
-      };
+const computeCardInstallmentsInfo = (data, card, asOfDate = new Date()) => {
+  if (!card)
+    return {
+      plans: [], activeCount: 0, totalDueSoFar: 0,
+      totalRemaining: 0, currentMonthly: 0, totalPaid: 0,
+    };
+  const plans = (data?.cardInstallments || []).filter(
+    (p) => p && p.cardId === card.id && p.status !== "cancelled",
+  );
+  let totalDueSoFar = 0, totalRemaining = 0, currentMonthly = 0, totalPaid = 0;
+  const enriched = plans.map((p) => {
+    const prog = computeInstallmentProgress(p, asOfDate, data);
+    totalDueSoFar += prog.dueAmount;
+    totalRemaining += prog.remainingAmount;
+    totalPaid += prog.paidAmount;                       // ← جديد
+    if (!prog.completed) currentMonthly += prog.monthlyAmount;
+    return { ...p, ...prog };
+  });
+  return {
+    plans: enriched,
+    activeCount: enriched.filter((p) => !p.completed).length,
+    totalDueSoFar, totalRemaining, currentMonthly,
+    totalPaid,                                        
+  };
+};
+
       const getCardCycleParams = (card) => {
         const dueDayMatch = String(card?.dueDate || "25").match(/(\d{1,2})/);
         const dueDay = Math.min(28, Math.max(1, dueDayMatch ? parseInt(dueDayMatch[1], 10) : 25));
@@ -4445,23 +4413,6 @@ const computeCardAvailable = (data, card, asOfDate = null) =>
         };
       };
 
-      /** 🆕 مفتاح دورة الكشف اللي تاريخ استحقاقها يقع في الشهر (y, m0) — يطابق منطق getCycleRange */
-      const cycleKeyForDueMonth = (card, y, m0) => {
-        const { dueDay, statementDay } = getCardCycleParams(card);
-        let ey = y;
-        let em = m0 - (dueDay < statementDay ? 1 : 0);
-        if (em < 0) { em = 11; ey--; }
-        return `${ey}-${String(em + 1).padStart(2, "0")}`;
-      };
-
-      /**
-       * ═══════════════════════════════════════════════════════════════
-       * buildCardStatementEngine — V88.5 (دفتر دورات موحّد)
-       * الرصيد الجاري = افتتاحي − مدفوع مسبقاً للخطط
-       *                 + مشتريات + أقساط الدورة − مرتجعات − كل السدادات (بما فيها سدادات الأقساط)
-       * فيكون الأقساط "مصروف" على الكشف وسدادها "دفعة" — لا خلط ولا رصيد سالب متراكم.
-       * ═══════════════════════════════════════════════════════════════
-       */
       const buildCardStatementEngine = (card, data, asOfDate = new Date()) => {
         if (!card)
           return { cycles: [], currentStatement: null, openCycle: null, totalDebt: 0, installmentsInfo: null };
@@ -4478,7 +4429,7 @@ const computeCardAvailable = (data, card, asOfDate = null) =>
             if (!t || t.status !== "paid") return false;
             if (t.installmentPlanId) return false;
             if (t.source === "void" || t.source === "carryover" || isCarryoverMarker(t)) return false;
-            // ✅ قيود التنبؤ المعتمدة (paid) هي سداد حقيقي؛ المعلّقة مستبعدة أصلاً بشرط status
+            if (t.source === "card-forecast") return false; // 🆕 استبعاد التنبؤات
             if (isHanyPurchaseTx(t) || isHanySettleTx(t)) return false;
             if (t.method === HANY_TAB_METHOD) return false;
             const hasExplicitLink =
@@ -4505,15 +4456,12 @@ const computeCardAvailable = (data, card, asOfDate = null) =>
           const k = getCycleKeyForDate(card, t.date);
           if (k) cycleKeysSet.add(k);
         });
+
         if (openingDate) {
           const k = getCycleKeyForDate(card, getLocalISODate(openingDate));
           if (k) cycleKeysSet.add(k);
         }
-        // 🆕 الدورة المفتوحة الحالية دايماً موجودة
-        const curKey = getCycleKeyForDate(card, getLocalISODate(now));
-        if (curKey) cycleKeysSet.add(curKey);
 
-        // 🆕 مفاتيح الأقساط تتحدد بشهر الاستحقاق (مش شهر نهاية الدورة)
         instInfo.plans.forEach((plan) => {
           if (plan.status === "cancelled") return;
           const startIdx = getMonthIndex(plan.startMonth);
@@ -4522,21 +4470,20 @@ const computeCardAvailable = (data, card, asOfDate = null) =>
             const totalIdx = startIdx + i;
             const m = totalIdx % 12;
             const y = safeNumber(plan.startYear, 2026) + Math.floor(totalIdx / 12);
-            cycleKeysSet.add(cycleKeyForDueMonth(card, y, m));
+            cycleKeysSet.add(`${y}-${String(m + 1).padStart(2, "0")}`);
           }
         });
 
-        const sortedKeys = Array.from(cycleKeysSet).filter(Boolean).sort();
-        const initialCredit = instInfo.plans.reduce((s, p) => s + safeNumber(p.initialPaid), 0);
+        const sortedKeys = Array.from(cycleKeysSet).sort();
+        if (sortedKeys.length === 0) {
+          return {
+            cycles: [], currentStatement: null, openCycle: null,
+            totalDebt: openingDebt, installmentsInfo: instInfo,
+            cycleParams: getCardCycleParams(card), openingDebt, openingDate,
+          };
+        }
 
-        // كل السدادات (للتخصيص FIFO)
-        const payList = allTxs
-          .filter((t) => isCardPaymentTx(t, card.id))
-          .map((t) => ({ d: parseISODate(t.date), amt: safeNumber(t.amount) }))
-          .filter((p) => p.d && p.d.getTime() <= upperTime && !(openingDate && p.d < openingDate))
-          .map((p) => ({ ts: p.d.getTime(), amt: p.amt }));
-
-        let runningBalance = openingDebt - initialCredit;
+        let runningBalance = openingDebt;
         const cycles = [];
 
         sortedKeys.forEach((cycleKey) => {
@@ -4546,6 +4493,7 @@ const computeCardAvailable = (data, card, asOfDate = null) =>
           const { cycleStart, cycleEnd, dueDate, statementDate } = range;
           const cycleStartTs = cycleStart.getTime();
           const cycleEndTs = cycleEnd.getTime();
+          const statementTs = statementDate.getTime();
           const dueTs = dueDate.getTime();
 
           if (cycleStartTs > upperTime) return;
@@ -4569,7 +4517,8 @@ const computeCardAvailable = (data, card, asOfDate = null) =>
             .reduce((s, t) => s + safeNumber(t.amount), 0);
 
           let installmentsDueThisCycle = 0;
-          const dueYM = dueDate.getFullYear() * 12 + dueDate.getMonth();
+          const dueMonthIdx = dueDate.getMonth();
+          const dueYM = dueDate.getFullYear() * 12 + dueMonthIdx;
           instInfo.plans.forEach((plan) => {
             if (plan.status === "cancelled") return;
             const pStartIdx = getMonthIndex(plan.startMonth);
@@ -4577,34 +4526,23 @@ const computeCardAvailable = (data, card, asOfDate = null) =>
             const pStartYM = safeNumber(plan.startYear, 2026) * 12 + pStartIdx;
             const diff = dueYM - pStartYM;
             if (diff >= 0 && diff < plan.months) {
-              installmentsDueThisCycle += getPlanInstallmentAmount(plan, diff);
+              installmentsDueThisCycle += plan.monthlyAmount;
             }
           });
 
           const openingBalance = runningBalance;
-          const closingBalance =
-            openingBalance + purchases + installmentsDueThisCycle - refunds - paymentsInCycle;
+          const closingBalance = openingBalance + purchases - refunds - paymentsInCycle;
           runningBalance = closingBalance;
 
-          // الحد الأدنى: 5% من غير الأقساط (حد أدنى 100) + الأقساط — ولا يتجاوز الرصيد
-          const posClosing = Math.max(0, closingBalance);
-          const nonInst = Math.max(0, posClosing - installmentsDueThisCycle);
-          const minBase = nonInst > 0.01 ? Math.min(nonInst, Math.max(100, Math.round(nonInst * 0.05 * 100) / 100)) : 0;
-          const minDue = Math.min(posClosing, minBase + Math.min(installmentsDueThisCycle, posClosing));
-          const totalDue = posClosing;
+const minBase = closingBalance > 0 ? Math.max(100, Math.round(closingBalance * 0.05 * 100) / 100) : 0;
+const minDue = minBase + installmentsDueThisCycle;
+// إضافة الأقساط المستحقة عشان "إجمالي المطلوب" يبقى دقيق
+const totalDue = Math.max(0, closingBalance) + installmentsDueThisCycle; 
 
-          // FIFO: كل سداد بعد نهاية الدورة يسدد الأقدم أولاً
-          const paymentsAfterCycle = payList
-            .filter((p) => p.ts > cycleEndTs)
-            .reduce((s, p) => s + p.amt, 0);
-          const remainingDue = Math.max(0, closingBalance - paymentsAfterCycle);
-
-          const isClosed = upperTime > cycleEndTs;
           let status = "open";
-          if (isClosed) {
-            if (remainingDue <= 0.01) status = "paid";
-            else status = upperTime > dueTs ? "overdue" : "closed";
-          }
+          if (upperTime > cycleEndTs && upperTime > statementTs) status = "closed";
+          if (upperTime > dueTs && closingBalance > 0.01) status = "overdue";
+          if (closingBalance <= 0.01 && upperTime > cycleEndTs) status = "paid";
 
           const daysUntilDue = Math.ceil((dueTs - upperTime) / 86400000);
 
@@ -4614,20 +4552,21 @@ const computeCardAvailable = (data, card, asOfDate = null) =>
             cycleStart, cycleEnd, statementDate, dueDate,
             openingBalance, purchases, refunds, paymentsInCycle,
             closingBalance, installmentsDueThisCycle, minDue, totalDue, minBase,
-            paymentsAfterCycle, remainingDue,
             status, daysUntilDue, txCount: cycleTxs.length,
             transactions: cycleTxs,
-            isPaid: isClosed ? remainingDue <= 0.01 : closingBalance <= 0.01,
+            isPaid: closingBalance <= 0.01,
           });
         });
 
-        const closedCycles = cycles.filter((c) => c.status !== "open");
+        const closedWithBalance = cycles.filter((c) => c.status === "closed" || c.status === "overdue");
         const openCycles = cycles.filter((c) => c.status === "open");
 
+        const currentStatement =
+          closedWithBalance.length > 0 ? closedWithBalance[closedWithBalance.length - 1] : null;
+        const openCycle = openCycles.length > 0 ? openCycles[openCycles.length - 1] : null;
+
         return {
-          cycles,
-          currentStatement: closedCycles.length ? closedCycles[closedCycles.length - 1] : null,
-          openCycle: openCycles.length ? openCycles[openCycles.length - 1] : null,
+          cycles, currentStatement, openCycle,
           installmentsInfo: instInfo,
           cycleParams: getCardCycleParams(card),
           openingDebt, openingDate,
@@ -4635,104 +4574,126 @@ const computeCardAvailable = (data, card, asOfDate = null) =>
       };
 
       /**
-       * 🆕 projectCardDebtSchedule — التنبؤ بالكشوف القادمة (حتى count شهر)
-       * الافتراضات: الكشف الحالي بيتسدد، والإنفاق = متوسط آخر 3 كشوف، والأقساط حسب الجدول.
-       */
-      const projectCardDebtSchedule = (card, engine, count = 6, asOfDate = new Date(), openCharges = null) => {
-        const now = new Date(asOfDate);
-        const plans = (engine.installmentsInfo?.plans || []).filter((p) => p.status !== "cancelled");
-        const closed = (engine.cycles || []).filter((c) => c.status !== "open").slice(-3);
-        const avgPurchases = closed.length
-          ? roundMoney(closed.reduce((s, c) => s + c.purchases, 0) / closed.length)
-          : 0;
-        const baseKey = engine.openCycle ? engine.openCycle.cycleKey : getCycleKeyForDate(card, getLocalISODate(now));
-        let [y, m] = String(baseKey).split("-").map(Number);
-        let credit = engine.openCycle ? Math.max(0, -engine.openCycle.closingBalance) : 0;
-        const out = [];
-        for (let i = 0; i < count; i++) {
-          const range = getCycleRange(card, `${y}-${String(m).padStart(2, "0")}`);
-          if (range) {
-            const dueYM = range.dueDate.getFullYear() * 12 + range.dueDate.getMonth();
-            let inst = 0, remainingAfter = 0;
-            plans.forEach((p) => {
-              const si = getMonthIndex(p.startMonth);
-              if (si < 0) return;
-              const startYM = safeNumber(p.startYear, 2026) * 12 + si;
-              const diff = dueYM - startYM;
-              if (diff >= 0 && diff < p.months) inst += getPlanInstallmentAmount(p, diff);
-              const billed = diff < 0 ? 0 : Math.min(p.months, diff + 1);
-              const billedAmt = Math.min(safeNumber(p.totalAmount), safeNumber(p.monthlyAmount) * billed);
-              remainingAfter += Math.max(0, safeNumber(p.totalAmount) - Math.max(billedAmt, safeNumber(p.paidAmount)));
-            });
-            let expected;
-            if (i === 0 && openCharges !== null) {
-              // المصروف الفعلي لحد دلوقتي في الدورة المفتوحة أو المتوسط — أيهما أكبر
-              const spentSoFar = Math.max(0, openCharges - inst);
-              expected = inst + Math.max(spentSoFar, avgPurchases);
-            } else {
-              const gross = inst + avgPurchases;
-              const used = Math.min(credit, gross);
-              credit -= used;
-              expected = gross - used;
-            }
-            out.push({
-              cycleKey: `${y}-${String(m).padStart(2, "0")}`,
-              dueDateISO: range.dueDateISO,
-              dueYear: range.dueDate.getFullYear(),
-              dueMonth: range.dueDate.getMonth(),
-              installments: inst, avgPurchases,
-              expected: roundMoney(Math.max(0, expected)),
-              installmentsRemainingAfter: remainingAfter,
-            });
-          }
-          m++; if (m > 12) { m = 1; y++; }
-        }
-        return out;
-      };
-
-      /**
        * ═══════════════════════════════════════════════════════════════
-       * computeCardPaymentPrediction — V88.5
-       * 1) لو فيه كشف صادر لسه عليه متبقي (بعد سدادات FIFO) → المطلوب = المتبقي
-       * 2) لو الكشف اتسدد → المطلوب = تقدير الكشف القادم (مصروفات + أقساط الدورة المفتوحة)
-       * الأقساط جوّه رصيد الكشف أصلاً → لا تُضاف مرتين ولا تُخصم مرتين
+       * computeCardPaymentPrediction — V88.4.0 (الإصلاح الحرج)
        * ═══════════════════════════════════════════════════════════════
+       *
+       * 🎯 الغرض:
+       *   حساب التنبؤ الشهري لسداد بطاقة ائتمانية واحدة بناءً على:
+       *   - الكشف الحالي (statement) المُصدر
+       *   - السدادات التي تمت بعد إصدار الكشف ← 🆕
+       *   - الأقساط المستحقة (totalDueSoFar وليس totalRemaining) ← 🆕
+       *
+       * 🧮 المنطق المحاسبي:
+       *   1. ابحث عن آخر دورة مغلقة (currentStatement)
+       *   2. احسب السدادات اللاحقة لـ statementDateISO ← 🆕
+       *   3. اطرحها من statementBalance و minDue و totalDue ← 🆕
+       *   4. المديونية = مشتريات + الأقساط المستحقة فقط ← 🆕
+       *   5. الحد المتاح = limit - المديونية - (كل الأقساط - المستحقة)
+       *
+       * ⚠️ حرج — لا تخلط بين:
+       *   - totalRemaining: كل المتبقي على الخطة (يحجز من الحد فقط)
+       *   - totalDueSoFar: المستحق فقط (يضاف للمديونية)
+       *
+       * 🚨 قيود يجب احترامها:
+       *   - قيود source === "card-forecast" لا تُحسب في paymentsAfterStatement
+       *   - القيود المعلقة (status !== "paid") لا تؤثر على statementBalance
        */
       const computeCardPaymentPrediction = (data, card, asOfDate = new Date()) => {
         if (!card) return null;
+        const engine = buildCardStatementEngine(card, data, asOfDate);
         const now = new Date(asOfDate);
-        const engine = buildCardStatementEngine(card, data, now);
+
+        // 1. المديونية الأساسية من المعاملات (بدون أقساط)
+        const currentDebtFromTx = Math.max(0, computeCardDebt(data, card, asOfDate));
         const instInfo = engine.installmentsInfo || {
-          currentMonthly: 0, totalRemaining: 0, totalDueSoFar: 0, totalOverdue: 0, totalNotYetDue: 0,
+          currentMonthly: 0, totalRemaining: 0, totalDueSoFar: 0,
           activeCount: 0, plans: [],
         };
-        const { currentStatement, openCycle } = engine;
-        const activePlans = (instInfo.plans || []).filter((p) => !p.completed && p.status !== "cancelled");
 
-        const stmtRemaining = currentStatement ? currentStatement.remainingDue : 0;
-        const hasUnpaidStatement = stmtRemaining > 0.01;
-        const paymentsAfterStatement = currentStatement ? currentStatement.paymentsAfterCycle : 0;
+        const currentStatement = engine.currentStatement;
+        const openCycle = engine.openCycle;
 
-        // مصروفات + أقساط الدورة المفتوحة (بافتراض سداد الكشف الصادر)
-        const openCharges = openCycle
-          ? Math.max(0, openCycle.closingBalance - (hasUnpaidStatement ? stmtRemaining : 0))
+        // 2. ✅ الإصلاح الحرج: احسب السدادات بعد تاريخ إصدار الكشف
+        let paymentsAfterStatement = 0;
+        if (currentStatement && currentStatement.statementDateISO) {
+          const statementDateTs = parseISODate(currentStatement.statementDateISO)?.getTime() ?? 0;
+          paymentsAfterStatement = (data?.transactions || [])
+            .filter((t) => {
+              if (!t || t.status !== "paid") return false;
+              if (t.source === "card-forecast") return false; // 🆕 استبعاد التنبؤات
+              if (t.source === "void") return false;
+              if (!isCardPaymentTx(t, card.id)) return false;
+              const d = parseISODate(t.date);
+              return d && d.getTime() > statementDateTs;
+            })
+            .reduce((s, t) => s + safeNumber(t.amount), 0);
+        }
+
+        // 3. ✅ رصيد الكشف الفعلي بعد خصم السدادات اللاحقة
+        let statementBalance = currentStatement
+          ? Math.max(0, currentStatement.closingBalance - paymentsAfterStatement)
           : 0;
 
-        let statementBalance, totalMandatory, minPayment, installmentsThisMonth, minBase, dueDate;
-        if (hasUnpaidStatement) {
-          statementBalance = stmtRemaining;
-          totalMandatory = stmtRemaining;
-          minPayment = Math.min(stmtRemaining, Math.max(0, currentStatement.minDue - paymentsAfterStatement));
-          installmentsThisMonth = currentStatement.installmentsDueThisCycle;
-          minBase = currentStatement.minBase;
+        let installmentsThisMonth = currentStatement ? currentStatement.installmentsDueThisCycle : 0;
+        let minBase = currentStatement ? currentStatement.minBase : 0;
+
+        // 4. ✅ الحد الأدنى والمطلوب بعد خصم السدادات
+        let minPayment = currentStatement
+          ? Math.max(0, currentStatement.minDue - paymentsAfterStatement)
+          : 0;
+        let totalMandatory = currentStatement
+          ? Math.max(0, currentStatement.totalDue - paymentsAfterStatement)
+          : 0;
+
+        const activePlans = (instInfo.plans || []).filter(
+          (p) => !p.completed && p.status !== "cancelled",
+        );
+
+        // 5. حالة عدم وجود كشف — الاعتماد على الخطط النشطة فقط
+        if (!currentStatement && activePlans.length > 0) {
+          installmentsThisMonth = activePlans.reduce((s, p) => s + safeNumber(p.monthlyAmount), 0);
+          minPayment = installmentsThisMonth;
+          totalMandatory = installmentsThisMonth;
+          statementBalance = instInfo.totalDueSoFar || 0;
+        }
+
+        // ✅ إصلاح: التحقق من سداد رصيد الكشف الأساسي (حتى لو تبقى أقساط)
+        const isStatementBasePaid = statementBalance <= 0.01;
+        const isStatementPaid = totalMandatory <= 0.01 && activePlans.length > 0;
+        
+        if (isStatementPaid) {
+          // حساب قسط الشهر القادم فقط
+          const nextMonthTotal = activePlans.reduce((s, p) => s + safeNumber(p.monthlyAmount), 0);
+          totalMandatory = nextMonthTotal;
+          minPayment = nextMonthTotal;
+          installmentsThisMonth = nextMonthTotal; 
+        }
+
+        // 6. ✅ المديونية حسب نوع البنك
+        const nextCycleEstimate = openCycle
+          ? Math.max(0, openCycle.closingBalance) + openCycle.installmentsDueThisCycle
+          : activePlans.length > 0
+            ? installmentsThisMonth
+            : 0;
+        const nextCycleDueDate = openCycle ? openCycle.dueDate : null;
+
+        let dueDate = null;
+        // ✅ الإصلاح: نتحقق من (isStatementPaid) أو (isStatementBasePaid) لنقل التاريخ للمستقبل
+        if (isStatementPaid || isStatementBasePaid) {
+          const { dueDay } = getCardCycleParams(card);
+          const baseDate = currentStatement ? new Date(currentStatement.dueDate) : new Date(now);
+          const nextDue = new Date(baseDate.getFullYear(), baseDate.getMonth(), dueDay);
+          
+          // لف للأمام شهر بشهر لحد ما نتجاوز تاريخ الكشف المسدد والنهاردة
+          while (nextDue <= baseDate || nextDue <= now) {
+            nextDue.setMonth(nextDue.getMonth() + 1);
+          }
+          dueDate = nextDue;
+        } else if (currentStatement) {
           dueDate = currentStatement.dueDate;
-        } else {
-          statementBalance = 0;
-          totalMandatory = openCharges;
-          minPayment = openCycle ? Math.min(openCharges, openCycle.minDue) : 0;
-          installmentsThisMonth = openCycle ? openCycle.installmentsDueThisCycle : 0;
-          minBase = openCycle ? openCycle.minBase : 0;
-          dueDate = openCycle ? openCycle.dueDate : null;
+        } else if (openCycle) {
+          dueDate = openCycle.dueDate;
         }
 
         if (!dueDate && activePlans.length > 0) {
@@ -4743,53 +4704,53 @@ const computeCardAvailable = (data, card, asOfDate = null) =>
           dueDate = d;
         }
 
-        const daysUntilDue = dueDate ? Math.ceil((dueDate.getTime() - now.getTime()) / 86400000) : null;
+        const daysUntilDue = dueDate
+          ? Math.ceil((dueDate.getTime() - now.getTime()) / 86400000)
+          : null;
 
         const limit = safeNumber(card.limit);
-        const live = computeCardLiveFigures(data, card, now);
-        const currentDebt = live.liveDebt;
-        const availableLimit = Math.max(0, limit - Math.max(0, currentDebt));
 
-        const schedule = projectCardDebtSchedule(card, engine, 6, now, openCharges);
+// 7. ✅ الحد المتاح = limit - المديونية - الأقساط المتبقية غير المستحقة
+// توحيد المديونية مع computeCardLiveFigures عشان الأرقام تطابق بعضها
+const liveFigures = computeCardLiveFigures(data, card);
+const currentDebt = liveFigures.liveDebt;
+const installmentsDueSoFar = instInfo.totalDueSoFar || 0;
+const installmentsNotYetDue = Math.max(0, (instInfo.totalRemaining || 0) - installmentsDueSoFar);
+const availableLimit = Math.max(0, limit - currentDebt);
 
         return {
           cardId: card.id,
           cardName: `${card.bank} - ${card.name}`,
           last4: card.last4,
-          currentDebt,
-          statementBalance,
+          currentDebt,                      // ✅ المديونية الحقيقية
+          statementBalance,                 // ✅ بعد خصم السدادات
           installmentsThisMonth,
           minBase,
-          minPayment,
-          totalMandatory,
-          forecastAmount: hasUnpaidStatement ? stmtRemaining : (schedule[0] ? schedule[0].expected : totalMandatory),
-          isStatementPaid: !hasUnpaidStatement,
-          paymentsAfterStatement,
-          nextCycleEstimate: openCharges,
-          nextCycleEstimateWithCarry: openCycle ? Math.max(0, openCycle.closingBalance) : 0,
-          nextCycleDueDate: openCycle ? openCycle.dueDate : null,
-          fullPayment: Math.max(0, currentDebt),
+          minPayment,                       // ✅ بعد خصم السدادات
+          totalMandatory,                   // ✅ بعد خصم السدادات
+          paymentsAfterStatement,           // 🆕
+          nextCycleEstimate,
+          nextCycleDueDate,
+          fullPayment: currentDebt,
           nextDueDate: dueDate,
           nextDueDateISO: dueDate ? getLocalISODate(dueDate) : null,
           daysUntilDue,
           urgency:
-            daysUntilDue === null || totalMandatory <= 0.01 ? "normal"
+            daysUntilDue === null ? "normal"
               : daysUntilDue <= 0 ? "overdue"
               : daysUntilDue <= 3 ? "urgent"
               : daysUntilDue <= 7 ? "soon"
               : "normal",
           activeInstallments: instInfo.activeCount,
           installmentsRemainingTotal: instInfo.totalRemaining,
-          installmentsDueSoFar: instInfo.totalDueSoFar,
-          installmentsOverdue: hasUnpaidStatement ? Math.min(instInfo.totalOverdue, stmtRemaining) : 0,
-          installmentsNotYetDue: instInfo.totalNotYetDue,
+          installmentsDueSoFar,             // 🆕
+          installmentsNotYetDue,            // 🆕
           availableLimit,
           limit,
           plans: instInfo.plans,
           cycles: engine.cycles,
           currentStatement,
           openCycle,
-          schedule,
           cycleParams: engine.cycleParams,
           usingPlansOnly: !currentStatement && activePlans.length > 0,
         };
@@ -4799,6 +4760,7 @@ const computeCardAvailable = (data, card, asOfDate = null) =>
         (data?.cards || [])
           .map((c) => computeCardPaymentPrediction(data, c, asOfDate))
           .filter(Boolean);
+
       const computeTotalMonthlyObligation = (data, asOfDate = new Date()) => {
         const preds = computeAllCardsPredictions(data, asOfDate);
         return {
@@ -4885,14 +4847,6 @@ const computeCardAvailable = (data, card, asOfDate = null) =>
         return transactions.map((t) => {
           if (!t) return t;
           if (isHanyPurchaseTx(t) || isHanySettleTx(t) || isHanyRefund(t)) return t;
-          // 🆕 قيود التنبؤ المعلّقة اللي method بتاعها هو الكارت نفسه → حوّلها لحساب سداد فعلي
-          if (
-            (t.source === "card-forecast" || t.source === "forecast-generator") &&
-            t.status === "pending" && CREDIT_CARD_METHOD_IDS.includes(t.method) && t.linkedCardId
-          ) {
-            const c = (cards || []).find((x) => x.id === t.linkedCardId);
-            return { ...t, method: getCardPaymentSourceMethod(c), __cardPaymentMigrated: true };
-          }
           if (t.__cardPaymentMigrated) return t;
           if (t.source === "card-payment-plan" || t.source === "payment-console") {
             return { ...t, __cardPaymentMigrated: true };
@@ -5242,17 +5196,11 @@ const computeCardAvailable = (data, card, asOfDate = null) =>
 
         const { openingBalance2026: _drop, ...rest } = parsed;
 
-        const cardInstallments = (Array.isArray(parsed.cardInstallments)
+        const cardInstallments = Array.isArray(parsed.cardInstallments)
           ? parsed.cardInstallments.filter(
               (p) => p && p.cardId && p.totalAmount && p.months && p.months > 0,
             )
-          : []
-        ).map((p) => {
-          // 🆕 تثبيت المبلغ الافتتاحي مرة واحدة: paidAmount القديم = افتتاحي + سدادات مسجلة
-          if (p.initialPaid !== undefined && p.initialPaid !== null) return p;
-          const txPaid = getPlanPaidAmount(p, { transactions });
-          return { ...p, initialPaid: Math.max(0, safeNumber(p.paidAmount) - txPaid) };
-        });
+          : [];
 
         const base = {
           ...rest,
@@ -11697,8 +11645,7 @@ if (isCard) {
               startYear: safeNumber(startYear, 2026),
               note: note.trim(),
               status: "active",
-              paidAmount: roundMoney(parseNumberInput(initialPaid)),
-              initialPaid: roundMoney(parseNumberInput(initialPaid)),
+			  paidAmount: roundMoney(parseNumberInput(initialPaid)),
               linkedTxIds: Array.from(selectedTxIds),
               createdAt: new Date().toISOString(),
             };
@@ -12052,18 +11999,14 @@ if (isCard) {
        */
       const handleGenerateNextMonthForecast = (prediction, dispatch, data, addNotification) => {
         if (!prediction || !prediction.cardId) return;
-        const fAmount = safeNumber(prediction.forecastAmount, prediction.totalMandatory);
-        if (fAmount <= 0.01) {
+        if (prediction.totalMandatory <= 0.01) {
           addNotification({ type: "info", title: "لا يوجد مبلغ مستحق" });
           return;
         }
-        // 🆕 القيد يُنشأ في شهر تاريخ الاستحقاق الفعلي للكشف (مش "الشهر الجاي" دايماً)
-        const dueDt = prediction.nextDueDate
-          ? new Date(prediction.nextDueDate)
-          : new Date(new Date().getFullYear(), new Date().getMonth() + 1, prediction.cycleParams?.dueDay || 25);
-        const nextYear = dueDt.getFullYear();
-        const nextMonthIdx = dueDt.getMonth();
-        const nextMonthName = ALL_MONTHS[nextMonthIdx];
+        const now = new Date();
+        const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+        const nextYear = nextMonth.getFullYear();
+        const nextMonthName = ALL_MONTHS[nextMonth.getMonth()];
 
         if (isMonthClosed(data, nextYear, nextMonthName)) {
           addNotification({
@@ -12075,11 +12018,11 @@ if (isCard) {
 
         const existingForecast = (data.transactions || []).find(
           (t) =>
-            (t.source === "card-forecast" || t.source === "forecast-generator") &&
+            t.source === "card-forecast" &&
             t.linkedCardId === prediction.cardId &&
             t.month === nextMonthName &&
             (t.year || nextYear) === nextYear &&
-            t.status === "pending",
+            t.status !== "void",
         );
         if (existingForecast) {
           addNotification({
@@ -12090,7 +12033,11 @@ if (isCard) {
           return;
         }
 
-        const dueDateISO = getLocalISODate(dueDt);
+        const dueDay = prediction.cycleParams?.dueDay || 25;
+        const maxDay = new Date(nextYear, nextMonth.getMonth() + 1, 0).getDate();
+        const safeDueDay = Math.min(dueDay, maxDay);
+        const dueDateISO = `${nextYear}-${String(nextMonth.getMonth() + 1).padStart(2, "0")}-${String(safeDueDay).padStart(2, "0")}`;
+
         const card = (data.cards || []).find((c) => c.id === prediction.cardId);
         const forecastTx = {
           id: getSafeId(),
@@ -12098,18 +12045,17 @@ if (isCard) {
           subType: "withdrawal",
           kind: KIND.FINANCIAL,
           category: "الالتزامات البنكية والتمويلية",
-          amount: roundMoney(fAmount),
+          amount: roundMoney(prediction.totalMandatory),
           description: `🔮 تنبؤ سداد ${prediction.cardName} • ••••${prediction.last4}`,
-          // ✅ الحساب اللي هتتسدد منه (مش الكارت نفسه) — عشان الاعتماد يخصم من حساب فعلي
-          method: getCardPaymentSourceMethod(card),
+          method: card ? getCardMethod(card) : "cash",
           date: dueDateISO,
           month: nextMonthName,
           year: nextYear,
-          monthIndex: nextMonthIdx,
+          monthIndex: nextMonth.getMonth(),
           status: "pending",
           source: "card-forecast",
           linkedCardId: prediction.cardId,
-          forecastAmount: roundMoney(fAmount),
+          forecastAmount: roundMoney(prediction.totalMandatory),
           forecastMinPayment: roundMoney(prediction.minPayment),
           forecastStatementBalance: roundMoney(prediction.statementBalance),
           affectsCardDebt: false,
@@ -12124,7 +12070,7 @@ if (isCard) {
         addNotification({
           type: "success",
           title: "✅ تم إنشاء القيد",
-          message: `${fmt(fAmount)} ج.م — ${nextMonthName} ${nextYear}\nراجعه من صفحة المعاملات`,
+          message: `${fmt(prediction.totalMandatory)} ج.م — ${nextMonthName} ${nextYear}\nراجعه من صفحة المعاملات`,
           duration: 8000,
         });
       };
@@ -12154,6 +12100,7 @@ if (isCard) {
                 if (t.status !== "paid") return false;
                 if (t.source === "carryover") return false;
                 if (isCarryoverMarker(t)) return false;
+                if (t.source === "card-forecast") return false; // 🆕 استبعاد التنبؤات
                 if (isHanyPurchaseTx(t) || isHanySettleTx(t)) return false;
                 if (t.method === HANY_TAB_METHOD) return false;
                 const d = parseISODate(t.date);
@@ -14531,34 +14478,27 @@ const liveDebt = useMemo(() => {
           if (includeCards) {
             (data.cards || []).forEach((card) => {
               const pred = computeCardPaymentPrediction(data, card);
-              if (!pred) return;
-              // 🆕 المبلغ حسب الشهر المختار: الكشف المستحق لو تاريخه في الشهر، وإلا من جدول التنبؤ
-              let amount = 0, dueDate = null, installments = 0, statementBalance = 0, minPayment = 0;
-              let urgency = "normal", daysUntilDue = null;
-              const nd = pred.nextDueDate;
-              if (nd && nd.getFullYear() === selectedYear && nd.getMonth() === monthIdx) {
-                amount = safeNumber(pred.forecastAmount, pred.totalMandatory); dueDate = nd; installments = pred.installmentsThisMonth;
-                statementBalance = pred.statementBalance; minPayment = pred.minPayment;
-                urgency = pred.urgency; daysUntilDue = pred.daysUntilDue;
-              } else {
-                const s = (pred.schedule || []).find((x) => x.dueYear === selectedYear && x.dueMonth === monthIdx);
-                if (s) {
-                  amount = s.expected; installments = s.installments;
-                  dueDate = parseISODate(s.dueDateISO);
-                  daysUntilDue = dueDate ? Math.ceil((dueDate.getTime() - Date.now()) / 86400000) : null;
-                }
-              }
-              if (amount <= 0.01 || !dueDate) return;
+              if (!pred || pred.totalMandatory <= 0.01) return;
               const existingPending = (transactions || []).find(
                 (t) => t.linkedCardId === card.id && t.status === "pending" && t.month === selectedMonth && (t.year || 2026) === selectedYear && t.category === "الالتزامات البنكية والتمويلية",
               );
+              let dueDate = pred.nextDueDate;
+              if (dueDate) {
+                const d = new Date(dueDate);
+                d.setFullYear(selectedYear);
+                d.setMonth(monthIdx);
+                dueDate = d;
+              } else {
+                dueDate = new Date(selectedYear, monthIdx, 25);
+              }
               items.push({
                 id: `card-${card.id}`, type: "card",
                 label: `💳 ${card.bank} - ${card.name} • ••••${card.last4}`,
-                amount, statementBalance, installments, minPayment,
-                dueDate: getLocalISODate(dueDate), urgency,
-                daysUntilDue, existingPendingId: existingPending?.id || null,
-                method: getCardPaymentSourceMethod(card),
+                amount: pred.totalMandatory, statementBalance: pred.statementBalance,
+                installments: pred.installmentsThisMonth, minPayment: pred.minPayment,
+                dueDate: getLocalISODate(dueDate), urgency: pred.urgency,
+                daysUntilDue: pred.daysUntilDue, existingPendingId: existingPending?.id || null,
+                method: getCardMethod(card),
                 category: "الالتزامات البنكية والتمويلية",
                 linkedCardId: card.id,
               });
@@ -16909,17 +16849,16 @@ const liveDebt = useMemo(() => {
               }),
             ];
 
-            const nextDataForPlans = { ...state.data, transactions: allTxs };
             const updatedPlans = linkedPlanId
               ? (state.data.cardInstallments || []).map((p) => {
                   if (p.id !== linkedPlanId) return p;
-                  // ✅ المدفوع بيتحسب من القيود (مش بيتزوّد يدوياً) — فالحذف/التعديل/المعلّق بيتعكس صح
-                  const prog = computeInstallmentProgress(p, new Date(), nextDataForPlans, getCardCycleParams(card).dueDay);
-                  const isCompleted = prog.completed;
+                  const newPaid = safeNumber(p.paidAmount) + safeNumber(amount);
+                  const total = safeNumber(p.totalAmount);
+                  const isCompleted = newPaid >= total - 0.005;
                   return {
-                    ...p,
-                    status: isCompleted ? "completed" : p.status === "completed" ? "active" : p.status,
-                    completedAt: isCompleted ? (p.completedAt || new Date().toISOString()) : undefined,
+                    ...p, paidAmount: newPaid,
+                    status: isCompleted ? "completed" : p.status,
+                    completedAt: isCompleted ? new Date().toISOString() : p.completedAt,
                   };
                 })
               : state.data.cardInstallments;
@@ -20367,340 +20306,3 @@ const liveDebt = useMemo(() => {
     </script>
   </body>
 </html>
-/**
- * ═══════════════════════════════════════════════════════════════
- * 🏦 V88.5.0 — ACCOUNTING CORE (Part 1)
- * ═══════════════════════════════════════════════════════════════
- * المنطق البنكي المعتمد:
- * 1. المديونية = افتتاحي + مشتريات (خارج الخطط) - مرتجعات - سدادات + (أقساط مستحقة + غير مستحقة)
- * 2. السداد المرتبط بخطة يُخصم كـ "سداد" فقط ولا يُخصم من الأقساط المستحقة مرة أخرى.
- * 3. الأقساط المستحقة تُحسب زمنياً (monthsElapsed) بناءً على يوم الاستحقاق (dueDay).
- * 4. دفتر هاني = مشتريات - سدادات (بدون مرتجعات).
- */
-(function() {
-  "use strict";
-
-  // ─── Utilities (Mocked for standalone test) ───
-  const safeNumber = (v, f = 0) => { const n = Number(v); return isNaN(n) || !isFinite(n) ? f : n; };
-  const roundMoney = (v) => Math.round(safeNumber(v) * 100) / 100;
-  const parseISODate = (iso) => {
-    if (!iso) return null;
-    const d = new Date(iso);
-    return isNaN(d) ? null : d;
-  };
-  const getMonthIndex = (m) => ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"].indexOf(m);
-  const getCardCycleParams = (card) => {
-    const dueDayMatch = String(card?.dueDate || "25").match(/(\d{1,2})/);
-    const dueDay = Math.min(28, Math.max(1, dueDayMatch ? parseInt(dueDayMatch[1], 10) : 25));
-    let statementDay = safeNumber(card?.statementDay, 0);
-    if (statementDay < 1 || statementDay > 28) {
-      statementDay = dueDay > 20 ? dueDay - 20 : dueDay + 10;
-      statementDay = Math.min(28, Math.max(1, statementDay));
-    }
-    return { dueDay, statementDay };
-  };
-  const getCardMethod = (card) => {
-    if (!card) return null;
-    if (card.methodId) return card.methodId;
-    if (card.bank === "CIB" && card.name === "SWYPE") return "cib_swype";
-    if (card.bank === "AAIB") return "aaib_card";
-    if (card.bank === "ADIB Egypt" || card.name === "Tainum") return "adib_card";
-    return "cib_card";
-  };
-  const isHanyShopCategory = (cat) => cat === "مشتريات محل هاني";
-  const isHanySettleCategory = (cat) => cat === "سداد دفتر هاني";
-  const isHanyPurchaseTx = (t) => t && (t.hanyEffect === "purchase" || t.method === "hany_tab") && isHanyShopCategory(t.category) && t.hanyEffect !== "carryover-marker";
-  const isHanySettleTx = (t) => t && (t.hanyEffect === "settle" || isHanySettleCategory(t.category));
-  const isCarryoverMarker = (t) => t && (t.hanyEffect === "carryover-marker" || t.subCategory === "رصيد مرحل");
-  const isCardPaymentTx = (t, cardId) => {
-    if (!t || !cardId) return false;
-    if (isHanyPurchaseTx(t) || isHanySettleTx(t)) return false;
-    if (t.source === "card-payment-plan") return t.linkedCardId === cardId;
-    if (t.source === "payment-console" && t.linkedCardId === cardId) return true;
-    if (t.category === "الالتزامات البنكية والتمويلية" && t.type === "expense" && t.linkedCardId === cardId && !t.linkedLoanId) return true;
-    if (t.type === "income" && t.linkedCardId === cardId && (t.description || "").match(/(Deposit|Payment|سداد|إيداع)/i)) return true;
-    return false;
-  };
-
-  // ─── 1. دالة حساب حالة القسط المركزية ───
-  /**
-   * @param {Object} plan خطة التقسيط
-   * @param {Date} asOfDate تاريخ الحساب
-   * @param {Object} data بيانات التطبيق (لحساب السدادات)
-   * @param {Number} dueDay يوم الاستحقاق بالشهر
-   */
-  const getInstallmentStatus = (plan, asOfDate = new Date(), data = null, dueDay = 25) => {
-    if (!plan || !plan.months || plan.months <= 0) {
-      return { monthsElapsed: 0, dueAmount: 0, paidAmount: 0, overdueAmount: 0, notYetDueAmount: 0, remainingAmount: 0, isCompleted: false, progressPct: 0 };
-    }
-
-    const startMonthIdx = getMonthIndex(plan.startMonth);
-    const startYM = safeNumber(plan.startYear, 2026) * 12 + (startMonthIdx >= 0 ? startMonthIdx : 0);
-    const nowYM = asOfDate.getFullYear() * 12 + asOfDate.getMonth();
-
-    // مراعاة يوم الاستحقاق (لو إحنا قبل يوم الاستحقاق، الشهر ده لسه ما استحقش)
-    const beforeDue = dueDay ? (asOfDate.getDate() < dueDay ? 1 : 0) : 0;
-    let monthsElapsed = nowYM - startYM + 1 - beforeDue;
-    monthsElapsed = Math.max(0, Math.min(monthsElapsed, plan.months));
-
-    const total = safeNumber(plan.totalAmount);
-    const monthlyAmount = safeNumber(plan.monthlyAmount, total / plan.months);
-    const dueAmount = Math.min(total, monthsElapsed * monthlyAmount);
-
-    // المدفوع = الافتتاحي + السدادات المسجلة في المعاملات
-    const txPaid = (data?.transactions || [])
-      .filter(t => t.status === "paid" && t.source === "card-payment-plan" && (t.linkedPlanId === plan.id || t.installmentPlanId === plan.id))
-      .reduce((sum, t) => sum + safeNumber(t.amount), 0);
-    
-    const hasInit = plan.initialPaid !== undefined && plan.initialPaid !== null;
-    const initialPaid = hasInit ? safeNumber(plan.initialPaid) : Math.max(0, safeNumber(plan.paidAmount) - txPaid);
-    
-    const paidAmount = Math.min(total, initialPaid + txPaid);
-
-    const overdueAmount = Math.max(0, dueAmount - paidAmount);
-    const notYetDueAmount = Math.max(0, total - Math.max(dueAmount, paidAmount));
-    const remainingAmount = Math.max(0, total - paidAmount);
-
-    return {
-      monthsElapsed,
-      dueAmount: roundMoney(dueAmount),
-      paidAmount: roundMoney(paidAmount),
-      overdueAmount: roundMoney(overdueAmount),
-      notYetDueAmount: roundMoney(notYetDueAmount),
-      remainingAmount: roundMoney(remainingAmount),
-      isCompleted: paidAmount >= total - 0.005,
-      progressPct: total > 0 ? (paidAmount / total) * 100 : 0
-    };
-  };
-
-  // ─── 2. دالة المديونية المركزية للبطاقة ───
-  /**
-   * ترجع تفصيل كامل لمديونية البطاقة بناءً على المنطق البنكي
-   */
-  const getCardOutstanding = (card, data, asOfDate = new Date()) => {
-    if (!card) return { openingDebt: 0, txPurchases: 0, txRefunds: 0, txPayments: 0, installmentsDue: 0, installmentsNotDue: 0, totalDebt: 0, availableCredit: 0, creditBalance: 0 };
-
-    const method = getCardMethod(card);
-    const subCards = Array.isArray(card.subCardLast4) ? card.subCardLast4 : [];
-    const openingDebt = safeNumber(card.openingDebt);
-    const { dueDay } = getCardCycleParams(card);
-    const openingDate = parseISODate(card.openingDebtDate || card.openingDate) || new Date(0);
-
-    let txPurchases = 0;
-    let txRefunds = 0;
-    let txPayments = 0;
-
-    (data?.transactions || []).forEach(t => {
-      if (!t || t.status !== "paid" || t.source === "void" || isCarryoverMarker(t)) return;
-      if (isHanyPurchaseTx(t) || isHanySettleTx(t)) return;
-      
-      const d = parseISODate(t.date);
-      if (!d || d > asOfDate || d < openingDate) return;
-
-      const hasExplicitLink = t.linkedCardId !== undefined && t.linkedCardId !== null && t.linkedCardId !== "";
-      let belongsToCard = false;
-      if (hasExplicitLink) belongsToCard = t.linkedCardId === card.id;
-      else if (t.cardLast4 && subCards.includes(t.cardLast4)) belongsToCard = true;
-      else belongsToCard = t.method === method;
-      
-      if (!belongsToCard) return;
-
-      if (isCardPaymentTx(t, card.id)) {
-        txPayments += safeNumber(t.amount);
-      } else if (t.installmentPlanId || t.linkedPlanId) {
-        // مشتريات تحولت لخطة أقساط - لا تُحسب هنا لتجنب الازدواجية
-      } else if (t.type === "expense") {
-        txPurchases += safeNumber(t.amount);
-      } else if (t.type === "income") {
-        txRefunds += safeNumber(t.amount);
-      }
-    });
-
-    // حساب الأقساط
-    let installmentsDue = 0;
-    let installmentsNotDue = 0;
-    const plans = (data?.cardInstallments || []).filter(p => p.cardId === card.id && p.status !== "cancelled");
-
-    plans.forEach(p => {
-      const status = getInstallmentStatus(p, asOfDate, data, dueDay);
-      installmentsDue += status.overdueAmount;
-      installmentsNotDue += status.notYetDueAmount;
-    });
-
-    // المديونية الإجمالية
-    const totalDebt = openingDebt + txPurchases - txRefunds - txPayments + installmentsDue + installmentsNotDue;
-    const limit = safeNumber(card.limit);
-    const availableCredit = Math.max(0, limit - Math.max(0, totalDebt));
-    const creditBalance = totalDebt < 0 ? Math.abs(totalDebt) : 0;
-
-    return {
-      openingDebt: roundMoney(openingDebt),
-      txPurchases: roundMoney(txPurchases),
-      txRefunds: roundMoney(txRefunds),
-      txPayments: roundMoney(txPayments),
-      installmentsDue: roundMoney(installmentsDue),
-      installmentsNotDue: roundMoney(installmentsNotDue),
-      totalDebt: roundMoney(totalDebt),
-      availableCredit: roundMoney(availableCredit),
-      creditBalance: roundMoney(creditBalance)
-    };
-  };
-
-  // ─── 3. محرك الكشف (Statement Engine) ───
-  const buildCardStatementEngine = (card, data, asOfDate = new Date()) => {
-    const outstanding = getCardOutstanding(card, data, asOfDate);
-    const { dueDay, statementDay } = getCardCycleParams(card);
-    
-    // ملاحظة: في الجزء الثاني سيتم تفصيل الـ Cycles بشكل أدق، لكن هنا نضمن التوافق مع الأرقام المركزية
-    return {
-      cardId: card.id,
-      totalDebt: outstanding.totalDebt,
-      outstanding,
-      cycleParams: { dueDay, statementDay }
-    };
-  };
-
-  // ─── 4. التنبؤ بالسداد (Prediction) ───
-  const computeCardPaymentPrediction = (data, card, asOfDate = new Date()) => {
-    if (!card) return null;
-    const outstanding = getCardOutstanding(card, data, asOfDate);
-    const { dueDay } = getCardCycleParams(card);
-    const plans = (data?.cardInstallments || []).filter(p => p.cardId === card.id && p.status !== "cancelled");
-    
-    let installmentsThisMonth = 0;
-    plans.forEach(p => {
-      const status = getInstallmentStatus(p, asOfDate, data, dueDay);
-      if (status.overdueAmount > 0) installmentsThisMonth += status.overdueAmount;
-      else if (!status.isCompleted) installmentsThisMonth += Math.min(safeNumber(p.monthlyAmount), status.remainingAmount);
-    });
-
-    // المطلوب الأدنى = أقساط هذا الشهر + (5% من المديونية المتغيرة)
-    const revolvingDebt = Math.max(0, outstanding.totalDebt - outstanding.installmentsDue - outstanding.installmentsNotDue);
-    const minBase = revolvingDebt > 0 ? Math.max(100, revolvingDebt * 0.05) : 0;
-    const totalMandatory = outstanding.totalDebt;
-
-    return {
-      cardId: card.id,
-      currentDebt: outstanding.totalDebt,
-      statementBalance: outstanding.totalDebt, // مبسط في هذا الجزء
-      installmentsThisMonth: roundMoney(installmentsThisMonth),
-      minBase: roundMoney(minBase),
-      minPayment: roundMoney(Math.min(totalMandatory, minBase + installmentsThisMonth)),
-      totalMandatory: roundMoney(totalMandatory),
-      breakdown: outstanding
-    };
-  };
-
-  // ─── 5. دفتر هاني (بدون مرتجعات) ───
-  const computeHanyPayable = (data, asOfDate = new Date()) => {
-    let purchases = 0;
-    let settlements = 0;
-
-    (data?.transactions || []).forEach(t => {
-      if (!t || t.status === "void" || t.source === "void" || isCarryoverMarker(t)) return;
-      const d = parseISODate(t.date);
-      if (!d || d > asOfDate) return;
-
-      if (isHanyPurchaseTx(t)) {
-        purchases += safeNumber(t.amount);
-      } else if (isHanySettleTx(t) && t.status === "paid") {
-        settlements += safeNumber(t.amount);
-      }
-    });
-
-    return roundMoney(Math.max(0, purchases - settlements));
-  };
-
-  // ═══════════════════════════════════════════════════════════════
-  // 🧪 اختبارات المحاسبة (يجب أن تظهر كلها PASS)
-  // ═══════════════════════════════════════════════════════════════
-  const __runAccountingTests = () => {
-    console.log("🧪 بدء اختبارات V88.5.0 Accounting Core...");
-    let passed = 0; let failed = 0;
-
-    const assertEqual = (name, actual, expected) => {
-      if (Math.abs(actual - expected) < 0.01) {
-        console.log(`✅ ${name}: ${actual}`);
-        passed++;
-      } else {
-        console.error(`❌ ${name}: متوقع ${expected}، وجاء ${actual}`);
-        failed++;
-      }
-    };
-
-    const mockCard = { id: 1, limit: 10000, openingDebt: 0, dueDate: "25 من كل شهر", statementDay: 5, bank: "CIB", name: "Titanium" };
-    
-    // 1. بطاقة بلا أقساط + مشتريات + سداد
-    const data1 = {
-      transactions: [
-        { id: "t1", status: "paid", type: "expense", amount: 1000, method: "cib_card", date: "2026-10-01" },
-        { id: "t2", status: "paid", type: "expense", amount: 500, method: "cib_savings", source: "card-payment-plan", linkedCardId: 1, date: "2026-10-10" }
-      ],
-      cardInstallments: []
-    };
-    const out1 = getCardOutstanding(mockCard, data1, new Date("2026-10-15"));
-    assertEqual("1. بطاقة بلا أقساط (1000 - 500)", out1.totalDebt, 500);
-
-    // 2. بطاقة بخطة أقساط + سداد قسط
-    const data2 = {
-      transactions: [
-        { id: "t3", status: "paid", type: "expense", amount: 100, method: "cib_savings", source: "card-payment-plan", linkedCardId: 1, linkedPlanId: "p1", date: "2026-10-10" }
-      ],
-      cardInstallments: [
-        { id: "p1", cardId: 1, totalAmount: 1200, months: 12, monthlyAmount: 100, startMonth: "أكتوبر", startYear: 2026, initialPaid: 0 }
-      ]
-    };
-    // قسط أكتوبر استحق (100)، تم سداده (100). المتبقي 1100.
-    const out2 = getCardOutstanding(mockCard, data2, new Date("2026-10-15"));
-    assertEqual("2. خطة أقساط + سداد (1100)", out2.totalDebt, 1100);
-
-    // 3. كشف صادر غير مسدد + سداد جزئي
-    // (بناءً على المنطق: 1000 شراء، 200 سداد = 800)
-    const data3 = {
-      transactions: [
-        { id: "t4", status: "paid", type: "expense", amount: 1000, method: "cib_card", date: "2026-09-01" },
-        { id: "t5", status: "paid", type: "expense", amount: 200, method: "cib_savings", source: "card-payment-plan", linkedCardId: 1, date: "2026-10-05" }
-      ],
-      cardInstallments: []
-    };
-    const pred3 = computeCardPaymentPrediction(data3, mockCard, new Date("2026-10-15"));
-    assertEqual("3. رصيد الكشف (800)", pred3.totalMandatory, 800);
-
-    // 4. كشف مسدد + مشتريات جديدة (التنبؤ)
-    const data4 = {
-      transactions: [
-        { id: "t6", status: "paid", type: "expense", amount: 1000, method: "cib_card", date: "2026-09-01" },
-        { id: "t7", status: "paid", type: "expense", amount: 1000, method: "cib_savings", source: "card-payment-plan", linkedCardId: 1, date: "2026-10-01" },
-        { id: "t8", status: "paid", type: "expense", amount: 300, method: "cib_card", date: "2026-10-10" }
-      ],
-      cardInstallments: []
-    };
-    const out4 = getCardOutstanding(mockCard, data4, new Date("2026-10-15"));
-    assertEqual("4. كشف مسدد + مشتريات جديدة (300)", out4.totalDebt, 300);
-
-    // 5. دفتر هاني: مشتريات + سدادات
-    const data5 = {
-      transactions: [
-        { id: "h1", status: "paid", type: "expense", amount: 500, category: "مشتريات محل هاني", method: "hany_tab", date: "2026-10-01" },
-        { id: "h2", status: "paid", type: "expense", amount: 200, category: "سداد دفتر هاني", method: "cash", hanyEffect: "settle", date: "2026-10-05" }
-      ]
-    };
-    const hanyBal = computeHanyPayable(data5, new Date("2026-10-15"));
-    assertEqual("5. رصيد هاني (300)", hanyBal, 300);
-
-    console.log(`\n📊 النتيجة: ${passed} ناجح، ${failed} فاشل.`);
-    if (failed === 0) console.log("🎉 جميع الاختبارات ناجحة! المنطق المحاسبي سليم.");
-  };
-
-  // Expose to window
-  window.AccountingCore = {
-    getInstallmentStatus,
-    getCardOutstanding,
-    buildCardStatementEngine,
-    computeCardPaymentPrediction,
-    computeHanyPayable,
-    __runAccountingTests
-  };
-
-  console.log("✅ V88.5.0 Accounting Core (Part 1) محملة بنجاح. اكتب window.AccountingCore.__runAccountingTests() في الكونسول.");
-})();
