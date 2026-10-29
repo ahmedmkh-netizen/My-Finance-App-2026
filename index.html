@@ -3769,12 +3769,28 @@ const computeCardLiveFigures = (data, card) => {
   const txDebt = computeCardDebt(data, card);
   const instInfo = computeCardInstallmentsInfo(data, card);
   const limit = safeNumber(card.limit);
-  
-  // المديونية الحية = ديون المعاملات + كل الأقساط المتبقية (عشان تطابق البنك)
-  const liveDebt = txDebt + (instInfo.totalRemaining || 0);
+
+  // ═══ V88.4.1 FIX: منع الاحتساب المزدوج ═══
+  let plansDebt = 0;
+
+  (instInfo.plans || []).forEach((p) => {
+    if (p.status === "cancelled") return;
+
+    const hasLinkedTxsInData = (data.transactions || []).some(
+      (t) => t.installmentPlanId === p.id || t.linkedPlanId === p.id
+    );
+    const wasLinkedAtCreation = Array.isArray(p.linkedTxIds) && p.linkedTxIds.length > 0;
+    const isNewPurchase = p.isNewPurchase === true;
+
+    if (isNewPurchase || wasLinkedAtCreation || hasLinkedTxsInData) {
+      plansDebt += p.remainingAmount;
+    }
+  });
+
+  const liveDebt = txDebt + plansDebt;
   const liveAvailable = Math.max(0, limit - Math.max(0, liveDebt));
-  
-  return { liveDebt, liveAvailable, notYetDue: instInfo.totalRemaining, txDebt, instInfo, limit, isReversal: false };
+
+  return { liveDebt, liveAvailable, notYetDue: plansDebt, txDebt, instInfo, limit, isReversal: false };
 };
 const computeCardAvailable = (data, card, asOfDate = null) =>
   computeCardLiveFigures(data, card).liveAvailable;
@@ -5242,7 +5258,43 @@ const availableLimit = Math.max(0, limit - currentDebt);
           if (isHanySettleCategory(t.category)) return t;
           return { ...t, method: HANY_TAB_METHOD, affectsCash: false, hanyEffect: "purchase" };
         });
+// ═══ V88.4.1 FIX: ترحيل الخطط القديمة ═══
+base.cardInstallments = (base.cardInstallments || []).map((plan) => {
+  if (plan.isNewPurchase !== undefined) return plan;
 
+  const hasLinkedTxs = (base.transactions || []).some(
+    (t) => t.installmentPlanId === plan.id || t.linkedPlanId === plan.id
+  );
+  const hasLinkedIds = Array.isArray(plan.linkedTxIds) && plan.linkedTxIds.length > 0;
+
+  if (hasLinkedTxs || hasLinkedIds) {
+    return { ...plan, isNewPurchase: false };
+  }
+
+  const card = (base.cards || []).find((c) => c.id === plan.cardId);
+  if (card) {
+    const method = getCardMethod(card);
+    const candidates = (base.transactions || []).filter(
+      (t) =>
+        t.status === "paid" &&
+        t.type === "expense" &&
+        !t.installmentPlanId &&
+        !t.linkedPlanId &&
+        (t.linkedCardId === plan.cardId || t.method === method) &&
+        Math.abs(safeNumber(t.amount) - safeNumber(plan.totalAmount)) < 0.01
+    );
+    if (candidates.length > 0) {
+      const match = candidates[0];
+      base.transactions = base.transactions.map((t) =>
+        t.id === match.id ? { ...t, installmentPlanId: plan.id } : t
+      );
+      return { ...plan, linkedTxIds: [match.id], isNewPurchase: false };
+    }
+  }
+
+  return { ...plan, isNewPurchase: true };
+});
+		  
         base.hanyPayableCache = computeHanyPayable(base);
         base.__v8840MigratedAt = new Date().toISOString();
         return base;
@@ -11625,51 +11677,83 @@ if (isCard) {
           const parsedMonths = Math.max(1, Math.min(60, parseInt(months, 10) || 12));
           const monthlyAmount = parsedTotal > 0 ? roundMoney(parsedTotal / parsedMonths) : 0;
 
-          const handleCreate = () => {
-            if (parsedTotal <= 0) {
-              addNotification({ type: "error", title: "أدخل مبلغ صحيح" });
-              return;
-            }
-            const startIdx = getMonthIndex(startMonth);
-            if (startIdx < 0) {
-              addNotification({ type: "error", title: "شهر بداية غير صالح" });
-              return;
-            }
-            const plan = {
-              id: getSafeId(),
-              cardId: card.id,
-              totalAmount: roundMoney(parsedTotal),
-              months: parsedMonths,
-              monthlyAmount,
-              startMonth,
-              startYear: safeNumber(startYear, 2026),
-              note: note.trim(),
-              status: "active",
-			  paidAmount: roundMoney(parseNumberInput(initialPaid)),
-              linkedTxIds: Array.from(selectedTxIds),
-              createdAt: new Date().toISOString(),
-            };
-            saveHistory();
-            const newPlans = [...(data.cardInstallments || []), plan];
-            const newTxs =
-              selectedTxIds.size > 0
-                ? (data.transactions || []).map((t) =>
-                    selectedTxIds.has(t.id) ? { ...t, installmentPlanId: plan.id } : t,
-                  )
-                : data.transactions || [];
-            dispatch({
-              type: "SET_DATA",
-              payload: { ...data, cardInstallments: newPlans, transactions: newTxs },
-            });
-            addNotification({
-              type: "success",
-              title: "✅ تم إنشاء خطة التقسيط",
-              message: `${fmt(parsedTotal)} ج.م على ${parsedMonths} شهر (${fmt(monthlyAmount)} ج.م/شهر)`,
-              duration: 6000,
-            });
-            onClose();
-          };
+const handleCreate = () => {
+  if (parsedTotal <= 0) {
+    addNotification({ type: "error", title: "أدخل مبلغ صحيح" });
+    return;
+  }
+  const startIdx = getMonthIndex(startMonth);
+  if (startIdx < 0) {
+    addNotification({ type: "error", title: "شهر بداية غير صالح" });
+    return;
+  }
 
+  // ═══ V88.4.1 FIX: منع الاحتساب المزدوج عند الإنشاء ═══
+  let finalSelectedIds = new Set(selectedTxIds);
+  let isNewPurchase = false;
+  let autoLinkedInfo = null;
+
+  if (finalSelectedIds.size === 0) {
+    const candidates = cardTxs.filter(
+      (t) => !t.installmentPlanId && !t.linkedPlanId
+    );
+    const exactMatch = candidates.find(
+      (t) => Math.abs(safeNumber(t.amount) - parsedTotal) < 0.01
+    );
+
+    if (exactMatch) {
+      finalSelectedIds.add(exactMatch.id);
+      autoLinkedInfo = exactMatch.description || exactMatch.category;
+    } else {
+      isNewPurchase = true;
+    }
+  }
+
+  const plan = {
+    id: getSafeId(),
+    cardId: card.id,
+    totalAmount: roundMoney(parsedTotal),
+    months: parsedMonths,
+    monthlyAmount,
+    startMonth,
+    startYear: safeNumber(startYear, 2026),
+    note: note.trim(),
+    status: "active",
+    paidAmount: roundMoney(parseNumberInput(initialPaid)),
+    linkedTxIds: Array.from(finalSelectedIds),
+    isNewPurchase,
+    createdAt: new Date().toISOString(),
+  };
+
+  saveHistory();
+  const newPlans = [...(data.cardInstallments || []), plan];
+  const newTxs =
+    finalSelectedIds.size > 0
+      ? (data.transactions || []).map((t) =>
+          finalSelectedIds.has(t.id) ? { ...t, installmentPlanId: plan.id } : t,
+        )
+      : data.transactions || [];
+
+  dispatch({
+    type: "SET_DATA",
+    payload: { ...data, cardInstallments: newPlans, transactions: newTxs },
+  });
+
+  const linkMsg = autoLinkedInfo
+    ? `🔗 تم ربط الخطة تلقائياً بـ: ${autoLinkedInfo}`
+    : isNewPurchase
+      ? `🆕 الخطة مُسجّلة كمشتريات جديدة (لن يتم احتسابها مرتين)`
+      : `🔗 تم ربط الخطة بـ ${finalSelectedIds.size} معاملة`;
+
+  addNotification({
+    type: "success",
+    title: "✅ تم إنشاء خطة التقسيط",
+    message: `${fmt(parsedTotal)} ج.م على ${parsedMonths} شهر (${fmt(monthlyAmount)} ج.م/شهر)\n${linkMsg}`,
+    duration: 8000,
+  });
+  onClose();
+};
+			
           const toggleTx = (id) =>
             setSelectedTxIds((prev) => {
               const n = new Set(prev);
