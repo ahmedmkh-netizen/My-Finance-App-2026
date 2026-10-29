@@ -3461,14 +3461,19 @@
           const isPaid = (closingBalance - paymentsAfterStatement) <= 0.01;
           const effectiveClosingBalance = Math.max(0, closingBalance - paymentsAfterStatement);
 
-          const minBase = closingBalance > 0 ? Math.max(100, Math.round(closingBalance * 0.05 * 100) / 100) : 0;
-          const minDue = minBase + installmentsDueThisCycle;
-          const totalDue = Math.max(0, closingBalance) + installmentsDueThisCycle;
+const minBase = closingBalance > 0 ? Math.max(100, Math.round(closingBalance * 0.05 * 100) / 100) : 0;
+const minDue = minBase + installmentsDueThisCycle;
+const totalDue = Math.max(0, closingBalance) + installmentsDueThisCycle;
 
-          let status = "open";
-          if (upperTime > cycleEndTs && upperTime > statementTs) status = "closed";
-          if (upperTime > dueTs && !isPaid) status = "overdue";
-          if (isPaid && upperTime > cycleEndTs) status = "paid";
+// ✅ المنطق الجديد اللي بيفهم كروت الائتمان
+const isFullyPaid = (closingBalance - paymentsAfterStatement) <= 0.01;
+const isMinPaid = paymentsAfterStatement >= (minDue - 0.01);
+
+let status = "open";
+if (upperTime > cycleEndTs && upperTime > statementTs) status = "closed";
+if (upperTime > dueTs && !isMinPaid) status = "overdue"; // متأخر فقط لو دفع أقل من الحد الأدنى
+if (upperTime > dueTs && isMinPaid && !isFullyPaid) status = "partial"; // مسدد جزئياً (دفع المطلوب بس لسه فيه باقي)
+if (isFullyPaid && upperTime > cycleEndTs) status = "paid"; // مسدد بالكامل
 
           const daysUntilDue = Math.ceil((dueTs - upperTime) / 86400000);
 
@@ -3480,9 +3485,10 @@
             closingBalance, installmentsDueThisCycle, minDue, totalDue, minBase,
             status, daysUntilDue, txCount: cycleTxs.length,
             transactions: cycleTxs,
-            isPaid,
-            effectiveClosingBalance,
-            paymentsAfterStatement,
+isPaid: isFullyPaid,
+isMinPaid,
+effectiveClosingBalance,
+paymentsAfterStatement,
           });
         });
 
@@ -10755,14 +10761,16 @@
                     ) : (
                       [...engine.cycles].reverse().map((cycle) => {
                         const isOpen = expandedCycle === cycle.cycleKey;
-                        const statusColor =
-                          cycle.status === "paid" ? "#10B981"
-                            : cycle.status === "overdue" ? "#DC2626"
-                            : cycle.status === "closed" ? "#D97706" : "#635BFF";
-                        const statusLabel =
-                          cycle.status === "paid" ? "✅ مسدد"
-                            : cycle.status === "overdue" ? "🔴 متأخر"
-                            : cycle.status === "closed" ? "📋 كشف مغلق" : "🟦 مفتوح";
+const statusColor =
+  cycle.status === "paid" ? "#10B981"
+    : cycle.status === "overdue" ? "#DC2626"
+    : cycle.status === "partial" ? "#D97706"
+    : cycle.status === "closed" ? "#64748B" : "#635BFF";
+const statusLabel =
+  cycle.status === "paid" ? "✅ مسدد بالكامل"
+    : cycle.status === "overdue" ? "🔴 متأخر"
+    : cycle.status === "partial" ? "🟡 مسدد جزئياً"
+    : cycle.status === "closed" ? "📋 كشف مغلق" : "🟦 مفتوح";
                         return (
                           <div key={cycle.cycleKey} className="rounded-xl overflow-hidden" style={{ border: `2px solid ${statusColor}40`, background: "var(--bg-card)" }}>
                             <button
