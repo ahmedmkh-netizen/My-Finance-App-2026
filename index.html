@@ -1490,7 +1490,7 @@
         MoreHorizontal, ArrowDown, Check, AlertCircle, MoreVertical,
         ChevronRight, Scale, User as UserIcon, Circle, Dot, History, FileText,
         Save as SaveIcon, Download, Database, FileDown, Share2,
-        Printer as PrinterIcon, FileCheck, Building2,
+        Printer as PrinterIcon, FileCheck, Building2, ShoppingBag,
       } from "lucide-react";
 
       /* ═══════════════ FIREBASE ═══════════════ */
@@ -10881,112 +10881,177 @@ const statusLabel =
                   </div>
                 )}
 
-                {activeTab === "transactions" && (
-                  <div className="space-y-3">
-                    <div className="flex gap-1.5 flex-wrap">
-                      <div className="relative flex-1 min-w-[140px]">
-                        <Search className="absolute right-2.5 top-1/2 -translate-y-1/2" size={12} style={{ color: "var(--text-muted)" }} />
-                        <input
-                          type="text" placeholder="ابحث..." className="input-field pr-8 text-[11px] py-2"
-                          value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
-                        />
-                      </div>
-                      <select className="input-field text-[11px] py-2 w-auto" value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
-                        <option value="date-desc">📅 الأحدث</option>
-                        <option value="date-asc">📅 الأقدم</option>
-                        <option value="amount-desc">💰 الأعلى</option>
-                        <option value="amount-asc">💰 الأقل</option>
-                      </select>
-                      <button
-                        type="button" onClick={() => setShowPending((v) => !v)}
-                        className={`badge text-[10px] px-2.5 py-1.5 cursor-pointer ${showPending ? "badge-warning" : "badge-neutral"}`}
-                      >
-                        <Clock size={10} /> المعلقات {stats.pendingCount > 0 && `(${stats.pendingCount})`}
-                      </button>
-                    </div>
+{activeTab === "transactions" && (
+  <div className="space-y-4">
+    {/* شريط البحث والترتيب */}
+    <div className="flex gap-2 flex-wrap">
+      <div className="relative flex-1 min-w-[140px]">
+        <Search className="absolute right-3 top-1/2 -translate-y-1/2" size={14} style={{ color: "var(--text-muted)" }} />
+        <input
+          type="text"
+          placeholder="ابحث في الحركات..."
+          className="input-field pr-9 text-xs py-2.5 rounded-xl border border-[color:var(--border-default)]"
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+        />
+      </div>
+      <select
+        className="input-field text-xs py-2.5 w-auto rounded-xl border border-[color:var(--border-default)] bg-[color:var(--bg-muted)]"
+        value={sortBy}
+        onChange={(e) => setSortBy(e.target.value)}
+      >
+        <option value="date-desc">📅 الأحدث</option>
+        <option value="date-asc">📅 الأقدم</option>
+        <option value="amount-desc">💰 الأعلى</option>
+        <option value="amount-asc">💰 الأقل</option>
+      </select>
+    </div>
 
-                    <div className="flex p-0.5 rounded-lg" style={{ background: "var(--bg-muted)" }}>
-                      {[
-                        { id: "all", label: "الكل" },
-                        { id: "expense", label: "مشتريات" },
-                        { id: "payment", label: "سدادات" },
-                        { id: "income", label: "مرتجعات" },
-                      ].map((f) => (
-                        <button
-                          key={f.id} type="button" onClick={() => setFilterType(f.id)}
-                          className={`px-2.5 py-1.5 rounded-md text-[10px] font-bold flex-1 ${filterType === f.id ? "shadow-sm" : ""}`}
-                          style={filterType === f.id
-                            ? { background: "var(--bg-card)", color: f.id === "expense" ? "var(--danger)" : f.id === "income" ? "var(--success)" : f.id === "payment" ? "var(--accent)" : "var(--text-primary)" }
-                            : { color: "var(--text-muted)" }}
-                        >{f.label}</button>
-                      ))}
-                    </div>
+    {/* فلاتر سريعة (Pills) */}
+    <div className="flex gap-2 overflow-x-auto scroll-hide pb-1">
+      {[
+        { id: "all", label: "الكل", icon: Layers },
+        { id: "expense", label: "مشتريات", icon: ShoppingBag },
+        { id: "payment", label: "سدادات", icon: Banknote },
+        { id: "income", label: "مرتجعات", icon: Undo2 },
+      ].map((f) => {
+        const Icon = f.icon;
+        const isActive = filterType === f.id;
+        return (
+          <button
+            key={f.id}
+            type="button"
+            onClick={() => setFilterType(f.id)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all whitespace-nowrap ${
+              isActive
+                ? "bg-[color:var(--accent)] text-white shadow-md shadow-[color:var(--accent-glow)]"
+                : "bg-[color:var(--bg-muted)] text-[color:var(--text-secondary)] hover:bg-[color:var(--bg-card-alt)]"
+            }`}
+          >
+            <Icon size={12} className={isActive ? "opacity-100" : "opacity-60"} />
+            {f.label}
+          </button>
+        );
+      })}
+      
+      <button
+        type="button"
+        onClick={() => setShowPending((v) => !v)}
+        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all whitespace-nowrap ${
+          showPending
+            ? "bg-amber-500 text-white shadow-md"
+            : "bg-[color:var(--bg-muted)] text-[color:var(--text-secondary)] hover:bg-[color:var(--bg-card-alt)]"
+        }`}
+      >
+        <Clock size={12} className={showPending ? "opacity-100" : "opacity-60"} />
+        المعلقات {stats.pendingCount > 0 && `(${stats.pendingCount})`}
+      </button>
+    </div>
 
-                    {filteredTx.length === 0 ? (
-                      <div className="text-center py-8">
-                        <CreditCard size={32} className="mx-auto mb-2" style={{ color: "var(--text-muted)" }} />
-                        <p className="font-semibold text-xs" style={{ color: "var(--text-muted)" }}>لا توجد معاملات</p>
-                      </div>
-                    ) : (
-                      <div className="space-y-2 max-h-[50vh] overflow-y-auto scroll-hide">
-                        {dailyGroups.map((group) => (
-                          <div key={group.date}>
-                            <DayGroupHeader label={group.label} total={group.total} count={group.items.length} />
-                            <div className="space-y-1.5">
-                              {group.items.map((t) => {
-                                const isPending = t.status !== "paid";
-                                return (
-                                  <div
-                                    key={t.id}
-                                    className={`flex justify-between items-center gap-2 p-2.5 rounded-lg ${isPending ? "border-2 border-dashed border-amber-400" : ""}`}
-                                    style={{ background: "var(--bg-card)", border: isPending ? undefined : "1px solid var(--border-subtle)" }}
-                                  >
-                                    <div className="min-w-0 flex-1">
-                                      <p className="font-bold text-xs truncate flex items-center gap-1 flex-wrap">
-                                        {getTxDisplay(t)}
-                                        <TxTimeChip createdAt={t.createdAt} />
-                                        {isPending && <span className="badge badge-warning text-[8px]">⏳ معلق</span>}
-                                        <CardPaymentBadge tx={t} />
-                                        <SmsBadge tx={t} />
-                                        <TeldaBadge tx={t} />
-                                        <RecurringBadge tx={t} />
-                                        <InstallmentBadge tx={t} />
-                                      </p>
-                                      <p className="text-[10px] font-semibold mt-0.5" style={{ color: "var(--text-muted)" }}>
-                                        {t.category}
-                                        {t.cardLast4 && <span className="font-mono"> • ••••{t.cardLast4}</span>}
-                                        <span className="font-mono mr-2 opacity-70">• رصيد: {fmt(t.__runningBalance)}</span>
-                                      </p>
-                                    </div>
-                                    <div className="flex items-center gap-1 flex-shrink-0">
-                                      <span className={`font-black text-xs money tabular ${
-                                        t.type === "income" ? "text-emerald-600"
-                                          : isCardPaymentTx(t, card.id) ? "text-purple-600" : "text-red-600"
-                                      }`}>
-                                        {t.type === "income" ? "+" : "−"}{fmt(t.amount)}
-                                      </span>
-                                      {isPending ? (
-                                        <button onClick={() => approvePending(t)} className="btn btn-ghost p-1 text-emerald-500" title="اعتماد">
-                                          <CheckCircle2 size={12} />
-                                        </button>
-                                      ) : (
-                                        <button onClick={() => editTx(t)} className="btn btn-ghost p-1 text-blue-500" title="تعديل">
-                                          <Edit size={12} />
-                                        </button>
-                                      )}
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
+    {/* قائمة الحركات */}
+    {filteredTx.length === 0 ? (
+      <div className="text-center py-10">
+        <CreditCard size={40} className="mx-auto mb-3" style={{ color: "var(--text-muted)", opacity: 0.5 }} />
+        <p className="font-semibold text-sm" style={{ color: "var(--text-muted)" }}>لا توجد معاملات مطابقة</p>
+      </div>
+    ) : (
+      <div className="space-y-4 max-h-[55vh] overflow-y-auto scroll-hide pr-1">
+        {dailyGroups.map((group) => (
+          <div key={group.date} className="space-y-2">
+            <div className="flex items-center justify-between px-1">
+              <div className="flex items-center gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-[color:var(--accent)]"></span>
+                <span className="text-xs font-black" style={{ color: "var(--text-primary)" }}>{group.label}</span>
+                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-[color:var(--bg-muted)] text-[color:var(--text-muted)]">
+                  {group.items.length} عملية
+                </span>
               </div>
+              <span className="text-[11px] font-black money tabular text-[color:var(--text-secondary)]">
+                {formatAdaptive(group.total)} ج.م
+              </span>
+            </div>
 
+            <div className="space-y-2">
+              {group.items.map((t) => {
+                const isPending = t.status !== "paid";
+                const isPayment = isCardPaymentTx(t, card.id);
+                const isIncome = t.type === "income";
+                
+                let TxIcon = isPayment ? Banknote : isIncome ? Undo2 : ShoppingBag;
+                let iconBg = isPayment ? "rgba(139,92,246,0.1)" : isIncome ? "rgba(16,185,129,0.1)" : "rgba(220,38,38,0.1)";
+                let iconColor = isPayment ? "#8B5CF6" : isIncome ? "#10B981" : "#DC2626";
+                let amountColor = isPayment ? "#8B5CF6" : isIncome ? "#10B981" : "#DC2626";
+                let amountPrefix = isIncome || isPayment ? "+" : "−";
+
+                return (
+                  <div
+                    key={t.id}
+                    className={`group flex items-center justify-between gap-3 p-3 rounded-2xl transition-all ${
+                      isPending ? "border border-dashed border-amber-400 bg-amber-50/30 dark:bg-amber-950/10" : "bg-[color:var(--bg-card)] border border-[color:var(--border-subtle)] shadow-sm hover:shadow-md hover:border-[color:var(--border-default)]"
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <div
+                        className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                        style={{ background: iconBg, color: iconColor }}
+                      >
+                        <TxIcon size={18} />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="font-bold text-xs truncate flex items-center gap-1.5" style={{ color: "var(--text-primary)" }}>
+                          {getTxDisplay(t)}
+                          {isPending && <span className="badge badge-warning text-[8px] px-1.5 py-0">⏳ معلق</span>}
+                        </p>
+                        <div className="flex items-center gap-1.5 text-[10px] font-semibold mt-1" style={{ color: "var(--text-muted)" }}>
+                          <span>{t.category}</span>
+                          {t.cardLast4 && <><span className="opacity-40">•</span><span className="font-mono">••••{t.cardLast4}</span></>}
+                          <span className="opacity-40">•</span>
+                          <span className="font-mono">{formatTxTime(t.createdAt)}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <div className="text-left">
+                        <p className="font-black text-sm money tabular" style={{ color: amountColor }}>
+                          {amountPrefix}{fmt(t.amount)}
+                        </p>
+                        <p className="text-[9px] font-semibold text-[color:var(--text-muted)] mt-0.5">
+                          رصيد: {formatAdaptive(t.__runningBalance)}
+                        </p>
+                      </div>
+                      
+                      <div className="flex flex-col gap-1">
+                        {isPending ? (
+                          <button
+                            onClick={() => approvePending(t)}
+                            className="w-7 h-7 rounded-lg bg-emerald-500/10 text-emerald-600 flex items-center justify-center hover:bg-emerald-500 hover:text-white transition-all"
+                            title="اعتماد"
+                          >
+                            <CheckCircle2 size={14} />
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => editTx(t)}
+                            className="w-7 h-7 rounded-lg bg-[color:var(--bg-muted)] text-[color:var(--text-secondary)] flex items-center justify-center hover:bg-[color:var(--accent)] hover:text-white transition-all"
+                            title="تعديل"
+                          >
+                            <Edit size={14} />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+    )}
+  </div>
+)}
+				  
               <div className="generic-modal-footer">
                 <button
                   onClick={() => dispatch({ type: "SET_CARD_PAYMENT_MODAL", payload: { cardId: card.id } })}
