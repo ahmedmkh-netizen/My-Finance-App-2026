@@ -6898,11 +6898,21 @@ const HANY_PRINT_ITEMS = [
   { key: 'includeFooter',     label: 'الفوتر',                desc: 'تذييل الصفحة + العلامة التجارية',         icon: '📌' },
 ];
 
-const HanyView = memo(function HanyView(props) {
 		const HanyView = memo(function HanyView(props) {
         const { data, dispatch, saveHistory, addNotification, selectedYear, selectedMonth } = props;
         const [showSettle, setShowSettle] = useState(false);
         const [settleAmount, setSettleAmount] = useState("");
+			const [showPrintSettings, setShowPrintSettings] = useState(false);
+const [printSettings, setPrintSettings] = useState(() => {
+  try {
+    const saved = localStorage.getItem('hany_print_settings_v1');
+    return saved ? { ...HANY_PRINT_DEFAULTS, ...JSON.parse(saved) } : { ...HANY_PRINT_DEFAULTS };
+  } catch { return { ...HANY_PRINT_DEFAULTS }; }
+});
+
+useEffect(() => {
+  try { localStorage.setItem('hany_print_settings_v1', JSON.stringify(printSettings)); } catch {}
+}, [printSettings]);
         const [settleMethod, setSettleMethod] = useState("cash");
         const [settleDate, setSettleDate] = useState(getLocalISODate());
         const [settleNote, setSettleNote] = useState("");
@@ -6961,16 +6971,12 @@ const HanyView = memo(function HanyView(props) {
         }, []);
 
         /* 🆕 طباعة كشف هاني */
-        const handlePrintHany = useCallback((withMonthFilter = false) => {
-          try {
-            const opts = {
-              includePurchases: true,
-              includeSettlements: true,
-              includeRefunds: true,
-              includeGrouped: true,
-              includeWatermark: true,
-              monthFilter: withMonthFilter ? { month: selectedMonth, year: selectedYear } : null,
-            };
+const handlePrintHany = useCallback((withMonthFilter = false) => {
+  try {
+    const opts = {
+      ...printSettings,
+      monthFilter: withMonthFilter ? { month: selectedMonth, year: selectedYear } : null,
+    };
             const html = generateHanyLedgerReport(data, opts);
             const title = withMonthFilter
               ? `كشف حساب هاني — ${selectedMonth} ${selectedYear}`
@@ -7089,8 +7095,16 @@ const HanyView = memo(function HanyView(props) {
                   </div>
                 </div>
 
-                {/* 🆕 أزرار طباعة كشف هاني */}
+{/* 🆕 أزرار طباعة كشف هاني */}
                 <div className="flex gap-1.5 flex-wrap">
+                  <button
+                    onClick={() => setShowPrintSettings(true)}
+                    title="إعدادات الطباعة"
+                    className="btn text-[11px] py-2 px-2.5 font-black focus-ring"
+                    style={{ background: "var(--bg-card)", color: "var(--text-secondary)", border: "2px solid var(--border-default)" }}
+                  >
+                    <Sliders size={12} />
+                  </button>
                   <button
                     onClick={() => handlePrintHany(false)}
                     className="btn text-[11px] py-2 px-3 font-black focus-ring"
@@ -7384,6 +7398,73 @@ const HanyView = memo(function HanyView(props) {
                   <button onClick={executeSettle} className="btn btn-primary w-full py-3 text-sm">
                     <CheckCircle2 size={16} /> تسجيل السداد
                   </button>
+                </div>
+              </Modal>
+            )}
+
+            {showPrintSettings && (
+              <Modal isOpen={true} onClose={() => setShowPrintSettings(false)} title="إعدادات طباعة كشف هاني" icon="⚙️">
+                <div className="space-y-3">
+                  <div className="p-2.5 rounded-lg" style={{ background: "var(--info-soft)", border: "1px dashed var(--info)" }}>
+                    <p className="text-[10px] font-bold leading-relaxed" style={{ color: "var(--info)" }}>
+                      💡 اختر العناصر اللي عايزها تظهر — الإعدادات بتتحفظ تلقائياً
+                    </p>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setPrintSettings({ ...HANY_PRINT_DEFAULTS })}
+                      className="btn btn-secondary text-xs flex-1 py-2"
+                    >
+                      <CheckCircle2 size={12} /> تحديد الكل
+                    </button>
+                    <button
+                      onClick={() => setPrintSettings(Object.fromEntries(Object.keys(HANY_PRINT_DEFAULTS).map(k => [k, false])))}
+                      className="btn btn-secondary text-xs flex-1 py-2"
+                    >
+                      <X size={12} /> مسح الكل
+                    </button>
+                  </div>
+
+                  <div className="space-y-1.5 max-h-80 overflow-y-auto scroll-hide">
+                    {HANY_PRINT_ITEMS.map(item => (
+                      <label
+                        key={item.key}
+                        className="flex items-center gap-3 p-2.5 rounded-xl cursor-pointer transition-all"
+                        style={{ background: "var(--bg-muted)", opacity: printSettings[item.key] ? 1 : 0.55 }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={!!printSettings[item.key]}
+                          onChange={(e) => setPrintSettings(s => ({ ...s, [item.key]: e.target.checked }))}
+                          className="w-4 h-4 accent-[color:var(--accent)]"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-black flex items-center gap-1.5">
+                            <span>{item.icon}</span><span>{item.label}</span>
+                          </p>
+                          <p className="text-[10px] mt-0.5" style={{ color: "var(--text-muted)" }}>{item.desc}</p>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+
+                  <div className="flex gap-2 pt-2" style={{ borderTop: "1px solid var(--border-subtle)" }}>
+                    <button
+                      onClick={() => { setShowPrintSettings(false); setTimeout(() => handlePrintHany(false), 150); }}
+                      className="btn text-xs flex-1 py-2.5 font-black"
+                      style={{ background: "linear-gradient(135deg, #EA580C 0%, #C2410C 100%)", color: "white" }}
+                    >
+                      <PrinterIcon size={12} /> طباعة الكل
+                    </button>
+                    <button
+                      onClick={() => { setShowPrintSettings(false); setTimeout(() => handlePrintHany(true), 150); }}
+                      className="btn text-xs flex-1 py-2.5 font-black"
+                      style={{ background: "white", color: "#EA580C", border: "2px solid #EA580C" }}
+                    >
+                      <Calendar size={12} /> {selectedMonth} {selectedYear}
+                    </button>
+                  </div>
                 </div>
               </Modal>
             )}
