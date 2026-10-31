@@ -10692,7 +10692,7 @@ const handlePrintHany = useCallback((withMonthFilter = false) => {
       };
 
       /* ═══════════════ CARD STATEMENT MODAL ═══════════════ */
-      const CardStatementModal = memo(({ card, data, transactions, onClose, addNotification, dispatch }) => {
+      const CardStatementModal = memo(({ card, data, transactions, onClose, addNotification, dispatch, handleDelete }) => {
         const [activeTab, setActiveTab] = useState("overview");
         const [filterType, setFilterType] = useState("all");
         const [searchTerm, setSearchTerm] = useState("");
@@ -11176,9 +11176,10 @@ const statusLabel =
                 const isPayment = isCardPaymentTx(t, card.id);
                 const isIncome = t.type === "income";
                 
-                let TxIcon = isPayment ? Banknote : isIncome ? Undo2 : ShoppingBag;
+                // الأيقونات الذكية الجديدة
+                const categoryEmoji = getCategoryIcon(t.category);
+                let iconEmoji = isPayment ? "💳" : isIncome ? "↩️" : categoryEmoji;
                 let iconBg = isPayment ? "rgba(139,92,246,0.1)" : isIncome ? "rgba(16,185,129,0.1)" : "rgba(220,38,38,0.1)";
-                let iconColor = isPayment ? "#8B5CF6" : isIncome ? "#10B981" : "#DC2626";
                 let amountColor = isPayment ? "#8B5CF6" : isIncome ? "#10B981" : "#DC2626";
                 let amountPrefix = isIncome || isPayment ? "+" : "−";
 
@@ -11191,10 +11192,10 @@ const statusLabel =
                   >
                     <div className="flex items-center gap-3 min-w-0 flex-1">
                       <div
-                        className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
-                        style={{ background: iconBg, color: iconColor }}
+                        className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 text-lg"
+                        style={{ background: iconBg }}
                       >
-                        <TxIcon size={18} />
+                        {iconEmoji}
                       </div>
                       <div className="min-w-0 flex-1">
                         <p className="font-bold text-xs truncate flex items-center gap-1.5" style={{ color: "var(--text-primary)" }}>
@@ -11238,14 +11239,21 @@ const statusLabel =
                             <Edit size={14} />
                           </button>
                         )}
+                        {/* 🗑️ زر الحذف الجديد */}
+                        {handleDelete && (
+                          <button
+                            onClick={() => handleDelete(t.id)}
+                            className="w-7 h-7 rounded-lg bg-red-500/10 text-red-600 flex items-center justify-center hover:bg-red-500 hover:text-white transition-all"
+                            title="حذف العملية"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>
                 );
               })}
-            </div>
-          </div>
-        ))}
       </div>
     )}
   </div>
@@ -17095,7 +17103,7 @@ const statusLabel =
                 <CardStatementModal
                   card={viewingCardStatement} data={data} transactions={transactions}
                   onClose={() => dispatch({ type: "SET_VIEWING_CARD_STATEMENT", payload: null })}
-                  addNotification={addNotification} dispatch={dispatch}
+                  addNotification={addNotification} dispatch={dispatch} handleDelete={handleDelete}
                 />
               )}
 
