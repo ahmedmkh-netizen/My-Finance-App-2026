@@ -4551,12 +4551,14 @@ paymentsAfterStatement,
       </html>`;
       };
 
-      const generateHanyLedgerReport = (data, options = {}) => {
-        const {
-          includePurchases = true, includeSettlements = true,
-          includeRefunds = true,
-          includeGrouped = true, monthFilter = null, includeWatermark = true,
-        } = options;
+const generateHanyLedgerReport = (data, options = {}) => {
+  const {
+    includePurchases = true, includeSettlements = true,
+    includeRefunds = true, includeGrouped = true,
+    includeHeader = true, includeHeroStrip = true, includeKpiCards = true,
+    includeTotalsBox = true, includeFooter = true,
+    monthFilter = null, includeWatermark = true,
+  } = options;
 
         const purchases = (data.transactions || [])
           .filter(
@@ -4670,22 +4672,27 @@ paymentsAfterStatement,
           )
           .join("");
 
-        const content = `
-          ${buildReportHeader(reportTitle, { badge: "كشف حساب مورد" })}
-          <div class="report-hero-strip">
-            <div class="hero-cell opening"><div class="hero-label">📊 الرصيد المستحق الحالي</div><div class="hero-value">${fmt(currentPayable)} ج.م</div></div>
-            <div class="hero-cell purchases"><div class="hero-label">🛒 إجمالي المشتريات</div><div class="hero-value">${fmt(totalPurchases)} ج.م</div></div>
-            <div class="hero-cell settlements"><div class="hero-label">💵 إجمالي السدادات</div><div class="hero-value">${fmt(totalSettlements)} ج.م</div></div>
-          </div>
-          ${totalRefunds > 0 ? `<div class="report-hero-strip" style="grid-template-columns: 1fr;">
-            <div class="hero-cell refunds"><div class="hero-label">↩️ إجمالي المرتجعات</div><div class="hero-value">${fmt(totalRefunds)} ج.م</div></div>
-          </div>` : ""}
-          <div class="report-kpi-grid">
-            <div class="report-kpi accent"><div class="kpi-label">عدد المشتريات</div><div class="kpi-value">${filteredPurchases.length}</div></div>
-            <div class="report-kpi success"><div class="kpi-label">عدد السدادات</div><div class="kpi-value">${filteredSettlements.length}</div></div>
-            <div class="report-kpi info"><div class="kpi-label">متوسط الفاتورة</div><div class="kpi-value">${filteredPurchases.length > 0 ? fmt(totalPurchases / filteredPurchases.length) : "0.00"}</div></div>
-            <div class="report-kpi warning"><div class="kpi-label">الفترة</div><div class="kpi-value" style="font-size:11px">${escapeHtml(monthLabel)}</div></div>
-          </div>
+const content = `
+  ${includeHeader 
+    ? buildReportHeader(reportTitle, { badge: "كشف حساب مورد" })
+    : `<div class="report-title-bar" style="margin-bottom:16px;"><h2>${escapeHtml(reportTitle)}</h2><span class="report-badge">كشف حساب مورد</span></div>`}
+  ${includeHeroStrip ? `
+  <div class="report-hero-strip">
+    <div class="hero-cell opening"><div class="hero-label">📊 الرصيد المستحق الحالي</div><div class="hero-value">${fmt(currentPayable)} ج.م</div></div>
+    <div class="hero-cell purchases"><div class="hero-label">🛒 إجمالي المشتريات</div><div class="hero-value">${fmt(totalPurchases)} ج.م</div></div>
+    <div class="hero-cell settlements"><div class="hero-label">💵 إجمالي السدادات</div><div class="hero-value">${fmt(totalSettlements)} ج.م</div></div>
+  </div>
+  ${totalRefunds > 0 ? `<div class="report-hero-strip" style="grid-template-columns: 1fr;">
+    <div class="hero-cell refunds"><div class="hero-label">↩️ إجمالي المرتجعات</div><div class="hero-value">${fmt(totalRefunds)} ج.م</div></div>
+  </div>` : ""}` : ""}
+  ${includeKpiCards ? `
+  <div class="report-kpi-grid">
+    <div class="report-kpi accent"><div class="kpi-label">عدد المشتريات</div><div class="kpi-value">${filteredPurchases.length}</div></div>
+    <div class="report-kpi success"><div class="kpi-label">عدد السدادات</div><div class="kpi-value">${filteredSettlements.length}</div></div>
+    <div class="report-kpi info"><div class="kpi-label">متوسط الفاتورة</div><div class="kpi-value">${filteredPurchases.length > 0 ? fmt(totalPurchases / filteredPurchases.length) : "0.00"}</div></div>
+    <div class="report-kpi warning"><div class="kpi-label">الفترة</div><div class="kpi-value" style="font-size:11px">${escapeHtml(monthLabel)}</div></div>
+  </div>` : ""}
+	
           ${includeGrouped && groupedList.length > 0 ? `
             <div class="report-section-title"><span>📋 ملخص الأصناف المُجمَّع</span><span class="section-sub">${groupedList.length} صنف</span></div>
             <table class="report-table">
@@ -6864,7 +6871,34 @@ paymentsAfterStatement,
       });
 
           /* ═══════════════ HANY VIEW ═══════════════ */
-      const HanyView = memo(function HanyView(props) {
+     const HANY_PRINT_DEFAULTS = {
+  includeHeader: true,
+  includeHeroStrip: true,
+  includeKpiCards: true,
+  includeGrouped: true,
+  includePurchases: true,
+  includeSettlements: true,
+  includeRefunds: true,
+  includeTotalsBox: true,
+  includeWatermark: true,
+  includeFooter: true,
+};
+
+const HANY_PRINT_ITEMS = [
+  { key: 'includeHeader',     label: 'الهيدر واللوجو',        desc: 'شعار محفظتي + رقم/تاريخ التقرير',         icon: '📄' },
+  { key: 'includeHeroStrip',  label: 'الإجماليات الكبيرة',     desc: 'الرصيد المستحق + المشتريات + السدادات',   icon: '📊' },
+  { key: 'includeKpiCards',   label: 'مربعات الإحصاء',         desc: 'عدد المشتريات + السدادات + متوسط الفاتورة', icon: '🔢' },
+  { key: 'includeGrouped',    label: 'ملخص الأصناف المُجمَّع', desc: 'جدول الأصناف بالعدد والإجمالي والمتوسط',   icon: '📋' },
+  { key: 'includePurchases',  label: 'تفاصيل المشتريات',       desc: 'سجل كل عملية شراء بالتاريخ والمبلغ',      icon: '🛒' },
+  { key: 'includeSettlements',label: 'تفاصيل السدادات',        desc: 'سجل كل عملية سداد',                        icon: '💵' },
+  { key: 'includeRefunds',    label: 'تفاصيل المرتجعات',       desc: 'سجل المرتجعات (لو موجودة)',                icon: '↩️' },
+  { key: 'includeTotalsBox',  label: 'صندوق الإجماليات النهائي', desc: 'الملخص المحاسبي بالأرقام',              icon: '📈' },
+  { key: 'includeWatermark',  label: 'العلامة المائية',        desc: 'نص "دفتر هاني" في خلفية التقرير',         icon: '💧' },
+  { key: 'includeFooter',     label: 'الفوتر',                desc: 'تذييل الصفحة + العلامة التجارية',         icon: '📌' },
+];
+
+const HanyView = memo(function HanyView(props) {
+		const HanyView = memo(function HanyView(props) {
         const { data, dispatch, saveHistory, addNotification, selectedYear, selectedMonth } = props;
         const [showSettle, setShowSettle] = useState(false);
         const [settleAmount, setSettleAmount] = useState("");
