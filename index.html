@@ -6987,7 +6987,7 @@ const handlePrintHany = useCallback((withMonthFilter = false) => {
             console.error("Print hany failed:", err);
             addNotification({ type: "error", title: "فشل فتح الطباعة", message: err.message });
           }
-        }, [data, selectedMonth, selectedYear, addNotification]);
+	        }, [data, selectedMonth, selectedYear, addNotification, printSettings]);
 
         const openQuickPurchase = (presetItem) => {
           dispatch({ type: "SET_FORM_MODE", payload: "add" });
@@ -7401,77 +7401,159 @@ const handlePrintHany = useCallback((withMonthFilter = false) => {
                 </div>
               </Modal>
             )}
-
             {showPrintSettings && (
-              <Modal isOpen={true} onClose={() => setShowPrintSettings(false)} title="إعدادات طباعة كشف هاني" icon="⚙️">
+              <Modal isOpen={true} onClose={() => setShowPrintSettings(false)} title="تخصيص كشف الحساب" icon="🎨">
                 <div className="space-y-3">
-                  <div className="p-2.5 rounded-lg" style={{ background: "var(--info-soft)", border: "1px dashed var(--info)" }}>
-                    <p className="text-[10px] font-bold leading-relaxed" style={{ color: "var(--info)" }}>
-                      💡 اختر العناصر اللي عايزها تظهر — الإعدادات بتتحفظ تلقائياً
-                    </p>
+
+                  {/* ── Header Info ── */}
+                  <div
+                    className="p-3 rounded-xl"
+                    style={{
+                      background: "linear-gradient(135deg, rgba(99,91,255,0.08), rgba(74,66,229,0.04))",
+                      border: "1px solid rgba(99,91,255,0.2)",
+                    }}
+                  >
+                    <div className="flex items-start gap-2">
+                      <div
+                        className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
+                        style={{ background: "rgba(99,91,255,0.15)" }}
+                      >
+                        <Info size={13} style={{ color: "var(--accent)" }} />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-[11px] font-black" style={{ color: "var(--accent)" }}>
+                          اختر اللي يظهر في التقرير
+                        </p>
+                        <p className="text-[10px] mt-0.5 leading-relaxed" style={{ color: "var(--text-secondary)" }}>
+                          الإعدادات بتتحفظ تلقائياً وهتتطبق على كل طباعة
+                        </p>
+                      </div>
+                    </div>
                   </div>
 
-                  <div className="flex gap-2">
+                  {/* ── Quick Actions ── */}
+                  <div className="grid grid-cols-2 gap-2">
                     <button
                       onClick={() => setPrintSettings({ ...HANY_PRINT_DEFAULTS })}
-                      className="btn btn-secondary text-xs flex-1 py-2"
+                      className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-[11px] font-black transition-all active:scale-95"
+                      style={{
+                        background: "rgba(16,185,129,0.08)",
+                        color: "#10B981",
+                        border: "1.5px solid rgba(16,185,129,0.3)",
+                      }}
                     >
-                      <CheckCircle2 size={12} /> تحديد الكل
+                      <CheckCircle2 size={13} /> تحديد الكل
                     </button>
                     <button
                       onClick={() => setPrintSettings(Object.fromEntries(Object.keys(HANY_PRINT_DEFAULTS).map(k => [k, false])))}
-                      className="btn btn-secondary text-xs flex-1 py-2"
+                      className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-[11px] font-black transition-all active:scale-95"
+                      style={{
+                        background: "rgba(220,38,38,0.08)",
+                        color: "#DC2626",
+                        border: "1.5px solid rgba(220,38,38,0.3)",
+                      }}
                     >
-                      <X size={12} /> مسح الكل
+                      <X size={13} /> مسح الكل
                     </button>
                   </div>
 
-                  <div className="space-y-1.5 max-h-80 overflow-y-auto scroll-hide">
-                    {HANY_PRINT_ITEMS.map(item => (
-                      <label
-                        key={item.key}
-                        className="flex items-center gap-3 p-2.5 rounded-xl cursor-pointer transition-all"
-                        style={{ background: "var(--bg-muted)", opacity: printSettings[item.key] ? 1 : 0.55 }}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={!!printSettings[item.key]}
-                          onChange={(e) => setPrintSettings(s => ({ ...s, [item.key]: e.target.checked }))}
-                          className="w-4 h-4 accent-[color:var(--accent)]"
-                        />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs font-black flex items-center gap-1.5">
-                            <span>{item.icon}</span><span>{item.label}</span>
-                          </p>
-                          <p className="text-[10px] mt-0.5" style={{ color: "var(--text-muted)" }}>{item.desc}</p>
-                        </div>
-                      </label>
-                    ))}
+                  {/* ── Counter ── */}
+                  <div className="flex items-center justify-between px-1">
+                    <span className="text-[10px] font-bold" style={{ color: "var(--text-muted)" }}>
+                      العناصر المفعّلة
+                    </span>
+                    <span
+                      className="text-[10px] font-black px-2 py-0.5 rounded-full"
+                      style={{ background: "var(--accent-soft)", color: "var(--accent)" }}
+                    >
+                      {Object.values(printSettings).filter(Boolean).length} / {Object.keys(printSettings).length}
+                    </span>
                   </div>
 
-                  <div className="flex gap-2 pt-2" style={{ borderTop: "1px solid var(--border-subtle)" }}>
+                  {/* ── Items List ── */}
+                  <div className="space-y-2 max-h-80 overflow-y-auto scroll-hide pr-0.5">
+                    {HANY_PRINT_ITEMS.map(item => {
+                      const isActive = !!printSettings[item.key];
+                      return (
+                        <label
+                          key={item.key}
+                          className="flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-all"
+                          style={{
+                            background: isActive ? "rgba(99,91,255,0.06)" : "var(--bg-muted)",
+                            border: `1.5px solid ${isActive ? "rgba(99,91,255,0.25)" : "transparent"}`,
+                            opacity: isActive ? 1 : 0.6,
+                          }}
+                        >
+                          <div
+                            className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 text-base transition-all"
+                            style={{
+                              background: isActive ? "rgba(99,91,255,0.15)" : "rgba(148,163,184,0.12)",
+                              transform: isActive ? "scale(1)" : "scale(0.92)",
+                            }}
+                          >
+                            {item.icon}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-black leading-tight">{item.label}</p>
+                            <p className="text-[10px] mt-0.5 leading-snug" style={{ color: "var(--text-muted)" }}>
+                              {item.desc}
+                            </p>
+                          </div>
+                          <div
+                            className={`w-10 h-5 rounded-full transition-all relative flex-shrink-0 ${
+                              isActive ? "bg-[color:var(--accent)]" : "bg-slate-300 dark:bg-slate-600"
+                            }`}
+                          >
+                            <div
+                              className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${
+                                isActive ? "right-0.5" : "left-0.5"
+                              }`}
+                            />
+                          </div>
+                          <input
+                            type="checkbox"
+                            checked={isActive}
+                            onChange={(e) => setPrintSettings(s => ({ ...s, [item.key]: e.target.checked }))}
+                            className="sr-only"
+                          />
+                        </label>
+                      );
+                    })}
+                  </div>
+
+                  {/* ── Print Actions ── */}
+                  <div
+                    className="flex gap-2 pt-3"
+                    style={{ borderTop: "1px solid var(--border-subtle)" }}
+                  >
                     <button
                       onClick={() => { setShowPrintSettings(false); setTimeout(() => handlePrintHany(false), 150); }}
-                      className="btn text-xs flex-1 py-2.5 font-black"
-                      style={{ background: "linear-gradient(135deg, #EA580C 0%, #C2410C 100%)", color: "white" }}
+                      className="flex-1 py-3 rounded-xl text-sm font-black flex items-center justify-center gap-1.5 transition-all active:scale-95"
+                      style={{
+                        background: "linear-gradient(135deg, #EA580C 0%, #C2410C 100%)",
+                        color: "white",
+                        boxShadow: "0 6px 16px -4px rgba(234,88,12,0.45)",
+                      }}
                     >
-                      <PrinterIcon size={12} /> طباعة الكل
+                      <PrinterIcon size={14} /> طباعة الكل
                     </button>
                     <button
                       onClick={() => { setShowPrintSettings(false); setTimeout(() => handlePrintHany(true), 150); }}
-                      className="btn text-xs flex-1 py-2.5 font-black"
-                      style={{ background: "white", color: "#EA580C", border: "2px solid #EA580C" }}
+                      className="flex-1 py-3 rounded-xl text-sm font-black flex items-center justify-center gap-1.5 transition-all active:scale-95"
+                      style={{
+                        background: "white",
+                        color: "#EA580C",
+                        border: "2px solid #EA580C",
+                      }}
                     >
-                      <Calendar size={12} /> {selectedMonth} {selectedYear}
+                      <Calendar size={14} /> {selectedMonth}
                     </button>
                   </div>
                 </div>
               </Modal>
             )}
-          </div>
-        );
-      });
 
+			  
       /* ═══════════════ CATEGORY ICONS MAP ═══════════════ */
       const CATEGORY_ICON_MAP = Object.freeze({
         "راتب شهري": "💰", "راتب AAIB": "🏦", "عمل حر": "💼", استثمارات: "📈",
