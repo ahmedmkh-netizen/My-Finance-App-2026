@@ -10693,11 +10693,10 @@ const handlePrintHany = useCallback((withMonthFilter = false) => {
 
       /* ═══════════════ CARD STATEMENT MODAL ═══════════════ */
       const CardStatementModal = memo(({ card, data, transactions, onClose, addNotification, dispatch, handleDelete }) => {
-        const [activeTab, setActiveTab] = useState("overview");
+              const [activeTab, setActiveTab] = useState("overview");
         const [filterType, setFilterType] = useState("all");
         const [searchTerm, setSearchTerm] = useState("");
         const [sortBy, setSortBy] = useState("date-desc");
-        const [showPending, setShowPending] = useState(false);
         const [expandedCycle, setExpandedCycle] = useState(null);
 
         const cardMethod = getCardMethod(card);
@@ -10713,7 +10712,6 @@ const handlePrintHany = useCallback((withMonthFilter = false) => {
           const cutoffDay = parsed ? dayStart(parsed) : null;
           return (transactions || [])
             .filter((t) => {
-              if (showPending ? false : t.status !== "paid") return false;
               if (t.source === "carryover") return false;
               if (isCarryoverMarker(t)) return false;
               if (t.source === "card-forecast") return false;
@@ -10728,13 +10726,17 @@ const handlePrintHany = useCallback((withMonthFilter = false) => {
               return t.method === cardMethod;
             })
             .sort(compareTransactions);
-        }, [transactions, card, cardMethod, subCards, showPending]);
+        }, [transactions, card, cardMethod, subCards]);
 
         const filteredTx = useMemo(() => {
           let arr = [...cardTx];
-          if (filterType === "expense") arr = arr.filter((t) => t.type === "expense" && !isCardPaymentTx(t, card.id));
-          if (filterType === "income") arr = arr.filter((t) => t.type === "income");
-          if (filterType === "payment") arr = arr.filter((t) => isCardPaymentTx(t, card.id));
+          if (filterType === "pending") {
+            arr = arr.filter((t) => t.status !== "paid");
+          } else {
+            if (filterType === "expense") arr = arr.filter((t) => t.type === "expense" && !isCardPaymentTx(t, card.id));
+            if (filterType === "income") arr = arr.filter((t) => t.type === "income");
+            if (filterType === "payment") arr = arr.filter((t) => isCardPaymentTx(t, card.id));
+          }
           if (searchTerm.trim()) {
             const term = normalizeText(searchTerm);
             arr = arr.filter((t) => normalizeText(t.description).includes(term) || normalizeText(t.category).includes(term));
@@ -10776,6 +10778,24 @@ const handlePrintHany = useCallback((withMonthFilter = false) => {
 
         const dailyGroups = useMemo(() => groupTransactionsByDate(txWithBalance), [txWithBalance]);
 
+        const groupedByMonth = useMemo(() => {
+          const months = {};
+          dailyGroups.forEach(group => {
+            const d = parseISODate(group.date);
+            if (!d) return;
+            const monthKey = `${d.getFullYear()}-${d.getMonth()}`;
+            if (!months[monthKey]) {
+              months[monthKey] = {
+                year: d.getFullYear(),
+                monthName: d.toLocaleDateString("ar-EG", { month: "long" }),
+                days: []
+              };
+            }
+            months[monthKey].days.push(group);
+          });
+          return Object.values(months);
+        }, [dailyGroups]);
+		  
         if (!card) return null;
 
         const { liveDebt, liveAvailable, notYetDue } = computeCardLiveFigures(data, card);
@@ -11079,7 +11099,7 @@ const statusLabel =
                     )}
                   </div>
                 )}
-                {activeTab === "transactions" && (
+				                  {activeTab === "transactions" && (
                   <div className="space-y-4">
                     {/* شريط البحث والترتيب */}
                     <div className="flex gap-2 flex-wrap">
@@ -11112,6 +11132,7 @@ const statusLabel =
                         { id: "expense", label: "مشتريات", icon: ShoppingBag },
                         { id: "payment", label: "سدادات", icon: Banknote },
                         { id: "income", label: "مرتجعات", icon: Undo2 },
+                        { id: "pending", label: `المعلقات ${stats.pendingCount > 0 ? `(${stats.pendingCount})` : ""}`, icon: Clock },
                       ].map((f) => {
                         const Icon = f.icon;
                         const isActive = filterType === f.id;
@@ -11131,127 +11152,125 @@ const statusLabel =
                           </button>
                         );
                       })}
-                      
-                      <button
-                        type="button"
-                        onClick={() => setShowPending((v) => !v)}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all whitespace-nowrap ${
-                          showPending
-                            ? "bg-amber-500 text-white shadow-md"
-                            : "bg-[color:var(--bg-muted)] text-[color:var(--text-secondary)] hover:bg-[color:var(--bg-card-alt)]"
-                        }`}
-                      >
-                        <Clock size={12} className={showPending ? "opacity-100" : "opacity-60"} />
-                        المعلقات {stats.pendingCount > 0 && `(${stats.pendingCount})`}
-                      </button>
                     </div>
 
-                    {/* قائمة الحركات */}
+                    {/* قائمة الحركات مع فصل الشهور */}
                     {filteredTx.length === 0 ? (
                       <div className="text-center py-10">
                         <CreditCard size={40} className="mx-auto mb-3" style={{ color: "var(--text-muted)", opacity: 0.5 }} />
                         <p className="font-semibold text-sm" style={{ color: "var(--text-muted)" }}>لا توجد معاملات مطابقة</p>
                       </div>
                     ) : (
-                      <div className="space-y-4 max-h-[68vh] overflow-y-auto form-scrollable pr-2">
-                        {dailyGroups.map((group) => (
-                          <div key={group.date} className="space-y-2">
-                            <div className="flex items-center justify-between px-1">
-                              <div className="flex items-center gap-2">
-                                <span className="w-1.5 h-1.5 rounded-full bg-[color:var(--accent)]"></span>
-                                <span className="text-xs font-black" style={{ color: "var(--text-primary)" }}>{group.label}</span>
-                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-[color:var(--bg-muted)] text-[color:var(--text-muted)]">
-                                  {group.items.length} عملية
-                                </span>
-                              </div>
-                              <span className="text-[11px] font-black money tabular text-[color:var(--text-secondary)]">
-                                {formatAdaptive(group.total)} ج.م
-                              </span>
+                      <div className="space-y-6 max-h-[68vh] overflow-y-auto form-scrollable pr-2">
+                        {groupedByMonth.map(monthGroup => (
+                          <div key={`${monthGroup.monthName}-${monthGroup.year}`}>
+                            
+                            {/* 📅 الهيدر المميز للشهر */}
+                            <div className="sticky top-0 z-10 bg-[color:var(--bg-card)] border-b-2 border-[color:var(--border-default)] py-2 mb-4 flex items-center justify-between shadow-sm">
+                              <h4 className="font-black text-sm text-[color:var(--accent)] px-2 flex items-center gap-2">
+                                <CalendarDays size={16} /> {monthGroup.monthName} {monthGroup.year}
+                              </h4>
                             </div>
 
-                            <div className="space-y-2">
-                              {group.items.map((t) => {
-                                const isPending = t.status !== "paid";
-                                const isPayment = isCardPaymentTx(t, card.id);
-                                const isIncome = t.type === "income";
-                                
-                                const categoryEmoji = getCategoryIcon(t.category);
-                                let iconEmoji = isPayment ? "💳" : isIncome ? "↩️" : categoryEmoji;
-                                let iconBg = isPayment ? "rgba(139,92,246,0.1)" : isIncome ? "rgba(16,185,129,0.1)" : "rgba(220,38,38,0.1)";
-                                let amountColor = isPayment ? "#8B5CF6" : isIncome ? "#10B981" : "#DC2626";
-                                let amountPrefix = isIncome || isPayment ? "+" : "−";
-
-                                return (
-                                  <div
-                                    key={t.id}
-                                    className={`group flex items-center justify-between gap-3 p-3 rounded-2xl transition-all ${
-                                      isPending ? "border border-dashed border-amber-400 bg-amber-50/30 dark:bg-amber-950/10" : "bg-[color:var(--bg-card)] border border-[color:var(--border-subtle)] shadow-sm hover:shadow-md hover:border-[color:var(--border-default)]"
-                                    }`}
-                                  >
-                                    <div className="flex items-center gap-3 min-w-0 flex-1">
-                                      <div
-                                        className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 text-lg"
-                                        style={{ background: iconBg }}
-                                      >
-                                        {iconEmoji}
-                                      </div>
-                                      <div className="min-w-0 flex-1">
-                                        <p className="font-bold text-xs truncate flex items-center gap-1.5" style={{ color: "var(--text-primary)" }}>
-                                          {getTxDisplay(t)}
-                                          {isPending && <span className="badge badge-warning text-[8px] px-1.5 py-0">⏳ معلق</span>}
-                                        </p>
-                                        <div className="flex items-center gap-1.5 text-[10px] font-semibold mt-1" style={{ color: "var(--text-muted)" }}>
-                                          <span>{t.category}</span>
-                                          {t.cardLast4 && <><span className="opacity-40">•</span><span className="font-mono">••••{t.cardLast4}</span></>}
-                                          <span className="opacity-40">•</span>
-                                          <span className="font-mono">{formatTxTime(t.createdAt)}</span>
-                                        </div>
-                                      </div>
+                            <div className="space-y-4">
+                              {monthGroup.days.map((group) => (
+                                <div key={group.date} className="space-y-2">
+                                  <div className="flex items-center justify-between px-1">
+                                    <div className="flex items-center gap-2">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-[color:var(--accent)]"></span>
+                                      <span className="text-xs font-black" style={{ color: "var(--text-primary)" }}>{group.label}</span>
+                                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-[color:var(--bg-muted)] text-[color:var(--text-muted)]">
+                                        {group.items.length} عملية
+                                      </span>
                                     </div>
-
-                                    <div className="flex items-center gap-2 flex-shrink-0">
-                                      <div className="text-left">
-                                        <p className="font-black text-sm money tabular" style={{ color: amountColor }}>
-                                          {amountPrefix}{fmt(t.amount)}
-                                        </p>
-                                        <p className="text-[9px] font-semibold text-[color:var(--text-muted)] mt-0.5">
-                                          رصيد: {formatAdaptive(t.__runningBalance)}
-                                        </p>
-                                      </div>
-                                      
-                                      <div className="flex flex-col gap-1">
-                                        {isPending ? (
-                                          <button
-                                            onClick={() => approvePending(t)}
-                                            className="w-7 h-7 rounded-lg bg-emerald-500/10 text-emerald-600 flex items-center justify-center hover:bg-emerald-500 hover:text-white transition-all"
-                                            title="اعتماد"
-                                          >
-                                            <CheckCircle2 size={14} />
-                                          </button>
-                                        ) : (
-                                          <button
-                                            onClick={() => editTx(t)}
-                                            className="w-7 h-7 rounded-lg bg-[color:var(--bg-muted)] text-[color:var(--text-secondary)] flex items-center justify-center hover:bg-[color:var(--accent)] hover:text-white transition-all"
-                                            title="تعديل"
-                                          >
-                                            <Edit size={14} />
-                                          </button>
-                                        )}
-                                        
-                                        {handleDelete && (
-                                          <button
-                                            onClick={() => handleDelete(t.id)}
-                                            className="w-7 h-7 rounded-lg bg-red-500/10 text-red-600 flex items-center justify-center hover:bg-red-500 hover:text-white transition-all"
-                                            title="حذف العملية"
-                                          >
-                                            <Trash2 size={14} />
-                                          </button>
-                                        )}
-                                      </div>
-                                    </div>
+                                    <span className="text-[11px] font-black money tabular text-[color:var(--text-secondary)]">
+                                      {formatAdaptive(group.total)} ج.م
+                                    </span>
                                   </div>
-                                );
-                              })}
+
+                                  <div className="space-y-2">
+                                    {group.items.map((t) => {
+                                      const isPending = t.status !== "paid";
+                                      const isPayment = isCardPaymentTx(t, card.id);
+                                      const isIncome = t.type === "income";
+                                      
+                                      const categoryEmoji = getCategoryIcon(t.category);
+                                      let iconEmoji = isPayment ? "💳" : isIncome ? "↩️" : categoryEmoji;
+                                      let iconBg = isPayment ? "rgba(139,92,246,0.1)" : isIncome ? "rgba(16,185,129,0.1)" : "rgba(220,38,38,0.1)";
+                                      let amountColor = isPayment ? "#8B5CF6" : isIncome ? "#10B981" : "#DC2626";
+                                      let amountPrefix = isIncome || isPayment ? "+" : "−";
+
+                                      return (
+                                        <div
+                                          key={t.id}
+                                          className={`group flex items-center justify-between gap-3 p-3 rounded-2xl transition-all ${
+                                            isPending ? "border border-dashed border-amber-400 bg-amber-50/30 dark:bg-amber-950/10" : "bg-[color:var(--bg-card)] border border-[color:var(--border-subtle)] shadow-sm hover:shadow-md hover:border-[color:var(--border-default)]"
+                                          }`}
+                                        >
+                                          <div className="flex items-center gap-3 min-w-0 flex-1">
+                                            <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 text-lg" style={{ background: iconBg }}>
+                                              {iconEmoji}
+                                            </div>
+                                            <div className="min-w-0 flex-1">
+                                              <p className="font-bold text-xs truncate flex items-center gap-1.5" style={{ color: "var(--text-primary)" }}>
+                                                {getTxDisplay(t)}
+                                                {isPending && <span className="badge badge-warning text-[8px] px-1.5 py-0">⏳ معلق</span>}
+                                              </p>
+                                              <div className="flex items-center gap-1.5 text-[10px] font-semibold mt-1" style={{ color: "var(--text-muted)" }}>
+                                                <span>{t.category}</span>
+                                                {t.cardLast4 && <><span className="opacity-40">•</span><span className="font-mono">••••{t.cardLast4}</span></>}
+                                                <span className="opacity-40">•</span>
+                                                <span className="font-mono">{formatTxTime(t.createdAt)}</span>
+                                              </div>
+                                            </div>
+                                          </div>
+
+                                          <div className="flex items-center gap-2 flex-shrink-0">
+                                            <div className="text-left">
+                                              <p className="font-black text-sm money tabular" style={{ color: amountColor }}>
+                                                {amountPrefix}{fmt(t.amount)}
+                                              </p>
+                                              <p className="text-[9px] font-semibold text-[color:var(--text-muted)] mt-0.5">
+                                                رصيد: {formatAdaptive(t.__runningBalance)}
+                                              </p>
+                                            </div>
+                                            
+                                            <div className="flex flex-col gap-1">
+                                              {isPending ? (
+                                                <button
+                                                  onClick={() => approvePending(t)}
+                                                  className="w-7 h-7 rounded-lg bg-emerald-500/10 text-emerald-600 flex items-center justify-center hover:bg-emerald-500 hover:text-white transition-all"
+                                                  title="اعتماد"
+                                                >
+                                                  <CheckCircle2 size={14} />
+                                                </button>
+                                              ) : (
+                                                <button
+                                                  onClick={() => editTx(t)}
+                                                  className="w-7 h-7 rounded-lg bg-[color:var(--bg-muted)] text-[color:var(--text-secondary)] flex items-center justify-center hover:bg-[color:var(--accent)] hover:text-white transition-all"
+                                                  title="تعديل"
+                                                >
+                                                  <Edit size={14} />
+                                                </button>
+                                              )}
+                                              
+                                              {handleDelete && (
+                                                <button
+                                                  onClick={() => handleDelete(t.id)}
+                                                  className="w-7 h-7 rounded-lg bg-red-500/10 text-red-600 flex items-center justify-center hover:bg-red-500 hover:text-white transition-all"
+                                                  title="حذف العملية"
+                                                >
+                                                  <Trash2 size={14} />
+                                                </button>
+                                              )}
+                                            </div>
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              ))}
                             </div>
                           </div>
                         ))}
