@@ -2629,8 +2629,6 @@
           if (t.source === "card-forecast" && t.status === "pending") return;
           if (isHanyPurchaseTx(t) || isHanySettleTx(t)) return;
           if (t.method === HANY_TAB_METHOD) return;
-          if (t.installmentPlanId) return;
-          if (t.linkedPlanId) return;
           const d = parseISODate(t.date);
           if (!d) return;
           if (cutoffDay && d < cutoffDay) return;
@@ -2707,25 +2705,12 @@
         const instInfo = computeCardInstallmentsInfo(data, card);
         const limit = safeNumber(card.limit);
 
-        let plansDebt = 0;
-        (instInfo.plans || []).forEach((p) => {
-          if (p.status === "cancelled") return;
-          // نتحقق إن القسط ده مش متسجل كمعاملة عشان ميتحسبش مرتين
-          const hasLinkedTxsInData = (data.transactions || []).some(
-            (t) => t.installmentPlanId === p.id || t.linkedPlanId === p.id
-          );
-          const wasLinkedAtCreation = Array.isArray(p.linkedTxIds) && p.linkedTxIds.length > 0;
-          const isNewPurchase = p.isNewPurchase === true;
-          
-          if (isNewPurchase || wasLinkedAtCreation || hasLinkedTxsInData) {
-            plansDebt += p.remainingAmount;
-          }
-        });
+        // ✅ المديونية بقت بتعتمد على حركات البنك فقط
+        const liveDebt = Math.max(0, txDebt);
+        const liveAvailable = Math.max(0, limit - liveDebt);
 
-        const liveDebt = txDebt + plansDebt;
-        const liveAvailable = Math.max(0, limit - Math.max(0, liveDebt));
-
-        return { liveDebt, liveAvailable, notYetDue: plansDebt, txDebt, instInfo, limit, isReversal: false };
+                // ✅ غير السطر ده
+        return { liveDebt, liveAvailable, notYetDue: instInfo.totalRemaining, txDebt, instInfo, limit, isReversal: false };
       };
       const computeCardAvailable = (data, card, asOfDate = null) =>
         computeCardLiveFigures(data, card).liveAvailable;
@@ -10547,20 +10532,7 @@ const handlePrintHany = useCallback((withMonthFilter = false) => {
             return;
           }
 
-          let finalSelectedIds = new Set(selectedTxIds);
-          let isNewPurchase = false;
-          let autoLinkedInfo = null;
-
-          if (finalSelectedIds.size === 0) {
-            const candidates = cardTxs.filter((t) => !t.installmentPlanId && !t.linkedPlanId);
-            const exactMatch = candidates.find((t) => Math.abs(safeNumber(t.amount) - parsedTotal) < 0.01);
-            if (exactMatch) {
-              finalSelectedIds.add(exactMatch.id);
-              autoLinkedInfo = exactMatch.description || exactMatch.category;
-            } else {
-              isNewPurchase = true;
-            }
-          }
+          const finalSelectedIds = new Set(selectedTxIds);
 
           const plan = {
             id: getSafeId(), cardId: card.id,
