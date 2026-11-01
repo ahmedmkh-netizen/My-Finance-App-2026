@@ -14949,15 +14949,19 @@ const statusLabel =
                 })
               : state.data.cardInstallments;
 
+            try { _balanceCache.clear(); } catch (e) {}
+
+            try { _balanceCache.clear(); } catch (e) {}
+
             return {
               ...state,
               data: {
-                ...state.data, transactions: allTxs, cardInstallments: updatedPlans,
+                ...state.data, transactions: allTxs,
                 auditLog: [...auditEntries, ...(state.data.auditLog || [])].slice(0, 1000),
                 hanyPayableCache: computeHanyPayable({ ...state.data, transactions: allTxs }),
+                __txVersion: safeNumber(state.data.__txVersion, 0) + 1,
               },
             };
-          }
 
           case "HANY_SETTLE": {
             const { amount, sourceMethod, date, note, linkedHanyMonth } = action.payload;
