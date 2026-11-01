@@ -9191,7 +9191,258 @@ const handlePrintHany = useCallback((withMonthFilter = false) => {
           </div>
         );
       });
-		      /* ═══════════════ WALLETS AND CARDS VIEW ═══════════════ */
+		      /* ═══════════════ CASHBACK VIEW ═══════════════ */
+      const CashbackView = memo(({ data, dispatch, saveHistory, addNotification, cards, selectedYear, selectedMonth }) => {
+        const [showAdd, setShowAdd] = useState(false);
+        const [newTracker, setNewTracker] = useState({
+          cardId: cards[0]?.id || "",
+          expectedAmount: "",
+          note: "",
+        });
+
+        const trackers = useMemo(() => {
+          return (data?.cashbackTrackers || []).filter(
+            (t) => t.month === selectedMonth && (t.year || 2026) === selectedYear,
+          );
+        }, [data?.cashbackTrackers, selectedMonth, selectedYear]);
+
+        const totalExpected = trackers.reduce((s, t) => s + safeNumber(t.expectedAmount), 0);
+        const totalReceived = trackers.reduce((s, t) => s + safeNumber(t.receivedAmount), 0);
+        const totalPending = totalExpected - totalReceived;
+
+        const handleAdd = () => {
+          const expectedCheck = validateAmount(newTracker.expectedAmount, { min: 0.01, max: 1000000, label: "المبلغ المتوقع" });
+          if (!expectedCheck.valid) {
+            addNotification({ type: "error", title: "خطأ", message: expectedCheck.error });
+            return;
+          }
+          saveHistory();
+          const tracker = {
+            id: getSafeId(),
+            month: selectedMonth,
+            year: selectedYear,
+            cardId: newTracker.cardId ? Number(newTracker.cardId) : null,
+            expectedAmount: roundMoney(expectedCheck.value),
+            receivedAmount: 0,
+            status: "expected",
+            note: newTracker.note.trim(),
+            createdAt: new Date().toISOString(),
+          };
+          dispatch({
+            type: "UPDATE_CASHBACK_TRACKERS",
+            payload: [...(data.cashbackTrackers || []), tracker],
+          });
+          addNotification({ type: "success", title: "تمت الإضافة" });
+          setShowAdd(false);
+          setNewTracker({ cardId: cards[0]?.id || "", expectedAmount: "", note: "" });
+        };
+
+        const handleReceive = async (tracker) => {
+          const amountStr = await showInputModal({
+            title: "تسجيل استلام كاش باك",
+            icon: "🎁",
+            numeric: true,
+            inputValue: String(tracker.expectedAmount - safeNumber(tracker.receivedAmount)),
+            placeholder: "المبلغ المستلم",
+          });
+          if (amountStr === null) return;
+          const amount = parseNumberInput(amountStr);
+          if (amount <= 0) {
+            addNotification({ type: "error", title: "أدخل مبلغ صالح" });
+            return;
+          }
+          saveHistory();
+          const newReceived = safeNumber(tracker.receivedAmount) + amount;
+          const isComplete = newReceived >= safeNumber(tracker.expectedAmount) - 0.005;
+          const updated = (data.cashbackTrackers || []).map((t) =>
+            t.id === tracker.id
+              ? {
+                  ...t,
+                  receivedAmount: roundMoney(newReceived),
+                  status: isComplete ? "received" : "partial",
+                  receivedAt: isComplete ? new Date().toISOString() : t.receivedAt,
+                }
+              : t,
+          );
+          dispatch({ type: "UPDATE_CASHBACK_TRACKERS", payload: updated });
+          addNotification({ type: "success", title: "تم تسجيل الاستلام", message: fmt(amount) + " ج.م" });
+        };
+
+        const handleDelete = (id) => {
+          dispatch({
+            type: "SHOW_CONFIRM",
+            danger: true,
+            title: "حذف السجل",
+            message: "هل أنت متأكد من حذف هذا السجل؟",
+            onConfirm: () => {
+              saveHistory();
+              const updated = (data.cashbackTrackers || []).filter((t) => t.id !== id);
+              dispatch({ type: "UPDATE_CASHBACK_TRACKERS", payload: updated });
+              addNotification({ type: "success", title: "تم الحذف" });
+              dispatch({ type: "HIDE_CONFIRM" });
+            },
+            onCancel: () => dispatch({ type: "HIDE_CONFIRM" }),
+          });
+        };
+
+        return (
+          <div className="space-y-3 animate-fadeIn">
+            <div className="card" style={{ background: "linear-gradient(135deg, rgba(16,185,129,0.1), rgba(5,150,105,0.05))", borderColor: "rgba(16,185,129,0.3)" }}>
+              <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 rounded-xl text-white" style={{ background: "linear-gradient(135deg, #10B981 0%, #059669 100%)" }}>
+                    <Gift size={18} />
+                  </div>
+                  <div>
+                    <h2 className="font-black text-sm">🎁 الكاش باك</h2>
+                    <p className="text-[11px] mt-0.5" style={{ color: "var(--text-muted)" }}>
+                      {selectedMonth} {selectedYear} • {trackers.length} سجل
+                    </p>
+                  </div>
+                </div>
+                <button onClick={() => setShowAdd(true)} className="btn btn-primary text-xs py-2 px-3">
+                  <Plus size={12} /> إضافة
+                </button>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                <div className="p-2.5 rounded-xl text-center" style={{ background: "var(--bg-card)" }}>
+                  <p className="text-[10px] font-bold" style={{ color: "var(--text-muted)" }}>متوقع</p>
+                  <p className="text-base font-black text-blue-600 money tabular mt-0.5">{fmt(totalExpected)}</p>
+                </div>
+                <div className="p-2.5 rounded-xl text-center" style={{ background: "var(--bg-card)" }}>
+                  <p className="text-[10px] font-bold" style={{ color: "var(--text-muted)" }}>مستلم</p>
+                  <p className="text-base font-black text-emerald-600 money tabular mt-0.5">{fmt(totalReceived)}</p>
+                </div>
+                <div className="p-2.5 rounded-xl text-center" style={{ background: "var(--bg-card)" }}>
+                  <p className="text-[10px] font-bold" style={{ color: "var(--text-muted)" }}>متبقي</p>
+                  <p className="text-base font-black text-amber-600 money tabular mt-0.5">{fmt(totalPending)}</p>
+                </div>
+              </div>
+            </div>
+
+            {trackers.length === 0 ? (
+              <div className="card">
+                <EmptyState
+                  icon={<Gift size={40} />}
+                  title="لا يوجد سجلات كاش باك لهذا الشهر"
+                  description="أضف سجل جديد لتتبع الكاش باك المتوقع"
+                  action={
+                    <button onClick={() => setShowAdd(true)} className="btn btn-primary text-xs">
+                      <Plus size={14} /> إضافة سجل
+                    </button>
+                  }
+                />
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {trackers.map((tracker) => {
+                  const card = cards.find((c) => c.id === tracker.cardId);
+                  const expected = safeNumber(tracker.expectedAmount);
+                  const received = safeNumber(tracker.receivedAmount);
+                  const pending = Math.max(0, expected - received);
+                  const isComplete = received >= expected - 0.005;
+                  const pct = expected > 0 ? (received / expected) * 100 : 0;
+
+                  return (
+                    <div key={tracker.id} className="card py-3">
+                      <div className="flex justify-between items-start gap-2 mb-2">
+                        <div className="min-w-0 flex-1">
+                          <p className="font-bold text-xs truncate flex items-center gap-2 flex-wrap">
+                            {card ? `💳 ${card.bank} - ${card.name} • ••••${card.last4}` : "🎁 كاش باك عام"}
+                            {isComplete ? (
+                              <span className="badge badge-success text-[9px]">✅ مستلم</span>
+                            ) : received > 0 ? (
+                              <span className="badge badge-warning text-[9px]">🟡 جزئي</span>
+                            ) : (
+                              <span className="badge badge-info text-[9px]">⏳ متوقع</span>
+                            )}
+                          </p>
+                          {tracker.note && (
+                            <p className="text-[10px] mt-1" style={{ color: "var(--text-muted)" }}>{tracker.note}</p>
+                          )}
+                        </div>
+                        <div className="flex gap-1 flex-shrink-0">
+                          {!isComplete && (
+                            <button onClick={() => handleReceive(tracker)} className="btn btn-ghost p-1.5 text-emerald-600" title="تسجيل استلام">
+                              <CheckCircle2 size={14} />
+                            </button>
+                          )}
+                          <button onClick={() => handleDelete(tracker.id)} className="btn btn-ghost p-1.5 text-red-500" title="حذف">
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2 mb-2">
+                        <div className="p-2 rounded-lg text-center" style={{ background: "var(--bg-muted)" }}>
+                          <p className="text-[9px] font-bold" style={{ color: "var(--text-muted)" }}>متوقع</p>
+                          <p className="text-xs font-black text-blue-600 money tabular">{fmt(expected)}</p>
+                        </div>
+                        <div className="p-2 rounded-lg text-center" style={{ background: "var(--bg-muted)" }}>
+                          <p className="text-[9px] font-bold" style={{ color: "var(--text-muted)" }}>مستلم</p>
+                          <p className="text-xs font-black text-emerald-600 money tabular">{fmt(received)}</p>
+                        </div>
+                        <div className="p-2 rounded-lg text-center" style={{ background: "var(--bg-muted)" }}>
+                          <p className="text-[9px] font-bold" style={{ color: "var(--text-muted)" }}>متبقي</p>
+                          <p className="text-xs font-black text-amber-600 money tabular">{fmt(pending)}</p>
+                        </div>
+                      </div>
+                      <div className="w-full rounded-full h-1.5 overflow-hidden" style={{ background: "var(--bg-muted)" }}>
+                        <div className={`h-full ${isComplete ? "bg-emerald-500" : "bg-blue-500"}`} style={{ width: `${Math.min(100, pct)}%` }}></div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {showAdd && (
+              <Modal isOpen={true} onClose={() => setShowAdd(false)} title="إضافة سجل كاش باك" icon="🎁">
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-[11px] font-bold block mb-1.5" style={{ color: "var(--text-muted)" }}>البطاقة (اختياري)</label>
+                    <select
+                      className="input-field text-sm"
+                      value={newTracker.cardId}
+                      onChange={(e) => setNewTracker({ ...newTracker, cardId: e.target.value })}
+                    >
+                      <option value="">🎁 كاش باك عام</option>
+                      {cards.map((c) => (
+                        <option key={c.id} value={c.id}>💳 {c.bank} - {c.name} • ••••{c.last4}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-bold block mb-1.5" style={{ color: "var(--text-muted)" }}>المبلغ المتوقع *</label>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      className="input-field input-num text-base text-center font-black"
+                      style={{ color: "var(--accent)" }}
+                      value={newTracker.expectedAmount}
+                      onChange={(e) => setNewTracker({ ...newTracker, expectedAmount: e.target.value })}
+                      placeholder="0.00"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-bold block mb-1.5" style={{ color: "var(--text-muted)" }}>ملاحظة (اختياري)</label>
+                    <input
+                      type="text"
+                      className="input-field text-sm"
+                      value={newTracker.note}
+                      onChange={(e) => setNewTracker({ ...newTracker, note: e.target.value })}
+                      placeholder="مثال: كاش باك مشتريات"
+                    />
+                  </div>
+                  <button onClick={handleAdd} className="btn btn-primary w-full py-2.5 text-sm">
+                    <Plus size={14} /> إضافة
+                  </button>
+                </div>
+              </Modal>
+            )}
+          </div>
+        );
+      });
+	 /* ═══════════════ WALLETS AND CARDS VIEW ═══════════════ */
       const WalletsAndCardsView = memo(({
         cards, buildLedger, expandedLedgers, expandedCardsSection,
         selectedMonth, selectedYear, dispatch, handleDelete,
