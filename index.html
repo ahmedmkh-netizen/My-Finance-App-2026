@@ -10729,13 +10729,25 @@ const handlePrintHany = useCallback((withMonthFilter = false) => {
         }, [transactions, card, cardMethod, subCards]);
 
         const filteredTx = useMemo(() => {
+          const todayISO = getLocalISODate();
           let arr = [...cardTx];
+          
+          // إخفاء المعاملات المستقبلية البعيدة من العرض الافتراضي لتجنب التشتيت
+          if (filterType === "all") {
+            arr = arr.filter((t) => t.date <= todayISO || t.status === "paid");
+          }
+          // 2. فلتر (مستقبلية): السطر الجديد الذي نتحدث عنه
+          if (filterType === "future") {
+            arr = arr.filter((t) => t.date > todayISO && t.status !== "paid");
+          }
           if (filterType === "pending") {
-            arr = arr.filter((t) => t.status !== "paid");
-          } else {
-            if (filterType === "expense") arr = arr.filter((t) => t.type === "expense" && !isCardPaymentTx(t, card.id));
-            if (filterType === "income") arr = arr.filter((t) => t.type === "income");
-            if (filterType === "payment") arr = arr.filter((t) => isCardPaymentTx(t, card.id));
+            arr = arr.filter((t) => t.status !== "paid" && t.date <= todayISO);
+          } else if (filterType === "expense") {
+            arr = arr.filter((t) => t.type === "expense" && !isCardPaymentTx(t, card.id));
+          } else if (filterType === "income") {
+            arr = arr.filter((t) => t.type === "income");
+          } else if (filterType === "payment") {
+            arr = arr.filter((t) => isCardPaymentTx(t, card.id));
           }
           if (searchTerm.trim()) {
             const term = normalizeText(searchTerm);
@@ -11128,11 +11140,13 @@ const statusLabel =
                     {/* فلاتر سريعة (Pills) */}
                     <div className="flex gap-2 overflow-x-auto scroll-hide pb-1">
                       {[
+                      {[
                         { id: "all", label: "الكل", icon: Layers },
                         { id: "expense", label: "مشتريات", icon: ShoppingBag },
                         { id: "payment", label: "سدادات", icon: Banknote },
                         { id: "income", label: "مرتجعات", icon: Undo2 },
                         { id: "pending", label: `المعلقات ${stats.pendingCount > 0 ? `(${stats.pendingCount})` : ""}`, icon: Clock },
+                        { id: "future", label: "مستقبلية", icon: CalendarDays }, // <--- السطر الجديد
                       ].map((f) => {
                         const Icon = f.icon;
                         const isActive = filterType === f.id;
