@@ -2707,18 +2707,11 @@
         const instInfo = computeCardInstallmentsInfo(data, card);
         const limit = safeNumber(card.limit);
 
-        let plansDebt = 0;
-        (instInfo.plans || []).forEach((p) => {
-          if (p.status === "cancelled") return;
-          const hasLinkedTxsInData = (data.transactions || []).some(
-            (t) => t.installmentPlanId === p.id || t.linkedPlanId === p.id
-          );
-          const wasLinkedAtCreation = Array.isArray(p.linkedTxIds) && p.linkedTxIds.length > 0;
-          const isNewPurchase = p.isNewPurchase === true;
-          if (isNewPurchase || wasLinkedAtCreation || hasLinkedTxsInData) {
-            plansDebt += p.remainingAmount;
-          }
-        });
+let plansDebt = 0;
+(instInfo.plans || []).forEach((p) => {
+  if (p.status === "cancelled") return;
+  plansDebt += p.remainingAmount;
+});
 
         const liveDebt = txDebt + plansDebt;
         const liveAvailable = Math.max(0, limit - Math.max(0, liveDebt));
@@ -3462,8 +3455,9 @@
           const effectiveClosingBalance = Math.max(0, closingBalance - paymentsAfterStatement);
 
 const minBase = closingBalance > 0 ? Math.max(100, Math.round(closingBalance * 0.05 * 100) / 100) : 0;
-const minDue = minBase + installmentsDueThisCycle;
-const totalDue = Math.max(0, closingBalance) + installmentsDueThisCycle;
+// شيلنا installmentsDueThisCycle عشان البنك مش بيحسبها في الكشف الحالي
+const minDue = minBase;
+const totalDue = Math.max(0, closingBalance);
 
 // ✅ المنطق الجديد اللي بيفهم كروت الائتمان
 const isFullyPaid = (closingBalance - paymentsAfterStatement) <= 0.01;
