@@ -15819,7 +15819,48 @@
           [],
         );
         const { forceSave: handleForceSave } = useForceSave({ isAuthenticated, data, budgets, addNotification, dbRef: docRef });
+        // ═══════════════ FORCE PULL FROM CLOUD ═══════════════
+        const forcePullFromCloud = useCallback(async () => {
+          if (!isAuthenticated) { addNotification({ type: "error", title: "غير مصرح" }); return; }
+          if (!isOnline) { addNotification({ type: "error", title: "لا يوجد اتصال" }); return; }
 
+          dispatch({ type: "SET_IS_PROCESSING", payload: true });
+          addNotification({ type: "info", title: "جاري المزامنة...", duration: 2000 });
+
+          try {
+            const innerDocRef = db.collection(FIREBASE_DOC_PATH.collection).doc(FIREBASE_DOC_PATH.doc);
+            const doc = await innerDocRef.get({ source: "server" });
+
+            if (!doc.exists) { addNotification({ type: "warning", title: "مفيش بيانات على السحابة" }); return; }
+
+            const remote = doc.data();
+            const migratedRemote = migrateData(remote);
+            const localTxIds = new Set((data.transactions || []).map((t) => t.id));
+            const remoteTxIds = new Set((migratedRemote.transactions || []).map((t) => t.id));
+
+            const onlyLocal = (data.transactions || []).filter((t) => !remoteTxIds.has(t.id));
+            const onlyRemote = (migratedRemote.transactions || []).filter((t) => !localTxIds.has(t.id));
+
+            if (onlyLocal.length > 0) {
+              const merged = { ...migratedRemote, transactions: sortTransactions([...(migratedRemote.transactions || []), ...onlyLocal]) };
+              await innerDocRef.set(merged, { merge: false });
+              dispatch({ type: "SET_DATA", payload: merged });
+              addNotification({ type: "success", title: `✅ تمت المزامنة (رفعت ${onlyLocal.length} وحمّلت ${onlyRemote.length})` });
+            } else {
+              dispatch({ type: "SET_DATA", payload: migratedRemote });
+              if (remote.budgets) dispatch({ type: "SET_BUDGETS", payload: remote.budgets });
+              addNotification({ type: "success", title: `✅ تم التحديث (${onlyRemote.length} معاملة جديدة)` });
+            }
+
+            lastRemoteRef.current = JSON.stringify(migratedRemote);
+            localStorage.setItem(LAST_SYNC_LS_KEY, String(Date.now()));
+          } catch (err) {
+            console.error("Force pull failed:", err);
+            addNotification({ type: "error", title: "فشلت المزامنة", message: err.message });
+          } finally {
+            dispatch({ type: "SET_IS_PROCESSING", payload: false });
+          }
+        }, [isAuthenticated, isOnline, data, addNotification]);
         useEffect(() => {
           const unsub = firebase.auth().onAuthStateChanged((user) => {
             setAuthLoading(false);
