@@ -11758,7 +11758,44 @@
                 />
               </div>
             )}
-
+            {/* ═══ V90 FIX — قسم تفاصيل البطاقات الائتمانية ═══ */}
+            {cards.filter(c => Math.max(0, computeCardLiveFigures(data, c).liveDebt) > 0).length > 0 && (
+              <div className="space-y-2">
+                <h3 className="font-black text-sm flex items-center gap-2 text-red-600">
+                  <CreditCard size={14} /> <span>البطاقات الائتمانية</span>
+                </h3>
+                {cards.filter(c => Math.max(0, computeCardLiveFigures(data, c).liveDebt) > 0).map((card) => {
+                  const { liveDebt, liveAvailable } = computeCardLiveFigures(data, card);
+                  return (
+                    <div key={card.id} className="card py-3">
+                      <div className="flex justify-between items-start gap-2 mb-2">
+                        <div className="flex items-center gap-2 flex-1 min-w-0">
+                          <div className="p-1.5 rounded-lg flex-shrink-0 bg-red-50 dark:bg-red-950/30 text-red-500">
+                            <CreditCard size={14} />
+                          </div>
+                          <div className="min-w-0">
+                            <h4 className="font-bold text-xs truncate">{card.bank} - {card.name} ••••{card.last4}</h4>
+                            <p className="text-[10px] font-semibold mt-0.5" style={{ color: "var(--text-muted)" }}>
+                              المتاح للشراء: {fmt(liveAvailable)}
+                            </p>
+                          </div>
+                        </div>
+                        <button onClick={() => dispatch({ type: "SET_ACTIVE_TAB", payload: "cards" })} className="btn btn-secondary text-[10px] py-1 px-2">
+                          التفاصيل
+                        </button>
+                      </div>
+                      <div className="flex justify-between items-center mb-2">
+                        <p className="text-base font-black money tabular text-red-600">{fmt(liveDebt)}</p>
+                        <p className="text-[10px] font-bold text-red-500">مديونية حالية</p>
+                      </div>
+                      <div className="w-full rounded-full h-1 overflow-hidden" style={{ background: "var(--bg-muted)" }}>
+                        <div className="bg-red-500 h-full rounded-full" style={{ width: `${Math.min(100, (Math.max(0, liveDebt) / safeNumber(card.limit)) * 100)}%` }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
             {receivables.length > 0 && (
               <div className="space-y-2">
                 <h3 className="font-black text-sm flex items-center gap-2 text-emerald-600">
