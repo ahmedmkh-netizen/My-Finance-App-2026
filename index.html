@@ -7611,8 +7611,11 @@
         const icon = getCategoryIcon(category);
         const isIncome = items[0]?.type === "income";
 
-        return (
-          <div className="lux-card">
+    return (
+      <div className="lux-card" style={{ 
+        borderRightWidth: '4px', 
+        borderRightColor: isIncome ? '#10B981' : '#DC2626' 
+      }}>
             <div
               className="lux-card__header"
               onClick={onToggle}
@@ -7956,7 +7959,12 @@
             dg.total += safeNumber(t.amount);
           });
           return Array.from(catMap.values())
-            .sort((a, b) => b.total - a.total)
+            .sort((a, b) => {
+              const isAIncome = a.items[0]?.type === "income";
+              const isBIncome = b.items[0]?.type === "income";
+              if (isAIncome !== isBIncome) return isAIncome ? 1 : -1;
+              return b.total - a.total;
+            })
             .map((cg) => ({ ...cg, days: Array.from(cg.days.values()).sort((a, b) => b.date.localeCompare(a.date)) }));
         }, [displayedList]);
 
