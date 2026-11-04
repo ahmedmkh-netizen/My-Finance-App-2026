@@ -6634,13 +6634,14 @@
         if (!isCarryoverMarker(tx)) return null;
         return <span className="badge badge-warning" title="قيد ترحيل للمرجع فقط">📌 ترحيل</span>;
       });
-      const CardPaymentBadge = memo(({ tx }) => {
-        if (!tx) return null;
-        if (tx.source === "card-payment-plan" || (tx.linkedCardId && isCardPaymentTx(tx, tx.linkedCardId))) {
-          return <span className="badge badge-success" title="سداد بطاقة">💳 سداد</span>;
-        }
-        return null;
-      });
+        const CardPaymentBadge = memo(({ tx }) => {
+          if (!tx) return null;
+          if (tx.source === "card-payment-plan" || (tx.linkedCardId && isCardPaymentTx(tx, tx.linkedCardId))) {
+            const cardNum = tx.cardLast4 ? ` ••••${tx.cardLast4}` : "";
+            return <span className="badge badge-success" title={`سداد ${tx.cardLast4 ? 'بطاقة ' + tx.cardLast4 : ''}`}>💳 سداد{cardNum}</span>;
+          }
+          return null;
+        });
       const InstallmentBadge = memo(({ tx }) => {
         if (!tx?.installmentPlanId) return null;
         return <span className="badge badge-accent" title="مربوط بخطة تقسيط">📅 تقسيط</span>;
@@ -15292,7 +15293,7 @@ if (paymentStatus === "paid" && sourceBalance < totalDebit - 0.005) return state
               id: paymentId, type: "expense", kind: KIND.FINANCIAL,
               category: "الالتزامات البنكية والتمويلية",
               amount: roundMoney(safeNumber(amount)),
-              description: note || `سداد بطاقة ${card.bank} - ${card.name}`,
+              description: note.trim() ? `${note.trim()} (${card.bank} - ${card.name})` : `سداد بطاقة ${card.bank} - ${card.name}`,
               method: sourceMethod, date, month: txMonth, year: txYear, monthIndex: d.getMonth(),
               subType: "withdrawal", status: paymentStatus,
               source: "card-payment-plan", linkedCardId: card.id,
@@ -15308,7 +15309,7 @@ if (paymentStatus === "paid" && sourceBalance < totalDebit - 0.005) return state
                 id: getSafeId(), type: "expense", kind: KIND.FINANCIAL,
                 category: "رسوم بنكية شهرية",
                 amount: roundMoney(safeNumber(feeAmount)),
-                description: `رسوم سداد بطاقة ${card.bank} - ${card.name}`,
+                description: `رسوم سداد ${card.bank} (على مبلغ ${fmt(amount)})`,
                 method: sourceMethod, date, month: txMonth, year: txYear, monthIndex: d.getMonth(),
                 subType: "withdrawal", status: paymentStatus,
                 source: "card-payment-plan", linkedCardId: card.id, linkedPaymentId: paymentId,
