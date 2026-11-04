@@ -9274,37 +9274,50 @@
               : t
           );
 
-          // 2. إنشاء حركة "دخل" تلقائياً عشان تخصم من الكارت
+          // 2. إنشاء حركة "دخل" تلقائياً
           let newTx = null;
+          
+          // تأكيد إن فيه كارت متسجل في الكاش باك
           if (tracker.cardId) {
-            const card = cards.find(c => c.id === tracker.cardId);
+            // البحث في الكروت باستخدام String عشان نضمن المطابقة
+            const card = (data.cards || []).find(c => String(c.id) === String(tracker.cardId));
+            
             if (card) {
               const now = new Date();
               newTx = {
                 id: getSafeId(),
-                type: "income", // دخل عشان يخصم من المديونية
+                type: "income", 
                 subType: "deposit",
                 kind: "operational",
                 category: "استرداد كاش باك",
                 amount: amount,
                 description: `استلام كاش باك - ${card.bank} ${card.name}`,
-                method: getCardMethod(card),
+                method: getCardMethod(card), // هيجيب aaib_card أو adib_card
                 date: getLocalISODate(now),
                 month: ALL_MONTHS[now.getMonth()],
                 year: now.getFullYear(),
                 monthIndex: now.getMonth(),
                 status: "paid",
                 source: "cashback-auto",
-                linkedCardId: card.id,
+                linkedCardId: card.id, // الربط بالكارت عشان يخصم
                 affectsCardDebt: true,
                 createdAt: now.toISOString()
               };
+              console.log("✅ تم تجهيز حركة الكاش باك:", newTx);
+            } else {
+              console.warn("⚠️ لم يتم العثور على الكارت برقم:", tracker.cardId);
             }
+          } else {
+            console.warn("⚠️ هذا السجل غير مرتبط بأي كارت (كاش باك عام).");
           }
 
-          // 3. الحفظ المزدوج (هنا كان الخطأ، استخدمنا data.transactions)
-          const nextTxs = newTx ? sortTransactions([newTx, ...(data.transactions || [])]) : data.transactions;
+          // 3. دمج الحركة الجديدة مع الحركات القديمة
+          let nextTxs = data.transactions || [];
+          if (newTx) {
+            nextTxs = sortTransactions([newTx, ...nextTxs]);
+          }
           
+          // 4. تحديث الحالة بالكامل
           dispatch({ 
             type: "SET_DATA", 
             payload: { 
@@ -9317,7 +9330,7 @@
           addNotification({ 
             type: "success", 
             title: "تم تسجيل الاستلام", 
-            message: `${fmt(amount)} ج.م ${newTx ? "(وتم خصمها من الكارت تلقائياً)" : ""}` 
+            message: `${fmt(amount)} ج.م ${newTx ? "(وتم خصمها من الكارت تلقائياً ✅)" : "(لم يتم خصمها من الكارت ❌)"}` 
           });
         };
         const handleDelete = (id) => {
