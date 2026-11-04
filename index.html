@@ -14449,8 +14449,11 @@
         const parsedFee = withFee ? parseNumberInput(feeAmount) : 0;
         const totalDebit = parsedAmount + parsedFee;
         const remainingAfter = Math.max(0, liveDebt - parsedAmount);
-        const canSubmit = parsedAmount > 0 && sourceBalance >= totalDebit - 0.005 && selectedCard && parsedAmount <= liveDebt + 0.005;
-
+// ✅ لو الحالة معلقة، بنتخطى شرط رصيد الكاش الحالي
+const canSubmit = parsedAmount > 0 && selectedCard && (
+  paymentStatus !== "paid" || 
+  (sourceBalance >= totalDebit - 0.005 && parsedAmount <= liveDebt + 0.005)
+);
         const setFullAmount = () => liveDebt > 0 && setAmount(String(roundMoney(liveDebt)));
         const setHalfAmount = () => liveDebt > 0 && setAmount(String(roundMoney(liveDebt / 2)));
         const setQuarterAmount = () => liveDebt > 0 && setAmount(String(roundMoney(liveDebt / 4)));
@@ -15281,8 +15284,8 @@
             const balances = computeBalancesAsOf(state.data);
             const sourceBalance = safeNumber(balances[sourceMethod]);
             const totalDebit = safeNumber(amount) + (withFee ? safeNumber(feeAmount) : 0);
-            if (sourceBalance < totalDebit - 0.005) return state;
-
+// ✅ لو معلق، متحققش من رصيد الكاش الحالي
+if (paymentStatus === "paid" && sourceBalance < totalDebit - 0.005) return state;
             const paymentId = getSafeId();
             // ═══ V90 FIX — السداد دائماً يخفض المديونية ═══
             const paymentTx = {
@@ -15324,37 +15327,40 @@
 
             let updatedPlans = state.data.cardInstallments;
             
-            if (linkedPlanId === "AUTO") {
-              // ✨ التوزيع الذكي: بنخصم الأقساط الأول وبعدين الباقي للمديونية
-              let remainingAmount = safeNumber(amount);
-              updatedPlans = (state.data.cardInstallments || []).map((p) => {
-                if (p.cardId !== cardId || p.completed || p.status === "cancelled") return p;
-                
-                if (remainingAmount >= p.monthlyAmount) {
-                  remainingAmount -= p.monthlyAmount;
-                  const newPaid = safeNumber(p.paidAmount) + p.monthlyAmount;
-                  const isCompleted = newPaid >= safeNumber(p.totalAmount) - 0.005;
+            // ✅ لا نحدّث خطط التقسيط إلا لو السداد "معتمد" (مش معلق)
+            if (paymentStatus === "paid" && linkedPlanId) {
+              if (linkedPlanId === "AUTO") {
+                // ✨ التوزيع الذكي: بنخصم الأقساط الأول وبعدين الباقي للمديونية
+                let remainingAmount = safeNumber(amount);
+                updatedPlans = (state.data.cardInstallments || []).map((p) => {
+                  if (p.cardId !== cardId || p.completed || p.status === "cancelled") return p;
+                  
+                  if (remainingAmount >= p.monthlyAmount) {
+                    remainingAmount -= p.monthlyAmount;
+                    const newPaid = safeNumber(p.paidAmount) + p.monthlyAmount;
+                    const isCompleted = newPaid >= safeNumber(p.totalAmount) - 0.005;
+                    return {
+                      ...p, paidAmount: newPaid,
+                      status: isCompleted ? "completed" : p.status,
+                      completedAt: isCompleted ? new Date().toISOString() : p.completedAt,
+                    };
+                  }
+                  return p;
+                });
+              } else {
+                // السداد العادي المرتبط بخطة واحدة
+                updatedPlans = (state.data.cardInstallments || []).map((p) => {
+                  if (p.id !== linkedPlanId) return p;
+                  const newPaid = safeNumber(p.paidAmount) + safeNumber(amount);
+                  const total = safeNumber(p.totalAmount);
+                  const isCompleted = newPaid >= total - 0.005;
                   return {
                     ...p, paidAmount: newPaid,
                     status: isCompleted ? "completed" : p.status,
                     completedAt: isCompleted ? new Date().toISOString() : p.completedAt,
                   };
-                }
-                return p;
-              });
-            } else if (linkedPlanId) {
-              // السداد العادي المرتبط بخطة واحدة
-              updatedPlans = (state.data.cardInstallments || []).map((p) => {
-                if (p.id !== linkedPlanId) return p;
-                const newPaid = safeNumber(p.paidAmount) + safeNumber(amount);
-                const total = safeNumber(p.totalAmount);
-                const isCompleted = newPaid >= total - 0.005;
-                return {
-                  ...p, paidAmount: newPaid,
-                  status: isCompleted ? "completed" : p.status,
-                  completedAt: isCompleted ? new Date().toISOString() : p.completedAt,
-                };
-              });
+                });
+              }
             }
             try { _balanceCache.clear(); } catch (e) {}
 
