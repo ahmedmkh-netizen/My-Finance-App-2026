@@ -6637,8 +6637,13 @@
         const CardPaymentBadge = memo(({ tx }) => {
           if (!tx) return null;
           if (tx.source === "card-payment-plan" || (tx.linkedCardId && isCardPaymentTx(tx, tx.linkedCardId))) {
-            const cardNum = tx.cardLast4 ? ` ••••${tx.cardLast4}` : "";
-            return <span className="badge badge-success" title={`سداد ${tx.cardLast4 ? 'بطاقة ' + tx.cardLast4 : ''}`}>💳 سداد{cardNum}</span>;
+            let cardNum = tx.cardLast4;
+            if (!cardNum && tx.linkedCardId) {
+              const c = DEFAULT_CARDS.find(x => x.id === tx.linkedCardId);
+              if (c) cardNum = c.last4;
+            }
+            const display = cardNum ? ` ••••${cardNum}` : "";
+            return <span className="badge badge-success" title="سداد بطاقة">💳 سداد{display}</span>;
           }
           return null;
         });
@@ -15293,7 +15298,7 @@ if (paymentStatus === "paid" && sourceBalance < totalDebit - 0.005) return state
               id: paymentId, type: "expense", kind: KIND.FINANCIAL,
               category: "الالتزامات البنكية والتمويلية",
               amount: roundMoney(safeNumber(amount)),
-              description: note.trim() ? `${note.trim()} (${card.bank} - ${card.name})` : `سداد بطاقة ${card.bank} - ${card.name}`,
+              description: note.trim() ? `سداد: ${note.trim()} (${card.bank} ••••${card.last4})` : `سداد بطاقة ${card.bank} ••••${card.last4}`,
               method: sourceMethod, date, month: txMonth, year: txYear, monthIndex: d.getMonth(),
               subType: "withdrawal", status: paymentStatus,
               source: "card-payment-plan", linkedCardId: card.id,
@@ -15304,18 +15309,19 @@ if (paymentStatus === "paid" && sourceBalance < totalDebit - 0.005) return state
 
             const newTxs = [paymentTx];
 
-            if (withFee && safeNumber(feeAmount) > 0) {
-              newTxs.push({
-                id: getSafeId(), type: "expense", kind: KIND.FINANCIAL,
-                category: "رسوم بنكية شهرية",
-                amount: roundMoney(safeNumber(feeAmount)),
-                description: `رسوم سداد ${card.bank} (على مبلغ ${fmt(amount)})`,
-                method: sourceMethod, date, month: txMonth, year: txYear, monthIndex: d.getMonth(),
-                subType: "withdrawal", status: paymentStatus,
-                source: "card-payment-plan", linkedCardId: card.id, linkedPaymentId: paymentId,
-                createdAt: new Date().toISOString(),
-              });
-            }
+if (withFee && safeNumber(feeAmount) > 0) {
+  newTxs.push({
+    id: getSafeId(), type: "expense", kind: KIND.FINANCIAL,
+    category: "رسوم بنكية شهرية",
+    amount: roundMoney(safeNumber(feeAmount)),
+    description: `رسوم سداد ${card.bank} ••••${card.last4} (على مبلغ ${fmt(amount)})`,
+    method: sourceMethod, date, month: txMonth, year: txYear, monthIndex: d.getMonth(),
+    subType: "withdrawal", status: paymentStatus,
+    source: "card-payment-plan", linkedCardId: card.id, linkedPaymentId: paymentId,
+    cardLast4: card.last4,    
+    createdAt: new Date().toISOString(),
+  });
+}
 
             const allTxs = sortTransactions([...newTxs, ...(state.data.transactions || [])]);
             const auditEntries = [
@@ -17390,8 +17396,21 @@ if (paymentStatus === "paid" && sourceBalance < totalDebit - 0.005) return state
                     </div>
 
                     <form data-form="main" onSubmit={handleSaveTransaction} className="form-scrollable flex-1" style={{ minHeight: 0 }}>
-                      <div className="p-3 space-y-3">
-                        {!isOnline && (
+<div className="p-3 space-y-3">
+  {(formData.source === "card-payment-plan" || formData.linkedCardId) && (
+    <div className="p-2.5 rounded-xl bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900 flex items-start gap-2">
+      <Info size={14} className="text-blue-600 mt-0.5 flex-shrink-0" />
+      <div className="flex-1">
+        <p className="text-[11px] font-bold text-blue-700 dark:text-blue-400">
+          سداد بطاقة: {formData.linkedCardId ? (DEFAULT_CARDS.find(c => c.id === formData.linkedCardId)?.name || 'كارت') : 'كارت غير معروف'}
+        </p>
+        <p className="text-[10px] text-blue-600 dark:text-blue-400 mt-0.5">
+          راجع التاريخ والمبلغ، ولا تغيّر الحساب المصدر إلا لو دفعت من حساب تاني.
+        </p>
+      </div>
+    </div>
+  )}
+  {!isOnline && (
                           <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 flex items-center gap-2">
                             <Wifi size={14} className="text-amber-600" />
                             <span className="text-[11px] font-bold text-amber-700 dark:text-amber-400">أنت غير متصل — سيتم الحفظ محلياً</span>
