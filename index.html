@@ -9257,10 +9257,13 @@
           if (amountStr === null) return;
           const amount = parseNumberInput(amountStr);
           if (amount <= 0) { addNotification({ type: "error", title: "أدخل مبلغ صالح" }); return; }
+          
           saveHistory();
           const newReceived = safeNumber(tracker.receivedAmount) + amount;
           const isComplete = newReceived >= safeNumber(tracker.expectedAmount) - 0.005;
-          const updated = (data.cashbackTrackers || []).map((t) =>
+          
+          // 1. تحديث سجل الكاش باك
+          const updatedTrackers = (data.cashbackTrackers || []).map((t) =>
             t.id === tracker.id
               ? {
                   ...t,
@@ -9268,10 +9271,54 @@
                   status: isComplete ? "received" : "partial",
                   receivedAt: isComplete ? new Date().toISOString() : t.receivedAt,
                 }
-              : t,
+              : t
           );
-          dispatch({ type: "UPDATE_CASHBACK_TRACKERS", payload: updated });
-          addNotification({ type: "success", title: "تم تسجيل الاستلام", message: fmt(amount) + " ج.م" });
+
+          // 2. إنشاء حركة "دخل" تلقائياً عشان تخصم من الكارت
+          let newTx = null;
+          if (tracker.cardId) {
+            const card = cards.find(c => c.id === tracker.cardId);
+            if (card) {
+              const now = new Date();
+              newTx = {
+                id: getSafeId(),
+                type: "income", // دخل عشان يخصم من المديونية
+                subType: "deposit",
+                kind: "operational",
+                category: "استرداد كاش باك",
+                amount: amount,
+                description: `استلام كاش باك - ${card.bank} ${card.name}`,
+                method: getCardMethod(card),
+                date: getLocalISODate(now),
+                month: ALL_MONTHS[now.getMonth()],
+                year: now.getFullYear(),
+                monthIndex: now.getMonth(),
+                status: "paid",
+                source: "cashback-auto",
+                linkedCardId: card.id,
+                affectsCardDebt: true,
+                createdAt: now.toISOString()
+              };
+            }
+          }
+
+          // 3. الحفظ المزدوج (تحديث سجل الكاش باك + إضافة الحركة)
+          const nextTxs = newTx ? sortTransactions([newTx, ...(transactions || [])]) : transactions;
+          
+          dispatch({ 
+            type: "SET_DATA", 
+            payload: { 
+              ...data, 
+              cashbackTrackers: updatedTrackers, 
+              transactions: nextTxs 
+            } 
+          });
+          
+          addNotification({ 
+            type: "success", 
+            title: "تم تسجيل الاستلام", 
+            message: `${fmt(amount)} ج.م ${newTx ? "(وخصمها من الكارت تلقائياً)" : ""}` 
+          });
         };
 
         const handleDelete = (id) => {
@@ -9288,7 +9335,6 @@
             onCancel: () => dispatch({ type: "HIDE_CONFIRM" }),
           });
         };
-
         return (
           <div className="space-y-3 animate-fadeIn">
             <div className="card" style={{ background: "linear-gradient(135deg, rgba(16,185,129,0.1), rgba(5,150,105,0.05))", borderColor: "rgba(16,185,129,0.3)" }}>
