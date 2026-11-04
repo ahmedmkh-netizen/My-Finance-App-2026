@@ -13748,7 +13748,7 @@
       });
 
       /* ═══════════════ SETTINGS VIEW ═══════════════ */
-      const SettingsView = memo(({ data, accountsData, cards, budgets, dispatch, saveHistory, addNotification, onResetPersonalData }) => {
+      const SettingsView = memo(({ data, accountsData, cards, budgets, dispatch, saveHistory, addNotification, onResetPersonalData, autoRemindersEnabled, onToggleAutoReminders }) => {
         const [localAccounts, setLocalAccounts] = useState(() => JSON.parse(JSON.stringify(accountsData)));
         const [localCards, setLocalCards] = useState(() => cards.map((c) => ({ ...c })));
         const [activeSection, setActiveSection] = useState("accounts");
@@ -14092,7 +14092,53 @@
                 </button>
               </div>
             )}
+<div className="card">
+  <div className="flex items-center gap-2 mb-3">
+    <div className="p-2 rounded-lg bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400">
+      <Bell size={14} />
+    </div>
+    <h3 className="font-black text-sm">التنبيهات التلقائية</h3>
+  </div>
+  <p className="text-[11px] mb-3 leading-relaxed" style={{ color: "var(--text-muted)" }}>
+    تحكم في الإشعارات اللي التطبيق بيظهرها تلقائياً:
+    <br />• ⏰ استحقاق البطاقات (5 أيام قبل)
+    <br />• 🔁 الحركات المتكررة
+    <br />• 🔮 تنبيهات التنبؤات
+  </p>
 
+  <div
+    className={`fee-toggle-row ${autoRemindersEnabled ? "active" : ""}`}
+    onClick={() => onToggleAutoReminders?.(!autoRemindersEnabled)}
+    style={{ cursor: "pointer" }}
+  >
+    <div className="flex items-center gap-2">
+      <Bell size={16} style={{ color: autoRemindersEnabled ? "var(--success)" : "var(--text-muted)" }} />
+      <div>
+        <p className="text-xs font-black">
+          {autoRemindersEnabled ? "مفعّلة" : "متوقفة"}
+        </p>
+        <p className="text-[10px]" style={{ color: "var(--text-muted)" }}>
+          {autoRemindersEnabled ? "هتستلم تنبيهات استحقاق البطاقات" : "مش هتستلم أي تنبيهات تلقائية"}
+        </p>
+      </div>
+    </div>
+    <div
+      className={`w-12 h-6 rounded-full transition-all relative flex-shrink-0 ${
+        autoRemindersEnabled ? "bg-emerald-500" : "bg-slate-300 dark:bg-slate-600"
+      }`}
+    >
+      <div
+        className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all ${
+          autoRemindersEnabled ? "right-0.5" : "left-0.5"
+        }`}
+      />
+    </div>
+  </div>
+
+  <p className="text-[10px] mt-2 leading-relaxed" style={{ color: "var(--text-muted)" }}>
+    💡 <strong>ملحوظة:</strong> رسائل التأكيد والأخطاء (زي "تم الحفظ") هتفضل شغالة دايمًا.
+  </p>
+</div>
             <div className="card">
               <div className="flex items-center gap-2 mb-3">
                 <div className="p-2 rounded-lg bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400"><Lock size={14} /></div>
@@ -15832,7 +15878,21 @@ if (withFee && safeNumber(feeAmount) > 0) {
           hanySettleModal: null,
           printModal: null,
         });
+// ═══════════ إعدادات التنبيهات ═══════════
+const [autoRemindersEnabled, setAutoRemindersEnabled] = useState(() => {
+  const v = localStorage.getItem("v91_auto_reminders_enabled");
+  return v === null ? true : v === "true";
+});
 
+const handleToggleAutoReminders = useCallback((v) => {
+  setAutoRemindersEnabled(v);
+  try { localStorage.setItem("v91_auto_reminders_enabled", v ? "true" : "false"); } catch (e) {}
+  addNotification({
+    type: v ? "success" : "info",
+    title: v ? "🔔 التنبيهات التلقائية مفعّلة" : "🔕 التنبيهات التلقائية متوقفة",
+    duration: 3000,
+  });
+}, [addNotification]);
         const [showAllHanyItems, setShowAllHanyItems] = useState(false);
         const [showQuickAddSheet, setShowQuickAddSheet] = useState(false);
         const [showMoreSheet, setShowMoreSheet] = useState(false);
@@ -16173,7 +16233,74 @@ if (withFee && safeNumber(feeAmount) > 0) {
             prevOnlineRef.current = isOnline;
           }
         }, [isOnline, addNotification, cloudSyncStatus]);
+// ═══════════ إشعارات استحقاق البطاقات (5 أيام قبل السداد) ═══════════
+const CARD_DUE_ALERT_LS_KEY = "v91_card_due_alert_ts";
 
+useEffect(() => {
+  if (!isAuthenticated || !pinVerified) return;
+  if (!autoRemindersEnabled) return;
+  if (!data?.cards?.length) return;
+  if (cloudSyncStatus === "pending") return;
+
+  const todayISO = getLocalISODate();
+  const notified = safeParseJson(localStorage.getItem(CARD_DUE_ALERT_LS_KEY), {});
+  const newNotified = { ...notified };
+  const alertsToShow = [];
+
+  (data.cards || []).forEach((card) => {
+    try {
+      const pred = computeCardPaymentPrediction(data, card);
+      if (!pred || pred.totalMandatory <= 0.01) return;
+      if (pred.daysUntilDue === null) return;
+      if (pred.daysUntilDue > 5) return;
+
+      const alertKey = `card_${card.id}_${pred.nextDueDateISO || "unknown"}_${todayISO}`;
+      if (notified[alertKey]) return;
+
+      const cardLabel = `${card.bank} ••••${card.last4}`;
+      let title, message, type;
+
+      if (pred.daysUntilDue < 0) {
+        title = `⚠️ سداد متأخر — ${cardLabel}`;
+        message = `متأخر ${Math.abs(pred.daysUntilDue)} يوم\nالمطلوب: ${fmt(pred.totalMandatory)} ج.م`;
+        type = "error";
+      } else if (pred.daysUntilDue === 0) {
+        title = `🔴 سداد اليوم — ${cardLabel}`;
+        message = `المطلوب: ${fmt(pred.totalMandatory)} ج.م\nالحد الأدنى: ${fmt(pred.minPayment)} ج.م`;
+        type = "warning";
+      } else {
+        title = `⏰ سداد قريب — ${cardLabel}`;
+        message = `باقي ${pred.daysUntilDue} يوم (${pred.nextDueDateISO})\nالمطلوب: ${fmt(pred.totalMandatory)} ج.م\nالحد الأدنى: ${fmt(pred.minPayment)} ج.م`;
+        type = "warning";
+      }
+
+      alertsToShow.push({ title, message, type, key: alertKey });
+      newNotified[alertKey] = Date.now();
+    } catch (e) {
+      console.warn("Card due alert error:", e);
+    }
+  });
+
+  if (alertsToShow.length > 0) {
+    const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+    Object.keys(newNotified).forEach((k) => {
+      if (newNotified[k] < cutoff) delete newNotified[k];
+    });
+    try { localStorage.setItem(CARD_DUE_ALERT_LS_KEY, JSON.stringify(newNotified)); } catch (e) {}
+
+    alertsToShow.forEach((alert, i) => {
+      setTimeout(() => {
+        addNotification({
+          type: alert.type,
+          title: alert.title,
+          message: alert.message,
+          duration: 15000,
+        });
+      }, 600 + i * 700);
+    });
+  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [isAuthenticated, pinVerified, autoRemindersEnabled, cloudSyncStatus, data?.cards?.length, data?.transactions?.length]);
         const cancelProcessing = useCallback(() => {
           if (processingTimeoutRef.current) { clearTimeout(processingTimeoutRef.current); processingTimeoutRef.current = null; }
           saveLockRef.current = false;
@@ -17220,6 +17347,8 @@ if (withFee && safeNumber(feeAmount) > 0) {
                   budgets={budgets} dispatch={dispatch} saveHistory={saveHistory}
                   addNotification={addNotification}
                   onResetPersonalData={handleResetPersonalData}
+                        autoRemindersEnabled={autoRemindersEnabled}     
+      onToggleAutoReminders={handleToggleAutoReminders}   
                 />
               );
             default:
