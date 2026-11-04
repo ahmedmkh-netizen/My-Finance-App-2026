@@ -12074,10 +12074,16 @@
             }
             return true;
           });
+          
           const income = active.filter((r) => r.type === "income").reduce((s, r) => s + safeNumber(r.amount), 0);
-          const cashExpense = active.filter((r) => r.type === "expense" && !CREDIT_CARD_METHOD_IDS.includes(r.method) && !isHanyShopCategory(r.category)).reduce((s, r) => s + safeNumber(r.amount), 0);
+          
+          // ✅ فصل القروض عن الكاش
+          const isLoanItem = (r) => r.category === "الالتزامات البنكية والتمويلية" || (r.category && r.category.includes("قرض"));
+          const loanInstallment = active.filter((r) => r.type === "expense" && isLoanItem(r)).reduce((s, r) => s + safeNumber(r.amount), 0);
+          const cashExpense = active.filter((r) => r.type === "expense" && !CREDIT_CARD_METHOD_IDS.includes(r.method) && !isHanyShopCategory(r.category) && !isLoanItem(r)).reduce((s, r) => s + safeNumber(r.amount), 0);
           const cardSpend = active.filter((r) => r.type === "expense" && CREDIT_CARD_METHOD_IDS.includes(r.method)).reduce((s, r) => s + safeNumber(r.amount), 0);
-          return { income, cashExpense, cardSpend };
+          
+          return { income, cashExpense, cardSpend, loanInstallment };
         }, [recurringItems]);
 
         const forecast = useMemo(() => {
@@ -12132,7 +12138,7 @@
               cashExp = flows.pendingCashExpense > 0.01 ? flows.pendingCashExpense : includePlanned ? plannedCashExp > 0 ? plannedCashExp : recurringAgg.cashExpense : recurringAgg.cashExpense;
               cardSpend = flows.pendingCardSpending > 0.01 ? flows.pendingCardSpending : recurringAgg.cardSpend;
               cardPay = flows.pendingCardPayment || baseCardPayment;
-              loanInst = flows.pendingLoanInstallment || activeLoanInstallments;
+              loanInst = flows.pendingLoanInstallment || activeLoanInstallments || recurringAgg.loanInstallment || 0;
               const plannedHanyP = safeNumber(p.expectedHanyPurchases);
               hanyPurchase = flows.pendingHanyPurchase > 0.01 ? flows.pendingHanyPurchase : plannedHanyP > 0 ? plannedHanyP : baseHanyPurchase;
               hanySettle = flows.pendingHanySettle > 0.01 ? flows.pendingHanySettle : autoAverages.hanySettle > 0 ? Math.min(autoAverages.hanySettle, hanyPayable + hanyPurchase) : 0;
