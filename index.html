@@ -3246,7 +3246,6 @@ const getCycleRange = (card, cycleKey) => {
         const allTxs = (data?.transactions || [])
           .filter((t) => {
             if (!t || t.status !== "paid") return false;
-            if (t.installmentPlanId) return false;
             if (t.source === "void" || t.source === "carryover" || isCarryoverMarker(t)) return false;
             if (t.source === "card-forecast") return false;
             if (isHanyPurchaseTx(t) || isHanySettleTx(t)) return false;
@@ -3325,9 +3324,24 @@ const getCycleRange = (card, cycleKey) => {
             return ts >= cycleStartTs && ts <= cycleEndTs;
           });
 
-          const purchases = cycleTxs
-            .filter((t) => t.type === "expense" && !isCardPaymentTx(t, card.id))
-            .reduce((s, t) => s + safeNumber(t.amount), 0);
+// حساب مشتريات الدورة (عادية + أقساط)
+let purchases = 0;
+cycleTxs.forEach(t => {
+    if (isCardPaymentTx(t, card.id)) return; // تجاهل السداد
+    if (t.installmentPlanId) {
+        // لو الحركة مرتبطة بخطة، نضيف قسط الشهر فقط (وليس المبلغ كامل)
+        const plan = instInfo.plans.find(p => p.id === t.installmentPlanId);
+        if (plan && isPlanDueInCycle(plan, cycleKey, dueDate)) {
+            purchases += safeNumber(plan.monthlyAmount);
+        }
+    } else if (t.type === "expense") {
+        // شراء عادي
+        purchases += safeNumber(t.amount);
+    } else if (t.type === "income") {
+        // مرتجع
+        purchases -= safeNumber(t.amount);
+    }
+});
           const refunds = cycleTxs
             .filter((t) => t.type === "income" && !isCardPaymentTx(t, card.id))
             .reduce((s, t) => s + safeNumber(t.amount), 0);
