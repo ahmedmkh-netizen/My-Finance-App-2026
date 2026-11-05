@@ -15403,8 +15403,11 @@ if (withFee && safeNumber(feeAmount) > 0) {
     description: `رسوم سداد ${card.bank} ••••${card.last4} (على مبلغ ${fmt(amount)})`,
     method: sourceMethod, date, month: txMonth, year: txYear, monthIndex: d.getMonth(),
     subType: "withdrawal", status: paymentStatus,
-    source: "card-payment-plan", linkedCardId: card.id, linkedPaymentId: paymentId,
-    cardLast4: card.last4,    
+    // ═══ V91 FIX — الرسوم تُخصم من الحساب المصدر فقط (CIB)، لا تُخصم من الكارت ═══
+    source: "card-payment-fee",       // ← مش "card-payment-plan" عشان classifyFlow يعتبرها bank fee
+    linkedPaymentId: paymentId,        // ← مرجع للحركة الأصلية (للتدقيق فقط، لا تأثير محاسبي)
+    cardLast4: card.last4,             // ← للعرض في الواجهة
+    // ❌ بدون linkedCardId — عشان isCardPaymentTx ترجع false
     createdAt: new Date().toISOString(),
   });
 }
