@@ -16128,54 +16128,71 @@ const handleToggleAutoReminders = useCallback((v) => {
           if (!isAuthenticated) return;
           const innerDocRef = db.collection(FIREBASE_DOC_PATH.collection).doc(FIREBASE_DOC_PATH.doc);
 
+          // ═══ V91 — timeout: لو السيرفر اتأخر، نعرض البيانات المحلية
+          // ⚠️ لا نلمس hasReceivedInitialSnapshot — نتركه false عشان لما السيرفر يجي ياخدها
           initialSnapshotTimeoutRef.current = setTimeout(() => {
             if (!hasReceivedInitialSnapshot.current) {
-              console.warn("⚠️ Firestore اتأخر — استخدام localStorage");
-              hasReceivedInitialSnapshot.current = true;
+              console.warn("⚠️ Firestore اتأخر — عرض البيانات المحلية مؤقتاً");
               setCloudSyncStatus("offline");
             }
           }, 8000);
 
+          // ═══ V91 FIX — includeMetadataChanges عشان نفرّق بين cache و server
           const unsub = innerDocRef.onSnapshot(
+            { includeMetadataChanges: true },
             (doc) => {
-              const isFirst = !hasReceivedInitialSnapshot.current;
-              if (isFirst) {
+              const isFromServer = !doc.metadata.fromCache;
+
+              // ═══ V91 FIX #1 — نتخطى الكاش نهائياً (يمكن يكون فيه بيانات قديمة محذوفة) ═══
+              if (!isFromServer) {
+                console.log("⏭️ تخطي snapshot من الكاش — في انتظار بيانات السيرفر");
+                return;
+              }
+
+              const isFirstServerData = !hasReceivedInitialSnapshot.current;
+              if (isFirstServerData) {
                 hasReceivedInitialSnapshot.current = true;
-                if (initialSnapshotTimeoutRef.current) { clearTimeout(initialSnapshotTimeoutRef.current); initialSnapshotTimeoutRef.current = null; }
+                if (initialSnapshotTimeoutRef.current) {
+                  clearTimeout(initialSnapshotTimeoutRef.current);
+                  initialSnapshotTimeoutRef.current = null;
+                }
                 setCloudSyncStatus("ready");
+                console.log("✅ استلمنا بيانات السيرفر (المصدر الموثوق)");
               }
 
               if (doc.exists) {
                 const raw = doc.data();
                 let migrated = migrateData(raw);
 
-                const permanentDeleted = new Set([
-                  ...(migrated.deletedTxIds || []),
-                  ...currentTxRef.current.filter((t) => t?._deleted).map((t) => t.id),
-                ]);
-                migrated.transactions = (migrated.transactions || []).filter((t) => !t?.id || !permanentDeleted.has(t.id));
+                // ═══ V91 FIX #2 — deletedTxIds من السحابة هو المرجع النهائي للحذف ═══
+                const permanentDeleted = new Set(migrated.deletedTxIds || []);
+                migrated.transactions = (migrated.transactions || [])
+                  .filter((t) => !t?.id || !permanentDeleted.has(t.id));
 
+                // ═══ V91 FIX #3 — نافذة 15 ثانية فقط (بدل 5 دقائق) ═══
+                // لحماية القيود اللي المستخدم لسه منشئها على نفس الجهاز
                 const remoteIds = new Set(migrated.transactions.map((t) => t.id));
-                const localOnly = currentTxRef.current.filter((t) => t?.id && !remoteIds.has(t.id) && !permanentDeleted.has(t.id));
-
+                const localOnly = currentTxRef.current.filter(
+                  (t) => t?.id && !remoteIds.has(t.id) && !permanentDeleted.has(t.id)
+                );
                 const now = Date.now();
                 const localOnlyToUpload = localOnly.filter((t) => {
                   if (!t.createdAt) return false;
                   const age = now - new Date(t.createdAt).getTime();
-                  return age >= 0 && age < 300000;
+                  return age >= 0 && age < 15000;
                 });
 
                 if (localOnlyToUpload.length > 0) {
-                  console.log(`📤 ${localOnlyToUpload.length} قيد محلي جديد — جاري رفعه للسحابة`);
+                  console.log(`📤 ${localOnlyToUpload.length} قيد محلي حديث (أقل من 15ث) — سيُرفع`);
                   migrated.transactions = sortTransactions([...migrated.transactions, ...localOnlyToUpload]);
-                  setTimeout(() => queueCloudSave(migrated, { silent: true }), 800);
+                  setTimeout(() => queueCloudSave(migrated, { silent: true }), 500);
                 }
 
                 const incoming = JSON.stringify(migrated);
                 const localTxHash = (currentTxRef.current || []).map((t) => `${t.id}:${t.status}:${t.amount}`).join("|");
                 const remoteTxHash = (migrated.transactions || []).map((t) => `${t.id}:${t.status}:${t.amount}`).join("|");
 
-                if (localTxHash === remoteTxHash && !isFirst) return;
+                if (localTxHash === remoteTxHash && !isFirstServerData) return;
                 lastRemoteRef.current = incoming;
 
                 if (raw.budgets && typeof raw.budgets === "object") {
@@ -16183,8 +16200,8 @@ const handleToggleAutoReminders = useCallback((v) => {
                 }
 
                 dispatch({ type: "SET_DATA", payload: migrated });
-                if (isFirst) console.log("☁️ تم استقبال البيانات من Firestore (أول تحميل)");
-              } else if (isFirst) {
+                if (isFirstServerData) console.log("☁️ تم استقبال البيانات من Firestore (المصدر الموثوق)");
+              } else if (isFirstServerData) {
                 console.log("📤 Firestore فاضي — أول استخدام");
               }
             },
