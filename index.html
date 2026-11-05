@@ -3324,31 +3324,22 @@ const getCycleRange = (card, cycleKey) => {
             return ts >= cycleStartTs && ts <= cycleEndTs;
           });
 
-// حساب مشتريات الدورة (عادية + أقساط)
-let purchases = 0;
-cycleTxs.forEach(t => {
-    if (isCardPaymentTx(t, card.id)) return; // تجاهل السداد
-    if (t.installmentPlanId) {
-        // لو الحركة مرتبطة بخطة، نضيف قسط الشهر فقط (وليس المبلغ كامل)
-        const plan = instInfo.plans.find(p => p.id === t.installmentPlanId);
-        if (plan && isPlanDueInCycle(plan, cycleKey, dueDate)) {
-            purchases += safeNumber(plan.monthlyAmount);
-        }
-    } else if (t.type === "expense") {
-        // شراء عادي
-        purchases += safeNumber(t.amount);
-    } else if (t.type === "income") {
-        // مرتجع
-        purchases -= safeNumber(t.amount);
-    }
-});
+          // ═══ V91 FIX — حساب مشتريات الدورة (بشكل صحيح) ═══
+          // 1. نضيف المبلغ الكامل للشراء (سواء كان عادي أو مرتبط بخطة تقسيط) 
+          // لأن رصيد الكشف يجب أن يعكس المديونية الإجمالية الحقيقية.
+          const purchases = cycleTxs
+            .filter((t) => t.type === "expense" && !isCardPaymentTx(t, card.id))
+            .reduce((s, t) => s + safeNumber(t.amount), 0);
+
+          // 2. المرتجعات
           const refunds = cycleTxs
             .filter((t) => t.type === "income" && !isCardPaymentTx(t, card.id))
             .reduce((s, t) => s + safeNumber(t.amount), 0);
+
+          // 3. السدادات
           const paymentsInCycle = cycleTxs
             .filter((t) => isCardPaymentTx(t, card.id))
             .reduce((s, t) => s + safeNumber(t.amount), 0);
-
           // ═══ V90 — الأقساط المستحقة في هذه الدورة (لكل خطة نشطة) ═══
           let installmentsDueThisCycle = 0;
           const dueMonthIdx = dueDate.getMonth();
