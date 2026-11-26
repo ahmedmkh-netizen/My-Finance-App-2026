@@ -6394,7 +6394,7 @@ const getCycleRange = (card, cycleKey) => {
 
         const handleDigit = useCallback((d) => {
           if (pin.length >= 4 || success) return;
-          const next = pin + d;
+          const next = (pin + d).slice(0, 4);
           setPin(next);
           setLastPressed(d);
           if (navigator.vibrate) navigator.vibrate(8);
@@ -6432,8 +6432,9 @@ const getCycleRange = (card, cycleKey) => {
         useEffect(() => {
           const handleKeyDown = (e) => {
             if (success) return;
-            if (e.key >= "0" && e.key <= "9") handleDigit(e.key);
-            else if (e.key === "Backspace") handleDelete();
+if (e.target && e.target.tagName === "INPUT") return;
+if (e.key >= "0" && e.key <= "9") handleDigit(e.key);
+                        else if (e.key === "Backspace") handleDelete();
           };
           window.addEventListener("keydown", handleKeyDown);
           return () => window.removeEventListener("keydown", handleKeyDown);
@@ -6480,7 +6481,9 @@ const getCycleRange = (card, cycleKey) => {
                   ></div>
                 ))}
               </div>
-
+<input type="password" inputMode="numeric" maxLength={4} autoComplete="off" placeholder="الرمز"
+  onChange={(e) => { const v = e.target.value.replace(/\D/g, ""); e.target.value = ""; if (v) handleDigit(v); }}
+  className="w-full mb-4 p-3 rounded-xl text-center text-white bg-white/10 border border-white/20" />
               <div className="grid grid-cols-3 gap-3 w-full mb-6">
                 {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((d) => (
                   <button
