@@ -653,6 +653,13 @@ body.dark .item .star-btn{background:rgba(13,21,36,.85)}
 .amount-cur{font-size:15px;font-weight:900;color:var(--accent);white-space:nowrap}
 .auto-badge{position:absolute;top:8px;right:12px;background:linear-gradient(135deg,var(--warning),#B45309);color:#fff;font-size:9.5px;font-weight:900;padding:3px 9px;border-radius:999px;display:none;align-items:center;gap:4px;box-shadow:0 4px 12px rgba(217,119,6,.3)}
 .auto-badge.show{display:inline-flex}
+.qty-chip{display:inline-block;background:var(--accent-soft,var(--bg-muted));color:var(--accent);border-radius:8px;padding:1px 7px;font-size:12px;font-weight:800;margin-inline-start:4px}
+.qty-row{display:flex;align-items:center;gap:10px;margin:-2px 0 12px;padding:8px 12px;background:var(--bg-muted);border-radius:12px}
+.qty-lbl{font-weight:700;font-size:13px;color:var(--text-secondary)}
+.qty-btn{width:36px;height:36px;min-height:36px;border-radius:50%;border:1px solid var(--border-default);background:var(--bg-card);color:var(--text-primary);font-size:20px;line-height:1;font-weight:700;cursor:pointer;padding:0}
+.qty-btn:active{background:var(--accent);color:#fff}
+.qty-num{min-width:26px;text-align:center;font-weight:800;font-size:17px;color:var(--text-primary)}
+.qty-cap{margin-inline-start:auto;font-size:13px;font-weight:700;color:var(--accent)}
 .amount-clear{position:absolute;top:8px;left:12px;width:32px;height:32px;border-radius:50%;background:var(--bg-card);border:1px solid var(--border-default);color:var(--text-muted);display:none;align-items:center;justify-content:center;cursor:pointer;transition:all .15s;min-height:32px}
 .amount-clear svg{width:13px;height:13px}
 .amount-box.has-value .amount-clear{display:flex}
@@ -1409,6 +1416,13 @@ button:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-off
           <input type="text" inputmode="decimal" class="amount-num" id="amount" placeholder="0">
           <span class="amount-cur">ج.م</span>
         </div>
+        <div class="qty-row" id="qtyRow">
+          <span class="qty-lbl">العدد</span>
+          <button class="qty-btn" id="qtyMinus" type="button" aria-label="أقل">−</button>
+          <span class="qty-num" id="qtyNum">1</span>
+          <button class="qty-btn" id="qtyPlus" type="button" aria-label="أكثر">+</button>
+          <span class="qty-cap" id="qtyCap"></span>
+        </div>
         <div class="quick" id="quick">
           <button class="quick-btn" data-v="5">5</button>
           <button class="quick-btn" data-v="8">8</button>
@@ -2152,6 +2166,21 @@ function updateAmountClearBtn(){
   if(!a||!b)return;
   if(a.value.trim()!=='')b.classList.add('has-value');else b.classList.remove('has-value');
 }
+var txQty=1;
+function qtyRender(){
+  var n=document.getElementById('qtyNum'),c=document.getElementById('qtyCap'),a=parseFloat((document.getElementById('amount')||{}).value);
+  if(!n)return;
+  n.textContent=String(txQty);
+  if(txQty>1&&a>0){c.textContent=txQty+' × '+fmt(Math.round(a/txQty*100)/100)+' = '+fmt(a);}else c.textContent='';
+}
+/* تغيير العدد بيحافظ على سعر الوحدة ويحدّث الإجمالي (المبلغ دايماً هو الإجمالي) */
+function qtyStep(d){
+  var nq=Math.min(99,Math.max(1,txQty+d));if(nq===txQty)return;
+  var inp=document.getElementById('amount'),a=parseFloat(inp.value);
+  if(a>0){inp.value=String(Math.round(a/txQty*nq*100)/100);updateAmountClearBtn();}
+  txQty=nq;qtyRender();
+}
+function qtyReset(){txQty=1;qtyRender();}
 function clearAutoPrice(){
   amountAutoFilled=false;
   var b=document.getElementById('amountBox'),a=document.getElementById('autoBadge');
@@ -2167,7 +2196,7 @@ function applyAutoPrice(itemName,force){
   if(price!==null){
     var cur=amountInput.value.trim();
     if(!cur||amountAutoFilled||force){
-      amountInput.value=String(price);
+      amountInput.value=String(Math.round(price*txQty*100)/100);
       amountAutoFilled=true;
       amountBox.classList.add('auto-filled');
       autoBadge.classList.add('show');
@@ -2179,7 +2208,7 @@ function applyAutoPrice(itemName,force){
     autoBadge.classList.remove('show');
     hideHanyBadge();
   }
-  updateAmountClearBtn();
+  updateAmountClearBtn();qtyRender();
 }
 
 /* ✨ v9.0: Custom Date */
@@ -2679,7 +2708,7 @@ function famApplyOp(d, op){
       var origAmt=o.originalAmount!=null?o.originalAmount:o.amount, origDesc=o.originalDescription!=null?o.originalDescription:o.description;
       o.amount=op.newAmount;o.description=op.newDesc;o.editedAt=op.at;o.updatedAt=new Date(op.at).toISOString();
       o.editedBy=op.by;o.editedByName=op.byName;o.editReason=op.reason;
-      o.originalAmount=origAmt;o.originalDescription=origDesc;
+      o.originalAmount=origAmt;o.originalDescription=origDesc;if(Number(o.quantity)>1)o.unitPrice=Math.round(Number(op.newAmount)/Number(o.quantity)*100)/100;
       if(op.isAdminAction)o.editedByAdmin=true;
       txs[k]=o;res='edited';
     }
@@ -3643,7 +3672,7 @@ function buildFeedItem(t){
   var badgeRow='<div class="feed-badges">'+adminBadge+hanyBadge+statusBadge+editedBadge+pendingBadge+catBadge+metaTxt+'</div>';
   return '<div class="feed-item" data-txid="'+t.id+'">'+badgeRow+
     '<div class="feed-avatar av-'+(u?u.id:'ahmed')+((ownerIsAdmin||!u)?' is-admin':'')+'">'+(u?u.emoji:'ح')+'</div>'+
-    '<div class="feed-body"><div class="feed-name">'+esc(t.description||t.category)+'</div></div>'+
+    '<div class="feed-body"><div class="feed-name">'+esc(t.description||t.category)+(Number(t.quantity)>1?' <span class="qty-chip">×'+Number(t.quantity)+'</span>':'')+'</div></div>'+
     '<div class="feed-amount">- '+fmt(t.amount)+' ج.م</div>'+actionBtn+'</div>';
 }
 
@@ -4223,6 +4252,7 @@ function saveTx(){
     createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),txDateMode:selectedDateMode,autoPriced:amountAutoFilled,
     __v: 1
   };
+  if(txQty>1){tx.quantity=txQty;tx.unitPrice=Math.round(amount/txQty*100)/100;}
   var btn=document.getElementById('saveBtn');
   btn.disabled=true;
   var originalHTML=btn.innerHTML;
@@ -4252,7 +4282,7 @@ function saveTx(){
 
     document.getElementById('amount').value='';
     document.getElementById('note').value='';
-    selectedItem='';clearAutoPrice();updateAmountClearBtn();hideHanyBadge();
+    selectedItem='';clearAutoPrice();updateAmountClearBtn();hideHanyBadge();qtyReset();
     document.getElementById('searchInput').value='';
     var hint=document.getElementById('searchHint');if(hint)hint.classList.remove('show');
     if(selectedDateMode!=='today'){selectedDateMode='today';updateDateQuickButtons();}
@@ -5012,13 +5042,15 @@ function bindEvents(){
   document.getElementById('quick').addEventListener('click',function(e){
     var btn=e.target.closest('.quick-btn');if(!btn)return;
     document.getElementById('amount').value=btn.dataset.v;
-    clearAutoPrice();updateAmountClearBtn();
+    clearAutoPrice();updateAmountClearBtn();qtyReset();
   });
+  document.getElementById('qtyMinus').addEventListener('click',function(){qtyStep(-1);});
+  document.getElementById('qtyPlus').addEventListener('click',function(){qtyStep(1);});
 
   document.getElementById('amount').addEventListener('input',function(e){
     e.target.value = sanitizeAmountInput(e.target.value);
     if(amountAutoFilled)clearAutoPrice();
-    updateAmountClearBtn();
+    updateAmountClearBtn();qtyRender();
   });
   document.getElementById('amount').addEventListener('keydown',function(e){ if(e.key==='Enter')saveTx(); });
   document.getElementById('saveBtn').addEventListener('click',saveTx);
