@@ -135,7 +135,7 @@ body.dark{
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent} /* ✨ mobile: no blue flash */
 html{-webkit-text-size-adjust:100%;touch-action:manipulation}
 body{font-family:'Cairo',system-ui,sans-serif;font-weight:500;color:var(--text-primary);background:var(--bg-app);
-  min-height:100dvh;padding-bottom:calc(var(--nav-h) + var(--safe-bottom) + 20px);
+  min-height:100dvh;padding-bottom:calc(var(--nav-real, calc(var(--nav-h) + var(--safe-bottom))) + 36px);
   padding-top:var(--safe-top);
   overflow-x:hidden;-webkit-font-smoothing:antialiased;transition:background .5s ease,color .5s ease;position:relative;
   overscroll-behavior-y:contain} /* ✨ mobile: no bounce */
@@ -419,6 +419,16 @@ body.dark .hany-tx-badge{color:#FB923C;border-color:rgba(251,146,60,.4)}
 .admin-rm-info{font-size:11px;color:var(--text-muted);font-weight:700;margin-bottom:8px;line-height:1.6}
 .admin-rm-row{display:flex;gap:8px;margin-bottom:8px;align-items:center}
 
+/* ══════ HOME-ONLY + MINI STRIP ══════ */
+/* last item always clears the bottom bar: spacer after each tab, sized from the real bar height (set by JS) */
+.tab::after{content:'';display:block;height:calc(var(--nav-real, calc(var(--nav-h) + var(--safe-bottom))) * 0.35)}
+html{scroll-padding-bottom:calc(var(--nav-real, 96px) + 16px)}
+body:not([data-tab="home"]) .home-only{display:none!important}
+.mini-strip{display:none;align-items:center;gap:8px;margin:0 16px 8px;padding:7px 14px;width:calc(100% - 32px);
+  border:1px solid rgba(232,194,133,.45);border-radius:14px;color:#FCE7B3;font:700 12.5px Cairo,system-ui,sans-serif;text-align:right;cursor:pointer;
+  background:linear-gradient(160deg,#0B1530 0%,#14224A 100%)}
+.mini-strip .mini-moon{font-size:15px;color:#FFD56B}
+body:not([data-tab="home"]) .mini-strip.has-text{display:flex}
 /* ══════ QUOTE CARD ══════ */
 .quote-card{margin:0 16px 16px;padding:22px;border-radius:20px;
   background:linear-gradient(135deg,var(--bg-card) 0%,var(--bg-muted) 100%);
@@ -1106,7 +1116,7 @@ button:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-off
 }
 </style>
 </head>
-<body class="dark">
+<body class="dark" data-tab="home">
 
 <!-- ══════ OFFLINE BANNER ══════ -->
 <div class="offline-banner" id="offlineBanner">
@@ -1206,7 +1216,7 @@ button:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-off
           <span>أهلاً بيك</span>
           <span id="headerAdminBadge" style="display:none" class="admin-badge">👑 مشرف</span>
         </div>
-        <div class="header-user-name" id="headerUserName">جارٍ التحميل...</div>
+        <div class="header-user-name" id="headerUserName"></div>
       </div>
     </div>
     <div class="header-actions">
@@ -1248,7 +1258,7 @@ button:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-off
   <!-- ═══════════════════════════════════════════════════════════════
        RAMADAN STRIP — كامل مع كل SVGs
        ═══════════════════════════════════════════════════════════════ -->
-  <div class="ramadan-strip" id="ramadanStrip">
+  <div class="ramadan-strip home-only" id="ramadanStrip">
     <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><symbol id="rmLA" viewBox="0 0 40 84"><defs><radialGradient id="rmLAg" cx="50%" cy="55%" r="55%"><stop offset="0%" stop-color="#FFFBEA"/><stop offset="55%" stop-color="#FFD56B"/><stop offset="100%" stop-color="#E59A1F"/></radialGradient><linearGradient id="rmLAm" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#FCE7B3"/><stop offset="100%" stop-color="#C9922E"/></linearGradient></defs>
 <path d="M20 0V11" stroke="#E8C285" stroke-width="1.2"/><circle cx="20" cy="12" r="2" fill="none" stroke="#E8C285" stroke-width="1.2"/>
 <path d="M12.5 22Q20 8 27.5 22Z" fill="url(#rmLAm)"/><rect x="10.5" y="21.5" width="19" height="3.2" rx="1.6" fill="url(#rmLAm)"/>
@@ -1279,7 +1289,7 @@ button:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-off
   </div>
 
   <!-- ══════ QUOTE CARD ══════ -->
-  <div class="quote-card">
+  <div class="quote-card home-only">
     <div class="quote-icon">
       <svg viewBox="0 0 24 24"><path d="M14.017 21v-7.391c0-5.704 3.731-9.57 8.983-10.609l.995 2.151c-2.432.917-3.995 3.638-3.995 5.849h4v10h-9.983zm-14.017 0v-7.391c0-5.704 3.748-9.57 9-10.609l.996 2.151c-2.433.917-3.996 3.638-3.996 5.849h3.983v10h-9.983z"/></svg>
     </div>
@@ -1290,7 +1300,10 @@ button:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-off
   </div>
 
   <!-- Family Strip -->
-  <div class="family-strip" id="familyStrip"></div>
+  <div class="family-strip home-only" id="familyStrip"></div>
+
+  <!-- شريط صغير في باقي التبويبات (بدل كارت رمضان والاقتباس وأسماء العيلة) -->
+  <button type="button" class="mini-strip" id="miniStrip" aria-label="الرئيسية"><span class="mini-moon">☪</span><span id="miniStripText">—</span></button>
 
   <!-- ═══════════════════════════════════════════════════════════════
        TAB HOME
@@ -2425,6 +2438,16 @@ function updateRamadanCountdown() {
     if (cityRow) cityRow.style.display = 'none';
   }
   if (body && body.__rmHtml !== html) { body.innerHTML = html; body.__rmHtml = html; }
+  try {
+    var mini = document.getElementById('miniStrip'), mt = document.getElementById('miniStripText'), txt = '';
+    if (st.phase === 'active') {
+      var ev2 = rmNextEvent(now, rmGetCity()), sc = Math.max(0, Math.floor((ev2.at.getTime() - now.getTime()) / 1000));
+      txt = 'رمضان · يوم ' + st.day + ' · باقي ' + rmPad(Math.floor(sc / 3600)) + ':' + rmPad(Math.floor((sc % 3600) / 60)) + (ev2.kind === 'iftar' ? ' على الفطار' : ' على الفجر');
+    } else if (st.phase === 'eid') { txt = 'عيد مبارك 🎉'; }
+    else { txt = 'باقي ' + Math.floor(Math.max(0, st.start.getTime() - now.getTime()) / 86400000) + ' يوم على رمضان'; }
+    if (mt && mt.textContent !== txt) mt.textContent = txt;
+    if (mini) mini.classList.toggle('has-text', !!txt);
+  } catch (e) {}
 }
 
 /* ticks every second only while Ramadan is active and the page is visible; otherwise every 30s; paused when hidden */
@@ -3044,6 +3067,7 @@ function checkPin(){
     sessionStorage.setItem('hani_user_id',user.id);
     sessionStorage.setItem('hani_user_pin',currentPin);
     currentUser=user;
+    paintHeaderUser();
     pinScreen.classList.remove('show');
     init();
   }else{
@@ -3160,6 +3184,18 @@ function init(){
   });
 }
 
+function syncNavHeight(){
+  var nav=document.querySelector('.bottom-nav'); if(!nav) return;
+  var h=Math.ceil(nav.getBoundingClientRect().height); if(h>0) document.documentElement.style.setProperty('--nav-real',h+'px');
+}
+window.addEventListener('resize',syncNavHeight); window.addEventListener('orientationchange',syncNavHeight);
+document.addEventListener('DOMContentLoaded',function(){ syncNavHeight(); setTimeout(syncNavHeight,600); });
+function paintHeaderUser(){
+  if(!currentUser) return;
+  var n=document.getElementById('headerUserName'); if(n) n.textContent=currentUser.name;
+  var a=document.getElementById('headerAvatar');
+  if(a){ a.textContent=initials(currentUser.name); if(isAdmin(currentUser.id)) a.classList.add('admin'); }
+}
 function showMainApp(){
   var main=document.getElementById('mainApp');if(!main)return;
   main.classList.add('show');
@@ -4915,6 +4951,8 @@ initTabLock();
 function switchTab(t){
   if(t!==currentTab&&!backNavFromPop){tabStack.push(currentTab);if(tabStack.length>30)tabStack.shift();}
   currentTab=t;
+  document.body.setAttribute('data-tab',t);
+  window.scrollTo(0,0);
   if(t==='history') histVisibleCount = HISTORY_PAGE_SIZE;
   document.querySelectorAll('.nav-btn').forEach(function(b){b.classList.toggle('active',b.dataset.t===t);});
   document.querySelectorAll('.tab').forEach(function(c){c.classList.toggle('active',c.id==='tab-'+t);});
@@ -5018,6 +5056,7 @@ function bindEvents(){
 
   document.getElementById('shareBtn').addEventListener('click',share);
   document.getElementById('logoutBtn').addEventListener('click',doLogout);
+  document.getElementById('miniStrip').addEventListener('click',function(){switchTab('home');});
   document.getElementById('logoutBtn2').addEventListener('click',doLogout);
   document.getElementById('setBudgetBtn').addEventListener('click',setBudgetModal);
   document.getElementById('testTelegramBtn').addEventListener('click',testTelegram);
@@ -5453,6 +5492,7 @@ function bootstrap(){
       if(found){
         console.log('✅ Session restored:',found.name);
         currentUser=found;
+        paintHeaderUser();
         var pinScreenEl=document.getElementById('pinScreen'); if(pinScreenEl)pinScreenEl.classList.remove('show');
         setTimeout(function(){init();},50);
         return;
