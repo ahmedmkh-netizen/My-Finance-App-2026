@@ -5410,7 +5410,36 @@ const getCycleRange = (card, cycleKey) => {
           return result;
         }
 
+        /* مرتجع: "The transaction on your credit card#9352 from Uber with EGP 48.96 on 26/11/26 at 23:33 has been refunded" */
         let m = text.match(
+          /(?:credit\s+)?card\s*(?:ending\s+with\s*)?[#*]+\s*(\d{4})\s+from\s+(.+?)\s+with\s+EGP\s*([\d, ]+\.?\d*)(?:\s+on\s+(\d{2}\/\d{2}\/\d{2,4}))?(?:\s+at\s+(\d{1,2}:\d{2}))?[^.]*?\brefunded\b/i,
+        );
+        if (m) {
+          result.ok = true;
+          result.type = "income";
+          result.subType = "deposit";
+          result.last4 = m[1];
+          result.merchant = m[2].trim();
+          result.amount = parseFloat(m[3].replace(/[,\s]/g, ""));
+          result.description = `مرتجع: ${result.merchant}`;
+          const mapInfo0 = CARD_LAST4_MAP[result.last4];
+          result.bank = mapInfo0 ? mapInfo0.bank : null;
+          if (m[4]) {
+            const [dd, mm, yy] = m[4].split("/");
+            result.date = `${yy.length === 2 ? "20" + yy : yy}-${mm}-${dd}`;
+          } else {
+            result.notes.push("⚠️ الرسالة بدون تاريخ — اتحسب تاريخ النهاردة، راجعه");
+          }
+          if (m[5]) result.time = m[5];
+          result.notes.push(`✅ مرتجع: ${result.merchant} — ${result.amount} ج.م (يتسجل كدخل على البطاقة)`);
+          if (mapInfo0) {
+            result.linkedCardId = mapInfo0.linkedCardId;
+            result.cardLabel = mapInfo0.label;
+          }
+          return result;
+        }
+
+        m = text.match(
           /credit card ending with#(\d{4})\s+was charged for EGP\s+([\d,]+\.?\d*)\s+at\s+(.+?)\s+on\s+(\d{2}\/\d{2}\/\d{2})(?:\s+at\s+(\d{2}:\d{2}))?/i,
         );
         if (m) {
@@ -5445,6 +5474,7 @@ const getCycleRange = (card, cycleKey) => {
           result.description = `مشتريات: ${result.merchant}`;
           result.bank = "CIB";
           result.availableLimit = parseFloat(m[4].replace(/[,\s]/g, ""));
+          result.notes.push("⚠️ الرسالة بدون تاريخ ووقت — اتحسب تاريخ النهاردة، راجعه");
           result.notes.push(`✅ CIB (بطاقة ${result.last4}): ${result.merchant} — ${result.amount} ج.م`);
           const mapInfo = CARD_LAST4_MAP[result.last4];
           if (mapInfo) {
