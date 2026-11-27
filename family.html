@@ -2028,7 +2028,10 @@ function formatTxTime(createdAt){
 function isMonthClosed(isoDateStr){
   if(!isoDateStr) return false;
   var pfx = String(isoDateStr).slice(0,7);
-  return allClosedMonths.indexOf(pfx) >= 0;
+  if(allClosedMonths.indexOf(pfx) >= 0) return true;
+  /* دفتري بيخزّن الشهر المقفول كـ "2026-أكتوبر" (سنة-اسم الشهر) */
+  var mi = parseInt(pfx.slice(5,7),10) - 1;
+  return mi >= 0 && mi < 12 && allClosedMonths.indexOf(pfx.slice(0,4) + '-' + MONTHS_AR[mi]) >= 0;
 }
 
 function formatDateLabel(iso){
@@ -2529,6 +2532,127 @@ try{
   console.log('✅ Firebase initialized with Persistence');
 }catch(e){console.error('FB init:',e);}
 
+/*FAMILY_OPS_START*/
+/* عمليات تطبيق العيلة: كل عملية مستند صغير في family_ops. دفتري بيستوردها داخل Transaction والتطبيقين بيستخدموا نفس الدالة.
+   الدالة idempotent: تطبيق نفس العملية مرتين لا يغيّر حاجة. */
+function famApplyOp(d, op){
+  var txs=Array.isArray(d.transactions)?d.transactions.slice():[];
+  var reqs=Array.isArray(d.deleteRequests)?d.deleteRequests.map(function(r){return r;}):[];
+  var tomb=Array.isArray(d.deletedTxIds)?d.deletedTxIds.slice():[];
+  var closed=Array.isArray(d.closedMonths)?d.closedMonths:[];
+  var res='noop';
+  function idx(id){for(var i=0;i<txs.length;i++){if(txs[i]&&txs[i].id===id)return i;}return -1;}
+  function ridx(id){for(var i=0;i<reqs.length;i++){if(reqs[i]&&reqs[i].id===id)return i;}return -1;}
+  var t=op&&op.type;
+  if(t==='add'){
+    var tx=op.tx;
+    if(!tx||!tx.id)res='bad';
+    else if(tomb.indexOf(tx.id)>=0)res='tombstoned';
+    else if(idx(tx.id)>=0)res='exists';
+    else if((tx.date&&closed.indexOf(String(tx.date).slice(0,7))>=0)||(tx.year&&tx.month&&closed.indexOf(tx.year+'-'+tx.month)>=0))res='closed';
+    else{txs.push(tx);res='added';}
+  }else if(t==='undo'){
+    var i1=idx(op.txId);
+    if(i1>=0){txs.splice(i1,1);res='undone';}
+    if(op.txId&&tomb.indexOf(op.txId)<0){tomb.push(op.txId);if(res==='noop')res='tombstoned';}
+  }else if(t==='delreq'){
+    var rq=op.request;
+    if(!rq||!rq.id)res='bad';
+    else if(ridx(rq.id)>=0)res='exists';
+    else if(reqs.some(function(r){return r&&r.txId===rq.txId&&r.status==='pending';}))res='already';
+    else{reqs.push(rq);res='added';}
+  }else if(t==='reject'||t==='cancel'){
+    var j=ridx(op.reqId);
+    if(j<0)res='missing';
+    else if(reqs[j].status!=='pending')res='noop';
+    else{
+      var r2=Object.assign({},reqs[j]);
+      if(t==='reject'){r2.status='rejected';r2.rejectedAt=op.at;r2.rejectedBy=op.by;r2.rejectedByName=op.byName;if(op.reason)r2.rejectionReason=op.reason;}
+      else{r2.status='cancelled';r2.cancelledAt=op.at;r2.cancelledBy=op.by;r2.cancelledByName=op.byName;}
+      r2.updatedAt=new Date(op.at).toISOString();
+      reqs[j]=r2;res=(t==='reject')?'rejected':'cancelled';
+    }
+  }else if(t==='edit'){
+    var k=idx(op.txId);
+    if(k<0)res='missing';
+    else if(txs[k].editedAt&&Number(txs[k].editedAt)>=Number(op.at))res='noop';
+    else{
+      var o=Object.assign({},txs[k]);
+      var origAmt=o.originalAmount!=null?o.originalAmount:o.amount, origDesc=o.originalDescription!=null?o.originalDescription:o.description;
+      o.amount=op.newAmount;o.description=op.newDesc;o.editedAt=op.at;o.updatedAt=new Date(op.at).toISOString();
+      o.editedBy=op.by;o.editedByName=op.byName;o.editReason=op.reason;
+      o.originalAmount=origAmt;o.originalDescription=origDesc;
+      if(op.isAdminAction)o.editedByAdmin=true;
+      txs[k]=o;res='edited';
+    }
+  }else res='bad';
+  var out=Object.assign({},d,{transactions:txs,deleteRequests:reqs,deletedTxIds:tomb.slice(-500)});
+  return {d:out,result:res};
+}
+function famSortOps(ops){return ops.slice().sort(function(a,b){return (Number(a.ts)||0)-(Number(b.ts)||0)||String(a.opId||'').localeCompare(String(b.opId||''));});}
+/*FAMILY_OPS_END*/
+
+var FAMILY_VIEW_PATH={collection:'finance_2026',doc:'family_view'};
+var famOps=[], famOpsUnsub=null, lastViewData=null;
+function famOpsCol(){return db.collection('family_ops');}
+function famSendOp(op){
+  op.applied=false;op.ts=Date.now();op.by=currentUser.id;op.byName=currentUser.name;
+  var ref=famOpsCol().doc(op.opId);
+  /* لو العملية دي اتبعتت قبل كده (ضغطة مزدوجة / إعادة إرسال) القواعد بترفض إعادة الكتابة: نعتبرها اتبعتت فعلاً */
+  var p=ref.set(op).catch(function(e){
+    if(e&&e.code==='permission-denied')return ref.get().then(function(s){if(s.exists)return;throw e;});
+    throw e;
+  });
+  return Promise.race([p,new Promise(function(_,rej){setTimeout(function(){rej(new Error('SEND_TIMEOUT'));},8000);})]).then(function(){return op;});
+}
+function famEffective(d){
+  lastViewData=d;
+  var gen=Number(d.generatedAt||0);
+  var ops=famSortOps(famOps.filter(function(o){return !o.applied||Number(o.appliedAt||0)>=gen;}));
+  var cur=d;ops.forEach(function(o){cur=famApplyOp(cur,o).d;});
+  return cur;
+}
+function famStartOpsListener(){
+  if(famOpsUnsub||!db)return;
+  famOpsUnsub=famOpsCol().onSnapshot(function(snap){
+    famOps=snap.docs.map(function(x){return Object.assign({opId:x.id},x.data());});
+    if(lastViewData&&typeof handleViewData==='function')handleViewData(lastViewData);
+  },function(e){console.error('ops listener:',e);});
+}
+
+/* فحوصات محلية قبل إرسال العملية (على الحالة الفعلية = النسخة المنشورة + عمليات لسه ما اتطبقتش) */
+function famEff(){return famEffective(lastViewData||{});}
+function famFlushCheck(item){
+  var d=famEff(),tx=item.tx;
+  if((d.transactions||[]).some(function(t){return t&&t.id===tx.id;})||(d.deletedTxIds||[]).indexOf(tx.id)>=0)return Promise.resolve({added:false});
+  if(isMonthClosed(tx.date))return Promise.resolve({added:false,closed:true});
+  return famSendOp({opId:'add-'+tx.id,type:'add',tx:tx}).then(function(){return {added:true};});
+}
+function famSaveCheck(tx,selectedItem){
+  var d=famEff(),now2=Date.now();
+  var dup=(d.transactions||[]).some(function(t){
+    if(!t)return false;
+    if(t.id===tx.id)return true;
+    if(t.createdBy===tx.createdBy&&Number(t.amount)===Number(tx.amount)&&(t.description||'').indexOf(selectedItem)>=0&&t.date===tx.date&&t.createdAt){
+      var tTime=new Date(t.createdAt).getTime();
+      if(!isNaN(tTime)&&(now2-tTime)<60000)return true;
+    }
+    return false;
+  });
+  if(dup)return Promise.reject(new Error('DUPLICATE_DETECTED'));
+  return famSendOp({opId:'add-'+tx.id,type:'add',tx:tx}).then(function(){return {tx:tx,version:0};});
+}
+function famDelReqCheck(tx,request){
+  var d=famEff();
+  if((d.deleteRequests||[]).some(function(r){return r&&r.txId===tx.id&&r.status==='pending';}))return Promise.reject(new Error('ALREADY_REQUESTED'));
+  return famSendOp({opId:'delreq-'+request.id,type:'delreq',request:request}).then(function(){return request;});
+}
+function famEditSend(tx,newAmount,newDesc,reason,isAdminAction){
+  var d=famEff(),cur=null;(d.transactions||[]).forEach(function(t){if(t&&t.id===tx.id)cur=t;});
+  if(!cur)return Promise.reject(new Error('tx_not_found'));
+  var original={amount:cur.amount,description:cur.description};
+  return famSendOp({opId:'edit-'+tx.id+'-'+Date.now(),type:'edit',txId:tx.id,newAmount:newAmount,newDesc:newDesc,reason:reason,isAdminAction:!!isAdminAction,at:Date.now()}).then(function(){return {original:original};});
+}
 function initFirebaseAuth(){
   if(!auth||!db)return Promise.reject(new Error('no_firebase'));
   /* مرحلة 1 من تأمين قاعدة البيانات: حساب العيلة (إيميل/باسورد) بدل الدخول المجهول.
@@ -2542,7 +2666,8 @@ function initFirebaseAuth(){
       });
   return signInP.then(function(cred){
     isAuthReady=true;
-    docRef=db.collection(FIREBASE_DOC_PATH.collection).doc(FIREBASE_DOC_PATH.doc);
+    docRef=db.collection(FAMILY_VIEW_PATH.collection).doc(FAMILY_VIEW_PATH.doc);  /* قراءة فقط: نسخة تنشرها دفتري. الكتابة بتروح family_ops */
+    famStartOpsListener();
     catalogDocRef=db.collection(CATALOG_DOC_PATH.collection).doc(CATALOG_DOC_PATH.doc);
     console.log('✓ Auth ready:',cred.user.uid);
     return cred.user;
@@ -3032,18 +3157,7 @@ function flushPendingSaves(){
   if(!list.length)return;
   flushingPending=true;
   var item=list[0];
-  db.runTransaction(function(transaction){
-    return transaction.get(docRef).then(function(snap){
-      var d=snap.exists?(snap.data()||{}):{};
-      var existing=Array.isArray(d.transactions)?d.transactions:[];
-      var tomb=Array.isArray(d.deletedTxIds)?d.deletedTxIds:[];
-      if(existing.some(function(t){return t&&t.id===item.tx.id;})||tomb.indexOf(item.tx.id)>=0)return {added:false};
-      if(isMonthClosed(item.tx.date))return {added:false,closed:true};
-      var v=Number(d.__docVersion||0);
-      transaction.set(docRef,{transactions:existing.concat([item.tx]),__docVersion:v+1,__lastWriteAt:Date.now(),__lastWriteBy:currentUser.id},{merge:true});
-      return {added:true};
-    });
-  }).then(function(r){
+  famFlushCheck(item).then(function(r){
     pendingRemove(item.id);
     if(r&&r.added)toast('✅ اتحفظت عملية كانت معلّقة: '+(item.tx.description||'')+' — '+fmt(item.tx.amount)+' ج.م');
     else if(r&&r.closed)toast('⚠️ عملية معلّقة لشهر مقفول اتلغت: '+(item.tx.description||''),'warn');
@@ -3092,10 +3206,7 @@ function refreshFresh(force){
   try{subscribe();}catch(e){}
   docRef.get({source:'server'}).then(function(doc){
     if(doc.exists){
-      var d=doc.data()||{};
-      cachedTx=parseTransactions(d);
-      allClosedMonths=Array.isArray(d.closedMonths)?d.closedMonths:[];
-      renderAll();
+      handleViewData(doc.data()||{});
     }
   }).catch(function(){});
   setTimeout(flushPendingSaves,800);
@@ -4008,40 +4119,7 @@ function saveTx(){
   /* V95: نسجّل العملية محليًا قبل الإرسال، فلو التبويب اتجمّد أو اتقفل في النص تتبعت تاني (بنفس الـ id فمفيش تكرار) */
   pendingAdd(tx);
 
-  db.runTransaction(function(transaction){
-    return transaction.get(docRef).then(function(snap){
-      var d=snap.exists?(snap.data()||{}):{};
-      var remoteV = Number(d.__docVersion || 0);
-      var existing=Array.isArray(d.transactions)?d.transactions:[];
-      /* ✨ v9.0: تنظيف طلبات الحذف القديمة (>30 يوم) */
-      var reqs = Array.isArray(d.deleteRequests) ? d.deleteRequests : [];
-      var now2 = Date.now();
-      var cleanedReqs = reqs.filter(function(r){
-        if(!r) return false;
-        if(r.status === 'pending') return true;
-        var age = now2 - (r.requestedAt || 0);
-        return age < DELETE_REQUESTS_TTL_DAYS * 86400000;
-      });
-      var isDuplicate=existing.some(function(t){
-        if(!t)return false;
-        if(t.id===tx.id)return true;
-        if(t.createdBy===tx.createdBy&&Number(t.amount)===Number(tx.amount)&&(t.description||'').indexOf(selectedItem)>=0&&t.date===tx.date&&t.createdAt){
-          var tTime=new Date(t.createdAt).getTime();
-          if(!isNaN(tTime)&&(now2-tTime)<60000)return true;
-        }
-        return false;
-      });
-      if(isDuplicate)throw new Error('DUPLICATE_DETECTED');
-      transaction.set(docRef,{
-        transactions:existing.concat([tx]),
-        deleteRequests: cleanedReqs,
-        __docVersion: remoteV + 1,
-        __lastWriteAt: now2,
-        __lastWriteBy: currentUser.id
-      },{merge:true});
-      return { tx: tx, version: remoteV + 1 };
-    });
-  }).then(function(result){
+  famSaveCheck(tx,selectedItem).then(function(result){
     pendingRemove(tx.id);
     currentDocVersion = result.version;
     trackRecent(selectedItem);
@@ -4053,25 +4131,7 @@ function saveTx(){
 
     /* ✨ v9.0: زر Undo لمدة 5 ثواني */
     showUndoToast('✅ اتحفظ: ' + itemName + ' — ' + fmt(amount) + ' ج.م', function(){
-      db.runTransaction(function(tr){
-        return tr.get(docRef).then(function(s){
-          if(!s.exists) return;
-          var data = s.data() || {};
-          var txs = Array.isArray(data.transactions) ? data.transactions : [];
-          var filtered = txs.filter(function(t){ return t.id !== result.tx.id; });
-          var remoteV = Number(data.__docVersion || 0);
-          /* V93: tombstone so the main app can never bring the undone entry back */
-          var tomb = Array.isArray(data.deletedTxIds) ? data.deletedTxIds.slice() : [];
-          if(tomb.indexOf(result.tx.id) < 0) tomb.push(result.tx.id);
-          tr.set(docRef, {
-            transactions: filtered,
-            deletedTxIds: tomb.slice(-500),
-            __docVersion: remoteV + 1,
-            __lastWriteAt: Date.now(),
-            __lastWriteBy: currentUser.id
-          }, {merge:true});
-        });
-      }).then(function(){
+      famSendOp({opId:'undo-'+result.tx.id,type:'undo',txId:result.tx.id}).then(function(){
         toast('↩️ تم التراجع — العملية اتشالت');
       }).catch(function(e){
         console.error('Undo failed:', e);
@@ -4149,21 +4209,7 @@ function submitDeleteRequest(tx,reason){
   if(!isAuthReady||!docRef)return;
   var isAdminAction = isAdmin(currentUser.id) && tx.createdBy !== currentUser.id;
   var request={id:getSafeId('delreq-'),txId:tx.id,txSnapshot:tx,reason:reason,requestedBy:currentUser.id,requestedByName:currentUser.name,requestedAt:Date.now(),updatedAt:new Date().toISOString(),status:'pending',source:'family-app',adminOverride:isAdminAction};
-  db.runTransaction(function(transaction){
-    return transaction.get(docRef).then(function(snap){
-      var d=snap.exists?(snap.data()||{}):{};
-      var existing=Array.isArray(d.deleteRequests)?d.deleteRequests:[];
-      if(existing.some(function(r){return r&&r.txId===tx.id&&r.status==='pending';}))throw new Error('ALREADY_REQUESTED');
-      var remoteV = Number(d.__docVersion || 0);
-      transaction.set(docRef,{
-        deleteRequests:existing.concat([request]),
-        __docVersion: remoteV + 1,
-        __lastWriteAt: Date.now(),
-        __lastWriteBy: currentUser.id
-      },{merge:true});
-      return request;
-    });
-  }).then(function(){
+  famDelReqCheck(tx,request).then(function(){
     toast('تم إرسال الطلب');
     sendTelegram((isAdminAction?'👑 <b>طلب حذف مشرف</b>\n':'🗑️ <b>طلب حذف</b>\n')+'👤 من: <b>'+currentUser.name+'</b>\n📦 '+(tx.description||'')+'\n💰 '+fmt(tx.amount)+' ج.م\n📝 '+reason);
   }).catch(function(e){
@@ -4194,32 +4240,7 @@ function rejectDelete(reqId){
 
 function doRejectDelete(req, reason){
   if(!isAuthReady||!docRef)return;
-  db.runTransaction(function(transaction){
-    return transaction.get(docRef).then(function(snap){
-      if(!snap.exists) throw new Error('doc_not_found');
-      var d = snap.data() || {};
-      var reqs = Array.isArray(d.deleteRequests) ? d.deleteRequests : [];
-      var now = Date.now();
-      var remoteV = Number(d.__docVersion || 0);
-      for(var j=0;j<reqs.length;j++){
-        if(reqs[j].id === req.id){
-          reqs[j].status = 'rejected';
-          reqs[j].rejectedAt = now;
-          reqs[j].updatedAt = new Date().toISOString();
-          reqs[j].rejectedBy = currentUser.id;
-          reqs[j].rejectedByName = currentUser.name;
-          if(reason) reqs[j].rejectionReason = reason;
-          break;
-        }
-      }
-      transaction.set(docRef, {
-        deleteRequests: reqs,
-        __docVersion: remoteV + 1,
-        __lastWriteAt: now,
-        __lastWriteBy: currentUser.id
-      }, {merge:true});
-    });
-  }).then(function(){
+  famSendOp({opId:'reject-'+req.id,type:'reject',reqId:req.id,at:Date.now(),reason:reason||''}).then(function(){
     toast('تم رفض الطلب');
     sendTelegram('❌ <b>رفض حذف</b>\n👑 '+currentUser.name+'\n📦 '+(req.txSnapshot.description||''));
   }).catch(function(e){
@@ -4243,31 +4264,7 @@ function cancelOwnRequest(reqId){
 
 function doCancelRequest(req){
   if(!isAuthReady||!docRef)return;
-  db.runTransaction(function(transaction){
-    return transaction.get(docRef).then(function(snap){
-      if(!snap.exists) throw new Error('doc_not_found');
-      var d = snap.data() || {};
-      var reqs = Array.isArray(d.deleteRequests) ? d.deleteRequests : [];
-      var now = Date.now();
-      var remoteV = Number(d.__docVersion || 0);
-      for(var j=0;j<reqs.length;j++){
-        if(reqs[j].id === req.id){
-          reqs[j].status = 'cancelled';
-          reqs[j].cancelledAt = now;
-          reqs[j].updatedAt = new Date().toISOString();
-          reqs[j].cancelledBy = currentUser.id;
-          reqs[j].cancelledByName = currentUser.name;
-          break;
-        }
-      }
-      transaction.set(docRef, {
-        deleteRequests: reqs,
-        __docVersion: remoteV + 1,
-        __lastWriteAt: now,
-        __lastWriteBy: currentUser.id
-      }, {merge:true});
-    });
-  }).then(function(){
+  famSendOp({opId:'cancel-'+req.id,type:'cancel',reqId:req.id,at:Date.now()}).then(function(){
     toast('تم سحب الطلب');
   }).catch(function(e){
     console.error('Cancel error:', e);
@@ -4340,39 +4337,7 @@ function submitEdit(tx,newAmount,newNote,oldNote,reason){
   var descParts=(tx.description||'').split(' — ');
   var itemName=descParts[0]||tx.description||'';
   var newDesc=newNote?itemName+' — '+newNote:itemName;
-  db.runTransaction(function(transaction){
-    return transaction.get(docRef).then(function(snap){
-      if(!snap.exists)throw new Error('doc_not_found');
-      var d=snap.data()||{};
-      var txs=Array.isArray(d.transactions)?d.transactions:[];
-      var remoteV=Number(d.__docVersion||0);
-      var found=false,original=null;
-      for(var i=0;i<txs.length;i++){
-        if(txs[i].id===tx.id){
-          original={amount:txs[i].amount,description:txs[i].description};
-          txs[i].amount=newAmount;
-          txs[i].description=newDesc;
-          txs[i].editedAt=Date.now();
-          txs[i].updatedAt=new Date().toISOString();
-          txs[i].editedBy=currentUser.id;
-          txs[i].editedByName=currentUser.name;
-          txs[i].editReason=reason;
-          txs[i].originalAmount=txs[i].originalAmount||original.amount;
-          txs[i].originalDescription=txs[i].originalDescription||original.description;
-          if(isAdminAction)txs[i].editedByAdmin=true;
-          found=true;break;
-        }
-      }
-      if(!found||!original)throw new Error('tx_not_found');
-      transaction.set(docRef,{
-        transactions:txs,
-        __docVersion: remoteV + 1,
-        __lastWriteAt: Date.now(),
-        __lastWriteBy: currentUser.id
-      },{merge:true});
-      return {original:original};
-    });
-  }).then(function(result){
+  famEditSend(tx,newAmount,newDesc,reason,isAdminAction).then(function(result){
     toast('✓ تم تعديل العملية');
     sendTelegram((isAdminAction?'👑 <b>تعديل مشرف</b>\n':'✏️ <b>تعديل</b>\n')+'👤 '+currentUser.name+'\n📦 '+itemName+'\n🔴 قبل: '+fmt(result.original.amount)+' ج.م\n🟢 بعد: '+fmt(newAmount)+' ج.م\n📝 '+reason);
   }).catch(function(err){
@@ -4765,6 +4730,15 @@ function parseTransactions(data){
   return result.sort(function(a,b){return new Date(b.createdAt||0).getTime()-new Date(a.createdAt||0).getTime();});
 }
 
+function handleViewData(raw){
+  var d=famEffective(raw);
+  cachedTx=parseTransactions(d);
+  allDeleteRequests=(d.deleteRequests||[]).filter(function(r){return r&&r.txSnapshot;});
+  cachedDeleteRequests=allDeleteRequests.filter(function(r){return r.status==='pending';});
+  allClosedMonths = Array.isArray(d.closedMonths) ? d.closedMonths : [];
+  try{localStorage.setItem('hani_tx_cache',JSON.stringify(cachedTx.slice(0,100)));}catch(e){}
+  renderAll();
+}
 function subscribe(){
   if(unsubscribe)unsubscribe();
   if(!docRef)return;
@@ -4793,12 +4767,7 @@ function subscribe(){
     }
     currentDocVersion = remoteV;
 
-    cachedTx=parseTransactions(d);
-    allDeleteRequests=(d.deleteRequests||[]).filter(function(r){return r&&r.txSnapshot;});
-    cachedDeleteRequests=allDeleteRequests.filter(function(r){return r.status==='pending';});
-    allClosedMonths = Array.isArray(d.closedMonths) ? d.closedMonths : [];
-    try{localStorage.setItem('hani_tx_cache',JSON.stringify(cachedTx.slice(0,100)));}catch(e){}
-    renderAll();
+    handleViewData(d);
   },function(e){
     console.error('Snapshot error:',e);
     if(initialSnapshotTimeout){clearTimeout(initialSnapshotTimeout);initialSnapshotTimeout=null;}
@@ -5154,12 +5123,7 @@ function refreshFromServer(){
   if(!docRef) { toast('غير متصل','err'); return; }
   docRef.get({source:'server'}).then(function(doc){
     if(doc.exists){
-      var d = doc.data() || {};
-      cachedTx = parseTransactions(d);
-      allClosedMonths = Array.isArray(d.closedMonths) ? d.closedMonths : [];
-      allDeleteRequests = (d.deleteRequests||[]).filter(function(r){return r&&r.txSnapshot;});
-      cachedDeleteRequests = allDeleteRequests.filter(function(r){return r.status==='pending';});
-      renderAll();
+      handleViewData(doc.data() || {});
       toast('✅ تم التحديث','ok');
       if(navigator.vibrate) navigator.vibrate(20);
     }

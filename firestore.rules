@@ -1,0 +1,40 @@
+rules_version = '2';
+// Stage 3 rules. NOT live until Ahmed and Anas have closed the apps and Ahmed approves.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function isAhmed() {
+      return signedIn() && request.auth.token.email == 'ahmedmkh@gmail.com'
+        && request.auth.token.email_verified == true
+        && request.auth.token.firebase.sign_in_provider == 'google.com';
+    }
+    function isFamily() { return signedIn() && request.auth.token.email == 'family@finance-app-2026.app'; }
+    function isBackup() { return signedIn() && request.auth.token.email == 'backup@finance-app-2026.app'; }
+
+    // Main data: only Ahmed (read and write). The backup account can read.
+    match /finance_2026/user_ahmed_data {
+      allow read: if isAhmed() || isBackup();
+      allow write: if isAhmed();
+    }
+    // Hani copy published by Daftari: Family reads it, only Daftari writes it.
+    match /finance_2026/family_view {
+      allow read: if isAhmed() || isFamily();
+      allow write: if isAhmed();
+    }
+    // Catalog (items, prices, logos, Ramadan override): Family admins edit it from the Family app.
+    match /finance_2026/catalog_data {
+      allow read: if isAhmed() || isFamily() || isBackup();
+      allow write: if isAhmed() || isFamily();
+    }
+    // Family writes small requests here; Daftari imports and marks them applied.
+    match /family_ops/{opId} {
+      allow read: if isAhmed() || isFamily();
+      allow create: if isFamily() && request.resource.data.applied == false
+        && request.resource.data.keys().hasAll(['type', 'ts', 'by', 'applied'])
+        && request.resource.data.type in ['add', 'undo', 'delreq', 'reject', 'cancel', 'edit'];
+      allow update: if isAhmed() || (isFamily() && request.resource.data == resource.data);
+      allow delete: if isAhmed();
+    }
+    match /{document=**} { allow read, write: if false; }
+  }
+}
