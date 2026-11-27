@@ -3426,18 +3426,21 @@ const SIDEBAR_GROUPS = [{
     id: "forecast",
     label: "التوقعات",
     icon: TrendingUp,
-    badge: "NEW"
+    badge: "NEW",
+    rare: true
   }, {
     id: "reports",
     label: "التقارير",
-    icon: FileText
+    icon: FileText,
+    rare: true
   }]
 }, {
   group: "⚙️ الإدارة",
   items: [{
     id: "admin",
     label: "الإدارة",
-    icon: ShieldCheck
+    icon: ShieldCheck,
+    rare: true
   }, {
     id: "settings",
     label: "الإعدادات",
@@ -7325,6 +7328,31 @@ const Sidebar = memo(({
     transactions: totals.pendingCount > 0 ? String(totals.pendingCount) : null,
     admin: totals.archiveCount + totals.auditCount > 0 ? String(Math.min(totals.archiveCount + totals.auditCount, 999)) : totals.pendingDeleteRequests > 0 ? String(totals.pendingDeleteRequests) : null
   };
+  const [moreOpen, setMoreOpen] = useState(false);
+  const isItemActive = item => activeTab === item.id || item.id === "forecast" && (activeTab === "financial-forecast" || activeTab === "monthly-forecast") || item.id === "admin" && ["data-health", "duplicates", "deleted"].includes(activeTab);
+  const rareItems = SIDEBAR_GROUPS.flatMap(g => g.items.filter(it => it.rare));
+  const rareActive = rareItems.some(isItemActive);
+  const renderSideItem = item => {
+    const Icon = item.icon;
+    const isActive = isItemActive(item);
+    const badge = badges[item.id] || item.badge;
+    return React.createElement("button", {
+      key: item.id,
+      onClick: () => {
+        onNavigate(item.id);
+        onClose();
+      },
+      className: `sidebar-item ${isActive ? "active" : ""} focus-ring`
+    }, React.createElement("span", {
+      className: "sidebar-icon"
+    }, React.createElement(Icon, {
+      size: 14
+    })), React.createElement("span", {
+      className: "flex-1 truncate text-right"
+    }, item.label), badge && React.createElement("span", {
+      className: "sidebar-badge money tabular"
+    }, badge));
+  };
   return React.createElement(React.Fragment, null, React.createElement("div", {
     className: `sidebar-overlay ${isOpen ? "open" : ""} no-print`,
     onClick: onClose
@@ -7368,27 +7396,25 @@ const Sidebar = memo(({
     className: "sidebar-group"
   }, React.createElement("p", {
     className: "sidebar-group-title"
-  }, group.group), group.items.map(item => {
-    const Icon = item.icon;
-    const isActive = activeTab === item.id || item.id === "forecast" && (activeTab === "financial-forecast" || activeTab === "monthly-forecast") || item.id === "admin" && ["data-health", "duplicates", "deleted"].includes(activeTab);
-    const badge = badges[item.id] || item.badge;
-    return React.createElement("button", {
-      key: item.id,
-      onClick: () => {
-        onNavigate(item.id);
-        onClose();
-      },
-      className: `sidebar-item ${isActive ? "active" : ""} focus-ring`
-    }, React.createElement("span", {
-      className: "sidebar-icon"
-    }, React.createElement(Icon, {
-      size: 14
-    })), React.createElement("span", {
-      className: "flex-1 truncate text-right"
-    }, item.label), badge && React.createElement("span", {
-      className: "sidebar-badge money tabular"
-    }, badge));
-  })))), React.createElement("div", {
+  }, group.group), group.items.filter(it => !it.rare).map(renderSideItem))), React.createElement("div", {
+    className: "sidebar-group"
+  }, React.createElement("button", {
+    type: "button",
+    onClick: () => setMoreOpen(!moreOpen),
+    className: "sidebar-item focus-ring",
+    "aria-expanded": moreOpen || rareActive
+  }, React.createElement("span", {
+    className: "sidebar-icon"
+  }, React.createElement(MoreHorizontal, {
+    size: 14
+  })), React.createElement("span", {
+    className: "flex-1 truncate text-right"
+  }, "المزيد (توقعات، تقارير، إدارة)"), React.createElement(ChevronDown, {
+    size: 13,
+    style: {
+      transform: moreOpen || rareActive ? "rotate(180deg)" : "none"
+    }
+  })), (moreOpen || rareActive) && rareItems.map(renderSideItem))), React.createElement("div", {
     className: "p-3 border-t",
     style: {
       borderColor: "var(--border-subtle)"
@@ -7531,16 +7557,6 @@ const ProfessionalHeader = memo(({
   size: 15
 }) : React.createElement(Moon, {
   size: 15
-})), React.createElement("button", {
-  onClick: onOpenQuickAdd,
-  className: "w-9 h-9 rounded-xl flex items-center justify-center text-white focus-ring",
-  style: {
-    background: "linear-gradient(135deg, #635BFF, #4A42E5)",
-    boxShadow: "0 4px 12px rgba(99,91,255,0.4)"
-  },
-  "aria-label": "إضافة سريعة"
-}, React.createElement(Plus, {
-  size: 16
 })), React.createElement(AvatarMenu, {
   onNavigate: onNavigate,
   onLock: onLock,
@@ -11716,6 +11732,10 @@ const DashboardDetailsView = memo(({
   }, formatAdaptive(totalCardDebt)))));
 });
 const RMM_CSS = `
+.rmm.cmp{padding:9px 12px;border-radius:16px}
+.rmm.cmp .rmm-moon{width:28px;height:28px}
+.rmm.cmp .rmm-greet{font-size:14px}
+.rmm.cmp .rmm-sub{font-size:10.5px;margin-top:1px}
 .rmm{position:relative;overflow:hidden;isolation:isolate;color:#fff;border-radius:22px;padding:44px 12px 12px;direction:rtl;
  background:radial-gradient(120% 80% at 85% 0%,rgba(255,196,87,.26) 0%,transparent 55%),linear-gradient(160deg,#0B1530 0%,#14224A 60%,#0E1A3C 100%);
  border:1.5px solid rgba(232,194,133,.5);box-shadow:0 10px 26px -10px rgba(8,14,40,.6)}
@@ -11824,7 +11844,7 @@ const RamadanMini = memo(() => {
   })));
   const shell = (cls, children) => React.createElement("div", {
     className: "rmm " + cls + (hidden ? " paused" : "")
-  }, React.createElement("style", null, RMM_CSS), React.createElement("svg", {
+  }, React.createElement("style", null, RMM_CSS), cls === "cmp" ? null : React.createElement(React.Fragment, null, React.createElement("svg", {
     width: "0",
     height: "0",
     style: {
@@ -11871,7 +11891,7 @@ const RamadanMini = memo(() => {
     id: "rmLA",
     delay: "-.5s",
     dur: "5s"
-  }), children);
+  })), children);
   if (st.phase === "eid") {
     return shell("eid", React.createElement("div", {
       className: "rmm-row",
@@ -11903,21 +11923,15 @@ const RamadanMini = memo(() => {
         timeZone: "Africa/Cairo"
       });
     } catch (e) {}
-    return shell("", React.createElement("div", {
+    return shell("cmp", React.createElement("div", {
       className: "rmm-row"
     }, moon, React.createElement("div", {
       className: "rmm-grow"
     }, React.createElement("div", {
       className: "rmm-greet"
-    }, "باقي على رمضان"), React.createElement("div", {
+    }, "باقي ", days, " يوم على رمضان"), React.createElement("div", {
       className: "rmm-sub"
-    }, when ? "يبدأ " + (st.estimated ? "تقريبًا " : "") + when : st.hijri + " هـ")), React.createElement("div", {
-      className: "rmm-tiles"
-    }, tile(days, "يوم"), React.createElement("span", {
-      className: "rmm-colon"
-    }, ":"), tile(pad(hh), "ساعة"), React.createElement("span", {
-      className: "rmm-colon"
-    }, ":"), tile(pad(mm), "دقيقة"))));
+    }, when ? "يبدأ " + (st.estimated ? "تقريبًا " : "") + when : st.hijri + " هـ"))));
   }
   const ev = rmNextEvent(now, city);
   const secs = Math.max(0, Math.floor((ev.at.getTime() - now.getTime()) / 1000));
@@ -19184,7 +19198,7 @@ const SettingsView = memo(({
   const [localCards, setLocalCards] = useState(() => cards.map(c => ({
     ...c
   })));
-  const [activeSection, setActiveSection] = useState("accounts");
+  const [activeSection, setActiveSection] = useState("general");
   const [hasChanges, setHasChanges] = useState(false);
   const [driveBusy, setDriveBusy] = useState(false);
   const [driveStatus, setDriveStatus] = useState("");
@@ -19506,8 +19520,12 @@ const SettingsView = memo(({
   }), React.createElement("div", {
     className: "card p-1 flex gap-1.5"
   }, [{
+    id: "general",
+    label: "عام",
+    icon: Sliders
+  }, {
     id: "accounts",
-    label: "الحسابات",
+    label: "الأرصدة",
     icon: Wallet
   }, {
     id: "cards",
@@ -19766,7 +19784,7 @@ const SettingsView = memo(({
     className: "btn btn-secondary text-xs w-full text-amber-600 py-2"
   }, React.createElement(RotateCcw, {
     size: 12
-  }), " تصفير مديونيات البطاقات")), React.createElement("div", {
+  }), " تصفير مديونيات البطاقات")), activeSection === "general" && React.createElement(React.Fragment, null, React.createElement("div", {
     className: "card"
   }, React.createElement("div", {
     className: "flex items-center gap-2 mb-3"
@@ -20007,7 +20025,7 @@ const SettingsView = memo(({
     className: "btn btn-secondary text-xs w-full text-red-600 py-2"
   }, React.createElement(Trash2, {
     size: 12
-  }), " إعادة تعيين شاملة (كل شيء)")));
+  }), " إعادة تعيين شاملة (كل شيء)"))));
 });
 const SmsParserModal = memo(({
   isOpen,
@@ -25324,7 +25342,7 @@ function App() {
   }, React.createElement("div", {
     key: activeTab,
     className: "max-w-5xl mx-auto space-y-4 page-transition pb-24"
-  }, React.createElement(OverdueBanner, {
+  }, (activeTab === "dashboard" || activeTab === "cards") && React.createElement(OverdueBanner, {
     data: data,
     dispatch: dispatch
   }), React.createElement(ProfessionalHeader, {
