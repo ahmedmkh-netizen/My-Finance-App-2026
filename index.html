@@ -8354,6 +8354,26 @@ const PickerSelect = ({
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const [hi, setHi] = useState(0);
+  const [vv, setVv] = useState(null);
+  useEffect(() => {
+    if (!open) {
+      setVv(null);
+      return;
+    }
+    const w = window.visualViewport;
+    if (!w) return;
+    const upd = () => setVv({
+      top: w.offsetTop,
+      height: w.height
+    });
+    upd();
+    w.addEventListener("resize", upd);
+    w.addEventListener("scroll", upd);
+    return () => {
+      w.removeEventListener("resize", upd);
+      w.removeEventListener("scroll", upd);
+    };
+  }, [open]);
   const opts = [];
   const walk = (nodes, group) => React.Children.forEach(nodes, ch => {
     if (!ch || !ch.props) return;
@@ -8401,13 +8421,18 @@ const PickerSelect = ({
   };
   const sheet = open && createPortal(React.createElement("div", {
     className: "sheet-backdrop no-print",
+    style: vv ? {
+      top: vv.top,
+      bottom: "auto",
+      height: vv.height
+    } : undefined,
     onClick: e => {
       if (e.target === e.currentTarget) close();
     }
   }, React.createElement("div", {
     className: "sheet-content",
     style: {
-      maxHeight: "86dvh"
+      maxHeight: vv ? Math.max(220, Math.floor(vv.height * 0.94)) + "px" : "86dvh"
     }
   }, React.createElement("div", {
     className: "sheet-handle"
@@ -8423,9 +8448,15 @@ const PickerSelect = ({
   }, React.createElement(X, {
     size: 16
   }))), React.createElement("div", {
-    className: "sheet-body"
+    style: {
+      padding: "12px 18px 0",
+      flexShrink: 0
+    }
   }, React.createElement("div", {
-    className: "picker-search"
+    className: "picker-search",
+    style: {
+      marginBottom: 0
+    }
   }, React.createElement(Search, {
     size: 15
   }), React.createElement("input", {
@@ -8454,7 +8485,9 @@ const PickerSelect = ({
         setHi(h => Math.max(h - 1, 0));
       }
     }
-  })), list.length === 0 && React.createElement("p", {
+  }))), React.createElement("div", {
+    className: "sheet-body"
+  }, list.length === 0 && React.createElement("p", {
     className: "text-center text-xs font-bold py-6",
     style: {
       color: "var(--text-muted)"

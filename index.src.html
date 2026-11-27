@@ -7375,6 +7375,17 @@ if (e.key >= "0" && e.key <= "9") handleDigit(e.key);
         const [open, setOpen] = useState(false);
         const [q, setQ] = useState("");
         const [hi, setHi] = useState(0);
+        /* لما الكيبورد تفتح: نقيس الجزء المرئي فعلاً من الشاشة ونحط الشيت جواه عشان القايمة تفضل ظاهرة فوق الكيبورد */
+        const [vv, setVv] = useState(null);
+        useEffect(() => {
+          if (!open) { setVv(null); return; }
+          const w = window.visualViewport;
+          if (!w) return;
+          const upd = () => setVv({ top: w.offsetTop, height: w.height });
+          upd();
+          w.addEventListener("resize", upd); w.addEventListener("scroll", upd);
+          return () => { w.removeEventListener("resize", upd); w.removeEventListener("scroll", upd); };
+        }, [open]);
         const opts = [];
         const walk = (nodes, group) => React.Children.forEach(nodes, (ch) => {
           if (!ch || !ch.props) return;
@@ -7395,27 +7406,29 @@ if (e.key >= "0" && e.key <= "9") handleDigit(e.key);
         const close = () => { setOpen(false); setQ(""); setHi(0); };
         const pick = (o) => { if (o.disabled) return; close(); onChange && onChange({ target: { value: o.value }, currentTarget: { value: o.value } }); };
         const sheet = open && createPortal(
-          <div className="sheet-backdrop no-print" onClick={(e) => { if (e.target === e.currentTarget) close(); }}>
-            <div className="sheet-content" style={{ maxHeight: "86dvh" }}>
+          <div className="sheet-backdrop no-print" style={vv ? { top: vv.top, bottom: "auto", height: vv.height } : undefined} onClick={(e) => { if (e.target === e.currentTarget) close(); }}>
+            <div className="sheet-content" style={{ maxHeight: vv ? Math.max(220, Math.floor(vv.height * 0.94)) + "px" : "86dvh" }}>
               <div className="sheet-handle" />
               <div className="sheet-header">
                 <h3 className="font-black text-base">{rest["aria-label"] || title || placeholder}</h3>
                 <button type="button" onClick={close} className="btn btn-ghost p-1.5" aria-label="إغلاق"><X size={16} /></button>
               </div>
+              <div style={{ padding: "12px 18px 0", flexShrink: 0 }}>
+              <div className="picker-search" style={{ marginBottom: 0 }}>
+                <Search size={15} />
+                <input
+                  autoFocus type="text" inputMode="search" enterKeyHint="done" className="input-field text-sm" placeholder="ابحث..."
+                  value={q} onChange={(e) => { setQ(e.target.value); setHi(0); }}
+                  onKeyDown={(e) => {
+                    const sel = list.filter((o) => !o.disabled);
+                    if (e.key === "Enter") { e.preventDefault(); const t = sel[Math.min(hi, sel.length - 1)]; if (t) pick(t); }
+                    else if (e.key === "ArrowDown") { e.preventDefault(); setHi((h) => Math.min(h + 1, sel.length - 1)); }
+                    else if (e.key === "ArrowUp") { e.preventDefault(); setHi((h) => Math.max(h - 1, 0)); }
+                  }}
+                />
+              </div>
+              </div>
               <div className="sheet-body">
-                <div className="picker-search">
-                  <Search size={15} />
-                  <input
-                    autoFocus type="text" inputMode="search" enterKeyHint="done" className="input-field text-sm" placeholder="ابحث..."
-                    value={q} onChange={(e) => { setQ(e.target.value); setHi(0); }}
-                    onKeyDown={(e) => {
-                      const sel = list.filter((o) => !o.disabled);
-                      if (e.key === "Enter") { e.preventDefault(); const t = sel[Math.min(hi, sel.length - 1)]; if (t) pick(t); }
-                      else if (e.key === "ArrowDown") { e.preventDefault(); setHi((h) => Math.min(h + 1, sel.length - 1)); }
-                      else if (e.key === "ArrowUp") { e.preventDefault(); setHi((h) => Math.max(h - 1, 0)); }
-                    }}
-                  />
-                </div>
                 {list.length === 0 && <p className="text-center text-xs font-bold py-6" style={{ color: "var(--text-muted)" }}>لا توجد نتائج</p>}
                 {list.map((o, i) => {
                   const isSel = cur && o.value === cur.value;
