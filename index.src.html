@@ -3402,15 +3402,31 @@ function getSunTimes(date, lat, lng, fajrAngle, ishaAngle) {
 
         const paidAmount = Math.max(safeNumber(plan.paidAmount), data ? getPlanPaidAmount(plan, data) : 0);
 
+        // دفعة مقدمة: سداد القسط الأول (أو أكتر) قبل شهر بداية الخطة بيقصّر جدول الأقساط.
+        // من غير كده الخطة (3 شهور وقسط اتدفع مقدم) كانت بتجدول 3 أقساط جاية وكمان القسط المدفوع = 4 أقساط.
+        let advanceCount = 0;
+        if (data && monthlyAmount > 0 && startMonthIdx >= 0) {
+          const startFirstDay = new Date(safeNumber(plan.startYear, 2026), startMonthIdx, 1).getTime();
+          let advAmt = 0;
+          (data.transactions || []).forEach((t) => {
+            if (!t || t.status !== "paid" || t.source !== "card-payment-plan") return;
+            if (t.linkedPlanId !== plan.id && t.installmentPlanId !== plan.id) return;
+            const d = parseISODate(t.date);
+            if (d && d.getTime() < startFirstDay) advAmt += safeNumber(t.amount);
+          });
+          advanceCount = Math.min(plan.months - 1, Math.floor(advAmt / monthlyAmount + 0.01));
+        }
+        const effMonths = plan.months - advanceCount;
+
         const remainingAmount = Math.max(0, financedTotal - paidAmount);
-        const remainingMonths = Math.max(0, plan.months - monthsElapsed);
+        const remainingMonths = Math.max(0, effMonths - monthsElapsed);
         const progressPct = financedTotal > 0
           ? (paidAmount / financedTotal) * 100
           : 0;
 
         return {
           monthsElapsed, dueAmount, remainingAmount, remainingMonths,
-          monthlyAmount,
+          monthlyAmount, effMonths, advanceCount,
           completed: paidAmount >= financedTotal - 0.005,
           progressPct, paidAmount, financedTotal,
         };
@@ -3485,15 +3501,16 @@ const getCycleRange = (card, cycleKey) => {
 
   const { dueDay, statementDay } = getCardCycleParams(card);
 
-  // cycleKey = "2026-11" يعنى:
-  //   - الدورة = الشهر السابق كاملاً (أكتوبر: 1 → 31)
+  // cycleKey = شهر تاريخ الكشف. مثال "2026-11" والكشف يوم 10:
+  //   - الدورة = من يوم الكشف السابق (10 أكتوبر) لحد اليوم اللي قبل الكشف (9 نوفمبر)
   //   - الكشف = نوفمبر يوم statementDay
-  //   - السداد = نوفمبر يوم dueDay
+  //   - السداد = يوم dueDay في نفس شهر الكشف، أو في الشهر التالي لو dueDay أصغر من statementDay (مثال CIB: كشف 10 وسداد 5)
+  // لو الكشف يوم 1: الدورة = الشهر السابق كاملاً (زي الأول بالظبط)
 
-  const cycleStart = new Date(y, m - 2, 1);
-  const cycleEnd   = new Date(y, m - 1, 0);
+  const cycleStart = new Date(y, m - 2, statementDay);
+  const cycleEnd   = new Date(y, m - 1, statementDay - 1);
   const statementDate = new Date(y, m - 1, statementDay);
-  const dueDate = new Date(y, m - 1, dueDay);
+  const dueDate = new Date(y, dueDay < statementDay ? m : m - 1, dueDay);
 
   return {
     cycleStart, cycleEnd,
@@ -3514,7 +3531,48 @@ const getCycleRange = (card, cycleKey) => {
         const planStartYM = safeNumber(plan.startYear, 2026) * 12 + getMonthIndex(plan.startMonth);
         const cycleYM = dueDate.getFullYear() * 12 + dueDate.getMonth();
         const monthsSinceStart = cycleYM - planStartYM;
-        return monthsSinceStart >= 0 && monthsSinceStart < plan.months;
+        return monthsSinceStart >= 0 && monthsSinceStart < (plan.effMonths ?? plan.months);
+      };
+
+      /* ═══ أقساط لسه ماجتش (أصل القسط اللي هيتحسب في كشوف جاية) ═══
+         المديونية فيها سعر المشتريات المقسطة كله، لكن المطلوب سداده في الكشف = المشتريات العادية + أقساط الشهر بس.
+         الأصل اللي لسه معاده ماجاش مش مطلوب في الكشف ده. */
+      const planPrincipalInDebt = (plan, data, card, asOfDate) => {
+        const upper = new Date(asOfDate).getTime();
+        const ids = Array.isArray(plan.linkedTxIds) ? plan.linkedTxIds : [];
+        const purchases = (data?.transactions || []).filter((t) =>
+          t && t.type === "expense" && t.source !== "void" &&
+          (((t.installmentPlanId === plan.id || t.linkedPlanId === plan.id) && t.source === "installment-purchase") || ids.includes(t.id)),
+        );
+        if (purchases.length > 0) {
+          return purchases.some((t) => {
+            if (t.status !== "paid") return false;
+            const d = parseISODate(t.date);
+            return d && d.getTime() <= upper;
+          });
+        }
+        // مفيش حركة شراء مربوطة: لو الخطة بدأت قبل الرصيد الافتتاحي فأصلها داخل الرصيد الافتتاحي
+        const od = parseISODate(card.openingDebtDate || card.openingDate);
+        if (!od) return false;
+        const startIdx = getMonthIndex(plan.startMonth);
+        if (startIdx < 0) return false;
+        return safeNumber(plan.startYear, 2026) * 12 + startIdx <= od.getFullYear() * 12 + od.getMonth();
+      };
+      const computeUnbilledPrincipal = (plans, statementDate, data, card, asOfDate) => {
+        const stmtYM = statementDate.getFullYear() * 12 + statementDate.getMonth();
+        let sum = 0;
+        (plans || []).forEach((plan) => {
+          if (plan.status === "cancelled" || plan.completed) return;
+          const startIdx = getMonthIndex(plan.startMonth);
+          if (startIdx < 0) return;
+          const pStartYM = safeNumber(plan.startYear, 2026) * 12 + startIdx;
+          const eff = plan.effMonths ?? plan.months;
+          const slotsAfter = Math.max(0, eff - Math.max(0, stmtYM - pStartYM + 1));
+          if (slotsAfter <= 0) return;
+          if (!planPrincipalInDebt(plan, data, card, asOfDate)) return;
+          sum += Math.min(safeNumber(plan.remainingAmount), slotsAfter * safeNumber(plan.monthlyAmount));
+        });
+        return sum;
       };
 
       /* ═══════════════ STATEMENT ENGINE (V90 — minDue FIX) ═══════════════ */
@@ -3570,7 +3628,7 @@ const getCycleRange = (card, cycleKey) => {
           if (plan.status === "cancelled") return;
           const startIdx = getMonthIndex(plan.startMonth);
           if (startIdx < 0) return;
-          for (let i = 0; i < plan.months; i++) {
+          for (let i = 0; i < (plan.effMonths ?? plan.months); i++) {
             const totalIdx = startIdx + i;
             const m = totalIdx % 12;
             const y = safeNumber(plan.startYear, 2026) + Math.floor(totalIdx / 12);
@@ -3578,7 +3636,23 @@ const getCycleRange = (card, cycleKey) => {
           }
         });
 
-        const sortedKeys = Array.from(cycleKeysSet).sort();
+        let sortedKeys = Array.from(cycleKeysSet).sort();
+        if (openingDate) {
+          // دورات قبل تاريخ الرصيد الافتتاحي مفيهاش حركات، فكانت بتطلع دورات وهمية "متأخرة" شايلة الرصيد كله.
+          // بنحتفظ بس بالدورات اللي بتخلص بعد الافتتاحي + آخر كشف صدر قبله بـ 7 أيام أو أقل (الرصيد الافتتاحي = رصيد الكشف ده).
+          const od = dayStart(openingDate).getTime();
+          const kept = [];
+          let carry = null;
+          sortedKeys.forEach((k) => {
+            const r = getCycleRange(card, k);
+            if (!r) return;
+            if (r.cycleEnd.getTime() >= od) { kept.push(k); return; }
+            const gapDays = (od - r.statementDate.getTime()) / 86400000;
+            if (gapDays >= 0 && gapDays <= 7) carry = k;
+          });
+          if (carry) kept.unshift(carry);
+          sortedKeys = kept;
+        }
         if (sortedKeys.length === 0) {
           return {
             cycles: [], currentStatement: null, openCycle: null,
@@ -3628,15 +3702,15 @@ const getCycleRange = (card, cycleKey) => {
             .reduce((s, t) => s + safeNumber(t.amount), 0);
           // ═══ V90 — الأقساط المستحقة في هذه الدورة (لكل خطة نشطة) ═══
           let installmentsDueThisCycle = 0;
-          const dueMonthIdx = dueDate.getMonth();
-          const dueYM = dueDate.getFullYear() * 12 + dueMonthIdx;
+          // القسط بيتحسب في كشف شهره (شهر تاريخ الكشف)، مش في شهر تاريخ السداد
+          const dueYM = statementDate.getFullYear() * 12 + statementDate.getMonth();
           instInfo.plans.forEach((plan) => {
             if (plan.status === "cancelled") return;
             const pStartIdx = getMonthIndex(plan.startMonth);
             if (pStartIdx < 0) return;
             const pStartYM = safeNumber(plan.startYear, 2026) * 12 + pStartIdx;
             const diff = dueYM - pStartYM;
-            if (diff >= 0 && diff < plan.months) {
+            if (diff >= 0 && diff < (plan.effMonths ?? plan.months)) {
               installmentsDueThisCycle += plan.monthlyAmount;
             }
           });
@@ -3658,34 +3732,36 @@ const getCycleRange = (card, cycleKey) => {
           // المرجع: CIB T&C، AAIB T&C، ADIB T&C
 
           // 1. احسب الرصيد غير المقسط
-          const totalRemainingInstallments = instInfo.plans
-            .filter((p) => p.status !== "cancelled" && !p.completed)
-            .reduce((s, p) => s + safeNumber(p.remainingAmount), 0);
-          const nonInstallmentBalance = Math.max(0, closingBalance - totalRemainingInstallments);
+          // أصل الأقساط اللي لسه ماجاش معادها (مش مطلوب في الكشف ده)
+          const unbilledPrincipal = Math.min(
+            Math.max(0, closingBalance),
+            computeUnbilledPrincipal(instInfo.plans, statementDate, data, card, Math.min(cycleEndTs, upperTime)),
+          );
+
+          // 3 (قبل). أقساط الشهر المستحقة في هذه الدورة
+          const installmentsDue = instInfo.plans
+            .filter((p) =>
+              !p.completed &&
+              p.status !== "cancelled" &&
+              isPlanDueInCycle(p, cycleKey, statementDate)
+            )
+            .reduce((s, p) => s + safeNumber(p.monthlyAmount), 0);
+          const nonInstallmentBalance = Math.max(0, closingBalance - unbilledPrincipal - installmentsDue);
 
           // 2. الحد الأدنى الأساسي (5% من غير المقسط)
           const minBase = nonInstallmentBalance > 0
             ? Math.max(100, Math.round(nonInstallmentBalance * 0.05 * 100) / 100)
             : 0;
 
-          // 3. أقساط الشهر المستحقة في هذه الدورة
-          const installmentsDue = instInfo.plans
-            .filter((p) =>
-              !p.completed &&
-              p.status !== "cancelled" &&
-              isPlanDueInCycle(p, cycleKey, dueDate)
-            )
-            .reduce((s, p) => s + safeNumber(p.monthlyAmount), 0);
-
           // 4. الحد الأدنى الفعلي = 5% من غير المقسط + الأقساط
-          const minDue = roundMoney(minBase + installmentsDue);
+          const minDue = roundMoney(Math.min(minBase + installmentsDue, Math.max(0, closingBalance - unbilledPrincipal)));
 
           // 5. الرصيد الكامل المستحق (وليس الحد الأدنى)
-          const totalDue = Math.max(0, closingBalance);
+          const totalDue = Math.max(0, closingBalance - unbilledPrincipal);
 
           // 6. الفائدة والرسوم (إن تأخر السداد)
           const daysPastDue = Math.max(0, Math.ceil((now.getTime() - dueTs) / 86400000));
-          const unpaidBalance = Math.max(0, closingBalance - paymentsAfterStatement);
+          const unpaidBalance = Math.max(0, totalDue - paymentsAfterStatement);
           const apr = safeNumber(card.apr, 18);
           const financeCharges = daysPastDue > 0 && unpaidBalance > 0
             ? roundMoney(unpaidBalance * (apr / 100) / 365 * daysPastDue)
@@ -3695,7 +3771,7 @@ const getCycleRange = (card, cycleKey) => {
             : 0;
 
           // ✅ تحديد الحالة بدقة
-          const isFullyPaid = (closingBalance - paymentsAfterStatement) <= 0.01;
+          const isFullyPaid = (totalDue - paymentsAfterStatement) <= 0.01;
           const isMinPaid = paymentsAfterStatement >= (minDue - 0.01);
 
           let status = "open";
@@ -3711,14 +3787,14 @@ const getCycleRange = (card, cycleKey) => {
             statementDateISO: range.statementDateISO, dueDateISO: range.dueDateISO,
             cycleStart, cycleEnd, statementDate, dueDate,
             openingBalance, purchases, refunds, paymentsInCycle,
-            closingBalance, installmentsDueThisCycle, minDue, totalDue, minBase,
+            closingBalance, installmentsDueThisCycle, minDue, totalDue, minBase, unbilledPrincipal,
             installmentsDue, nonInstallmentBalance,
             financeCharges, lateFee,
             status, daysUntilDue, txCount: cycleTxs.length,
             transactions: cycleTxs,
             isPaid: isFullyPaid,
             isMinPaid,
-            effectiveClosingBalance: Math.max(0, closingBalance - paymentsAfterStatement),
+            effectiveClosingBalance: Math.max(0, totalDue - paymentsAfterStatement),
             paymentsAfterStatement,
           });
         });
@@ -3771,7 +3847,7 @@ const getCycleRange = (card, cycleKey) => {
         }
 
         let statementBalance = currentStatement
-          ? Math.max(0, currentStatement.closingBalance - paymentsAfterStatement)
+          ? Math.max(0, currentStatement.totalDue - paymentsAfterStatement)
           : 0;
 
         let installmentsThisMonth = currentStatement ? currentStatement.installmentsDueThisCycle : 0;
@@ -3790,7 +3866,9 @@ const getCycleRange = (card, cycleKey) => {
 
         if (!currentStatement) {
           // ✅ التنبؤ: بناءً على المديونية الحالية الفعلية
-          const projectedTxDebt = liveFigures.txDebt;
+          const projectedTxDebt = Math.max(0, liveFigures.txDebt - (openCycle
+            ? Math.min(Math.max(0, liveFigures.txDebt), computeUnbilledPrincipal(instInfo.plans, openCycle.statementDate, data, card, now))
+            : 0));
           const projectedMinBase = projectedTxDebt > 0
             ? Math.max(100, Math.round(projectedTxDebt * 0.05 * 100) / 100)
             : 0;
@@ -3798,7 +3876,8 @@ const getCycleRange = (card, cycleKey) => {
 
           installmentsThisMonth = activePlansMonthly;
           minPayment = projectedMinBase + activePlansMonthly;
-          totalMandatory = projectedTxDebt + activePlansMonthly;
+          // المديونية فيها سعر المشتريات المقسطة أصلاً، فمنزودش الأقساط فوقها (كان بيتحسب مرتين)
+          totalMandatory = Math.max(projectedTxDebt, activePlansMonthly);
           statementBalance = projectedTxDebt;
           minBase = projectedMinBase;
         }
@@ -3814,7 +3893,7 @@ const getCycleRange = (card, cycleKey) => {
         }
 
         const nextCycleEstimate = openCycle
-          ? Math.max(0, openCycle.closingBalance) + openCycle.installmentsDueThisCycle
+          ? Math.max(Math.max(0, openCycle.totalDue), openCycle.installmentsDueThisCycle)
           : activePlans.length > 0
             ? installmentsThisMonth
             : 0;
@@ -3849,6 +3928,41 @@ const getCycleRange = (card, cycleKey) => {
 
         const limit = safeNumber(card.limit);
 
+        // ═══ المتوقع عند تاريخ السداد: المديونية + مصروفات مجدولة (pending) − سدادات مجدولة لحد تاريخ السداد ═══
+        let pendingCharges = 0, pendingPayments = 0, pendingChargesCount = 0, pendingPaymentsCount = 0;
+        // لو تاريخ السداد الحالي عدّى (كشف متأخر)، نحسب المتوقع لحد تاريخ سداد الدورة الجاية
+        let horizonDate = dueDate;
+        if (horizonDate && dayStart(horizonDate).getTime() < dayStart(now).getTime() && openCycle && openCycle.dueDate) {
+          horizonDate = openCycle.dueDate;
+        }
+        if (horizonDate) {
+          const horizonTs = dayStart(horizonDate).getTime();
+          const cardSubs = Array.isArray(card.subCardLast4) ? card.subCardLast4 : [];
+          const cardMeth = getCardMethod(card);
+          const cutISO = card.openingDebtDate || card.openingDate;
+          const cutP = cutISO ? parseISODate(cutISO) : null;
+          const cutTs = cutP ? dayStart(cutP).getTime() : null;
+          (data?.transactions || []).forEach((t) => {
+            if (!t || t.status !== "pending") return;
+            if (t.source === "void" || t.source === "carryover" || t.source === "card-forecast") return;
+            if (isCarryoverMarker(t) || isHanyPurchaseTx(t) || isHanySettleTx(t) || t.method === HANY_TAB_METHOD) return;
+            const d = parseISODate(t.date);
+            if (!d || d.getTime() > horizonTs) return;
+            if (cutTs !== null && d.getTime() < cutTs) return;
+            const explicit = t.linkedCardId !== undefined && t.linkedCardId !== null && t.linkedCardId !== "";
+            let mine = false;
+            if (explicit) mine = t.linkedCardId === card.id;
+            else if (t.cardLast4 && cardSubs.includes(t.cardLast4)) mine = true;
+            else mine = t.method === cardMeth;
+            if (!mine) return;
+            const amt = safeNumber(t.amount);
+            if (isCardPaymentTx(t, card.id)) { pendingPayments += amt; pendingPaymentsCount++; }
+            else if (t.type === "expense") { pendingCharges += amt; pendingChargesCount++; }
+            else if (t.type === "income") { pendingCharges -= amt; pendingChargesCount++; }
+          });
+        }
+        const projectedAtDue = liveFigures.liveDebt + pendingCharges - pendingPayments;
+
         const currentDebt = liveFigures.liveDebt;
         const installmentsDueSoFar = instInfo.totalDueSoFar || 0;
         const installmentsNotYetDue = Math.max(0, (instInfo.totalRemaining || 0) - installmentsDueSoFar);
@@ -3882,6 +3996,9 @@ const getCycleRange = (card, cycleKey) => {
           installmentsDueSoFar,
           installmentsNotYetDue,
           availableLimit,
+          pendingCharges, pendingPayments, pendingChargesCount, pendingPaymentsCount,
+          projectedAtDue, projectedAvailableAtDue: limit - projectedAtDue,
+          projectedDateISO: horizonDate ? getLocalISODate(horizonDate) : null,
           limit,
           plans: instInfo.plans,
           cycles: engine.cycles,
@@ -11729,6 +11846,14 @@ if (e.key >= "0" && e.key <= "9") handleDigit(e.key);
                             </p>
                           </div>
                         </div>
+                        {(prediction.pendingChargesCount > 0 || prediction.pendingPaymentsCount > 0) && (
+                          <div className="p-2 rounded-lg bg-white/60 dark:bg-black/20 mb-2">
+                            <p className="text-[10px] font-bold leading-relaxed" style={{ color: "var(--text-muted)" }}>
+                              📈 المتوقع في {prediction.projectedDateISO || "تاريخ السداد"}: <span className="money tabular font-black">{fmt(prediction.projectedAtDue)}</span> ج.م
+                              {" "}(مصروفات مجدولة {fmt(prediction.pendingCharges)} − سدادات مجدولة {fmt(prediction.pendingPayments)})
+                            </p>
+                          </div>
+                        )}
                         {prediction.paymentsAfterStatement > 0 && (
                           <div className="p-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 mb-2">
                             <p className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 leading-relaxed">
