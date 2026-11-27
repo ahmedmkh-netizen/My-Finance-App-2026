@@ -1484,6 +1484,7 @@
         { id: "exp_personal_loans", label: "مصاريف وسلف شخصية", type: "expense", kind: "financial", group: "تحويلات مالية", color: "#DC2626" },
         { id: "exp_wallet_pay", label: "محافظ الكترونية", type: "expense", kind: "financial", group: "تحويلات مالية", color: "#0369A1" },
         { id: "exp_cash_out", label: "مصروف نقدي", type: "expense", kind: "operational", group: "تحويلات مالية", color: "#65A30D" },
+        { id: "exp_for_others", label: "مشتريات للغير", type: "expense", kind: "operational", group: "للغير", color: "#7C3AED" },
         { id: "exp_custody_inv", label: "فواتير عهدة", type: "expense", kind: "operational", group: "العهد", color: "#0369A1" },
         { id: "exp_custody_spend", label: "مصروفات عهدة", type: "expense", kind: "operational", group: "العهد", color: "#0EA5E9" },
         { id: "adj_reconcile", label: "تسوية رصيد", type: "expense", kind: "adjustment", group: "تسويات", color: "#D97706" },
@@ -5904,7 +5905,7 @@ const getCycleRange = (card, cycleKey) => {
 
       const getTxDisplay = (t) => {
         if (!t) return "";
-        const base = t.description || t.category || "بدون وصف";
+        const base = (t.description || t.category || "بدون وصف") + (t.beneficiaryName ? ` — لـ ${t.beneficiaryName}` : "");
         if (t.quantity && Number(t.quantity) >= 1 && t.unitPrice && !String(base).includes("×")) {
           return `${base} (${t.quantity} × ${t.unitPrice})`;
         }
@@ -5913,7 +5914,7 @@ const getCycleRange = (card, cycleKey) => {
 
       const getTxDisplayText = (t) => {
         if (!t) return "";
-        const base = t.description || t.category || "بدون وصف";
+        const base = (t.description || t.category || "بدون وصف") + (t.beneficiaryName ? ` — لـ ${t.beneficiaryName}` : "");
         if (String(base).includes("×")) return base;
         if (t.quantity && t.unitPrice) {
           return `${base} (${t.quantity} × ${t.unitPrice})`;
@@ -8359,7 +8360,7 @@ if (e.key >= "0" && e.key <= "9") handleDigit(e.key);
       const CATEGORY_ICON_MAP = Object.freeze({
         "راتب شهري": "💰", "راتب AAIB": "🏦", "عمل حر": "💼", استثمارات: "📈",
         "إيجار المحل": "🏠", "تكييف محمود": "❄️", "استرداد كاش باك": "🎁",
-        "عهدة شركة إيماك": "📦", "عهدة إيماك WE": "📦", "تحويلات واردة": "📥", "استرداد من الشركة": "🧾",
+        "عهدة شركة إيماك": "📦", "عهدة إيماك WE": "📦", "تحويلات واردة": "📥", "استرداد من الشركة": "🧾", "مشتريات للغير": "🛍️",
         "شحن محفظة": "📱", "شحن رصيد فوري": "⚡",
         "مصروفات المعيشة اليومية": "🛒", "المستلزمات المنزلية والتموين": "🧺",
         "اللحوم والدواجن والأسماك": "🍗", خضروات: "🥬", "بقالة / فاكهة": "🍎",
@@ -17690,6 +17691,7 @@ useEffect(() => {
           if (!amountCheck.valid) errors.amount = amountCheck.error;
           if (!formData.category) errors.category = "اختر الفئة";
           if (!formData.date) errors.date = "اختر التاريخ";
+          if (formData.category === "مشتريات للغير" && String(formData.beneficiaryName || "").trim().length < 2) errors.beneficiaryName = "اكتب اسم المستفيد";
 
           if (Object.keys(errors).length > 0) {
             saveLockRef.current = false;
@@ -17794,6 +17796,7 @@ useEffect(() => {
                 kind: finalKind || cleanFormData.kind,
                 linkedCardId: syncLinkedCardId,
                 cardLast4: syncCardLast4,
+                beneficiaryName: formData.category === "مشتريات للغير" ? String(formData.beneficiaryName || "").trim() : undefined,
                 quantity: formData.quantity ? Number(formData.quantity) : undefined,
                 unitPrice: formData.unitPrice ? Number(formData.unitPrice) : undefined,
                 time: formData.time || undefined,
@@ -18757,6 +18760,18 @@ useEffect(() => {
                               </PickerSelect>
                             </div>
                           </div>
+                          {formData.category === "مشتريات للغير" && (
+                            <div className="mt-3">
+                              <label className="block text-[11px] font-bold mb-1.5" style={{ color: "var(--text-muted)" }}>اسم المستفيد *</label>
+                              <input
+                                type="text" enterKeyHint="next" autoComplete="off"
+                                className={`input-field font-bold text-sm py-2.5 ${formErrors.beneficiaryName ? "error" : ""}`}
+                                value={formData.beneficiaryName || ""}
+                                onChange={(e) => dispatch({ type: "SET_FORM_DATA", payload: { ...formData, beneficiaryName: e.target.value } })}
+                                placeholder="لمين الشراء؟"
+                              />
+                            </div>
+                          )}
                         </div>
 
                         <div className="form-section form-section-compact">

@@ -1619,6 +1619,13 @@ const CATALOG = [{
   group: "تحويلات مالية",
   color: "#65A30D"
 }, {
+  id: "exp_for_others",
+  label: "مشتريات للغير",
+  type: "expense",
+  kind: "operational",
+  group: "للغير",
+  color: "#7C3AED"
+}, {
   id: "exp_custody_inv",
   label: "فواتير عهدة",
   type: "expense",
@@ -6533,7 +6540,7 @@ const groupTransactionsByDate = list => {
 };
 const getTxDisplay = t => {
   if (!t) return "";
-  const base = t.description || t.category || "بدون وصف";
+  const base = (t.description || t.category || "بدون وصف") + (t.beneficiaryName ? ` — لـ ${t.beneficiaryName}` : "");
   if (t.quantity && Number(t.quantity) >= 1 && t.unitPrice && !String(base).includes("×")) {
     return `${base} (${t.quantity} × ${t.unitPrice})`;
   }
@@ -6541,7 +6548,7 @@ const getTxDisplay = t => {
 };
 const getTxDisplayText = t => {
   if (!t) return "";
-  const base = t.description || t.category || "بدون وصف";
+  const base = (t.description || t.category || "بدون وصف") + (t.beneficiaryName ? ` — لـ ${t.beneficiaryName}` : "");
   if (String(base).includes("×")) return base;
   if (t.quantity && t.unitPrice) {
     return `${base} (${t.quantity} × ${t.unitPrice})`;
@@ -9812,6 +9819,7 @@ const CATEGORY_ICON_MAP = Object.freeze({
   "عهدة إيماك WE": "📦",
   "تحويلات واردة": "📥",
   "استرداد من الشركة": "🧾",
+  "مشتريات للغير": "🛍️",
   "شحن محفظة": "📱",
   "شحن رصيد فوري": "⚡",
   "مصروفات المعيشة اليومية": "🛒",
@@ -23434,6 +23442,7 @@ function App() {
     if (!amountCheck.valid) errors.amount = amountCheck.error;
     if (!formData.category) errors.category = "اختر الفئة";
     if (!formData.date) errors.date = "اختر التاريخ";
+    if (formData.category === "مشتريات للغير" && String(formData.beneficiaryName || "").trim().length < 2) errors.beneficiaryName = "اكتب اسم المستفيد";
     if (Object.keys(errors).length > 0) {
       saveLockRef.current = false;
       dispatch({
@@ -23574,6 +23583,7 @@ function App() {
           kind: finalKind || cleanFormData.kind,
           linkedCardId: syncLinkedCardId,
           cardLast4: syncCardLast4,
+          beneficiaryName: formData.category === "مشتريات للغير" ? String(formData.beneficiaryName || "").trim() : undefined,
           quantity: formData.quantity ? Number(formData.quantity) : undefined,
           unitPrice: formData.unitPrice ? Number(formData.unitPrice) : undefined,
           time: formData.time || undefined,
@@ -25207,7 +25217,28 @@ function App() {
   }, items.map(c => React.createElement("option", {
     key: c,
     value: c
-  }, c)))))))), React.createElement("div", {
+  }, c))))))), formData.category === "مشتريات للغير" && React.createElement("div", {
+    className: "mt-3"
+  }, React.createElement("label", {
+    className: "block text-[11px] font-bold mb-1.5",
+    style: {
+      color: "var(--text-muted)"
+    }
+  }, "اسم المستفيد *"), React.createElement("input", {
+    type: "text",
+    enterKeyHint: "next",
+    autoComplete: "off",
+    className: `input-field font-bold text-sm py-2.5 ${formErrors.beneficiaryName ? "error" : ""}`,
+    value: formData.beneficiaryName || "",
+    onChange: e => dispatch({
+      type: "SET_FORM_DATA",
+      payload: {
+        ...formData,
+        beneficiaryName: e.target.value
+      }
+    }),
+    placeholder: "لمين الشراء؟"
+  }))), React.createElement("div", {
     className: "form-section form-section-compact"
   }, React.createElement("div", {
     className: "form-section-title"
