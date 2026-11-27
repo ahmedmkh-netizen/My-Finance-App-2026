@@ -8900,7 +8900,63 @@ if (e.key >= "0" && e.key <= "9") handleDigit(e.key);
         );
       });
 
-      // V94 — شريط رمضان المصغّر (نفس منطق تطبيق العيلة)
+      // V95 — شريط رمضان المصغّر (تصميم جديد، نفس منطق تطبيق العيلة)
+      const RMM_CSS = `
+.rmm{position:relative;overflow:hidden;isolation:isolate;color:#fff;border-radius:22px;padding:44px 12px 12px;direction:rtl;
+ background:radial-gradient(120% 80% at 85% 0%,rgba(255,196,87,.26) 0%,transparent 55%),linear-gradient(160deg,#0B1530 0%,#14224A 60%,#0E1A3C 100%);
+ border:1.5px solid rgba(232,194,133,.5);box-shadow:0 10px 26px -10px rgba(8,14,40,.6)}
+.rmm.eid{background:radial-gradient(120% 80% at 85% 0%,rgba(255,214,120,.3) 0%,transparent 55%),linear-gradient(160deg,#0C2E2A 0%,#14544A 60%,#0D3B35 100%);border-color:rgba(255,226,150,.8)}
+.rmm-pat{position:absolute;inset:0;z-index:0;opacity:.07;pointer-events:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 48 48'%3E%3Cpath d='M24 4l4.5 8.5L38 10l-2.5 9.5L44 24l-8.5 4.5L38 38l-9.5-2.5L24 44l-4.5-8.5L10 38l2.5-9.5L4 24l8.5-4.5L10 10l9.5 2.5z' fill='none' stroke='%23FCE7B3'/%3E%3C/svg%3E");background-size:40px 40px}
+.rmm-lan{position:absolute;top:0;z-index:1;transform-origin:50% 0;animation:rmmSway 5s ease-in-out infinite;filter:drop-shadow(0 0 6px rgba(255,200,87,.6));pointer-events:none}
+.rmm-lan svg{display:block;width:100%;height:100%;overflow:visible}
+@keyframes rmmSway{0%,100%{transform:rotate(-5deg)}50%{transform:rotate(5deg)}}
+.rmm-row{position:relative;z-index:2;display:flex;align-items:center;gap:8px}
+.rmm-moon{width:36px;height:36px;flex:none;filter:drop-shadow(0 0 9px rgba(255,214,120,.7))}
+.rmm-moon svg{width:100%;height:100%}
+.rmm-greet{overflow:visible;font-size:17px;font-weight:900;line-height:1.2;background:linear-gradient(180deg,#FFF3C4,#E8B84F);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;white-space:nowrap}
+.rmm-sub{font-size:11px;font-weight:700;color:rgba(255,255,255,.78);margin-top:2px}
+.rmm-grow{flex:1;min-width:0}
+.rmm-tiles{display:flex;direction:ltr;align-items:flex-start;gap:3px;flex:none}
+.rmm-tile{text-align:center;width:40px}
+.rmm-num{display:block;font-size:18px;font-weight:900;line-height:1;padding:8px 0 7px;border-radius:10px;color:#FFF3C4;font-variant-numeric:tabular-nums;background:linear-gradient(180deg,rgba(255,255,255,.14),rgba(255,255,255,.05));border:1px solid rgba(232,194,133,.45);text-shadow:0 0 10px rgba(255,200,87,.5)}
+.rmm-unit{display:block;font-size:9.5px;font-weight:700;color:rgba(255,255,255,.7);margin-top:3px}
+.rmm-colon{font-size:15px;font-weight:900;color:#E8B84F;padding-top:7px;animation:rmmBlink 1s steps(2,end) infinite}
+@keyframes rmmBlink{0%{opacity:1}50%{opacity:.25}}
+.rmm-label{position:relative;z-index:2;font-size:11.5px;font-weight:800;color:#FCE7B3;margin:10px 0 0}
+.rmm-times{position:relative;z-index:2;display:flex;align-items:stretch;gap:6px;margin-top:8px}
+.rmm-time{flex:1;text-align:center;padding:5px 2px;border-radius:11px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);min-width:0}
+.rmm-time span{display:block;font-size:10.5px;font-weight:700;color:rgba(255,255,255,.75)}
+.rmm-time b{display:block;font-size:12.5px;font-weight:900;color:#fff;margin-top:1px;white-space:nowrap}
+.rmm-time.next{background:linear-gradient(180deg,rgba(255,214,120,.3),rgba(255,214,120,.12));border-color:rgba(255,226,150,.85);box-shadow:0 0 12px -2px rgba(255,200,87,.45)}
+.rmm-time.next span,.rmm-time.next b{color:#FFF3C4}
+.rmm-city{flex:none;width:92px;background:rgba(255,255,255,.1);color:#FCE7B3;border:1px solid rgba(232,194,133,.5);border-radius:11px;font-size:16px;font-weight:800;font-family:inherit;padding:0 6px}
+.rmm-city option{color:#111;background:#fff}
+.rmm-eidtxt{font-size:22px;font-weight:900;background:linear-gradient(180deg,#FFF8DA,#F0BF55);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.rmm.paused *{animation-play-state:paused!important}
+@media (max-width:350px){.rmm-moon{display:none}.rmm-tile{width:36px}}
+@media (prefers-reduced-motion:reduce){.rmm *{animation:none!important}}
+`;
+      const RMM_DEFS = `<symbol id="rmLA" viewBox="0 0 40 84"><defs><radialGradient id="rmLAg" cx="50%" cy="55%" r="55%"><stop offset="0%" stop-color="#FFFBEA"/><stop offset="55%" stop-color="#FFD56B"/><stop offset="100%" stop-color="#E59A1F"/></radialGradient><linearGradient id="rmLAm" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#FCE7B3"/><stop offset="100%" stop-color="#C9922E"/></linearGradient></defs>
+<path d="M20 0V11" stroke="#E8C285" stroke-width="1.2"/><circle cx="20" cy="12" r="2" fill="none" stroke="#E8C285" stroke-width="1.2"/>
+<path d="M12.5 22Q20 8 27.5 22Z" fill="url(#rmLAm)"/><rect x="10.5" y="21.5" width="19" height="3.2" rx="1.6" fill="url(#rmLAm)"/>
+<path d="M12 24.7H28C34.5 35 34.5 47 28 57H12C5.5 47 5.5 35 12 24.7Z" fill="url(#rmLAg)" stroke="url(#rmLAm)" stroke-width="1.3"/>
+<path d="M20 24.7V57M16 24.7C11.5 36 11.5 46 16 57M24 24.7C28.5 36 28.5 46 24 57" fill="none" stroke="#B8862F" stroke-width=".7" opacity=".55"/>
+<ellipse cx="20" cy="41" rx="3" ry="5.2" fill="#FFF6CF"/>
+<rect x="10.5" y="56.5" width="19" height="3.2" rx="1.6" fill="url(#rmLAm)"/><path d="M14 59.7H26L20 69Z" fill="url(#rmLAm)"/>
+<path d="M20 69V77" stroke="#E8C285" stroke-width="1"/><circle cx="20" cy="79.5" r="2.2" fill="url(#rmLAm)"/></symbol><symbol id="rmLB" viewBox="0 0 40 84"><defs><radialGradient id="rmLBg" cx="50%" cy="55%" r="55%"><stop offset="0%" stop-color="#FFFBEA"/><stop offset="55%" stop-color="#FFC58A"/><stop offset="100%" stop-color="#E0702A"/></radialGradient><linearGradient id="rmLBm" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#FCE7B3"/><stop offset="100%" stop-color="#D08A3A"/></linearGradient></defs>
+<path d="M20 0V11" stroke="#E8C285" stroke-width="1.2"/><circle cx="20" cy="12" r="2" fill="none" stroke="#E8C285" stroke-width="1.2"/>
+<path d="M12.5 22Q20 8 27.5 22Z" fill="url(#rmLBm)"/><rect x="10.5" y="21.5" width="19" height="3.2" rx="1.6" fill="url(#rmLBm)"/>
+<path d="M12 24.7H28C34.5 35 34.5 47 28 57H12C5.5 47 5.5 35 12 24.7Z" fill="url(#rmLBg)" stroke="url(#rmLBm)" stroke-width="1.3"/>
+<path d="M20 24.7V57M16 24.7C11.5 36 11.5 46 16 57M24 24.7C28.5 36 28.5 46 24 57" fill="none" stroke="#B8862F" stroke-width=".7" opacity=".55"/>
+<ellipse cx="20" cy="41" rx="3" ry="5.2" fill="#FFF6CF"/>
+<rect x="10.5" y="56.5" width="19" height="3.2" rx="1.6" fill="url(#rmLBm)"/><path d="M14 59.7H26L20 69Z" fill="url(#rmLBm)"/>
+<path d="M20 69V77" stroke="#E8C285" stroke-width="1"/><circle cx="20" cy="79.5" r="2.2" fill="url(#rmLBm)"/></symbol><symbol id="rmCres" viewBox="0 0 64 64"><defs><linearGradient id="rmCresG" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#FFF3C4"/><stop offset="100%" stop-color="#E0A93B"/></linearGradient></defs>
+<path d="M44 6A27 27 0 1 0 58 46 22 22 0 0 1 44 6Z" fill="url(#rmCresG)"/><path d="M52 14l1.8 4.6 4.8.4-3.7 3.1 1.2 4.7-4.1-2.6-4.1 2.6 1.2-4.7-3.7-3.1 4.8-.4z" fill="#FFF3C4"/></symbol>`;
+      const RmmLantern = ({ left, w, h, id, delay, dur }) => (
+        <div className="rmm-lan" style={{ left, width: w, height: h, animationDelay: delay, animationDuration: dur }} aria-hidden="true">
+          <svg viewBox="0 0 40 84"><use href={"#" + id} /></svg>
+        </div>
+      );
       const RamadanMini = memo(() => {
         const override = useHanyCatalog().ramadanOverride;
         const [now, setNow] = useState(() => new Date());
@@ -8917,50 +8973,75 @@ if (e.key >= "0" && e.key <= "9") handleDigit(e.key);
           const id = setInterval(() => setNow(new Date()), st.phase === "active" ? 1000 : 30000);
           return () => clearInterval(id);
         }, [hidden, st.phase]);
-        const box = { background: "linear-gradient(135deg,#0A1628 0%,#1E2B4A 100%)", color: "#fff", borderRadius: 20, padding: "12px 16px", border: "1px solid rgba(251,191,36,.35)", display: "flex", alignItems: "center", gap: 12, direction: "rtl" };
-        const gold = "#FBBF24";
-        if (st.phase === "eid") {
-          return (
-            <div style={box}>
-              <div style={{ fontSize: 28 }}>🌙</div>
-              <div>
-                <div style={{ fontWeight: 900, fontSize: 15, color: gold }}>عيد الفطر المبارك 🎉</div>
-                <div style={{ fontSize: 12, opacity: 0.85 }}>كل عام وأنتم بخير</div>
-              </div>
-            </div>
-          );
-        }
-        if (st.phase === "before") {
-          const days = Math.max(0, Math.ceil((st.start.getTime() - now.getTime()) / 86400000));
-          if (days > 120) return null;
-          return (
-            <div style={box}>
-              <div style={{ fontSize: 28 }}>🌙</div>
-              <div style={{ fontWeight: 800, fontSize: 14 }}>
-                {days === 1 ? "باقي يوم على رمضان" : `باقي ${days} يوم على رمضان`}{st.estimated ? " (تقريبي)" : ""}
-              </div>
-            </div>
-          );
-        }
-        const ev = rmNextEvent(now, city);
-        const fmt = (d) => d ? d.toLocaleTimeString("ar-EG", { hour: "numeric", minute: "2-digit", timeZone: "Africa/Cairo" }) : "—";
-        return (
-          <div style={box}>
-            <div style={{ fontSize: 28 }}>🌙</div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 11, opacity: 0.85 }}>رمضان كريم · اليوم {st.day} من {st.len}</div>
-              <div style={{ fontSize: 12, fontWeight: 700 }}>{ev.kind === "iftar" ? "باقي على الفطار" : "باقي على الفجر (نهاية السحور)"}</div>
-              <div style={{ fontSize: 20, fontWeight: 900, color: gold, fontVariantNumeric: "tabular-nums", letterSpacing: 1, direction: "ltr", textAlign: "right" }}>{rmClock(ev.at.getTime() - now.getTime())}</div>
-            </div>
-            <div style={{ textAlign: "left", fontSize: 11, lineHeight: 1.6 }}>
-              <div>الفطار: <b>{fmt(ev.times.sunset)}</b></div>
-              <div>الفجر: <b>{fmt(ev.times.fajr)}</b></div>
-              <select value={city} onChange={(e) => { rmSetCity(e.target.value); setCity(e.target.value); }} aria-label="المدينة" style={{ marginTop: 2, background: "rgba(255,255,255,.12)", color: "#fff", border: "1px solid rgba(255,255,255,.25)", borderRadius: 8, fontSize: 16, padding: "1px 4px", maxWidth: 96 }}>
-                {Object.keys(RM_CITIES).map((k) => <option key={k} value={k} style={{ color: "#000" }}>{RM_CITIES[k].n}</option>)}
-              </select>
-            </div>
+        const pad = (n) => (n < 10 ? "0" : "") + n;
+        const tile = (n, unit) => (<div className="rmm-tile"><span className="rmm-num">{n}</span><span className="rmm-unit">{unit}</span></div>);
+        const moon = (<div className="rmm-moon"><svg viewBox="0 0 64 64"><use href="#rmCres" /></svg></div>);
+        const shell = (cls, children) => (
+          <div className={"rmm " + cls + (hidden ? " paused" : "")}>
+            <style>{RMM_CSS}</style>
+            <svg width="0" height="0" style={{ position: "absolute" }} aria-hidden="true" dangerouslySetInnerHTML={{ __html: "<defs>" + RMM_DEFS + "</defs>" }} />
+            <div className="rmm-pat" />
+            <RmmLantern left="6%" w={20} h={42} id="rmLA" delay="-1s" dur="5s" />
+            <RmmLantern left="26%" w={22} h={46} id="rmLB" delay="-3s" dur="6s" />
+            <RmmLantern left="50%" w={20} h={42} id="rmLA" delay="-2s" dur="5.4s" />
+            <RmmLantern left="72%" w={24} h={50} id="rmLB" delay="-4s" dur="6.4s" />
+            <RmmLantern left="92%" w={18} h={38} id="rmLA" delay="-.5s" dur="5s" />
+            {children}
           </div>
         );
+        if (st.phase === "eid") {
+          return shell("eid", (
+            <div className="rmm-row" style={{ justifyContent: "center", textAlign: "center" }}>
+              {moon}
+              <div>
+                <div className="rmm-eidtxt">عيد الفطر المبارك</div>
+                <div style={{ fontSize: 13, fontWeight: 800, marginTop: 2 }}>كل عام وأنتم بخير 🎉</div>
+              </div>
+            </div>
+          ));
+        }
+        if (st.phase === "before") {
+          const total = Math.max(0, Math.floor((st.start.getTime() - now.getTime()) / 1000));
+          const days = Math.floor(total / 86400);
+          if (days > 120) return null;
+          const hh = Math.floor((total % 86400) / 3600), mm = Math.floor((total % 3600) / 60);
+          let when = "";
+          try { when = st.start.toLocaleDateString("ar-EG", { day: "numeric", month: "long", timeZone: "Africa/Cairo" }); } catch (e) {}
+          return shell("", (
+            <div className="rmm-row">
+              {moon}
+              <div className="rmm-grow">
+                <div className="rmm-greet">باقي على رمضان</div>
+                <div className="rmm-sub">{when ? "يبدأ " + (st.estimated ? "تقريبًا " : "") + when : st.hijri + " هـ"}</div>
+              </div>
+              <div className="rmm-tiles">{tile(days, "يوم")}<span className="rmm-colon">:</span>{tile(pad(hh), "ساعة")}<span className="rmm-colon">:</span>{tile(pad(mm), "دقيقة")}</div>
+            </div>
+          ));
+        }
+        const ev = rmNextEvent(now, city);
+        const secs = Math.max(0, Math.floor((ev.at.getTime() - now.getTime()) / 1000));
+        const fmt = (d) => d ? d.toLocaleTimeString("ar-EG", { hour: "numeric", minute: "2-digit", timeZone: "Africa/Cairo" }) : "—";
+        const cell = (label, d, next) => (<div className={"rmm-time" + (next ? " next" : "")}><span>{label}</span><b>{fmt(d)}</b></div>);
+        return shell("", (
+          <React.Fragment>
+            <div className="rmm-row">
+              {moon}
+              <div className="rmm-grow">
+                <div className="rmm-greet">رمضان كريم</div>
+                <div className="rmm-sub">اليوم {st.day} من {st.len}</div>
+              </div>
+              <div className="rmm-tiles">{tile(pad(Math.floor(secs / 3600)), "ساعة")}<span className="rmm-colon">:</span>{tile(pad(Math.floor((secs % 3600) / 60)), "دقيقة")}<span className="rmm-colon">:</span>{tile(pad(secs % 60), "ثانية")}</div>
+            </div>
+            <div className="rmm-label">{ev.kind === "iftar" ? "باقي على أذان المغرب (الفطار)" : "باقي على أذان الفجر (نهاية السحور)"}</div>
+            <div className="rmm-times">
+              {cell("الفجر", ev.times.fajr, ev.kind === "fajr" && !ev.tomorrow)}
+              {cell("الفطار", ev.times.sunset, ev.kind === "iftar")}
+              <select className="rmm-city" value={city} onChange={(e) => { rmSetCity(e.target.value); setCity(e.target.value); }} aria-label="المدينة">
+                {Object.keys(RM_CITIES).map((k) => <option key={k} value={k}>{RM_CITIES[k].n}</option>)}
+              </select>
+            </div>
+          </React.Fragment>
+        ));
       });
 
       const DashboardView = memo(({
