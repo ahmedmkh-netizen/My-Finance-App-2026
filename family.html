@@ -4791,9 +4791,12 @@ function checkReminders(){
       localStorage.setItem(REMINDERS_LAST_CHECK+'_'+currentUser.id,'budget_'+today);return;
     }
   }
-  if(now.getHours()>=20&&lastCheck!=='no_tx_'+today){
-    var myTodayCount=cachedTx.filter(function(t){return t._isoDate===today&&t.createdBy===currentUser.id;}).length;
-    if(myTodayCount===0){
+  /* تذكير التسجيل: ما يشتغلش قبل ما بيانات اليوم تتحمّل من السيرفر (كان بيطلع غلط أول ما التطبيق يفتح بعد 8 م وقائمة العمليات لسه فاضية)،
+     والساعة بتوقيت القاهرة، والعدّ بيشمل أي مشتريات هاني اتسجلت النهاردة من أي مستخدم أو من دفتري (مش بس اللي سجّلها المستخدم ده) */
+  var cairoHour=Number(new Intl.DateTimeFormat('en-GB',{timeZone:CAIRO_TZ,hour:'2-digit',hour12:false}).format(now))%24;
+  if(viewDataLoaded&&cairoHour>=20&&lastCheck!=='no_tx_'+today){
+    var todayCount=cachedTx.filter(function(t){return t._isoDate===today;}).length;
+    if(todayCount===0){
       notifyReminder('لم تسجّل اليوم','هل نسيت تسجيل مشترياتك من محل هاني؟');
       localStorage.setItem(REMINDERS_LAST_CHECK+'_'+currentUser.id,'no_tx_'+today);
     }
@@ -4871,8 +4874,10 @@ function parseTransactions(data){
   return result.sort(function(a,b){return new Date(b.createdAt||0).getTime()-new Date(a.createdAt||0).getTime();});
 }
 
+var viewDataLoaded=false;
 function handleViewData(raw){
   var d=famEffective(raw);
+  viewDataLoaded=true;
   cachedTx=parseTransactions(d);
   allDeleteRequests=(d.deleteRequests||[]).filter(function(r){return r&&r.txSnapshot;});
   cachedDeleteRequests=allDeleteRequests.filter(function(r){return r.status==='pending';});
