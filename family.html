@@ -1880,6 +1880,8 @@ var amountAutoFilled = false;
 var isFirstLoad = true;
 var lastSaveInfo = { item: '', amount: 0, time: 0 };
 var isSaving = false;
+var savingSince = 0;
+var tabInactive = false;
 var isOnline = true;
 var eventsBound = false;
 var remindersInterval = null;
@@ -2995,6 +2997,105 @@ function updateSyncUI(){
   if(stripText)stripText.textContent=stripLabel;
 }
 
+/* ═══════════════════════════════════════════════════════════
+   V95 — أمان التبويبات المتعددة
+   1) عملية قيد الإرسال بتتخزن محليًا وتتعاد لو التبويب اتجمّد/اتقفل (idempotent بالـ id)
+   2) تبويب واحد نشط: لو اتفتح تبويب تاني، القديم بيتوقف برسالة واضحة
+   3) لما التبويب يرجع للشاشة بنعيد تحميل البيانات من السيرفر
+   ═══════════════════════════════════════════════════════════ */
+var PENDING_KEY='family_pending_tx_v1';
+var PENDING_MAX_AGE=3*86400000;
+function pendingRead(){try{var a=JSON.parse(localStorage.getItem(PENDING_KEY)||'[]');return Array.isArray(a)?a:[];}catch(e){return [];}}
+function pendingWrite(a){try{localStorage.setItem(PENDING_KEY,JSON.stringify(a.slice(-50)));}catch(e){}}
+function pendingAdd(tx){var a=pendingRead().filter(function(x){return x&&x.id!==tx.id;});a.push({tx:tx,id:tx.id,at:Date.now()});pendingWrite(a);}
+function pendingRemove(id){pendingWrite(pendingRead().filter(function(x){return x&&x.id!==id;}));}
+var flushingPending=false;
+function flushPendingSaves(){
+  if(flushingPending||isSaving||tabInactive||!isAuthReady||!docRef||!currentUser||!navigator.onLine)return;
+  var list=pendingRead().filter(function(x){
+    return x&&x.tx&&x.tx.id&&x.tx.createdBy===currentUser.id&&(Date.now()-(x.at||0))<PENDING_MAX_AGE;
+  });
+  /* القديم جدًا أو بتاع مستخدم تاني بيتشال من القايمة */
+  pendingWrite(pendingRead().filter(function(x){return x&&x.tx&&(Date.now()-(x.at||0))<PENDING_MAX_AGE;}));
+  if(!list.length)return;
+  flushingPending=true;
+  var item=list[0];
+  db.runTransaction(function(transaction){
+    return transaction.get(docRef).then(function(snap){
+      var d=snap.exists?(snap.data()||{}):{};
+      var existing=Array.isArray(d.transactions)?d.transactions:[];
+      var tomb=Array.isArray(d.deletedTxIds)?d.deletedTxIds:[];
+      if(existing.some(function(t){return t&&t.id===item.tx.id;})||tomb.indexOf(item.tx.id)>=0)return {added:false};
+      if(isMonthClosed(item.tx.date))return {added:false,closed:true};
+      var v=Number(d.__docVersion||0);
+      transaction.set(docRef,{transactions:existing.concat([item.tx]),__docVersion:v+1,__lastWriteAt:Date.now(),__lastWriteBy:currentUser.id},{merge:true});
+      return {added:true};
+    });
+  }).then(function(r){
+    pendingRemove(item.id);
+    if(r&&r.added)toast('✅ اتحفظت عملية كانت معلّقة: '+(item.tx.description||'')+' — '+fmt(item.tx.amount)+' ج.م');
+    else if(r&&r.closed)toast('⚠️ عملية معلّقة لشهر مقفول اتلغت: '+(item.tx.description||''),'warn');
+  }).catch(function(e){console.error('flushPending failed:',e);}).then(function(){
+    flushingPending=false;
+    if(pendingRead().some(function(x){return x&&x.tx&&currentUser&&x.tx.createdBy===currentUser.id;}))setTimeout(flushPendingSaves,1500);
+  });
+}
+
+var TAB_ID=getSafeId('tab-');
+var TAB_KEY='family_active_tab_v1';
+function tabClaim(){try{localStorage.setItem(TAB_KEY,JSON.stringify({id:TAB_ID,ts:Date.now()}));}catch(e){}setTabInactive(false);}
+function setTabInactive(v){
+  var was=tabInactive;tabInactive=!!v;
+  var ov=document.getElementById('tabLockOverlay');
+  if(tabInactive){
+    if(!ov){
+      var st=document.createElement('style');
+      st.textContent='#tabLockOverlay{position:fixed;inset:0;z-index:99999;background:rgba(5,10,20,.94);display:flex;align-items:center;justify-content:center;padding:24px;direction:rtl;font-family:Cairo,system-ui,sans-serif}'+
+        '#tabLockOverlay .tl-box{max-width:340px;text-align:center;color:#fff;background:linear-gradient(160deg,#14224A,#0B1530);border:1.5px solid rgba(232,194,133,.6);border-radius:22px;padding:26px 22px;box-shadow:0 20px 50px -10px rgba(0,0,0,.7)}'+
+        '#tabLockOverlay h3{font-size:19px;font-weight:900;color:#FCE7B3;margin:10px 0 8px}'+
+        '#tabLockOverlay p{font-size:14px;line-height:1.7;margin:0 0 18px;color:rgba(255,255,255,.85);font-weight:600}'+
+        '#tabLockOverlay button{font-family:inherit;font-size:15px;font-weight:900;color:#0B1530;background:linear-gradient(180deg,#FFF3C4,#E8B84F);border:0;border-radius:14px;padding:12px 22px;cursor:pointer;width:100%}';
+      document.head.appendChild(st);
+      ov=document.createElement('div');ov.id='tabLockOverlay';
+      ov.innerHTML='<div class="tl-box"><div style="font-size:38px">⚠️</div><h3>التطبيق مفتوح في تبويب آخر</h3><p>عشان العمليات ما تضيعش، التطبيق بيشتغل في تبويب واحد بس. اقفل التبويب التاني، أو اضغط الزر لاستخدام هذا التبويب.</p><button type="button" id="tabLockBtn">استخدام هذا التبويب</button></div>';
+      document.body.appendChild(ov);
+      document.getElementById('tabLockBtn').addEventListener('click',function(){tabClaim();refreshFresh(true);});
+    }
+    ov.style.display='flex';
+  }else if(ov){ov.style.display='none';}
+  return was;
+}
+function initTabLock(){
+  tabClaim();
+  window.addEventListener('storage',function(e){
+    if(e.key!==TAB_KEY||!e.newValue)return;
+    try{var o=JSON.parse(e.newValue);if(o&&o.id&&o.id!==TAB_ID)setTabInactive(true);}catch(x){}
+  });
+  window.addEventListener('pagehide',function(){/* لا شيء: التبويب الأحدث هو النشط */});
+}
+var lastHiddenAt=0;
+function refreshFresh(force){
+  if(!docRef||!isAuthReady)return;
+  if(isSaving&&Date.now()-savingSince>=15000)isSaving=false;
+  try{subscribe();}catch(e){}
+  docRef.get({source:'server'}).then(function(doc){
+    if(doc.exists){
+      var d=doc.data()||{};
+      cachedTx=parseTransactions(d);
+      allClosedMonths=Array.isArray(d.closedMonths)?d.closedMonths:[];
+      renderAll();
+    }
+  }).catch(function(){});
+  setTimeout(flushPendingSaves,800);
+}
+document.addEventListener('visibilitychange',function(){
+  if(document.hidden){lastHiddenAt=Date.now();return;}
+  if(tabInactive)return;
+  if(Date.now()-lastHiddenAt>20000)refreshFresh(false);else setTimeout(flushPendingSaves,500);
+});
+window.addEventListener('pageshow',function(e){if(e.persisted&&!tabInactive)refreshFresh(false);});
+window.addEventListener('online',function(){setTimeout(flushPendingSaves,800);});
+
 function setupSync(){
   window.addEventListener('online',function(){
     isOnline=true;
@@ -3781,7 +3882,8 @@ function adminResetCatalog(){
 function saveTx(){
   if(!selectedItem){toast('اختر صنفاً أولاً','err');return;}
   if(!isAuthReady||!docRef){toast('التطبيق غير متصل','err');return;}
-  if(isSaving)return;
+  if(tabInactive){toast('التطبيق مفتوح في تبويب آخر — اضغط \"استخدام هذا التبويب\" الأول','err');return;}
+  if(isSaving&&Date.now()-savingSince<15000){toast('جارٍ حفظ العملية السابقة، لحظة...','warn');return;}
   var amount=parseFloat(document.getElementById('amount').value);
   if(!amount||amount<=0){toast('أدخل المبلغ','err');return;}
   var note=document.getElementById('note').value.trim();
@@ -3800,7 +3902,7 @@ function saveTx(){
     toast('نفس العملية تم تسجيلها للتو — انتظر '+remaining+' ثانية','warn');
     return;
   }
-  isSaving=true;
+  isSaving=true;savingSince=Date.now();
   var txDateObj=new Date(txDateISO+'T12:00:00');
   var tx={
     id:getSafeId('fam-'),type:'expense',kind:'operational',
@@ -3818,6 +3920,8 @@ function saveTx(){
   btn.disabled=true;
   var originalHTML=btn.innerHTML;
   btn.innerHTML='جارٍ الحفظ...';
+  /* V95: نسجّل العملية محليًا قبل الإرسال، فلو التبويب اتجمّد أو اتقفل في النص تتبعت تاني (بنفس الـ id فمفيش تكرار) */
+  pendingAdd(tx);
 
   db.runTransaction(function(transaction){
     return transaction.get(docRef).then(function(snap){
@@ -3853,6 +3957,7 @@ function saveTx(){
       return { tx: tx, version: remoteV + 1 };
     });
   }).then(function(result){
+    pendingRemove(tx.id);
     currentDocVersion = result.version;
     trackRecent(selectedItem);
     var itemName=selectedItem;
@@ -3903,6 +4008,7 @@ function saveTx(){
     }
   }).catch(function(e){
     console.error('Save error:',e);
+    pendingRemove(tx.id);
     if(e&&e.message==='DUPLICATE_DETECTED')toast('⚠️ تم تسجيل نفس العملية للتو','warn');
     else toast('فشل الحفظ: '+(e.message||''),'err');
   }).then(function(){
@@ -4587,6 +4693,7 @@ function subscribe(){
   unsubscribe=docRef.onSnapshot(function(doc){
     if(initialSnapshotTimeout){clearTimeout(initialSnapshotTimeout);initialSnapshotTimeout=null;}
     isFirstLoad=false;
+    setTimeout(flushPendingSaves,1200);
     if(!doc.exists){cachedTx=[];cachedDeleteRequests=[];allDeleteRequests=[];allClosedMonths=[];renderAll();return;}
     var d=doc.data()||{};
 
@@ -4643,10 +4750,18 @@ function renderAll(){
 /* V93: back button = close modal, then previous tab, then "press again to exit" */
 var tabStack=[];var backNavFromPop=false;var backLastHint=0;
 function installBackNav(){
-  try{history.replaceState({dfBase:1},'');history.pushState({dfTop:1},'');}catch(e){return;}
-  function rearm(){try{history.pushState({dfTop:1},'');}catch(e){}}
+  /* V95: كروم/أندرويد بيتجاهل أي سجل اتضاف بدون لمسة، فبنضيف الحارس كمان عند أول لمسة وبعد كل رجوع */
+  function isSent(st){return !!(st&&(st.dfBase||st.dfTop));}
+  try{if(!isSent(history.state))history.replaceState({dfBase:1},'');history.pushState({dfTop:1},'');}catch(e){return;}
+  var pending=true;
+  function push(){try{history.pushState({dfTop:1},'');}catch(e){}}
+  ['pointerdown','touchstart','click','keydown'].forEach(function(t){
+    window.addEventListener(t,function(){if(!pending)return;pending=false;push();},{capture:true,passive:true});
+  });
   window.addEventListener('popstate',function(ev){
-    if(!(ev.state&&ev.state.dfBase))return;
+    if(!isSent(ev.state))return;
+    var atBase=!!ev.state.dfBase;
+    function rearm(){if(atBase){push();pending=true;}}
     var layers=document.querySelectorAll('.modal-bg');
     if(layers.length){
       var top=layers[layers.length-1];
@@ -4663,6 +4778,7 @@ function installBackNav(){
   });
 }
 installBackNav();
+initTabLock();
 
 function switchTab(t){
   if(t!==currentTab&&!backNavFromPop){tabStack.push(currentTab);if(tabStack.length>30)tabStack.shift();}
