@@ -2414,7 +2414,14 @@ const verifyPin = async pin => {
   }
 };
 const BIO = (() => {
-  const KEY = "app_bio_cred_v1";
+  const KEY = "daftari_bio_cred_v1";
+  try {
+    const old = localStorage.getItem("app_bio_cred_v1");
+    if (old && !localStorage.getItem("app_bio_user_v1") && !localStorage.getItem(KEY)) {
+      localStorage.setItem(KEY, old);
+      localStorage.removeItem("app_bio_cred_v1");
+    }
+  } catch (e) {}
   const k = uid => uid ? KEY + "_" + uid : KEY;
   const b64 = buf => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
   const unb64 = s => Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/")), c => c.charCodeAt(0));
