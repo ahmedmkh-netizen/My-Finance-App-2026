@@ -7466,11 +7466,17 @@ if (e.key >= "0" && e.key <= "9") handleDigit(e.key);
           document.head.appendChild(st); document.body.appendChild(btn);
           document.addEventListener('focusin', function (e) { if (ok(e.target)) attach(e.target); else if (e.target !== btn) detach(); });
           document.addEventListener('focusout', function (e) { if (e.target === cur) setTimeout(function () { if (document.activeElement !== cur) detach(); }, 80); });
-          ['pointerdown', 'mousedown', 'touchstart'].forEach(function (ev) { btn.addEventListener(ev, function (e) { e.preventDefault(); }, { passive: false }); });
-          btn.addEventListener('click', function (e) {
-            e.preventDefault(); if (!cur) return;
-            var el = cur; setter.call(el, ''); el.dispatchEvent(new Event('input', { bubbles: true })); el.focus();
-          });
+          /* المسح بيتم على أول لمسة (pointerdown/touchstart) مش على click: منع الـ default على touchstart بيلغي الـ click على الموبايل */
+    var clearNow = function (e) {
+      e.preventDefault(); e.stopPropagation(); if (!cur) return;
+      var now = Date.now(); if (now - lastClear < 400) return; lastClear = now;
+      var el = cur; setter.call(el, ''); el.dispatchEvent(new Event('input', { bubbles: true })); el.focus();
+    };
+    var lastClear = 0;
+    btn.addEventListener('pointerdown', clearNow, { passive: false });
+    btn.addEventListener('touchstart', clearNow, { passive: false });
+    btn.addEventListener('mousedown', clearNow, { passive: false });
+    btn.addEventListener('click', function (e) { e.preventDefault(); });
         }
         if (document.body) init(); else document.addEventListener('DOMContentLoaded', init);
       })();
