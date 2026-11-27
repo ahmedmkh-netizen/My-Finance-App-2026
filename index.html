@@ -2027,6 +2027,26 @@ const DEFAULT_CARDS = [
         "معطر", "كريم", "شوكولاتة", "بونبون", "آيس كريم",
       ];
 
+      // V93 — أصناف محل هاني: القائمة الثابتة + كتالوج تطبيق العيلة (finance_2026/catalog_data) للقراءة فقط
+      const useHanyQuickItems = () => {
+        const [catalogItems, setCatalogItems] = useState([]);
+        useEffect(() => {
+          let unsub = null;
+          try {
+            unsub = db.collection("finance_2026").doc("catalog_data").onSnapshot((snap) => {
+              const cats = snap.exists ? (snap.data() || {}).categories : null;
+              const out = [];
+              if (cats && typeof cats === "object") {
+                Object.values(cats).forEach((c) => (Array.isArray(c?.items) ? c.items : []).forEach((i) => { if (typeof i === "string" && i.trim()) out.push(i.trim()); }));
+              }
+              setCatalogItems(out);
+            }, () => {});
+          } catch (e) {}
+          return () => { try { unsub && unsub(); } catch (e) {} };
+        }, []);
+        return useMemo(() => Array.from(new Set([...HANY_QUICK_ITEMS, ...catalogItems])), [catalogItems]);
+      };
+
       const AUDIT = {
         CREATE: "create", UPDATE: "update", DELETE: "delete",
         APPROVE: "approve", REOPEN: "reopen", VOID: "void",
@@ -6936,6 +6956,7 @@ if (e.key >= "0" && e.key <= "9") handleDigit(e.key);
 
       const HanyView = memo(function HanyView(props) {
         const { data, dispatch, saveHistory, addNotification, selectedYear, selectedMonth } = props;
+        const HANY_ALL_ITEMS = useHanyQuickItems();
         const [showSettle, setShowSettle] = useState(false);
         const [settleAmount, setSettleAmount] = useState("");
         const [showPrintSettings, setShowPrintSettings] = useState(false);
@@ -7317,7 +7338,7 @@ if (e.key >= "0" && e.key <= "9") handleDigit(e.key);
                 </button>
               </div>
               <div className="quick-items-grid flex flex-wrap gap-1.5">
-                {HANY_QUICK_ITEMS.slice(0, 24).map((item) => (
+                {HANY_ALL_ITEMS.slice(0, 24).map((item) => (
                   <button key={item} type="button" onClick={() => openQuickPurchase(item)} className="quick-chip">
                     {item}
                   </button>
@@ -15112,6 +15133,9 @@ const canSubmit = parsedAmount > 0 && selectedCard && (
             if (!silent) addNotification({ type: "info", title: "العملية جارية بالفعل" });
             return false;
           }
+          // V93 — الرفع الإجباري بيمسح أي حاجة على السحابة مش موجودة عندك: لازم تأكيد صريح، ومفيش رفع صامت
+          if (silent) return false;
+          if (!window.confirm("تحذير: الرفع الإجباري هيكتب نسختك الحالية فوق السحابة بالكامل، وأي حاجة على السحابة مش موجودة على جهازك (مثلاً حركات من تطبيق العيلة أو جهاز تاني) هتتمسح. متأكد؟")) return false;
           busyRef.current = true;
           setState(FORCE_SAVE_STATES.SAVING);
           setLastError(null);
@@ -15971,6 +15995,7 @@ const handleToggleAutoReminders = useCallback((v) => {
     },
   });
 }, []);
+        const HANY_ALL_ITEMS = useHanyQuickItems();
         const [showAllHanyItems, setShowAllHanyItems] = useState(false);
         const [showQuickAddSheet, setShowQuickAddSheet] = useState(false);
         const [showMoreSheet, setShowMoreSheet] = useState(false);
@@ -16025,6 +16050,64 @@ const handleToggleAutoReminders = useCallback((v) => {
           (notification) => dispatch({ type: "ADD_NOTIFICATION", payload: notification }),
           [],
         );
+
+        // ═══ V93 — زر الرجوع في الموبايل: يقفل النافذة/القائمة الأول، بعدين يرجع للتبويب السابق، وبعدين "اضغط مرة تانية للخروج" ═══
+        const backNavRef = useRef({ tab: activeTab, sidebar: isSidebarOpen, stack: [], fromBack: false, lastHint: 0 });
+        backNavRef.current.sidebar = isSidebarOpen;
+        useEffect(() => {
+          const n = backNavRef.current;
+          if (n.tab !== activeTab) {
+            if (!n.fromBack) { n.stack.push(n.tab); if (n.stack.length > 30) n.stack.shift(); }
+            n.fromBack = false;
+            n.tab = activeTab;
+          }
+        }, [activeTab]);
+        useEffect(() => {
+          const n = backNavRef.current;
+          try {
+            history.replaceState({ dfBase: 1 }, "");
+            history.pushState({ dfTop: 1 }, "");
+          } catch (e) { return undefined; }
+          const rearm = () => { try { history.pushState({ dfTop: 1 }, ""); } catch (e) {} };
+          const topLayer = () => {
+            const all = Array.from(document.querySelectorAll(".modal-backdrop, .sheet-backdrop"));
+            return all.length ? all[all.length - 1] : null;
+          };
+          const onPop = (ev) => {
+            if (!(ev.state && ev.state.dfBase)) return;
+            if (n.sidebar) { dispatch({ type: "SET_SIDEBAR_OPEN", payload: false }); rearm(); return; }
+            const layer = topLayer();
+            if (layer) {
+              layer.click();
+              setTimeout(() => {
+                if (document.body.contains(layer)) {
+                  const closeBtn = layer.querySelector('[aria-label*="close" i], [aria-label*="إغلاق"], button.btn-ghost');
+                  if (closeBtn) closeBtn.click();
+                }
+              }, 80);
+              rearm();
+              return;
+            }
+            if (n.stack.length) {
+              n.fromBack = true;
+              dispatch({ type: "SET_ACTIVE_TAB", payload: n.stack.pop() });
+              rearm();
+              return;
+            }
+            if (n.tab !== "dashboard") {
+              n.fromBack = true;
+              dispatch({ type: "SET_ACTIVE_TAB", payload: "dashboard" });
+              rearm();
+              return;
+            }
+            if (Date.now() - n.lastHint < 2000) { history.back(); return; }
+            n.lastHint = Date.now();
+            addNotification({ type: "info", title: "اضغط رجوع مرة تانية للخروج", duration: 2000 });
+            rearm();
+          };
+          window.addEventListener("popstate", onPop);
+          return () => window.removeEventListener("popstate", onPop);
+        }, []);
         const removeNotification = useCallback(
           (id) => dispatch({ type: "REMOVE_NOTIFICATION", payload: id }),
           [],
@@ -16048,51 +16131,62 @@ const handleToggleAutoReminders = useCallback((v) => {
                 const payloadStr = JSON.stringify(newData);
                 try { localStorage.setItem(STORAGE_KEY, JSON.stringify(newData)); } catch (e) {}
 
-                if (force) {
-                  await docRef.set({ ...newData, budgets: newData.budgets || budgetsRef.current }, { merge: false });
-                  lastRemoteRef.current = payloadStr;
-                  try { localStorage.setItem(LAST_SYNC_LS_KEY, String(Date.now())); } catch (e) {}
-                  return;
-                }
-
-                const doc = await docRef.get();
+                // ═══ V93 — حفظ آمن: قراءة + دمج + كتابة داخل Firestore Transaction (مفيش كتابة كاملة بـ merge:false هنا) ═══
+                // خيار force لم يعد يكتب فوق السحابة؛ الرفع الإجباري الصريح بس من زر "رفع للسحابة" بعد تأكيد.
+                const txStamp = (t) => { const ts = Date.parse(t?.updatedAt || ""); return isNaN(ts) ? 0 : ts; };
+                const reqRank = (r) => (r && r.status && r.status !== "pending" ? 1 : 0);
                 let finalData = { ...newData };
+                await db.runTransaction(async (transaction) => {
+                  const doc = await transaction.get(docRef);
+                  finalData = { ...newData };
 
-                if (doc.exists) {
-                  const remote = doc.data() || {};
-                  const remoteTx = Array.isArray(remote.transactions) ? remote.transactions : [];
-                  const localTx = Array.isArray(newData.transactions) ? newData.transactions : [];
-                  const permanentDeleted = new Set([...(newData.deletedTxIds || []), ...(remote.deletedTxIds || [])]);
-                  const mergedMap = new Map();
-                  const txStamp = (t) => { const ts = Date.parse(t?.updatedAt || ""); return isNaN(ts) ? 0 : ts; };
-                  remoteTx.forEach((t) => { if (t?.id && !permanentDeleted.has(t.id)) mergedMap.set(t.id, t); });
-                  // ═══ V92 — الأحدث (updatedAt) يكسب لكل قيد: جهاز قديم مش هيكتب فوق تعديل أحدث على السحابة ═══
-                  localTx.forEach((t) => {
-                    if (!t?.id || permanentDeleted.has(t.id)) return;
-                    const existing = mergedMap.get(t.id);
-                    if (!existing || txStamp(t) >= txStamp(existing)) mergedMap.set(t.id, t);
-                  });
+                  if (doc.exists) {
+                    const remote = doc.data() || {};
+                    const remoteTx = Array.isArray(remote.transactions) ? remote.transactions : [];
+                    const localTx = Array.isArray(newData.transactions) ? newData.transactions : [];
+                    const permanentDeleted = new Set([...(newData.deletedTxIds || []), ...(remote.deletedTxIds || [])]);
+                    // حركات اتعلّمت deleted:true (من نسخ قديمة من تطبيق العيلة) تتعامل كمحذوفة
+                    [...remoteTx, ...localTx].forEach((t) => { if (t?.id && t.deleted === true) permanentDeleted.add(t.id); });
+                    const mergedMap = new Map();
+                    remoteTx.forEach((t) => { if (t?.id && !permanentDeleted.has(t.id)) mergedMap.set(t.id, t); });
+                    // الأحدث (updatedAt) يكسب لكل قيد
+                    localTx.forEach((t) => {
+                      if (!t?.id || permanentDeleted.has(t.id)) return;
+                      const existing = mergedMap.get(t.id);
+                      if (!existing || txStamp(t) >= txStamp(existing)) mergedMap.set(t.id, t);
+                    });
+                    finalData.transactions = sortTransactions(Array.from(mergedMap.values()));
+                    finalData.deletedTxIds = Array.from(permanentDeleted).slice(-500);
 
-                  finalData.transactions = sortTransactions(
-                    Array.from(mergedMap.values()).filter((t) => !t?.id || !(finalData.deletedTxIds || []).includes(t.id)),
-                  );
-                  finalData.deletedTxIds = Array.from(permanentDeleted).slice(-500);
+                    // دمج طلبات الحذف بالـ id: الطلب اللي اتراجع (موافقة/رفض/سحب) يكسب على المعلّق
+                    const reqMap = new Map();
+                    (Array.isArray(remote.deleteRequests) ? remote.deleteRequests : []).forEach((r) => { if (r?.id) reqMap.set(r.id, r); });
+                    (Array.isArray(newData.deleteRequests) ? newData.deleteRequests : []).forEach((r) => {
+                      if (!r?.id) return;
+                      const ex = reqMap.get(r.id);
+                      if (!ex || reqRank(r) >= reqRank(ex)) reqMap.set(r.id, r);
+                    });
+                    finalData.deleteRequests = Array.from(reqMap.values());
 
-                  if (remote.budgets && typeof remote.budgets === "object") {
-                    // ═══ V92 — الأولوية للسحابة في الميزانيات، إلا لو التعديل المحلي أحدث (بختم وقت) ═══
-                    const remoteBudAt = safeNumber(remote.__budgetsUpdatedAt, 0);
-                    if (budgetsStampRef.current > 0 && budgetsStampRef.current >= remoteBudAt) {
-                      finalData.budgets = budgetsRef.current;
-                      finalData.__budgetsUpdatedAt = budgetsStampRef.current;
-                    } else {
-                      finalData.budgets = remote.budgets;
-                      if (remoteBudAt > 0) finalData.__budgetsUpdatedAt = remoteBudAt;
-                      if (remoteBudAt > budgetsStampRef.current) budgetsStampRef.current = remoteBudAt;
+                    if (remote.budgets && typeof remote.budgets === "object") {
+                      const remoteBudAt = safeNumber(remote.__budgetsUpdatedAt, 0);
+                      if (budgetsStampRef.current > 0 && budgetsStampRef.current >= remoteBudAt) {
+                        finalData.budgets = budgetsRef.current;
+                        finalData.__budgetsUpdatedAt = budgetsStampRef.current;
+                      } else {
+                        finalData.budgets = remote.budgets;
+                        if (remoteBudAt > 0) finalData.__budgetsUpdatedAt = remoteBudAt;
+                        if (remoteBudAt > budgetsStampRef.current) budgetsStampRef.current = remoteBudAt;
+                      }
                     }
+                    // نفس بروتوكول تطبيق العيلة لاكتشاف التعارض
+                    finalData.__docVersion = Number(remote.__docVersion || 0) + 1;
+                    finalData.__lastWriteAt = Date.now();
+                    finalData.__lastWriteBy = "daftari-main";
                   }
-                }
 
-                await docRef.set({ ...finalData, budgets: finalData.budgets || budgetsRef.current }, { merge: true });
+                  transaction.set(docRef, { ...finalData, budgets: finalData.budgets || budgetsRef.current }, { merge: true });
+                });
                 lastRemoteRef.current = payloadStr;
                 try { localStorage.setItem(LAST_SYNC_LS_KEY, String(Date.now())); } catch (e) {}
                 cloudSaveRetriesRef.current = 0;
@@ -16148,8 +16242,19 @@ const handleToggleAutoReminders = useCallback((v) => {
             const onlyRemote = (migratedRemote.transactions || []).filter((t) => !localTxIds.has(t.id));
 
             if (onlyLocal.length > 0) {
-              const merged = { ...migratedRemote, transactions: sortTransactions([...(migratedRemote.transactions || []), ...onlyLocal]) };
-              await innerDocRef.set(merged, { merge: false });
+              // V93 — إعادة قراءة داخل Transaction وإضافة الحركات المحلية الناقصة فقط (من غير merge:false)
+              let merged = null;
+              await db.runTransaction(async (transaction) => {
+                const snap = await transaction.get(innerDocRef);
+                const cur = snap.exists ? (snap.data() || {}) : {};
+                const curTx = Array.isArray(cur.transactions) ? cur.transactions : [];
+                const curIds = new Set(curTx.map((t) => t?.id));
+                const gone = new Set(cur.deletedTxIds || []);
+                const toAdd = onlyLocal.filter((t) => t?.id && !curIds.has(t.id) && !gone.has(t.id));
+                const mergedTx = sortTransactions([...curTx, ...toAdd]);
+                merged = { ...migrateData(cur), transactions: mergedTx };
+                transaction.set(innerDocRef, { transactions: mergedTx, __docVersion: Number(cur.__docVersion || 0) + 1, __lastWriteAt: Date.now(), __lastWriteBy: "daftari-main" }, { merge: true });
+              });
               dispatch({ type: "SET_DATA", payload: merged });
               addNotification({ type: "success", title: `✅ تمت المزامنة (رفعت ${onlyLocal.length} وحمّلت ${onlyRemote.length})` });
             } else {
@@ -16220,6 +16325,20 @@ const handleToggleAutoReminders = useCallback((v) => {
                 migrated.transactions = (migrated.transactions || [])
                   .filter((t) => !t?.id || !permanentDeleted.has(t.id));
 
+                // ═══ V93 — حركات اتعلّمت deleted:true من تطبيق العيلة: تتنقل للأرشيف + deletedTxIds (حذف واحد المعنى) ═══
+                const softDeleted = migrated.transactions.filter((t) => t?.id && t.deleted === true);
+                let softDeletedFixed = false;
+                if (softDeleted.length > 0) {
+                  const ids = new Set(softDeleted.map((t) => t.id));
+                  migrated.deletedTxArchive = [
+                    ...(migrated.deletedTxArchive || []),
+                    ...softDeleted.map((t) => ({ ...t, deletedAt: new Date().toISOString(), deletedBy: t.deletedByName || t.deletedBy || "family", originalStatus: t.status || "pending", reason: t.deleteReason || "حذف من تطبيق العيلة" })),
+                  ].slice(-500);
+                  migrated.deletedTxIds = Array.from(new Set([...(migrated.deletedTxIds || []), ...ids])).slice(-500);
+                  migrated.transactions = migrated.transactions.filter((t) => !ids.has(t.id));
+                  softDeletedFixed = true;
+                }
+
                 // ═══ V92 FIX — أي قيد محلي مش على السحابة يترفع مهما كان عمره ═══
                 // إلغاء نافذة الـ 15 ثانية اللي كانت بتسقط القيود المحلية القديمة بصمت
                 const remoteIds = new Set(migrated.transactions.map((t) => t.id));
@@ -16227,6 +16346,9 @@ const handleToggleAutoReminders = useCallback((v) => {
                   (t) => t?.id && !remoteIds.has(t.id) && !permanentDeleted.has(t.id)
                 );
 
+                if (softDeletedFixed && localOnlyToUpload.length === 0) {
+                  setTimeout(() => queueCloudSave(migrated, { silent: true }), 500);
+                }
                 if (localOnlyToUpload.length > 0) {
                   console.log(`📤 ${localOnlyToUpload.length} قيد محلي مش على السحابة — سيُرفع`);
                   migrated.transactions = sortTransactions([...migrated.transactions, ...localOnlyToUpload]);
@@ -17827,13 +17949,13 @@ useEffect(() => {
                               <p className="text-[10px] font-black text-amber-700 dark:text-amber-400">⚡ أصناف سريعة — محل هاني</p>
                               <div className="flex items-center gap-2">
                                 <button type="button" onClick={() => setShowAllHanyItems(true)} className="text-[9px] font-black px-2 py-1 rounded-full" style={{ background: "var(--warning)", color: "white" }}>
-                                  عرض الكل ({HANY_QUICK_ITEMS.length})
+                                  عرض الكل ({HANY_ALL_ITEMS.length})
                                 </button>
                                 <button type="button" onClick={() => dispatch({ type: "SET_FORM_DATA", payload: { ...formData, description: "" } })} className="text-[9px] font-bold text-red-500 hover:underline">مسح</button>
                               </div>
                             </div>
                             <div className="quick-items-grid flex flex-wrap gap-1">
-                              {HANY_QUICK_ITEMS.slice(0, 12).map((item) => (
+                              {HANY_ALL_ITEMS.slice(0, 12).map((item) => (
                                 <button key={item} type="button" onClick={() => appendQuickItem(item)} className="quick-chip" style={{ fontSize: "10px", padding: "4px 8px" }}>{item}</button>
                               ))}
                             </div>
@@ -17870,12 +17992,12 @@ useEffect(() => {
                 <div className="modal-backdrop no-print" style={{ zIndex: 5000 }} onClick={(e) => { if (e.target === e.currentTarget) setShowAllHanyItems(false); }}>
                   <div className="w-full max-w-md rounded-2xl shadow-2xl flex flex-col animate-scaleIn" style={{ background: "var(--bg-card)", maxHeight: "80dvh" }}>
                     <div className="p-4 flex justify-between items-center flex-shrink-0" style={{ borderBottom: "1px solid var(--border-subtle)" }}>
-                      <h3 className="text-sm font-black">كل أصناف محل هاني ({HANY_QUICK_ITEMS.length})</h3>
+                      <h3 className="text-sm font-black">كل أصناف محل هاني ({HANY_ALL_ITEMS.length})</h3>
                       <button type="button" onClick={() => setShowAllHanyItems(false)} className="btn btn-ghost p-2"><X size={18} /></button>
                     </div>
                     <div className="p-4 overflow-y-auto scroll-hide flex-1" style={{ minHeight: 0 }}>
                       <div className="flex flex-wrap gap-1.5">
-                        {HANY_QUICK_ITEMS.map((item) => (
+                        {HANY_ALL_ITEMS.map((item) => (
                           <button key={item} type="button" onClick={() => { appendQuickItem(item); setShowAllHanyItems(false); }} className="quick-chip">{item}</button>
                         ))}
                       </div>
