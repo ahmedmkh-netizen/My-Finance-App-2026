@@ -8490,22 +8490,32 @@ const PICKER_MIN_OPTIONS = 8;
         if (document.activeElement !== cur) detach();
       }, 80);
     });
-    ['pointerdown', 'mousedown', 'touchstart'].forEach(function (ev) {
-      btn.addEventListener(ev, function (e) {
-        e.preventDefault();
-      }, {
-        passive: false
-      });
-    });
-    btn.addEventListener('click', function (e) {
+    var clearNow = function (e) {
       e.preventDefault();
+      e.stopPropagation();
       if (!cur) return;
+      var now = Date.now();
+      if (now - lastClear < 400) return;
+      lastClear = now;
       var el = cur;
       setter.call(el, '');
       el.dispatchEvent(new Event('input', {
         bubbles: true
       }));
       el.focus();
+    };
+    var lastClear = 0;
+    btn.addEventListener('pointerdown', clearNow, {
+      passive: false
+    });
+    btn.addEventListener('touchstart', clearNow, {
+      passive: false
+    });
+    btn.addEventListener('mousedown', clearNow, {
+      passive: false
+    });
+    btn.addEventListener('click', function (e) {
+      e.preventDefault();
     });
   }
   if (document.body) init();else document.addEventListener('DOMContentLoaded', init);
