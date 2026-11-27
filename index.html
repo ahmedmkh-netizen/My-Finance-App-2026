@@ -809,6 +809,10 @@
       .form-section-compact { padding: 10px 12px !important; }
 
       /* ═══ picker: searchable select (opens a sheet with quick search when the list is long) ═══ */
+      /* الكيبورد مفتوحة: كل الشيتات والنوافذ تتحجم على الجزء المرئي من الشاشة (القيم بيحطها كود visualViewport تحت) */
+      .kb-open .sheet-backdrop, .kb-open .modal-backdrop { inset: auto 0 auto 0; top: var(--vv-top, 0px); height: var(--vv-h, 100dvh); }
+      .kb-open .sheet-content { max-height: calc(var(--vv-h, 100dvh) - 12px); }
+      .kb-open .generic-modal { max-height: calc(var(--vv-h, 100dvh) - 24px); }
       .picker-btn { display: flex; align-items: center; justify-content: space-between; gap: 8px; text-align: right; cursor: pointer; min-height: 48px; }
       .picker-btn .picker-val { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .picker-btn .picker-val.placeholder { color: var(--text-muted); font-weight: 500; }
@@ -8340,6 +8344,38 @@ const pickerText = n => {
 };
 const pickerNorm = t => String(t || "").toLowerCase().replace(/[\u064B-\u0652\u0640]/g, "").replace(/[أإآ]/g, "ا").replace(/ى/g, "ي").replace(/ة/g, "ه").replace(/\s+/g, " ").trim();
 const PICKER_MIN_OPTIONS = 8;
+(() => {
+  const w = window.visualViewport,
+    root = document.documentElement;
+  if (w) {
+    const upd = () => {
+      const open = window.innerHeight - w.height > 120;
+      root.classList.toggle("kb-open", open);
+      if (open) {
+        root.style.setProperty("--vv-top", w.offsetTop + "px");
+        root.style.setProperty("--vv-h", w.height + "px");
+      } else {
+        root.style.removeProperty("--vv-top");
+        root.style.removeProperty("--vv-h");
+      }
+    };
+    w.addEventListener("resize", upd);
+    w.addEventListener("scroll", upd);
+  }
+  document.addEventListener("focusin", e => {
+    const el = e.target;
+    if (!el || !el.matches || !el.matches("input, textarea")) return;
+    if (el.tagName === "INPUT" && /^(text|number|search|tel|email)$/.test(el.type) && !el.hasAttribute("enterkeyhint")) el.setAttribute("enterkeyhint", "done");
+    if (el.closest(".sheet-content, .generic-modal")) setTimeout(() => {
+      try {
+        el.scrollIntoView({
+          block: "center",
+          behavior: "smooth"
+        });
+      } catch (_) {}
+    }, 320);
+  });
+})();
 const PickerSelect = ({
   children,
   value,
@@ -13283,6 +13319,7 @@ const WalletsAndCardsView = memo(({
     }
   }, "يوم الكشف"), React.createElement("input", {
     type: "number",
+    inputMode: "numeric",
     min: "1",
     max: "28",
     className: "input-field input-num text-center text-sm",
@@ -14486,6 +14523,7 @@ const InstallmentPlanModal = memo(({
     }
   }, "عدد الأشهر *"), React.createElement("input", {
     type: "number",
+    inputMode: "numeric",
     min: "1",
     max: "60",
     className: "input-field text-base text-center font-black",
@@ -19316,6 +19354,7 @@ const SettingsView = memo(({
       }
     }, "يوم إصدار الكشف"), React.createElement("input", {
       type: "number",
+      inputMode: "numeric",
       min: "1",
       max: "28",
       value: card.statementDay || "",
@@ -25991,6 +26030,7 @@ function App() {
     }
   }, "يوم الكشف"), React.createElement("input", {
     type: "number",
+    inputMode: "numeric",
     min: "1",
     max: "28",
     className: "input-field text-sm text-center",
@@ -26028,6 +26068,7 @@ function App() {
     }
   }, "فترة السماح"), React.createElement("input", {
     type: "number",
+    inputMode: "numeric",
     min: "1",
     max: "60",
     className: "input-field text-sm text-center",
@@ -26145,6 +26186,7 @@ function App() {
     }
   }, "إجمالي الأقساط"), React.createElement("input", {
     type: "number",
+    inputMode: "numeric",
     min: "0",
     className: "input-field text-sm text-center",
     value: editingLoan.totalInstallments ?? "",
@@ -26162,6 +26204,7 @@ function App() {
     }
   }, "المدفوعة"), React.createElement("input", {
     type: "number",
+    inputMode: "numeric",
     min: "0",
     className: "input-field text-sm text-center",
     value: editingLoan.paidInstallments ?? "",
@@ -26288,6 +26331,7 @@ function App() {
     }
   }, "اليوم (1-31)"), React.createElement("input", {
     type: "number",
+    inputMode: "numeric",
     required: true,
     min: "1",
     max: "31",
