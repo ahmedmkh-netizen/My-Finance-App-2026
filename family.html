@@ -2527,7 +2527,16 @@ try{
 
 function initFirebaseAuth(){
   if(!auth||!db)return Promise.reject(new Error('no_firebase'));
-  return auth.signInAnonymously().then(function(cred){
+  /* مرحلة 1 من تأمين قاعدة البيانات: حساب العيلة (إيميل/باسورد) بدل الدخول المجهول.
+     لو الحساب لسه مش متفعّل نرجع للدخول المجهول عشان التطبيق يفضل شغال (وبعد تفعيل القواعد الجديدة الحساب بس هو المسموح). */
+  var FAMILY_AUTH_EMAIL='family@finance-app-2026.app', FAMILY_AUTH_PASS='dvF0i2y5UTRSltMi7RezbHPR1uz1';
+  var cur=auth.currentUser;
+  var signInP=(cur && cur.email===FAMILY_AUTH_EMAIL) ? Promise.resolve({user:cur})
+    : auth.signInWithEmailAndPassword(FAMILY_AUTH_EMAIL,FAMILY_AUTH_PASS).catch(function(e){
+        console.warn('family login failed, falling back to anonymous:',e&&e.code);
+        return auth.signInAnonymously();
+      });
+  return signInP.then(function(cred){
     isAuthReady=true;
     docRef=db.collection(FIREBASE_DOC_PATH.collection).doc(FIREBASE_DOC_PATH.doc);
     catalogDocRef=db.collection(CATALOG_DOC_PATH.collection).doc(CATALOG_DOC_PATH.doc);
