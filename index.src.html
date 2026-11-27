@@ -809,6 +809,10 @@
       .form-section-compact { padding: 10px 12px !important; }
 
       /* ═══ picker: searchable select (opens a sheet with quick search when the list is long) ═══ */
+      /* الكيبورد مفتوحة: كل الشيتات والنوافذ تتحجم على الجزء المرئي من الشاشة (القيم بيحطها كود visualViewport تحت) */
+      .kb-open .sheet-backdrop, .kb-open .modal-backdrop { inset: auto 0 auto 0; top: var(--vv-top, 0px); height: var(--vv-h, 100dvh); }
+      .kb-open .sheet-content { max-height: calc(var(--vv-h, 100dvh) - 12px); }
+      .kb-open .generic-modal { max-height: calc(var(--vv-h, 100dvh) - 24px); }
       .picker-btn { display: flex; align-items: center; justify-content: space-between; gap: 8px; text-align: right; cursor: pointer; min-height: 48px; }
       .picker-btn .picker-val { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .picker-btn .picker-val.placeholder { color: var(--text-muted); font-weight: 500; }
@@ -7371,6 +7375,25 @@ if (e.key >= "0" && e.key <= "9") handleDigit(e.key);
       const pickerNorm = (t) => String(t || "").toLowerCase()
         .replace(/[\u064B-\u0652\u0640]/g, "").replace(/[أإآ]/g, "ا").replace(/ى/g, "ي").replace(/ة/g, "ه").replace(/\s+/g, " ").trim();
       const PICKER_MIN_OPTIONS = 8;
+      /* تحسين شاشات الإدخال: (1) تتبع الجزء المرئي من الشاشة لما الكيبورد تفتح (2) الحقل اللي بتكتب فيه يفضل ظاهر (3) زرار الكيبورد "تم" */
+      (() => {
+        const w = window.visualViewport, root = document.documentElement;
+        if (w) {
+          const upd = () => {
+            const open = window.innerHeight - w.height > 120;
+            root.classList.toggle("kb-open", open);
+            if (open) { root.style.setProperty("--vv-top", w.offsetTop + "px"); root.style.setProperty("--vv-h", w.height + "px"); }
+            else { root.style.removeProperty("--vv-top"); root.style.removeProperty("--vv-h"); }
+          };
+          w.addEventListener("resize", upd); w.addEventListener("scroll", upd);
+        }
+        document.addEventListener("focusin", (e) => {
+          const el = e.target;
+          if (!el || !el.matches || !el.matches("input, textarea")) return;
+          if (el.tagName === "INPUT" && /^(text|number|search|tel|email)$/.test(el.type) && !el.hasAttribute("enterkeyhint")) el.setAttribute("enterkeyhint", "done");
+          if (el.closest(".sheet-content, .generic-modal")) setTimeout(() => { try { el.scrollIntoView({ block: "center", behavior: "smooth" }); } catch (_) {} }, 320);
+        });
+      })();
       const PickerSelect = ({ children, value, onChange, className = "input-field", disabled, style, title, ...rest }) => {
         const [open, setOpen] = useState(false);
         const [q, setQ] = useState("");
@@ -10813,7 +10836,7 @@ if (e.key >= "0" && e.key <= "9") handleDigit(e.key);
                         يوم الكشف
                       </label>
                       <input
-                        type="number" min="1" max="28"
+                        type="number" inputMode="numeric" min="1" max="28"
                         className="input-field input-num text-center text-sm"
                         value={newCard.statementDay}
                         onChange={(e) => setNewCard({ ...newCard, statementDay: e.target.value })}
@@ -11644,7 +11667,7 @@ if (e.key >= "0" && e.key <= "9") handleDigit(e.key);
                 </div>
                 <div>
                   <label className="text-[11px] font-black block mb-2" style={{ color: "var(--text-muted)" }}>عدد الأشهر *</label>
-                  <input type="number" min="1" max="60" className="input-field text-base text-center font-black" value={months} onChange={(e) => setMonths(e.target.value)} />
+                  <input type="number" inputMode="numeric" min="1" max="60" className="input-field text-base text-center font-black" value={months} onChange={(e) => setMonths(e.target.value)} />
                   <div className="flex gap-1 mt-1.5">
                     {[3, 6, 12, 18, 24, 36].map((m) => (
                       <button
@@ -14947,7 +14970,7 @@ if (e.key >= "0" && e.key <= "9") handleDigit(e.key);
                         </div>
                         <div>
                           <label className="block text-[10px] font-bold mb-1" style={{ color: "var(--text-muted)" }}>يوم إصدار الكشف</label>
-                          <input type="number" min="1" max="28" value={card.statementDay || ""} onChange={(e) => handleCardChange(card.id, "statementDay", e.target.value)} className="input-field input-num text-center text-xs py-2" />
+                          <input type="number" inputMode="numeric" min="1" max="28" value={card.statementDay || ""} onChange={(e) => handleCardChange(card.id, "statementDay", e.target.value)} className="input-field input-num text-center text-xs py-2" />
                         </div>
                         <div>
                           <label className="block text-[10px] font-bold mb-1" style={{ color: "var(--text-muted)" }}>رسوم التأخير</label>
@@ -19101,7 +19124,7 @@ useEffect(() => {
                         </div>
                         <div>
                           <label className="text-[11px] font-bold" style={{ color: "var(--text-muted)" }}>يوم الكشف</label>
-                          <input type="number" min="1" max="28" className="input-field text-sm text-center" value={editingCard.statementDay || ""} onChange={(e) => dispatch({ type: "SET_EDITING_CARD", payload: { ...editingCard, statementDay: e.target.value } })} />
+                          <input type="number" inputMode="numeric" min="1" max="28" className="input-field text-sm text-center" value={editingCard.statementDay || ""} onChange={(e) => dispatch({ type: "SET_EDITING_CARD", payload: { ...editingCard, statementDay: e.target.value } })} />
                         </div>
                       </div>
                       <div className="grid grid-cols-3 gap-3">
@@ -19111,7 +19134,7 @@ useEffect(() => {
                         </div>
                         <div>
                           <label className="text-[11px] font-bold" style={{ color: "var(--text-muted)" }}>فترة السماح</label>
-                          <input type="number" min="1" max="60" className="input-field text-sm text-center" value={editingCard.gracePeriodDays || 20} onChange={(e) => dispatch({ type: "SET_EDITING_CARD", payload: { ...editingCard, gracePeriodDays: e.target.value } })} />
+                          <input type="number" inputMode="numeric" min="1" max="60" className="input-field text-sm text-center" value={editingCard.gracePeriodDays || 20} onChange={(e) => dispatch({ type: "SET_EDITING_CARD", payload: { ...editingCard, gracePeriodDays: e.target.value } })} />
                         </div>
                         <div>
                           <label className="text-[11px] font-bold" style={{ color: "var(--text-muted)" }}>تاريخ المديونية</label>
@@ -19150,11 +19173,11 @@ useEffect(() => {
                         <div className="grid grid-cols-2 gap-3">
                           <div>
                             <label className="text-[11px] font-bold" style={{ color: "var(--text-muted)" }}>إجمالي الأقساط</label>
-                            <input type="number" min="0" className="input-field text-sm text-center" value={editingLoan.totalInstallments ?? ""} onChange={(e) => dispatch({ type: "SET_EDITING_LOAN", payload: { ...editingLoan, totalInstallments: e.target.value } })} />
+                            <input type="number" inputMode="numeric" min="0" className="input-field text-sm text-center" value={editingLoan.totalInstallments ?? ""} onChange={(e) => dispatch({ type: "SET_EDITING_LOAN", payload: { ...editingLoan, totalInstallments: e.target.value } })} />
                           </div>
                           <div>
                             <label className="text-[11px] font-bold" style={{ color: "var(--text-muted)" }}>المدفوعة</label>
-                            <input type="number" min="0" className="input-field text-sm text-center" value={editingLoan.paidInstallments ?? ""} onChange={(e) => dispatch({ type: "SET_EDITING_LOAN", payload: { ...editingLoan, paidInstallments: e.target.value } })} />
+                            <input type="number" inputMode="numeric" min="0" className="input-field text-sm text-center" value={editingLoan.paidInstallments ?? ""} onChange={(e) => dispatch({ type: "SET_EDITING_LOAN", payload: { ...editingLoan, paidInstallments: e.target.value } })} />
                           </div>
                         </div>
                       )}
@@ -19206,7 +19229,7 @@ useEffect(() => {
                         </div>
                         <div>
                           <label className="text-[11px] font-bold block mb-1" style={{ color: "var(--text-muted)" }}>اليوم (1-31)</label>
-                          <input type="number" required min="1" max="31" className="input-field text-center text-sm" value={recurringFormData.day} onChange={(e) => dispatch({ type: "SET_RECURRING_FORM_DATA", payload: { ...recurringFormData, day: e.target.value } })} />
+                          <input type="number" inputMode="numeric" required min="1" max="31" className="input-field text-center text-sm" value={recurringFormData.day} onChange={(e) => dispatch({ type: "SET_RECURRING_FORM_DATA", payload: { ...recurringFormData, day: e.target.value } })} />
                         </div>
                       </div>
                       <div>
