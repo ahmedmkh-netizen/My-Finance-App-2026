@@ -87,8 +87,22 @@ t("مفيش عدّ مزدوج للأقساط: المطلوب الكلي = الم
     tx({ id: "pp", date: "2026-11-20", amount: 900, linkedCardId: 3, source: "installment-purchase", linkedPlanId: "p5" }) ] };
   const p = E.computeCardPaymentPrediction(data, card, D(2026, 11, 27));
   assert.strictEqual(p.currentDebt, 900);
-  assert.strictEqual(p.totalMandatory, 900);
-  assert.strictEqual(p.nextCycleEstimate, 900);
+  // المطلوب في الكشف = أول قسط بس (300). باقي الأصل (600) لسه ماجاش معاده.
+  assert.strictEqual(p.totalMandatory, 300);
+  assert.strictEqual(p.nextCycleEstimate, 300);
+});
+
+t("المطلوب في الكشف مش بيشمل أصل الأقساط اللي لسه ماجاش (بنك بقسط 1000 x 6)", () => {
+  const card = mk({ statementDay: 1, dueDay: 25, openingDebt: 6000 + 500, openingDebtDate: "2026-11-01" });
+  const plan = { id: "p6", cardId: 1, months: 6, startMonth: "نوفمبر", startYear: 2026, totalAmount: 6000, monthlyAmount: 1000, paidAmount: 0, status: "active" };
+  const data = { cards: [card], cardInstallments: [plan], transactions: [] };
+  const p = E.computeCardPaymentPrediction(data, card, D(2026, 11, 27));
+  const st = p.currentStatement;
+  assert.strictEqual(st.closingBalance, 6500);
+  assert.strictEqual(st.unbilledPrincipal, 5000); // 5 أقساط لسه
+  assert.strictEqual(st.totalDue, 1500);          // 500 مشتريات عادية + قسط 1000
+  assert.strictEqual(p.totalMandatory, 1500);
+  assert.ok(st.minDue <= st.totalDue);
 });
 
 t("المتوقع عند تاريخ السداد = المديونية + مصروفات مجدولة - سدادات مجدولة", () => {

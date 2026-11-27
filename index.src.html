@@ -3534,6 +3534,47 @@ const getCycleRange = (card, cycleKey) => {
         return monthsSinceStart >= 0 && monthsSinceStart < (plan.effMonths ?? plan.months);
       };
 
+      /* ═══ أقساط لسه ماجتش (أصل القسط اللي هيتحسب في كشوف جاية) ═══
+         المديونية فيها سعر المشتريات المقسطة كله، لكن المطلوب سداده في الكشف = المشتريات العادية + أقساط الشهر بس.
+         الأصل اللي لسه معاده ماجاش مش مطلوب في الكشف ده. */
+      const planPrincipalInDebt = (plan, data, card, asOfDate) => {
+        const upper = new Date(asOfDate).getTime();
+        const ids = Array.isArray(plan.linkedTxIds) ? plan.linkedTxIds : [];
+        const purchases = (data?.transactions || []).filter((t) =>
+          t && t.type === "expense" && t.source !== "void" &&
+          (((t.installmentPlanId === plan.id || t.linkedPlanId === plan.id) && t.source === "installment-purchase") || ids.includes(t.id)),
+        );
+        if (purchases.length > 0) {
+          return purchases.some((t) => {
+            if (t.status !== "paid") return false;
+            const d = parseISODate(t.date);
+            return d && d.getTime() <= upper;
+          });
+        }
+        // مفيش حركة شراء مربوطة: لو الخطة بدأت قبل الرصيد الافتتاحي فأصلها داخل الرصيد الافتتاحي
+        const od = parseISODate(card.openingDebtDate || card.openingDate);
+        if (!od) return false;
+        const startIdx = getMonthIndex(plan.startMonth);
+        if (startIdx < 0) return false;
+        return safeNumber(plan.startYear, 2026) * 12 + startIdx <= od.getFullYear() * 12 + od.getMonth();
+      };
+      const computeUnbilledPrincipal = (plans, statementDate, data, card, asOfDate) => {
+        const stmtYM = statementDate.getFullYear() * 12 + statementDate.getMonth();
+        let sum = 0;
+        (plans || []).forEach((plan) => {
+          if (plan.status === "cancelled" || plan.completed) return;
+          const startIdx = getMonthIndex(plan.startMonth);
+          if (startIdx < 0) return;
+          const pStartYM = safeNumber(plan.startYear, 2026) * 12 + startIdx;
+          const eff = plan.effMonths ?? plan.months;
+          const slotsAfter = Math.max(0, eff - Math.max(0, stmtYM - pStartYM + 1));
+          if (slotsAfter <= 0) return;
+          if (!planPrincipalInDebt(plan, data, card, asOfDate)) return;
+          sum += Math.min(safeNumber(plan.remainingAmount), slotsAfter * safeNumber(plan.monthlyAmount));
+        });
+        return sum;
+      };
+
       /* ═══════════════ STATEMENT ENGINE (V90 — minDue FIX) ═══════════════ */
       const buildCardStatementEngine = (card, data, asOfDate = new Date()) => {
         if (!card)
@@ -3691,17 +3732,13 @@ const getCycleRange = (card, cycleKey) => {
           // المرجع: CIB T&C، AAIB T&C، ADIB T&C
 
           // 1. احسب الرصيد غير المقسط
-          const totalRemainingInstallments = instInfo.plans
-            .filter((p) => p.status !== "cancelled" && !p.completed)
-            .reduce((s, p) => s + safeNumber(p.remainingAmount), 0);
-          const nonInstallmentBalance = Math.max(0, closingBalance - totalRemainingInstallments);
+          // أصل الأقساط اللي لسه ماجاش معادها (مش مطلوب في الكشف ده)
+          const unbilledPrincipal = Math.min(
+            Math.max(0, closingBalance),
+            computeUnbilledPrincipal(instInfo.plans, statementDate, data, card, Math.min(cycleEndTs, upperTime)),
+          );
 
-          // 2. الحد الأدنى الأساسي (5% من غير المقسط)
-          const minBase = nonInstallmentBalance > 0
-            ? Math.max(100, Math.round(nonInstallmentBalance * 0.05 * 100) / 100)
-            : 0;
-
-          // 3. أقساط الشهر المستحقة في هذه الدورة
+          // 3 (قبل). أقساط الشهر المستحقة في هذه الدورة
           const installmentsDue = instInfo.plans
             .filter((p) =>
               !p.completed &&
@@ -3709,16 +3746,22 @@ const getCycleRange = (card, cycleKey) => {
               isPlanDueInCycle(p, cycleKey, statementDate)
             )
             .reduce((s, p) => s + safeNumber(p.monthlyAmount), 0);
+          const nonInstallmentBalance = Math.max(0, closingBalance - unbilledPrincipal - installmentsDue);
+
+          // 2. الحد الأدنى الأساسي (5% من غير المقسط)
+          const minBase = nonInstallmentBalance > 0
+            ? Math.max(100, Math.round(nonInstallmentBalance * 0.05 * 100) / 100)
+            : 0;
 
           // 4. الحد الأدنى الفعلي = 5% من غير المقسط + الأقساط
-          const minDue = roundMoney(minBase + installmentsDue);
+          const minDue = roundMoney(Math.min(minBase + installmentsDue, Math.max(0, closingBalance - unbilledPrincipal)));
 
           // 5. الرصيد الكامل المستحق (وليس الحد الأدنى)
-          const totalDue = Math.max(0, closingBalance);
+          const totalDue = Math.max(0, closingBalance - unbilledPrincipal);
 
           // 6. الفائدة والرسوم (إن تأخر السداد)
           const daysPastDue = Math.max(0, Math.ceil((now.getTime() - dueTs) / 86400000));
-          const unpaidBalance = Math.max(0, closingBalance - paymentsAfterStatement);
+          const unpaidBalance = Math.max(0, totalDue - paymentsAfterStatement);
           const apr = safeNumber(card.apr, 18);
           const financeCharges = daysPastDue > 0 && unpaidBalance > 0
             ? roundMoney(unpaidBalance * (apr / 100) / 365 * daysPastDue)
@@ -3728,7 +3771,7 @@ const getCycleRange = (card, cycleKey) => {
             : 0;
 
           // ✅ تحديد الحالة بدقة
-          const isFullyPaid = (closingBalance - paymentsAfterStatement) <= 0.01;
+          const isFullyPaid = (totalDue - paymentsAfterStatement) <= 0.01;
           const isMinPaid = paymentsAfterStatement >= (minDue - 0.01);
 
           let status = "open";
@@ -3744,14 +3787,14 @@ const getCycleRange = (card, cycleKey) => {
             statementDateISO: range.statementDateISO, dueDateISO: range.dueDateISO,
             cycleStart, cycleEnd, statementDate, dueDate,
             openingBalance, purchases, refunds, paymentsInCycle,
-            closingBalance, installmentsDueThisCycle, minDue, totalDue, minBase,
+            closingBalance, installmentsDueThisCycle, minDue, totalDue, minBase, unbilledPrincipal,
             installmentsDue, nonInstallmentBalance,
             financeCharges, lateFee,
             status, daysUntilDue, txCount: cycleTxs.length,
             transactions: cycleTxs,
             isPaid: isFullyPaid,
             isMinPaid,
-            effectiveClosingBalance: Math.max(0, closingBalance - paymentsAfterStatement),
+            effectiveClosingBalance: Math.max(0, totalDue - paymentsAfterStatement),
             paymentsAfterStatement,
           });
         });
@@ -3804,7 +3847,7 @@ const getCycleRange = (card, cycleKey) => {
         }
 
         let statementBalance = currentStatement
-          ? Math.max(0, currentStatement.closingBalance - paymentsAfterStatement)
+          ? Math.max(0, currentStatement.totalDue - paymentsAfterStatement)
           : 0;
 
         let installmentsThisMonth = currentStatement ? currentStatement.installmentsDueThisCycle : 0;
@@ -3823,7 +3866,9 @@ const getCycleRange = (card, cycleKey) => {
 
         if (!currentStatement) {
           // ✅ التنبؤ: بناءً على المديونية الحالية الفعلية
-          const projectedTxDebt = liveFigures.txDebt;
+          const projectedTxDebt = Math.max(0, liveFigures.txDebt - (openCycle
+            ? Math.min(Math.max(0, liveFigures.txDebt), computeUnbilledPrincipal(instInfo.plans, openCycle.statementDate, data, card, now))
+            : 0));
           const projectedMinBase = projectedTxDebt > 0
             ? Math.max(100, Math.round(projectedTxDebt * 0.05 * 100) / 100)
             : 0;
@@ -3848,7 +3893,7 @@ const getCycleRange = (card, cycleKey) => {
         }
 
         const nextCycleEstimate = openCycle
-          ? Math.max(Math.max(0, openCycle.closingBalance), openCycle.installmentsDueThisCycle)
+          ? Math.max(Math.max(0, openCycle.totalDue), openCycle.installmentsDueThisCycle)
           : activePlans.length > 0
             ? installmentsThisMonth
             : 0;
