@@ -6678,15 +6678,16 @@ const getCycleRange = (card, cycleKey) => {
 
       /* ═══════════════ OVERDUE CARD BANNER (one slim line instead of stacked alerts) ═══════════════ */
       const OVERDUE_BANNER_LS_KEY = "daftari_overdue_banner_dismissed";
-      const OverdueBanner = memo(({ data, onOpen }) => {
+      const OverdueBanner = memo(({ data, dispatch }) => {
         const [tick, setTick] = useState(0);
+        const [sheetOpen, setSheetOpen] = useState(false);
         const items = useMemo(() => {
           const out = [];
           try {
             (data?.cards || []).forEach((card) => {
               const pred = computeCardPaymentPrediction(data, card);
               if (!pred || pred.totalMandatory <= 0.01 || pred.daysUntilDue === null || pred.daysUntilDue > 0) return;
-              out.push({ id: card.id, overdue: pred.daysUntilDue < 0, amount: pred.totalMandatory });
+              out.push({ id: card.id, card, overdue: pred.daysUntilDue < 0, daysLate: Math.abs(pred.daysUntilDue), amount: pred.totalMandatory, dueISO: pred.nextDueDateISO });
             });
           } catch (e) {}
           return out;
@@ -6701,8 +6702,11 @@ const getCycleRange = (card, cycleKey) => {
         const label = overdueCount > 0
           ? `⚠️ ${overdueCount === 1 ? "سداد بطاقة متأخر" : overdueCount + " سدادات بطاقات متأخرة"}`
           : `🔴 ${items.length === 1 ? "سداد بطاقة مستحق اليوم" : items.length + " سدادات مستحقة اليوم"}`;
+        const openCard = (card) => { setSheetOpen(false); dispatch({ type: "SET_VIEWING_CARD_STATEMENT", payload: card }); };
+        const sorted = [...items].sort((x, y) => y.daysLate - x.daysLate);
         return (
-          <div className={`overdue-banner no-print ${overdueCount > 0 ? "" : "due-today"}`} role="alert" onClick={onOpen}>
+          <>
+          <div className={`overdue-banner no-print ${overdueCount > 0 ? "" : "due-today"}`} role="alert" onClick={() => setSheetOpen(true)}>
             <span className="ob-text">{label} · <span className="money tabular">{fmt(total)}</span> ج.م</span>
             <ChevronLeft size={14} />
             <button type="button" className="ob-x" aria-label="إخفاء اليوم"
@@ -6710,6 +6714,30 @@ const getCycleRange = (card, cycleKey) => {
               <X size={13} />
             </button>
           </div>
+          <BottomSheet isOpen={sheetOpen} onClose={() => setSheetOpen(false)} title={overdueCount > 0 ? "⚠️ بطاقات سدادها متأخر" : "🔴 بطاقات سدادها اليوم"}>
+            <div className="space-y-2">
+              {sorted.map((it) => (
+                <div key={it.id} className="p-3 rounded-xl" style={{ background: "var(--bg-muted)", border: `1.5px solid ${it.overdue ? "#DC2626" : "#D97706"}` }}>
+                  <div className="flex justify-between items-start gap-2">
+                    <div className="min-w-0">
+                      <p className="font-black text-sm">{it.card.bank} {it.card.name} • ••••{it.card.last4}</p>
+                      <p className="text-[11px] font-bold mt-0.5" style={{ color: it.overdue ? "#DC2626" : "#D97706" }}>
+                        {it.overdue ? `متأخر ${it.daysLate} يوم` : "مستحق اليوم"}
+                      </p>
+                      {it.dueISO && <p className="text-[10px] mt-0.5" style={{ color: "var(--text-muted)" }}>تاريخ الاستحقاق: <span className="money tabular">{it.dueISO}</span></p>}
+                    </div>
+                    <div className="text-left flex-shrink-0">
+                      <p className="text-[9px] font-bold" style={{ color: "var(--text-muted)" }}>المطلوب</p>
+                      <p className="font-black text-base money tabular">{fmt(it.amount)} <span className="text-[10px]">ج.م</span></p>
+                    </div>
+                  </div>
+                  <button type="button" onClick={() => openCard(it.card)} className="btn btn-secondary w-full mt-2.5 py-2 text-xs font-black">فتح البطاقة</button>
+                </div>
+              ))}
+              <button type="button" onClick={() => { setSheetOpen(false); dispatch({ type: "SET_ACTIVE_TAB", payload: "cards" }); }} className="btn btn-ghost w-full text-xs font-bold">كل الحسابات والبطاقات</button>
+            </div>
+          </BottomSheet>
+          </>
         );
       });
 
@@ -18454,7 +18482,7 @@ useEffect(() => {
 
               <main className="p-3 lg:p-5 w-full">
                 <div key={activeTab} className="max-w-5xl mx-auto space-y-4 page-transition pb-24">
-                  <OverdueBanner data={data} onOpen={() => dispatch({ type: "SET_ACTIVE_TAB", payload: "cards" })} />
+                  <OverdueBanner data={data} dispatch={dispatch} />
                   <ProfessionalHeader
                     isDarkMode={isDarkMode}
                     dispatch={dispatch}
