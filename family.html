@@ -3399,7 +3399,7 @@ function buildFeedItem(t){
   return '<div class="feed-item" data-txid="'+t.id+'">'+
     '<div class="feed-avatar av-'+(u?u.id:'ans')+(ownerIsAdmin?' is-admin':'')+'">'+(u?u.emoji:'؟')+'</div>'+
     '<div class="feed-body"><div class="feed-name">'+adminBadge+editedBadge+hanyBadge+pendingBadge+catBadge+' '+esc(t.description||t.category)+'</div>'+
-    '<div class="feed-time">'+(u?u.name:'—')+' · '+displayTime+'</div></div>'+
+    '<div class="feed-time">'+(u?u.name:(t.createdByName||'من التطبيق الرئيسي'))+' · '+displayTime+'</div></div>'+
     '<div class="feed-amount">- '+fmt(t.amount)+' ج.م</div>'+actionBtn+'</div>';
 }
 
@@ -4721,7 +4721,10 @@ function parseTransactions(data){
     var isFamilyApp=(t.source==='family-app');
     var isHanyCategory=(t.category===CATEGORY_NAME);
     var isHanyRelated=(t.category==='مشتريات بقالة هاني');
-    if(!isFamilyApp&&!isHanyCategory&&!isHanyRelated)return;
+    /* نفس شرط دفتري: فئة "مشتريات محل هاني" (المسجلة من التطبيق الرئيسي) + عمليات هاني (hany_tab / purchase) */
+    var isHanyShop=(t.category==='مشتريات محل هاني');
+    var isHanyPurchase=((t.method==='hany_tab'||t.hanyEffect==='purchase')&&isHanyShop);
+    if(!isFamilyApp&&!isHanyCategory&&!isHanyRelated&&!isHanyShop&&!isHanyPurchase)return;
     if(!isActiveTx(t))return;
     var iso=getTxDate(t);if(!iso)return;
     if(seen[t.id]){
