@@ -1,0 +1,22 @@
+name: Daily data backup to Google Drive
+on:
+  schedule:
+    - cron: '30 22 * * *'   # 00:30 Cairo time
+  workflow_dispatch:
+
+jobs:
+  data-backup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install google-api-python-client google-auth-oauthlib google-auth-httplib2
+      - name: Dump Firestore data and upload to Drive
+        env:
+          CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
+          FOLDER_ID: ${{ secrets.GOOGLE_FOLDER_ID }}
+        run: python scripts/backup_firestore.py
