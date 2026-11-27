@@ -277,6 +277,10 @@
         font-feature-settings: "tnum" 1, "lnum" 1;
         letter-spacing: -0.02em;
       }
+      /* v-look: digits always read left-to-right, so a minus sits in front of the number (−70,285.45) */
+      .money, .tabular, .lux-card__amount-value, .month-stats-cell__value { unicode-bidi: isolate; direction: ltr; }
+      .lux-card__amount-value, .month-stats-cell__value { text-align: inherit; }
+      .money:where(p, div, h1, h2, h3, h4) { text-align: right; }
       .money-xl { font-size: 32px; font-weight: 900; line-height: 1.1; }
       .money-lg { font-size: 22px; font-weight: 900; line-height: 1.15; }
       .money-md { font-size: 16px; font-weight: 800; line-height: 1.2; }
@@ -564,6 +568,12 @@
         animation: spin 0.8s linear infinite;
       }
 
+      .overdue-banner { display: flex; align-items: center; gap: 8px; width: 100%; padding: 9px 12px; border-radius: 14px; cursor: pointer; font-size: 12.5px; font-weight: 800; text-align: right;
+        color: #fff; background: linear-gradient(135deg, #b91c1c 0%, #dc2626 100%); border: 1px solid rgba(255,255,255,.18); box-shadow: 0 6px 16px -6px rgba(185,28,28,.55); }
+      .overdue-banner.due-today { background: linear-gradient(135deg, #b45309 0%, #d97706 100%); box-shadow: 0 6px 16px -6px rgba(180,83,9,.55); }
+      .overdue-banner .ob-text { flex: 1; min-width: 0; }
+      .overdue-banner .ob-x { flex-shrink: 0; width: 26px; height: 26px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; background: rgba(255,255,255,.18); border: none; color: #fff; cursor: pointer; }
+      .header-icon-btn { background: var(--bg-muted); color: var(--text-primary); border: 1px solid var(--border-strong); }
       .toast-container {
         position: fixed; top: 12px; left: 50%; transform: translateX(-50%);
         z-index: 10000; display: flex; flex-direction: column; gap: 10px;
@@ -573,9 +583,9 @@
       .toast {
         pointer-events: auto; animation: toastIn 0.35s cubic-bezier(0.16, 1, 0.3, 1);
         display: flex; align-items: flex-start; gap: 12px;
-        padding: 14px 18px 18px; border-radius: var(--r-lg);
+        padding: 10px 14px 14px; border-radius: var(--r-lg);
         box-shadow: 0 12px 32px -8px rgba(10, 22, 40, 0.35), 0 4px 12px rgba(10, 22, 40, 0.15);
-        color: white; font-weight: 600; font-size: 14px;
+        color: white; font-weight: 600; font-size: 13px;
         backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
         border: 1px solid rgba(255, 255, 255, 0.15);
         cursor: grab; position: relative; overflow: hidden;
@@ -999,7 +1009,8 @@
       /* PageHeader */
       .page-header { display: flex; align-items: flex-start; gap: 12px; padding: 4px 0 16px; flex-wrap: wrap; }
       .page-header__icon { width: 40px; height: 40px; border-radius: 12px; display: flex; align-items: center; justify-content: center; background: var(--accent-soft); color: var(--accent); flex-shrink: 0; }
-      .page-header__text { flex: 1; min-width: 0; }
+      .page-header__text { flex: 1 1 150px; min-width: 0; }
+      @media (max-width: 480px) { .page-header__actions, .page-header > div:last-child:not(.page-header__text):not(.page-header__icon) { flex-basis: 100%; } }
       .page-header__title { font-size: 18px; font-weight: 900; margin: 0; letter-spacing: -0.02em; line-height: 1.2; }
       .page-header__subtitle { font-size: 11px; font-weight: 600; color: var(--text-muted); margin-top: 3px; line-height: 1.4; }
       .page-header__actions { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
@@ -7369,7 +7380,8 @@ const ProfessionalHeader = memo(({
   className: "hidden sm:flex w-9 h-9 rounded-xl items-center justify-center focus-ring",
   style: {
     background: "var(--bg-muted)",
-    color: "var(--text-secondary)"
+    color: "var(--text-primary)",
+    border: "1px solid var(--border-strong)"
   }
 }, React.createElement(PrinterIcon, {
   size: 15
@@ -7380,7 +7392,8 @@ const ProfessionalHeader = memo(({
   className: "w-9 h-9 rounded-xl flex items-center justify-center focus-ring",
   style: {
     background: "var(--bg-muted)",
-    color: "var(--text-secondary)"
+    color: "var(--text-primary)",
+    border: "1px solid var(--border-strong)"
   }
 }, React.createElement(MessageSquare, {
   size: 15
@@ -7393,7 +7406,8 @@ const ProfessionalHeader = memo(({
   className: "w-9 h-9 rounded-xl flex items-center justify-center focus-ring",
   style: {
     background: "var(--bg-muted)",
-    color: "var(--text-secondary)"
+    color: "var(--text-primary)",
+    border: "1px solid var(--border-strong)"
   },
   "aria-label": "تبديل الوضع الليلي"
 }, isDarkMode ? React.createElement(Sun, {
@@ -7416,6 +7430,62 @@ const ProfessionalHeader = memo(({
   onLogout: onLogout,
   onOpenDrive: onOpenDrive
 })))));
+const OVERDUE_BANNER_LS_KEY = "daftari_overdue_banner_dismissed";
+const OverdueBanner = memo(({
+  data,
+  onOpen
+}) => {
+  const [tick, setTick] = useState(0);
+  const items = useMemo(() => {
+    const out = [];
+    try {
+      (data?.cards || []).forEach(card => {
+        const pred = computeCardPaymentPrediction(data, card);
+        if (!pred || pred.totalMandatory <= 0.01 || pred.daysUntilDue === null || pred.daysUntilDue > 0) return;
+        out.push({
+          id: card.id,
+          overdue: pred.daysUntilDue < 0,
+          amount: pred.totalMandatory
+        });
+      });
+    } catch (e) {}
+    return out;
+  }, [data?.cards, data?.transactions, data?.cardInstallments]);
+  if (items.length === 0) return null;
+  const sig = getLocalISODate() + "|" + items.map(i => i.id + (i.overdue ? "o" : "t")).sort().join(",");
+  let dismissed = false;
+  try {
+    dismissed = localStorage.getItem(OVERDUE_BANNER_LS_KEY) === sig;
+  } catch (e) {}
+  if (dismissed) return null;
+  const overdueCount = items.filter(i => i.overdue).length;
+  const total = items.reduce((sum, i) => sum + i.amount, 0);
+  const label = overdueCount > 0 ? `⚠️ ${overdueCount === 1 ? "سداد بطاقة متأخر" : overdueCount + " سدادات بطاقات متأخرة"}` : `🔴 ${items.length === 1 ? "سداد بطاقة مستحق اليوم" : items.length + " سدادات مستحقة اليوم"}`;
+  return React.createElement("div", {
+    className: `overdue-banner no-print ${overdueCount > 0 ? "" : "due-today"}`,
+    role: "alert",
+    onClick: onOpen
+  }, React.createElement("span", {
+    className: "ob-text"
+  }, label, " · ", React.createElement("span", {
+    className: "money tabular"
+  }, fmt(total)), " ج.م"), React.createElement(ChevronLeft, {
+    size: 14
+  }), React.createElement("button", {
+    type: "button",
+    className: "ob-x",
+    "aria-label": "إخفاء اليوم",
+    onClick: e => {
+      e.stopPropagation();
+      try {
+        localStorage.setItem(OVERDUE_BANNER_LS_KEY, sig);
+      } catch (err) {}
+      setTick(tick + 1);
+    }
+  }, React.createElement(X, {
+    size: 13
+  })));
+});
 const Toast = ({
   notification,
   removeNotification
@@ -8929,7 +8999,7 @@ const HanyView = memo(function HanyView(props) {
     }
   }, React.createElement(Banknote, {
     size: 16
-  }), " سداد"))), React.createElement("div", {
+  }), " سداد"))), Math.abs(safeNumber(monthSummary.opening)) > 0.005 && React.createElement("div", {
     className: "card",
     style: {
       background: 'linear-gradient(135deg, rgba(100,116,139,0.08), rgba(100,116,139,0.04))',
@@ -10282,9 +10352,9 @@ const TransactionsView = memo(function TransactionsView({
   }, monthStats.net >= 0 ? "+" : "−", formatAdaptive(Math.abs(monthStats.net)), React.createElement("span", {
     className: "month-stats-cell__currency"
   }, "ج.م")))), React.createElement("div", {
-    className: "card py-3"
+    className: "card py-2.5"
   }, React.createElement("div", {
-    className: "flex items-center gap-2 mb-3"
+    className: "flex items-center gap-2 mb-2"
   }, React.createElement("button", {
     type: "button",
     onClick: () => navigateMonth(-1),
@@ -10297,12 +10367,12 @@ const TransactionsView = memo(function TransactionsView({
     className: "flex-1 text-center"
   }, React.createElement("h2", {
     className: "font-black text-base"
-  }, selectedMonth, " ", selectedYear), React.createElement("p", {
-    className: "text-[10px] mt-0.5",
+  }, selectedMonth, " ", selectedYear, " ", React.createElement("span", {
+    className: "text-[10px] font-bold",
     style: {
       color: "var(--text-muted)"
     }
-  }, monthTx.length, " معاملة ", isClosed && "· 🔒 مغلق")), React.createElement("button", {
+  }, "· ", monthTx.length, " معاملة ", isClosed && "· 🔒 مغلق"))), React.createElement("button", {
     type: "button",
     onClick: () => navigateMonth(1),
     disabled: !canGoNext,
@@ -10331,9 +10401,9 @@ const TransactionsView = memo(function TransactionsView({
   }, React.createElement(CheckCircle2, {
     size: 14
   }), " المُعتمدة (", paidList.length, ")")), React.createElement("div", {
-    className: "flex gap-2 mt-3"
+    className: "flex gap-2 mt-2"
   }, React.createElement("div", {
-    className: "relative flex-1"
+    className: "relative flex-1 min-w-0"
   }, React.createElement(Search, {
     className: "absolute right-3 top-1/2 -translate-y-1/2",
     size: 14,
@@ -10350,6 +10420,14 @@ const TransactionsView = memo(function TransactionsView({
       payload: e.target.value
     })
   })), React.createElement("button", {
+    type: "button",
+    onClick: () => dispatch({
+      type: "SET_TRANS_VIEW_MODE",
+      payload: transViewMode === "all" ? "expense" : transViewMode === "expense" ? "income" : "all"
+    }),
+    className: `btn px-3 py-2.5 text-[11px] font-black ${transViewMode === "all" ? "btn-secondary" : "btn-primary"}`,
+    "aria-label": "نوع الحركات: الكل / مصروفات / إيرادات"
+  }, transViewMode === "expense" ? "مصروفات" : transViewMode === "income" ? "إيرادات" : "الكل"), React.createElement("button", {
     onClick: () => setShowFilterSheet(true),
     className: "btn btn-secondary px-3 py-2.5 relative"
   }, React.createElement(Filter, {
@@ -10363,27 +10441,7 @@ const TransactionsView = memo(function TransactionsView({
     "aria-label": "فتح/طي الكل"
   }, React.createElement(Layers, {
     size: 14
-  }))), React.createElement("div", {
-    className: "flex gap-1.5 mt-3 flex-wrap"
-  }, React.createElement("button", {
-    onClick: () => dispatch({
-      type: "SET_TRANS_VIEW_MODE",
-      payload: "all"
-    }),
-    className: `badge px-2.5 py-1 cursor-pointer text-[10px] ${transViewMode === "all" ? "badge-accent" : "badge-neutral"}`
-  }, "الكل"), React.createElement("button", {
-    onClick: () => dispatch({
-      type: "SET_TRANS_VIEW_MODE",
-      payload: "expense"
-    }),
-    className: `badge px-2.5 py-1 cursor-pointer text-[10px] ${transViewMode === "expense" ? "badge-accent" : "badge-neutral"}`
-  }, "مصروفات"), React.createElement("button", {
-    onClick: () => dispatch({
-      type: "SET_TRANS_VIEW_MODE",
-      payload: "income"
-    }),
-    className: `badge px-2.5 py-1 cursor-pointer text-[10px] ${transViewMode === "income" ? "badge-accent" : "badge-neutral"}`
-  }, "إيرادات"))), displayedList.length === 0 ? React.createElement("div", {
+  })))), displayedList.length === 0 ? React.createElement("div", {
     className: "card"
   }, React.createElement(EmptyState, {
     icon: activeTab === "pending" ? React.createElement(CheckCircle2, {
@@ -11360,9 +11418,7 @@ const DashboardView = memo(({
     className: "flex-1 min-w-0"
   }, React.createElement("p", {
     className: "text-xs font-bold opacity-70 mb-1"
-  }, "نظرة سريعة على يومك"), React.createElement("p", {
-    className: "text-[11px] font-semibold opacity-60"
-  }, quote)), React.createElement("div", {
+  }, "نظرة سريعة على يومك")), React.createElement("div", {
     className: "flex flex-col items-end gap-1.5 flex-shrink-0"
   }, React.createElement("button", {
     onClick: () => setShowDetails(true),
@@ -11418,7 +11474,12 @@ const DashboardView = memo(({
     className: "font-bold money tabular"
   }, fmtShort(netWorthData.totalLiabilities)), " ج.م أكبر من السيولة", " ", React.createElement("span", {
     className: "font-bold money tabular"
-  }, fmtShort(netWorthData.liquidity)), " ج.م"))), React.createElement("div", {
+  }, fmtShort(netWorthData.liquidity)), " ج.م")), quote && React.createElement("p", {
+    className: "text-[11px] font-semibold opacity-60 leading-relaxed text-center mt-3 pt-3",
+    style: {
+      borderTop: "1px solid rgba(255,255,255,0.12)"
+    }
+  }, quote)), React.createElement("div", {
     className: "grid grid-cols-3 gap-2"
   }, React.createElement("button", {
     onClick: () => setShowDetails(true),
@@ -12653,7 +12714,7 @@ const WalletsAndCardsView = memo(({
       size: 20
     }),
     title: "الحسابات",
-    subtitle: `${cards.length} بطاقة + ${Object.keys(WALLET_CONFIGS).length} حساب/محفظة`,
+    subtitle: `${cards.length} بطاقات · ${Object.keys(WALLET_CONFIGS).length} حسابات`,
     actions: React.createElement("div", {
       className: "flex gap-1.5 flex-wrap"
     }, React.createElement("button", {
@@ -22694,6 +22755,7 @@ function App() {
         if (!pred || pred.totalMandatory <= 0.01) return;
         if (pred.daysUntilDue === null) return;
         if (pred.daysUntilDue > 5) return;
+        if (pred.daysUntilDue <= 0) return;
         const alertKey = `card_${card.id}_${pred.nextDueDateISO || "unknown"}_${todayISO}`;
         if (notified[alertKey]) return;
         const cardLabel = `${card.bank} ••••${card.last4}`;
@@ -22722,6 +22784,16 @@ function App() {
         console.warn("Card due alert error:", e);
       }
     });
+    if (alertsToShow.length > 1) {
+      const merged = {
+        title: `⏰ ${alertsToShow.length} سدادات بطاقات قريبة`,
+        message: alertsToShow.map(a => a.title.replace(/^[^ ]+ سداد قريب — /, "") + ": " + a.message.split("\n")[0]).join("\n"),
+        type: "warning",
+        key: alertsToShow.map(a => a.key).join("+")
+      };
+      alertsToShow.length = 0;
+      alertsToShow.push(merged);
+    }
     if (alertsToShow.length > 0) {
       const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
       Object.keys(newNotified).forEach(k => {
@@ -24600,7 +24672,13 @@ function App() {
   }, React.createElement("div", {
     key: activeTab,
     className: "max-w-5xl mx-auto space-y-4 page-transition pb-24"
-  }, React.createElement(ProfessionalHeader, {
+  }, React.createElement(OverdueBanner, {
+    data: data,
+    onOpen: () => dispatch({
+      type: "SET_ACTIVE_TAB",
+      payload: "cards"
+    })
+  }), React.createElement(ProfessionalHeader, {
     isDarkMode: isDarkMode,
     dispatch: dispatch,
     onOpenSms: () => dispatch({
