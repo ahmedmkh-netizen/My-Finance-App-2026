@@ -808,6 +808,19 @@
       .quick-items-grid::-webkit-scrollbar-thumb { background: var(--warning); border-radius: 2px; }
       .form-section-compact { padding: 10px 12px !important; }
 
+      /* ═══ picker: searchable select (opens a sheet with quick search when the list is long) ═══ */
+      .picker-btn { display: flex; align-items: center; justify-content: space-between; gap: 8px; text-align: right; cursor: pointer; min-height: 48px; }
+      .picker-btn .picker-val { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .picker-btn .picker-val.placeholder { color: var(--text-muted); font-weight: 500; }
+      .picker-search { position: relative; margin-bottom: 10px; }
+      .picker-search input { padding-right: 38px; }
+      .picker-search svg { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: var(--text-muted); pointer-events: none; }
+      .picker-group { font-size: 11px; font-weight: 900; color: var(--text-muted); padding: 10px 4px 4px; }
+      .picker-opt { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; text-align: right; padding: 13px 14px; border-radius: 14px; font-family: inherit; font-size: 14px; font-weight: 700; color: var(--text-primary); background: transparent; border: 1.5px solid transparent; cursor: pointer; }
+      .picker-opt:active { background: var(--bg-muted); }
+      .picker-opt.sel { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+      .picker-opt.active { background: var(--bg-muted); }
+      .picker-opt[disabled] { opacity: .4; }
       .sheet-backdrop { position: fixed; inset: 0; background: var(--bg-overlay); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); z-index: 4500; display: flex; align-items: flex-end; justify-content: center; animation: fadeIn 0.2s ease-out; }
       .sheet-content {
         background: var(--bg-card); border-radius: 24px 24px 0 0;
@@ -1179,6 +1192,7 @@
     <script type="module">
 import React, { useState, useMemo, useEffect, useCallback, useReducer, useRef, memo } from "react";
 import { createRoot } from "react-dom/client";
+import { createPortal } from "react-dom";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, AreaChart, Area } from "recharts";
 import { LayoutDashboard, Wallet, CreditCard, Banknote, Plus, Trash2, Repeat, TrendingUp, TrendingDown, Calendar, ArrowUpRight, Edit, X, Save, Layers, ArrowRight, Printer, ChevronDown, ChevronLeft, ArrowUp, Undo2, LogOut, Lock, Unlock, Moon, Sun, ShieldCheck, RefreshCcw, Menu, Search, FileSpreadsheet, Settings as SettingsIcon, Target, CalendarDays, BarChart3, Bell, Sparkles, AlertTriangle, Clock, CheckCircle2, Zap, Coins, Filter, Eye, EyeOff, ShieldAlert, Upload, Cloud, Signal, PiggyBank, Landmark as BuildingBank, ArrowDownCircle, ArrowUpCircle, Wifi, Store as StoreIcon, Users, Activity, Sliders, Table, RotateCcw, LineChart, Delete, Gift, Receipt, ArrowLeftRight, MessageSquare, PieChart as PieChartIcon, CloudOff, Copy, Send, Bot, ExternalLink, CircleDollarSign, Percent, Info, Home, User, MoreHorizontal, ArrowDown, Check, AlertCircle, MoreVertical, ChevronRight, Scale, User as UserIcon, Circle, Dot, History, FileText, Save as SaveIcon, Download, Database, FileDown, Share2, Printer as PrinterIcon, FileCheck, Building2, ShoppingBag } from "lucide-react";
 const firebaseConfig = {
@@ -8309,6 +8323,170 @@ const BottomSheet = memo(({
     className: "sheet-body"
   }, children)));
 });
+const pickerText = n => {
+  if (n === null || n === undefined || n === false || n === true) return "";
+  if (typeof n === "string" || typeof n === "number") return String(n);
+  if (Array.isArray(n)) return n.map(pickerText).join("");
+  if (n.props) return pickerText(n.props.children);
+  return "";
+};
+const pickerNorm = t => String(t || "").toLowerCase().replace(/[\u064B-\u0652\u0640]/g, "").replace(/[أإآ]/g, "ا").replace(/ى/g, "ي").replace(/ة/g, "ه").replace(/\s+/g, " ").trim();
+const PICKER_MIN_OPTIONS = 8;
+const PickerSelect = ({
+  children,
+  value,
+  onChange,
+  className = "input-field",
+  disabled,
+  style,
+  title,
+  ...rest
+}) => {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const [hi, setHi] = useState(0);
+  const opts = [];
+  const walk = (nodes, group) => React.Children.forEach(nodes, ch => {
+    if (!ch || !ch.props) return;
+    if (ch.type === "option") opts.push({
+      value: String(ch.props.value !== undefined ? ch.props.value : pickerText(ch.props.children)),
+      label: pickerText(ch.props.children),
+      group,
+      disabled: !!ch.props.disabled
+    });else if (ch.type === "optgroup") walk(ch.props.children, ch.props.label);else if (ch.type === React.Fragment) walk(ch.props.children, group);
+  });
+  walk(children, null);
+  if (opts.length < PICKER_MIN_OPTIONS) {
+    return React.createElement("select", {
+      className: className,
+      value: value,
+      onChange: onChange,
+      disabled: disabled,
+      style: style,
+      title: title,
+      ...rest
+    }, children);
+  }
+  const cur = opts.find(o => o.value === String(value === undefined || value === null ? "" : value));
+  const shown = cur && cur.value !== "" ? cur.label : null;
+  const placeholder = (opts.find(o => o.value === "") || {}).label || "اختر...";
+  const nq = pickerNorm(q);
+  const byLabel = nq ? opts.filter(o => o.value !== "" && pickerNorm(o.label).includes(nq)) : [];
+  const list = nq ? byLabel.length ? byLabel : opts.filter(o => o.value !== "" && pickerNorm(o.group || "").includes(nq)) : opts;
+  const close = () => {
+    setOpen(false);
+    setQ("");
+    setHi(0);
+  };
+  const pick = o => {
+    if (o.disabled) return;
+    close();
+    onChange && onChange({
+      target: {
+        value: o.value
+      },
+      currentTarget: {
+        value: o.value
+      }
+    });
+  };
+  const sheet = open && createPortal(React.createElement("div", {
+    className: "sheet-backdrop no-print",
+    onClick: e => {
+      if (e.target === e.currentTarget) close();
+    }
+  }, React.createElement("div", {
+    className: "sheet-content",
+    style: {
+      maxHeight: "86dvh"
+    }
+  }, React.createElement("div", {
+    className: "sheet-handle"
+  }), React.createElement("div", {
+    className: "sheet-header"
+  }, React.createElement("h3", {
+    className: "font-black text-base"
+  }, rest["aria-label"] || title || placeholder), React.createElement("button", {
+    type: "button",
+    onClick: close,
+    className: "btn btn-ghost p-1.5",
+    "aria-label": "إغلاق"
+  }, React.createElement(X, {
+    size: 16
+  }))), React.createElement("div", {
+    className: "sheet-body"
+  }, React.createElement("div", {
+    className: "picker-search"
+  }, React.createElement(Search, {
+    size: 15
+  }), React.createElement("input", {
+    autoFocus: true,
+    type: "text",
+    inputMode: "search",
+    enterKeyHint: "done",
+    className: "input-field text-sm",
+    placeholder: "ابحث...",
+    value: q,
+    onChange: e => {
+      setQ(e.target.value);
+      setHi(0);
+    },
+    onKeyDown: e => {
+      const sel = list.filter(o => !o.disabled);
+      if (e.key === "Enter") {
+        e.preventDefault();
+        const t = sel[Math.min(hi, sel.length - 1)];
+        if (t) pick(t);
+      } else if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setHi(h => Math.min(h + 1, sel.length - 1));
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setHi(h => Math.max(h - 1, 0));
+      }
+    }
+  })), list.length === 0 && React.createElement("p", {
+    className: "text-center text-xs font-bold py-6",
+    style: {
+      color: "var(--text-muted)"
+    }
+  }, "لا توجد نتائج"), list.map((o, i) => {
+    const isSel = cur && o.value === cur.value;
+    const showGroup = o.group && (i === 0 || list[i - 1].group !== o.group);
+    const selList = list.filter(x => !x.disabled);
+    const isHi = nq && selList[Math.min(hi, selList.length - 1)] === o;
+    return React.createElement(React.Fragment, {
+      key: o.value + "_" + i
+    }, showGroup && React.createElement("div", {
+      className: "picker-group"
+    }, o.group), React.createElement("button", {
+      type: "button",
+      disabled: o.disabled,
+      onClick: () => pick(o),
+      className: `picker-opt ${isSel ? "sel" : ""} ${isHi ? "active" : ""}`
+    }, React.createElement("span", null, o.label || "—"), isSel && React.createElement(Check, {
+      size: 16
+    })));
+  })))), document.body);
+  return React.createElement(React.Fragment, null, React.createElement("button", {
+    type: "button",
+    disabled: disabled,
+    onClick: () => setOpen(true),
+    className: `${className} picker-btn`,
+    style: style,
+    title: title,
+    "aria-haspopup": "listbox",
+    "aria-label": rest["aria-label"]
+  }, React.createElement("span", {
+    className: `picker-val ${shown ? "" : "placeholder"}`
+  }, shown || placeholder), React.createElement(ChevronDown, {
+    size: 16,
+    style: {
+      color: "var(--text-muted)",
+      flexShrink: 0
+    }
+  })), sheet);
+};
 const QuickAddSheet = memo(({
   isOpen,
   onClose,
@@ -9330,7 +9508,7 @@ const HanyView = memo(function HanyView(props) {
     style: {
       color: "var(--text-muted)"
     }
-  }, "من حساب *"), React.createElement("select", {
+  }, "من حساب *"), React.createElement(PickerSelect, {
     className: "input-field text-sm",
     value: settleMethod,
     onChange: e => setSettleMethod(e.target.value)
@@ -9342,7 +9520,7 @@ const HanyView = memo(function HanyView(props) {
     style: {
       color: "var(--text-muted)"
     }
-  }, "مرتبط بشهر (اختياري)"), React.createElement("select", {
+  }, "مرتبط بشهر (اختياري)"), React.createElement(PickerSelect, {
     className: "input-field text-sm",
     value: linkedHanyMonth,
     onChange: e => setLinkedHanyMonth(e.target.value)
@@ -11386,7 +11564,7 @@ const RamadanMini = memo(() => {
     className: "rmm-label"
   }, ev.kind === "iftar" ? "باقي على أذان المغرب (الفطار)" : "باقي على أذان الفجر (نهاية السحور)"), React.createElement("div", {
     className: "rmm-times"
-  }, cell("الفجر", ev.times.fajr, ev.kind === "fajr" && !ev.tomorrow), cell("الفطار", ev.times.sunset, ev.kind === "iftar"), React.createElement("select", {
+  }, cell("الفجر", ev.times.fajr, ev.kind === "fajr" && !ev.tomorrow), cell("الفطار", ev.times.sunset, ev.kind === "iftar"), React.createElement(PickerSelect, {
     className: "rmm-city",
     value: city,
     onChange: e => {
@@ -12549,7 +12727,7 @@ const CashbackView = memo(({
     style: {
       color: "var(--text-muted)"
     }
-  }, "البطاقة (اختياري)"), React.createElement("select", {
+  }, "البطاقة (اختياري)"), React.createElement(PickerSelect, {
     className: "input-field text-sm",
     value: newTracker.cardId,
     onChange: e => setNewTracker({
@@ -13017,7 +13195,7 @@ const WalletsAndCardsView = memo(({
     style: {
       color: "var(--text-muted)"
     }
-  }, "المزود *"), React.createElement("select", {
+  }, "المزود *"), React.createElement(PickerSelect, {
     className: "input-field text-sm",
     value: newCard.providerKey,
     onChange: e => setNewCard({
@@ -13285,7 +13463,7 @@ const GenericLedgerComponent = memo(({
     className: "text-sm font-black text-blue-600 dark:text-blue-400 money tabular"
   }, mask(stats.currentBalance)))), React.createElement("div", {
     className: "flex gap-2 mb-3 flex-wrap"
-  }, React.createElement("select", {
+  }, React.createElement(PickerSelect, {
     className: "input-field text-xs py-2 flex-1 min-w-[100px]",
     value: filter,
     onChange: e => setFilter(e.target.value)
@@ -14350,7 +14528,7 @@ const InstallmentPlanModal = memo(({
     style: {
       color: "var(--text-muted)"
     }
-  }, "شهر البداية"), React.createElement("select", {
+  }, "شهر البداية"), React.createElement(PickerSelect, {
     className: "input-field text-sm py-2",
     value: startMonth,
     onChange: e => setStartMonth(e.target.value)
@@ -14362,7 +14540,7 @@ const InstallmentPlanModal = memo(({
     style: {
       color: "var(--text-muted)"
     }
-  }, "السنة"), React.createElement("select", {
+  }, "السنة"), React.createElement(PickerSelect, {
     className: "input-field text-sm py-2",
     value: startYear,
     onChange: e => setStartYear(Number(e.target.value))
@@ -15198,7 +15376,7 @@ const CardStatementModal = memo(({
     className: "input-field pr-9 text-xs py-2.5 rounded-xl border border-[color:var(--border-default)]",
     value: searchTerm,
     onChange: e => setSearchTerm(e.target.value)
-  })), React.createElement("select", {
+  })), React.createElement(PickerSelect, {
     className: "input-field text-xs py-2.5 w-auto rounded-xl border border-[color:var(--border-default)] bg-[color:var(--bg-muted)]",
     value: sortBy,
     onChange: e => setSortBy(e.target.value)
@@ -17629,7 +17807,7 @@ const DuplicatesContent = ({
     style: {
       color: "var(--text-muted)"
     }
-  }, "نطاق البحث"), React.createElement("select", {
+  }, "نطاق البحث"), React.createElement(PickerSelect, {
     className: "input-field text-sm",
     value: selectedMonth,
     onChange: e => setSelectedMonth(e.target.value)
@@ -18242,7 +18420,7 @@ const ActivityContent = ({
     className: "input-field pr-9 text-sm py-2.5",
     value: searchTerm,
     onChange: e => setSearchTerm(e.target.value)
-  })), React.createElement("select", {
+  })), React.createElement(PickerSelect, {
     className: "input-field text-xs py-2.5 flex-1 min-w-[130px]",
     value: monthFilter,
     onChange: e => setMonthFilter(e.target.value)
@@ -19729,7 +19907,7 @@ const SmsParserModal = memo(({
     style: {
       color: "var(--text-muted)"
     }
-  }, "الفئة *"), React.createElement("select", {
+  }, "الفئة *"), React.createElement(PickerSelect, {
     className: "input-field text-xs py-2",
     value: category,
     onChange: e => setCategory(e.target.value)
@@ -19746,7 +19924,7 @@ const SmsParserModal = memo(({
     style: {
       color: "var(--text-muted)"
     }
-  }, "طريقة الدفع"), React.createElement("select", {
+  }, "طريقة الدفع"), React.createElement(PickerSelect, {
     className: "input-field text-xs py-2",
     value: method,
     onChange: e => setMethod(e.target.value)
@@ -20034,7 +20212,7 @@ const CardPaymentModal = memo(({
     style: {
       color: "var(--accent)"
     }
-  }, "🔁 سداد قسط من خطة (اختياري)"), React.createElement("select", {
+  }, "🔁 سداد قسط من خطة (اختياري)"), React.createElement(PickerSelect, {
     className: "input-field text-sm py-2.5",
     value: linkedPlanId,
     onChange: e => {
@@ -24851,7 +25029,7 @@ function App() {
     style: {
       color: "var(--text-muted)"
     }
-  }, "النوع"), React.createElement("select", {
+  }, "النوع"), React.createElement(PickerSelect, {
     className: "input-field font-bold text-sm py-2.5",
     value: formData.type,
     onChange: e => {
@@ -24875,8 +25053,9 @@ function App() {
     style: {
       color: "var(--text-muted)"
     }
-  }, "الفئة *"), React.createElement("select", {
+  }, "الفئة *"), React.createElement(PickerSelect, {
     className: `input-field font-bold text-sm py-2.5 ${formErrors.category ? "error" : ""}`,
+    "aria-label": "الفئة",
     value: formData.category,
     onChange: e => {
       const newCategory = e.target.value;
@@ -25069,8 +25248,9 @@ function App() {
     style: {
       color: "var(--text-muted)"
     }
-  }, "الدفع"), React.createElement("select", {
+  }, "الدفع"), React.createElement(PickerSelect, {
     className: "input-field text-[13px] font-bold py-2.5",
+    "aria-label": "الدفع / الحساب",
     value: formData.method,
     onChange: e => dispatch({
       type: "SET_FORM_DATA",
@@ -25475,7 +25655,7 @@ function App() {
     style: {
       color: "var(--text-muted)"
     }
-  }, "من حساب"), React.createElement("select", {
+  }, "من حساب"), React.createElement(PickerSelect, {
     className: "input-field text-sm py-3",
     value: quickTransferData.internalFrom || "cib_savings",
     onChange: e => dispatch({
@@ -25492,7 +25672,7 @@ function App() {
     style: {
       color: "var(--text-muted)"
     }
-  }, "إلى حساب"), React.createElement("select", {
+  }, "إلى حساب"), React.createElement(PickerSelect, {
     className: "input-field text-sm py-3",
     value: quickTransferData.internalTo || "fawry",
     onChange: e => dispatch({
@@ -25593,7 +25773,7 @@ function App() {
     style: {
       color: "var(--text-muted)"
     }
-  }, "من حساب"), React.createElement("select", {
+  }, "من حساب"), React.createElement(PickerSelect, {
     className: "input-field text-sm py-3",
     value: quickTransferData.from,
     onChange: e => dispatch({
@@ -26116,7 +26296,7 @@ function App() {
     style: {
       color: "var(--text-muted)"
     }
-  }, "النوع"), React.createElement("select", {
+  }, "النوع"), React.createElement(PickerSelect, {
     className: "input-field text-sm",
     value: recurringFormData.type,
     onChange: e => dispatch({
@@ -26136,7 +26316,7 @@ function App() {
     style: {
       color: "var(--text-muted)"
     }
-  }, "الفئة"), React.createElement("select", {
+  }, "الفئة"), React.createElement(PickerSelect, {
     className: "input-field text-sm",
     value: recurringFormData.category,
     onChange: e => dispatch({
@@ -26154,7 +26334,7 @@ function App() {
     style: {
       color: "var(--text-muted)"
     }
-  }, "طريقة الدفع"), React.createElement("select", {
+  }, "طريقة الدفع"), React.createElement(PickerSelect, {
     className: "input-field text-sm",
     value: recurringFormData.method || "cash",
     onChange: e => dispatch({
