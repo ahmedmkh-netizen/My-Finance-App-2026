@@ -16345,17 +16345,30 @@ const handleToggleAutoReminders = useCallback((v) => {
         }, [activeTab]);
         useEffect(() => {
           const n = backNavRef.current;
+          // V95 — Chrome/Android يتجاهل أي سجل (history entry) اتضاف بدون لمسة من المستخدم، فكان زر الرجوع بيقفل التطبيق.
+          // الحل: نحط "حارس" عند أول لمسة، ونعيد تركيبه بعد كل ضغطة رجوع وعند اللمسة التالية.
+          const isSentinel = (st) => !!(st && (st.dfBase || st.dfTop));
           try {
-            history.replaceState({ dfBase: 1 }, "");
+            if (!isSentinel(history.state)) history.replaceState({ dfBase: 1 }, "");
             history.pushState({ dfTop: 1 }, "");
           } catch (e) { return undefined; }
-          const rearm = () => { try { history.pushState({ dfTop: 1 }, ""); } catch (e) {} };
+          n.pending = true; // الحارس اللي اتحط بدون لمسة محتاج حارس تاني عند أول لمسة
+          const push = () => { try { history.pushState({ dfTop: 1 }, ""); } catch (e) {} };
+          const onGesture = () => {
+            if (!n.pending) return;
+            n.pending = false;
+            push();
+          };
+          ["pointerdown", "touchstart", "click", "keydown"].forEach((t) => window.addEventListener(t, onGesture, { capture: true, passive: true }));
           const topLayer = () => {
             const all = Array.from(document.querySelectorAll(".modal-backdrop, .sheet-backdrop"));
             return all.length ? all[all.length - 1] : null;
           };
           const onPop = (ev) => {
-            if (!(ev.state && ev.state.dfBase)) return;
+            if (!isSentinel(ev.state)) return;
+            const atBase = !!ev.state.dfBase;
+            // لو وصلنا للقاع (base) لازم نرجّع حارس فوقه، ولو لسه فوق حارس تاني مش لازم
+            const rearm = () => { if (atBase) { push(); n.pending = true; } };
             if (n.sidebar) { dispatch({ type: "SET_SIDEBAR_OPEN", payload: false }); rearm(); return; }
             const layer = topLayer();
             if (layer) {
@@ -16381,13 +16394,16 @@ const handleToggleAutoReminders = useCallback((v) => {
               rearm();
               return;
             }
-            if (Date.now() - n.lastHint < 2000) { history.back(); return; }
+            if (Date.now() - n.lastHint < 2000) { n.exiting = true; history.back(); return; }
             n.lastHint = Date.now();
             addNotification({ type: "info", title: "اضغط رجوع مرة تانية للخروج", duration: 2000 });
             rearm();
           };
           window.addEventListener("popstate", onPop);
-          return () => window.removeEventListener("popstate", onPop);
+          return () => {
+            window.removeEventListener("popstate", onPop);
+            ["pointerdown", "touchstart", "click", "keydown"].forEach((t) => window.removeEventListener(t, onGesture, { capture: true }));
+          };
         }, []);
         const removeNotification = useCallback(
           (id) => dispatch({ type: "REMOVE_NOTIFICATION", payload: id }),
