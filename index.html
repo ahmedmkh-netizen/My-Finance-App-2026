@@ -2027,25 +2027,156 @@ const DEFAULT_CARDS = [
         "معطر", "كريم", "شوكولاتة", "بونبون", "آيس كريم",
       ];
 
-      // V93 — أصناف محل هاني: القائمة الثابتة + كتالوج تطبيق العيلة (finance_2026/catalog_data) للقراءة فقط
-      const useHanyQuickItems = () => {
-        const [catalogItems, setCatalogItems] = useState([]);
-        useEffect(() => {
-          let unsub = null;
-          try {
-            unsub = db.collection("finance_2026").doc("catalog_data").onSnapshot((snap) => {
-              const cats = snap.exists ? (snap.data() || {}).categories : null;
-              const out = [];
-              if (cats && typeof cats === "object") {
-                Object.values(cats).forEach((c) => (Array.isArray(c?.items) ? c.items : []).forEach((i) => { if (typeof i === "string" && i.trim()) out.push(i.trim()); }));
-              }
-              setCatalogItems(out);
-            }, () => {});
-          } catch (e) {}
-          return () => { try { unsub && unsub(); } catch (e) {} };
-        }, []);
-        return useMemo(() => Array.from(new Set([...HANY_QUICK_ITEMS, ...catalogItems])), [catalogItems]);
+      // V94 — الكتالوج مصدر واحد: أصناف وأسعار محل هاني تُقرأ من finance_2026/catalog_data (نفس مصدر تطبيق العيلة)
+      // القائمة الثابتة HANY_QUICK_ITEMS تُستخدم فقط كاحتياطي لو الكتالوج لم يُحمّل أو فاضي
+      const HANY_CATALOG_STORE = { items: null, prices: {}, ramadanOverride: null, loaded: false, subs: new Set(), unsub: null };
+      const hanyCatalogNotify = () => HANY_CATALOG_STORE.subs.forEach((fn) => { try { fn(); } catch (e) {} });
+      const hanyCatalogStart = () => {
+        if (HANY_CATALOG_STORE.unsub || typeof db === "undefined" || !db) return;
+        try {
+          HANY_CATALOG_STORE.unsub = db.collection("finance_2026").doc("catalog_data").onSnapshot((snap) => {
+            const data = snap.exists ? (snap.data() || {}) : {};
+            const cats = data.categories;
+            const seen = new Set();
+            const out = [];
+            if (cats && typeof cats === "object") {
+              Object.values(cats).forEach((c) => (Array.isArray(c?.items) ? c.items : []).forEach((i) => {
+                const name = typeof i === "string" ? i.trim() : "";
+                if (name && !seen.has(name)) { seen.add(name); out.push(name); }
+              }));
+            }
+            const prices = {};
+            if (data.prices && typeof data.prices === "object") {
+              Object.keys(data.prices).forEach((k) => { const v = Number(data.prices[k]); if (isFinite(v) && v > 0) prices[k.trim()] = v; });
+            }
+            HANY_CATALOG_STORE.items = out.length ? out : null;
+            HANY_CATALOG_STORE.prices = prices;
+            HANY_CATALOG_STORE.ramadanOverride = (data.ramadanOverride && data.ramadanOverride.date) ? data.ramadanOverride : null;
+            HANY_CATALOG_STORE.loaded = !!out.length;
+            hanyCatalogNotify();
+          }, () => {});
+        } catch (e) {}
       };
+      const useHanyCatalog = () => {
+        const [, force] = useState(0);
+        useEffect(() => {
+          const fn = () => force((n) => n + 1);
+          HANY_CATALOG_STORE.subs.add(fn);
+          hanyCatalogStart();
+          return () => { HANY_CATALOG_STORE.subs.delete(fn); };
+        }, []);
+        const st = HANY_CATALOG_STORE;
+        return useMemo(() => ({
+          items: st.items || HANY_QUICK_ITEMS,
+          prices: st.prices,
+          ramadanOverride: st.ramadanOverride,
+          loaded: st.loaded,
+        }), [st.items, st.prices, st.ramadanOverride, st.loaded]);
+      };
+
+/* ═══ V94 Ramadan core (same logic in family.html and index.html) ═══ */
+var RM_CITIES = {
+  cairo:{n:'القاهرة',lat:30.0444,lng:31.2357}, giza:{n:'الجيزة',lat:30.0131,lng:31.2089},
+  alex:{n:'الإسكندرية',lat:31.2001,lng:29.9187}, mansoura:{n:'المنصورة',lat:31.0409,lng:31.3785},
+  tanta:{n:'طنطا',lat:30.7865,lng:31.0004}, ismailia:{n:'الإسماعيلية',lat:30.5965,lng:32.2715},
+  portsaid:{n:'بورسعيد',lat:31.2653,lng:32.3019}, suez:{n:'السويس',lat:29.9668,lng:32.5498},
+  fayoum:{n:'الفيوم',lat:29.3084,lng:30.8428}, minya:{n:'المنيا',lat:28.1099,lng:30.7503},
+  assiut:{n:'أسيوط',lat:27.1809,lng:31.1837}, sohag:{n:'سوهاج',lat:26.5591,lng:31.6957},
+  luxor:{n:'الأقصر',lat:25.6872,lng:32.6396}, aswan:{n:'أسوان',lat:24.0889,lng:32.8998},
+  hurghada:{n:'الغردقة',lat:27.2579,lng:33.8116}, sharm:{n:'شرم الشيخ',lat:27.9158,lng:34.3300}
+};
+var RM_CITY_KEY = 'ramadan_city_v1';
+var RM_TABLE = [
+  { hijri: 1447, date: '2026-02-18' }, { hijri: 1448, date: '2027-02-08' },
+  { hijri: 1449, date: '2028-01-28' }, { hijri: 1450, date: '2029-01-16' },
+  { hijri: 1451, date: '2030-01-06' }
+];
+function rmGetCity(){ try{ var k = localStorage.getItem(RM_CITY_KEY); if(k && RM_CITIES[k]) return k; }catch(e){} return 'cairo'; }
+function rmSetCity(k){ if(RM_CITIES[k]){ try{ localStorage.setItem(RM_CITY_KEY, k); }catch(e){} } }
+function rmEntries(ov){
+  return RM_TABLE.map(function(e){
+    var date = e.date, len = 30;
+    if(ov && ov.date && Number(ov.hijri) === e.hijri && /^\d{4}-\d{2}-\d{2}$/.test(ov.date)){
+      date = ov.date; len = Number(ov.length) === 29 ? 29 : 30;
+    }
+    return { hijri: e.hijri, date: new Date(date + 'T00:00:00+02:00'), len: len };
+  });
+}
+/* phase: active (during Ramadan), eid (3 days after), before (countdown to the next one) */
+function rmState(now, ov){
+  var DAY = 86400000, es = rmEntries(ov), i, nowMs = now.getTime();
+  for(i = es.length - 1; i >= 0; i--){
+    var t = nowMs - es[i].date.getTime();
+    if(t < 0) continue;
+    var day = Math.floor(t / DAY) + 1;
+    if(day <= es[i].len) return { phase: 'active', hijri: es[i].hijri, day: day, len: es[i].len, start: es[i].date };
+    if(day <= es[i].len + 3) return { phase: 'eid', hijri: es[i].hijri, eidDay: day - es[i].len, start: es[i].date };
+    break;
+  }
+  for(i = 0; i < es.length; i++){
+    if(es[i].date.getTime() > nowMs) return { phase: 'before', hijri: es[i].hijri, start: es[i].date };
+  }
+  var last = es[es.length - 1];
+  return { phase: 'before', hijri: last.hijri + 1, start: new Date(last.date.getTime() + 354 * DAY), estimated: true };
+}
+/* next suhoor-end (fajr) or iftar (sunset) event for the chosen city */
+function rmNextEvent(now, cityKey){
+  var c = RM_CITIES[cityKey] || RM_CITIES.cairo, DAY = 86400000;
+  var t = getSunTimes(now, c.lat, c.lng), nowMs = now.getTime();
+  if(t.fajr && t.fajr.getTime() > nowMs) return { kind: 'fajr', at: t.fajr, times: t };
+  if(t.sunset && t.sunset.getTime() > nowMs) return { kind: 'iftar', at: t.sunset, times: t };
+  var t2 = getSunTimes(new Date(nowMs + DAY), c.lat, c.lng);
+  return { kind: 'fajr', at: t2.fajr || new Date(nowMs + DAY), times: t, tomorrow: true };
+}
+function rmClock(ms){
+  var s = Math.max(0, Math.floor(ms / 1000)), h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+  function p(n){ return (n < 10 ? '0' : '') + n; }
+  return p(h) + ':' + p(m) + ':' + p(sec);
+}
+
+var EGYPT_FAJR_ANGLE=-19.5,EGYPT_ISHA_ANGLE=-17.5;
+function getSunTimes(date, lat, lng, fajrAngle, ishaAngle) {
+  fajrAngle = (fajrAngle === undefined) ? EGYPT_FAJR_ANGLE : fajrAngle;
+  ishaAngle = (ishaAngle === undefined) ? EGYPT_ISHA_ANGLE : ishaAngle;
+  var rad = Math.PI / 180, dayMs = 86400000, J1970 = 2440588, J2000 = 2451545;
+  function toJulian(date) { return date.valueOf() / dayMs - 0.5 + J1970; }
+  function fromJulian(j) { return new Date((j + 0.5 - J1970) * dayMs); }
+  function toDays(date) { return toJulian(date) - J2000; }
+  var e = rad * 23.4397;
+  function solarMeanAnomaly(d) { return rad * (357.5291 + 0.98560028 * d); }
+  function eclipticLongitude(M) {
+    var C = rad * (1.9148 * Math.sin(M) + 0.02 * Math.sin(2 * M) + 0.0003 * Math.sin(3 * M));
+    return M + C + rad * 102.9372 + Math.PI;
+  }
+  function declination(l, b) { return Math.asin(Math.sin(b) * Math.cos(e) + Math.cos(b) * Math.sin(e) * Math.sin(l)); }
+  function julianCycle(d, lw) { return Math.round(d - 0.0009 - lw / (2 * Math.PI)); }
+  function approxTransit(Ht, lw, n) { return 0.0009 + (Ht + lw) / (2 * Math.PI) + n; }
+  function solarTransitJ(ds, M, L) { return J2000 + ds + 0.0053 * Math.sin(M) - 0.0069 * Math.sin(2 * L); }
+  function hourAngle(h, phi, d) {
+    var cosW = (Math.sin(h) - Math.sin(phi) * Math.sin(d)) / (Math.cos(phi) * Math.cos(d));
+    if (cosW > 1 || cosW < -1) return NaN;
+    return Math.acos(cosW);
+  }
+  var lw = rad * -lng, phi = rad * lat, d = toDays(date);
+  var n = julianCycle(d, lw), ds = approxTransit(0, lw, n);
+  var M = solarMeanAnomaly(ds), L = eclipticLongitude(M), dec = declination(L, 0);
+  var Jnoon = solarTransitJ(ds, M, L);
+  var w0 = hourAngle(rad * -0.833, phi, dec);
+  var Jset = solarTransitJ(approxTransit(w0, lw, n), M, L);
+  var Jrise = Jnoon - (Jset - Jnoon);
+  var wFajr = hourAngle(rad * fajrAngle, phi, dec);
+  var fajrTime = NaN;
+  if (!isNaN(wFajr)) fajrTime = Jnoon - (solarTransitJ(approxTransit(wFajr, lw, n), M, L) - Jnoon);
+  var wIsha = hourAngle(rad * ishaAngle, phi, dec);
+  var JIsha = NaN;
+  if (!isNaN(wIsha)) JIsha = solarTransitJ(approxTransit(wIsha, lw, n), M, L);
+  return {
+    sunrise: fromJulian(Jrise), sunset: fromJulian(Jset),
+    fajr: isNaN(fajrTime) ? null : fromJulian(fajrTime),
+    isha: isNaN(JIsha) ? null : fromJulian(JIsha), noon: fromJulian(Jnoon)
+  };
+}
+
 
       const AUDIT = {
         CREATE: "create", UPDATE: "update", DELETE: "delete",
@@ -6956,7 +7087,9 @@ if (e.key >= "0" && e.key <= "9") handleDigit(e.key);
 
       const HanyView = memo(function HanyView(props) {
         const { data, dispatch, saveHistory, addNotification, selectedYear, selectedMonth } = props;
-        const HANY_ALL_ITEMS = useHanyQuickItems();
+        const hanyCatalog = useHanyCatalog();
+        const HANY_ALL_ITEMS = hanyCatalog.items;
+        const HANY_PRICES = hanyCatalog.prices;
         const [showSettle, setShowSettle] = useState(false);
         const [settleAmount, setSettleAmount] = useState("");
         const [showPrintSettings, setShowPrintSettings] = useState(false);
@@ -7053,7 +7186,8 @@ if (e.key >= "0" && e.key <= "9") handleDigit(e.key);
             payload: {
               type: "expense", subType: "withdrawal", status: "paid",
               category: HANY_TAB_CATEGORY, method: HANY_TAB_METHOD,
-              affectsCash: false, hanyEffect: "purchase", amount: "",
+              affectsCash: false, hanyEffect: "purchase",
+              amount: presetItem && HANY_PRICES[presetItem] ? String(HANY_PRICES[presetItem]) : "",
               date: getLocalISODate(), description: presetItem || "",
             },
           });
@@ -8766,6 +8900,69 @@ if (e.key >= "0" && e.key <= "9") handleDigit(e.key);
         );
       });
 
+      // V94 — شريط رمضان المصغّر (نفس منطق تطبيق العيلة)
+      const RamadanMini = memo(() => {
+        const override = useHanyCatalog().ramadanOverride;
+        const [now, setNow] = useState(() => new Date());
+        const [city, setCity] = useState(rmGetCity);
+        const [hidden, setHidden] = useState(() => typeof document !== "undefined" && document.hidden);
+        const st = rmState(now, override);
+        useEffect(() => {
+          const onVis = () => { setHidden(document.hidden); if (!document.hidden) setNow(new Date()); };
+          document.addEventListener("visibilitychange", onVis);
+          return () => document.removeEventListener("visibilitychange", onVis);
+        }, []);
+        useEffect(() => {
+          if (hidden) return undefined;
+          const id = setInterval(() => setNow(new Date()), st.phase === "active" ? 1000 : 30000);
+          return () => clearInterval(id);
+        }, [hidden, st.phase]);
+        const box = { background: "linear-gradient(135deg,#0A1628 0%,#1E2B4A 100%)", color: "#fff", borderRadius: 20, padding: "12px 16px", border: "1px solid rgba(251,191,36,.35)", display: "flex", alignItems: "center", gap: 12, direction: "rtl" };
+        const gold = "#FBBF24";
+        if (st.phase === "eid") {
+          return (
+            <div style={box}>
+              <div style={{ fontSize: 28 }}>🌙</div>
+              <div>
+                <div style={{ fontWeight: 900, fontSize: 15, color: gold }}>عيد الفطر المبارك 🎉</div>
+                <div style={{ fontSize: 12, opacity: 0.85 }}>كل عام وأنتم بخير</div>
+              </div>
+            </div>
+          );
+        }
+        if (st.phase === "before") {
+          const days = Math.max(0, Math.ceil((st.start.getTime() - now.getTime()) / 86400000));
+          if (days > 120) return null;
+          return (
+            <div style={box}>
+              <div style={{ fontSize: 28 }}>🌙</div>
+              <div style={{ fontWeight: 800, fontSize: 14 }}>
+                {days === 1 ? "باقي يوم على رمضان" : `باقي ${days} يوم على رمضان`}{st.estimated ? " (تقريبي)" : ""}
+              </div>
+            </div>
+          );
+        }
+        const ev = rmNextEvent(now, city);
+        const fmt = (d) => d ? d.toLocaleTimeString("ar-EG", { hour: "numeric", minute: "2-digit", timeZone: "Africa/Cairo" }) : "—";
+        return (
+          <div style={box}>
+            <div style={{ fontSize: 28 }}>🌙</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 11, opacity: 0.85 }}>رمضان كريم · اليوم {st.day} من {st.len}</div>
+              <div style={{ fontSize: 12, fontWeight: 700 }}>{ev.kind === "iftar" ? "باقي على الفطار" : "باقي على الفجر (نهاية السحور)"}</div>
+              <div style={{ fontSize: 20, fontWeight: 900, color: gold, fontVariantNumeric: "tabular-nums", letterSpacing: 1, direction: "ltr", textAlign: "right" }}>{rmClock(ev.at.getTime() - now.getTime())}</div>
+            </div>
+            <div style={{ textAlign: "left", fontSize: 11, lineHeight: 1.6 }}>
+              <div>الفطار: <b>{fmt(ev.times.sunset)}</b></div>
+              <div>الفجر: <b>{fmt(ev.times.fajr)}</b></div>
+              <select value={city} onChange={(e) => { rmSetCity(e.target.value); setCity(e.target.value); }} aria-label="المدينة" style={{ marginTop: 2, background: "rgba(255,255,255,.12)", color: "#fff", border: "1px solid rgba(255,255,255,.25)", borderRadius: 8, fontSize: 16, padding: "1px 4px", maxWidth: 96 }}>
+                {Object.keys(RM_CITIES).map((k) => <option key={k} value={k} style={{ color: "#000" }}>{RM_CITIES[k].n}</option>)}
+              </select>
+            </div>
+          </div>
+        );
+      });
+
       const DashboardView = memo(({
         data, financeSnapshot, liveBalances, liquidityDual, netWorthData, walletVisibility,
         onToggleVisibility, dispatch, selectedYear, selectedMonth, transactions, cards,
@@ -8842,6 +9039,7 @@ if (e.key >= "0" && e.key <= "9") handleDigit(e.key);
 
         return (
           <div className="space-y-4 animate-fadeIn pb-24">
+            <RamadanMini />
             <div className="hero-navy animate-slideInBottom">
               <div className="flex items-start justify-between mb-5 gap-3">
                 <div className="flex-1 min-w-0">
@@ -15995,7 +16193,9 @@ const handleToggleAutoReminders = useCallback((v) => {
     },
   });
 }, []);
-        const HANY_ALL_ITEMS = useHanyQuickItems();
+        const hanyCatalog = useHanyCatalog();
+        const HANY_ALL_ITEMS = hanyCatalog.items;
+        const HANY_PRICES = hanyCatalog.prices;
         const [showAllHanyItems, setShowAllHanyItems] = useState(false);
         const [showQuickAddSheet, setShowQuickAddSheet] = useState(false);
         const [showMoreSheet, setShowMoreSheet] = useState(false);
@@ -17592,7 +17792,9 @@ useEffect(() => {
         const appendQuickItem = (item) => {
           const current = formData.description || "";
           const sep = current && !current.endsWith(" ") && !current.endsWith(",") ? " + " : "";
-          dispatch({ type: "SET_FORM_DATA", payload: { ...formData, description: current + sep + item } });
+          const price = HANY_PRICES[item];
+          const emptyAmount = formData.amount === "" || formData.amount === undefined || formData.amount === null;
+          dispatch({ type: "SET_FORM_DATA", payload: { ...formData, description: current + sep + item, ...(price && emptyAmount ? { amount: String(price) } : {}) } });
         };
 
         // ═══ V90 — Bottom Nav: 5 items only ═══
