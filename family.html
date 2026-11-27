@@ -1122,6 +1122,7 @@ button:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-off
   .quick-stats{grid-template-columns:repeat(3,1fr)}
 }
 
+.bio-user-btn{width:100%;padding:13px;border-radius:16px;border:0;background:#635BFF;color:#fff;font:900 14px inherit;cursor:pointer}
 /* ══════ تقليل الزحمة (v9.6) ══════ */
 .ramadan-strip.rm-compact{padding:12px 14px;margin-bottom:10px;border-radius:18px}
 .ramadan-strip.rm-compact .rm-lanterns,.ramadan-strip.rm-compact .rm-stars,.ramadan-strip.rm-compact .rm-pattern,.ramadan-strip.rm-compact .rm-tiles,.ramadan-strip.rm-compact .rm-label,.ramadan-strip.rm-compact .rm-foot{display:none!important}
@@ -1209,7 +1210,7 @@ button:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-off
       <button class="pin-btn" data-d="0">0</button>
       <button class="pin-btn" data-d="⌫">⌫</button>
     </div>
-    <button type="button" id="bioBtn" style="display:none;width:100%;margin-top:14px;padding:13px;border-radius:16px;border:0;background:#635BFF;color:#fff;font:900 14px inherit;align-items:center;justify-content:center;gap:8px;cursor:pointer">🔐 فتح بالبصمة</button>
+    <div id="bioBtns" style="display:flex;flex-direction:column;gap:8px;margin-top:14px"></div>
     <div class="pin-err" id="pinErr"></div>
     <div class="pin-attempts-warn" id="pinAttemptsWarn" style="display:none"></div>
     <div class="pin-hint">
@@ -3108,48 +3109,55 @@ function attachPinKeyboard(){
 
 var BIO = (() => {
   const KEY = "app_bio_cred_v1";
+  const k = (uid) => (uid ? KEY + "_" + uid : KEY);
   const b64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
   const unb64 = (s) => Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0));
   const rnd = (n) => crypto.getRandomValues(new Uint8Array(n));
-  return {
-    enabled: () => { try { return !!localStorage.getItem(KEY); } catch (e) { return false; } },
+  const api = {
+    err: "",
+    enabled: (uid) => { try { return !!localStorage.getItem(k(uid)); } catch (e) { return false; } },
     supported: async () => {
       try { return !!(window.isSecureContext && window.PublicKeyCredential && await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()); } catch (e) { return false; }
     },
-    register: async (label) => {
-      const cred = await navigator.credentials.create({ publicKey: {
-        challenge: rnd(32), rp: { name: label },
-        user: { id: rnd(16), name: "device-lock", displayName: label },
-        pubKeyCredParams: [{ type: "public-key", alg: -7 }, { type: "public-key", alg: -257 }],
-        authenticatorSelection: { authenticatorAttachment: "platform", userVerification: "required", residentKey: "discouraged" },
-        timeout: 60000, attestation: "none" } });
-      if (!cred) throw new Error("no credential");
-      localStorage.setItem(KEY, b64(cred.rawId));
-      return true;
+    register: async (label, uid) => {
+      api.err = "";
+      try {
+        const cred = await navigator.credentials.create({ publicKey: {
+          challenge: rnd(32), rp: { name: label },
+          user: { id: rnd(16), name: uid || "device-lock", displayName: label },
+          pubKeyCredParams: [{ type: "public-key", alg: -7 }, { type: "public-key", alg: -257 }],
+          authenticatorSelection: { authenticatorAttachment: "platform", userVerification: "required", residentKey: "discouraged" },
+          timeout: 60000, attestation: "none" } });
+        if (!cred) throw new Error("no credential");
+        localStorage.setItem(k(uid), b64(cred.rawId));
+        return true;
+      } catch (e) { api.err = (e && e.name) || "Error"; throw e; }
     },
-    verify: async () => {
-      const id = localStorage.getItem(KEY);
-      if (!id) return false;
+    verify: async (uid) => {
+      api.err = "";
+      const id = localStorage.getItem(k(uid));
+      if (!id) { api.err = "NoCredential"; return false; }
       try {
         const a = await navigator.credentials.get({ publicKey: {
           challenge: rnd(32), timeout: 60000, userVerification: "required",
           allowCredentials: [{ type: "public-key", id: unb64(id), transports: ["internal"] }] } });
         return !!a;
-      } catch (e) { return false; }
+      } catch (e) { api.err = (e && e.name) || "Error"; return false; }
     },
-    disable: () => { try { localStorage.removeItem(KEY); } catch (e) {} },
+    disable: (uid) => { try { localStorage.removeItem(k(uid)); } catch (e) {} },
   };
+  return api;
 })();
-
 var bioIdleAt=0;
-function bioUnlock(){
-  BIO.verify().then(function(ok){
-    if(!ok)return;
-    var uid=sessionStorage.getItem('hani_user_id');
-    if(uid){pinScreen.classList.remove('show');return;}
-    var sid=localStorage.getItem('app_bio_user_v1');
-    var found=null;Object.keys(USERS).forEach(function(k){if(USERS[k].id===sid)found=USERS[k];});
-    if(!found)return;
+function bioUserIds(){return Object.keys(USERS).map(function(k){return USERS[k].id}).filter(function(id){return BIO.enabled(id)});}
+function bioUserById(id){var f=null;Object.keys(USERS).forEach(function(k){if(USERS[k].id===id)f=USERS[k];});return f;}
+function bioUnlock(uid){
+  if(!uid||!BIO.enabled(uid))return;
+  BIO.verify(uid).then(function(ok){
+    if(!ok){pinErr.textContent='البصمة ما اشتغلتش'+(BIO.err?' ('+BIO.err+')':'')+'. استخدم الرمز.';return;}
+    var cur=sessionStorage.getItem('hani_user_id');
+    if(cur){if(cur===uid){pinScreen.classList.remove('show');}return;}
+    var found=bioUserById(uid);if(!found)return;
     sessionStorage.setItem('hani_user_id',found.id);
     currentUser=found;paintHeaderUser();
     pinScreen.classList.remove('show');
@@ -3157,26 +3165,40 @@ function bioUnlock(){
   });
 }
 function bioToggle(){
-  if(BIO.enabled()){BIO.disable();localStorage.removeItem('app_bio_user_v1');paintBioBtn();toast('اتقفل فتح البصمة');return;}
   var uid=sessionStorage.getItem('hani_user_id');if(!uid)return;
-  BIO.register('محل هاني').then(function(){
-    localStorage.setItem('app_bio_user_v1',uid);paintBioBtn();toast('فتح البصمة اشتغل');
-  }).catch(function(){toast('الجهاز ده مش بيدعم البصمة. الرمز شغال عادي','err');});
+  if(BIO.enabled(uid)){BIO.disable(uid);paintBioBtn();toast('اتقفل فتح البصمة لـ '+bioUserById(uid).name);return;}
+  BIO.register('محل هاني - '+bioUserById(uid).name,uid).then(function(){
+    paintBioBtn();toast('فتح البصمة اشتغل لـ '+bioUserById(uid).name);
+  }).catch(function(){toast('ماقدرناش نفعّل البصمة'+(BIO.err?' ('+BIO.err+')':'')+'. الرمز شغال عادي','err');});
 }
 function bioLockNow(){
-  /* قفل سريع: يرجع شاشة الرمز، والبصمة أو الرمز يفتحوها */
+  var uid=sessionStorage.getItem('hani_user_id');
   currentPin='';updatePinDots();pinErr.textContent='';
   pinScreen.classList.add('show');
   attachPinKeyboard();
-  bioUnlock();
+  paintBioBtn();
+  bioUnlock(uid);
 }
 function paintBioBtn(){
-  var b=document.getElementById('bioBtn');if(b)b.style.display=BIO.enabled()?'flex':'none';
-  var t=document.getElementById('bioToggleBtn');if(t)t.textContent=BIO.enabled()?'إيقاف':'تفعيل';
+  var box=document.getElementById('bioBtns');
+  if(box){
+    var cur=sessionStorage.getItem('hani_user_id');
+    var ids=cur?(BIO.enabled(cur)?[cur]:[]):bioUserIds();
+    box.innerHTML='';
+    ids.forEach(function(id){
+      var b=document.createElement('button');b.type='button';b.className='bio-user-btn';
+      b.textContent='🔐 فتح بالبصمة · '+bioUserById(id).name;
+      b.addEventListener('click',function(){bioUnlock(id);});
+      box.appendChild(b);
+    });
+  }
+  var t=document.getElementById('bioToggleBtn');
+  var cu=sessionStorage.getItem('hani_user_id');
+  if(t)t.textContent=(cu&&BIO.enabled(cu))?'إيقاف':'تفعيل';
 }
 document.addEventListener('visibilitychange',function(){
   if(document.hidden){bioIdleAt=Date.now();return;}
-  if(bioIdleAt&&BIO.enabled()&&sessionStorage.getItem('hani_user_id')&&Date.now()-bioIdleAt>60000){bioLockNow();}
+  var cuid=sessionStorage.getItem('hani_user_id');if(bioIdleAt&&cuid&&BIO.enabled(cuid)&&Date.now()-bioIdleAt>60000){bioLockNow();}
   bioIdleAt=0;
 });
 
@@ -5613,14 +5635,19 @@ function setBudgetModal(){
 function bootstrap(){
   console.log('🚀 Bootstrap V9.0 — محل هاني');
   (function(){
-    var bb=document.getElementById('bioBtn'),tb=document.getElementById('bioToggleBtn');
-    if(bb)bb.addEventListener('click',bioUnlock);
+    var tb=document.getElementById('bioToggleBtn');
     if(tb)tb.addEventListener('click',bioToggle);
+    /* ترحيل نسخة قديمة: بصمة واحدة ماركة بمستخدم */
+    try{var oc=localStorage.getItem('app_bio_cred_v1'),ou=localStorage.getItem('app_bio_user_v1');
+      if(oc&&ou){localStorage.setItem('app_bio_cred_v1_'+ou,oc);}
+      localStorage.removeItem('app_bio_cred_v1');localStorage.removeItem('app_bio_user_v1');}catch(e){}
     BIO.supported().then(function(ok){
-      var row=document.getElementById('bioRow');if(row&&(ok||BIO.enabled()))row.style.display='';
+      var row=document.getElementById('bioRow');var cu=sessionStorage.getItem('hani_user_id');
+      if(row&&(ok||(cu&&BIO.enabled(cu))))row.style.display='';
     });
     paintBioBtn();
-    if(BIO.enabled()&&!sessionStorage.getItem('hani_user_id'))setTimeout(bioUnlock,500);
+    var ids=bioUserIds();
+    if(ids.length===1&&!sessionStorage.getItem('hani_user_id'))setTimeout(function(){bioUnlock(ids[0]);},500);
   })();
   setTimeout(function(){ var s=document.getElementById('splash'); if(s&&s.style.display!=='none')s.style.display='none'; },300);
 

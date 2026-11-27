@@ -2415,13 +2415,15 @@ const verifyPin = async pin => {
 };
 const BIO = (() => {
   const KEY = "app_bio_cred_v1";
+  const k = uid => uid ? KEY + "_" + uid : KEY;
   const b64 = buf => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
   const unb64 = s => Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/")), c => c.charCodeAt(0));
   const rnd = n => crypto.getRandomValues(new Uint8Array(n));
-  return {
-    enabled: () => {
+  const api = {
+    err: "",
+    enabled: uid => {
       try {
-        return !!localStorage.getItem(KEY);
+        return !!localStorage.getItem(k(uid));
       } catch (e) {
         return false;
       }
@@ -2433,41 +2435,51 @@ const BIO = (() => {
         return false;
       }
     },
-    register: async label => {
-      const cred = await navigator.credentials.create({
-        publicKey: {
-          challenge: rnd(32),
-          rp: {
-            name: label
-          },
-          user: {
-            id: rnd(16),
-            name: "device-lock",
-            displayName: label
-          },
-          pubKeyCredParams: [{
-            type: "public-key",
-            alg: -7
-          }, {
-            type: "public-key",
-            alg: -257
-          }],
-          authenticatorSelection: {
-            authenticatorAttachment: "platform",
-            userVerification: "required",
-            residentKey: "discouraged"
-          },
-          timeout: 60000,
-          attestation: "none"
-        }
-      });
-      if (!cred) throw new Error("no credential");
-      localStorage.setItem(KEY, b64(cred.rawId));
-      return true;
+    register: async (label, uid) => {
+      api.err = "";
+      try {
+        const cred = await navigator.credentials.create({
+          publicKey: {
+            challenge: rnd(32),
+            rp: {
+              name: label
+            },
+            user: {
+              id: rnd(16),
+              name: uid || "device-lock",
+              displayName: label
+            },
+            pubKeyCredParams: [{
+              type: "public-key",
+              alg: -7
+            }, {
+              type: "public-key",
+              alg: -257
+            }],
+            authenticatorSelection: {
+              authenticatorAttachment: "platform",
+              userVerification: "required",
+              residentKey: "discouraged"
+            },
+            timeout: 60000,
+            attestation: "none"
+          }
+        });
+        if (!cred) throw new Error("no credential");
+        localStorage.setItem(k(uid), b64(cred.rawId));
+        return true;
+      } catch (e) {
+        api.err = e && e.name || "Error";
+        throw e;
+      }
     },
-    verify: async () => {
-      const id = localStorage.getItem(KEY);
-      if (!id) return false;
+    verify: async uid => {
+      api.err = "";
+      const id = localStorage.getItem(k(uid));
+      if (!id) {
+        api.err = "NoCredential";
+        return false;
+      }
       try {
         const a = await navigator.credentials.get({
           publicKey: {
@@ -2483,15 +2495,17 @@ const BIO = (() => {
         });
         return !!a;
       } catch (e) {
+        api.err = e && e.name || "Error";
         return false;
       }
     },
-    disable: () => {
+    disable: uid => {
       try {
-        localStorage.removeItem(KEY);
+        localStorage.removeItem(k(uid));
       } catch (e) {}
     }
   };
+  return api;
 })();
 const PIN_SESSION_KEY = "pin_session_token_v90_1";
 const buildPinSessionToken = async pin => {
@@ -7950,12 +7964,14 @@ const PinLockScreen = ({
   const navTimerRef = useRef(null);
   const [bioOn] = useState(() => BIO.enabled());
   const [bioBusy, setBioBusy] = useState(false);
+  const [bioMsg, setBioMsg] = useState("");
   const tryBio = async () => {
     if (bioBusy) return;
     setBioBusy(true);
+    setBioMsg("");
     const ok = await BIO.verify();
     setBioBusy(false);
-    if (ok) onSuccess(null);
+    if (ok) onSuccess(null);else setBioMsg("البصمة ما اشتغلتش" + (BIO.err ? " (" + BIO.err + ")" : "") + ". استخدم الرمز.");
   };
   useEffect(() => {
     if (bioOn) {
@@ -8082,7 +8098,9 @@ const PinLockScreen = ({
     className: "w-full py-3 mt-3 rounded-xl text-sm font-black flex items-center justify-center gap-2 bg-[#635BFF] text-white active:scale-95 transition-all"
   }, React.createElement(Fingerprint, {
     size: 18
-  }), " فتح بالبصمة"), React.createElement("div", {
+  }), " فتح بالبصمة"), bioMsg && React.createElement("p", {
+    className: "text-[11px] text-center mt-2 text-amber-400 font-bold"
+  }, bioMsg), React.createElement("div", {
     className: "flex flex-col gap-2 w-full mt-2"
   }, React.createElement("button", {
     type: "button",
@@ -8132,7 +8150,7 @@ const BioLockCard = ({
     } catch (e) {
       addNotification({
         type: "error",
-        title: "ماقدرناش نفعّل البصمة على الجهاز ده"
+        title: "ماقدرناش نفعّل البصمة على الجهاز ده" + (BIO.err ? " (" + BIO.err + ")" : "")
       });
     }
     setBusy(false);
