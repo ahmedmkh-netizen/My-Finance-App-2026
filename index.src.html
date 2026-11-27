@@ -7412,6 +7412,69 @@ if (e.key >= "0" && e.key <= "9") handleDigit(e.key);
           if (el.closest(".sheet-content, .generic-modal, .modal-backdrop")) setTimeout(() => { try { el.scrollIntoView({ block: "center", behavior: "smooth" }); } catch (_) {} }, 320);
         });
       })();
+      /* تحسين الإدخال: (1) زرار X يمسح الحقل اللي بتكتب فيه (2) الأرقام العربية ٠-٩ والفاصلة العربية بتتحوّل لأرقام إنجليزية وانت بتكتب في خانات الأرقام (القيمة المحفوظة ما بتتغيرش) */
+      (function () {
+        var AR = '٠١٢٣٤٥٦٧٨٩', PERS = '۰۱۲۳۴۵۶۷۸۹';
+        var setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+        function isNumeric(el) {
+          var m = el.getAttribute('inputmode');
+          return el.type === 'number' || m === 'decimal' || m === 'numeric' || el.classList.contains('amount-num') || el.classList.contains('input-num');
+        }
+        document.addEventListener('input', function (e) {
+          var el = e.target;
+          if (!el || el.tagName !== 'INPUT' || el.type === 'number' || !isNumeric(el)) return;
+          var v = el.value, n = v.replace(/[٠-٩۰-۹]/g, function (c) { var i = AR.indexOf(c); return String(i >= 0 ? i : PERS.indexOf(c)); }).replace(/[٫،,]/g, '.').replace(/٬/g, '').replace(/\s+/g, '');
+          if (n !== v) setter.call(el, n);
+        }, true);
+        var btn = document.createElement('button');
+        btn.type = 'button'; btn.setAttribute('aria-label', 'مسح'); btn.className = 'kclear no-print';
+        btn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>';
+        var st = document.createElement('style');
+        st.textContent = '.kclear{position:fixed;z-index:2147483000;width:28px;height:28px;border-radius:50%;border:0;background:rgba(120,120,140,.28);color:#555;display:none;align-items:center;justify-content:center;padding:0;cursor:pointer;touch-action:manipulation}.kclear.on{display:flex}';
+        var cur = null, raf = 0, pad = null;
+        function ok(el) {
+          if (!el || el.tagName !== 'INPUT') return false;
+          if (!/^(text|number|search|tel|email|)$/.test(el.type)) return false;
+          if (el.readOnly || el.disabled || el.id === 'amount' || el.hasAttribute('data-noclear')) return false;
+          return true;
+        }
+        function place() {
+          if (!cur) { btn.classList.remove('on'); return; }
+          var r = cur.getBoundingClientRect();
+          var rtl = getComputedStyle(cur).direction === 'rtl';
+          var off = cur.id === 'searchInput' ? 46 : 8;
+          var x = rtl ? r.left + off : r.right - off - 28, y = r.top + (r.height - 28) / 2;
+          var show = cur.value !== '' && r.width > 60;
+          if (show) { var t = document.elementFromPoint(x + 14, y + 14); show = t === cur || t === btn || (t && btn.contains(t)); }
+          btn.style.left = x + 'px'; btn.style.top = y + 'px';
+          btn.classList.toggle('on', show);
+          raf = requestAnimationFrame(place);
+        }
+        function attach(el) {
+          detach();
+          cur = el; pad = [el.style.paddingLeft, el.style.paddingRight];
+          var rtl = getComputedStyle(el).direction === 'rtl';
+          var p = (el.id === 'searchInput' ? 84 : 40) + 'px';
+          if (rtl) el.style.paddingLeft = p; else el.style.paddingRight = p;
+          cancelAnimationFrame(raf); place();
+        }
+        function detach() {
+          if (cur && pad) { cur.style.paddingLeft = pad[0]; cur.style.paddingRight = pad[1]; }
+          cur = null; pad = null; cancelAnimationFrame(raf); btn.classList.remove('on');
+        }
+        function init() {
+          document.head.appendChild(st); document.body.appendChild(btn);
+          document.addEventListener('focusin', function (e) { if (ok(e.target)) attach(e.target); else if (e.target !== btn) detach(); });
+          document.addEventListener('focusout', function (e) { if (e.target === cur) setTimeout(function () { if (document.activeElement !== cur) detach(); }, 80); });
+          ['pointerdown', 'mousedown', 'touchstart'].forEach(function (ev) { btn.addEventListener(ev, function (e) { e.preventDefault(); }, { passive: false }); });
+          btn.addEventListener('click', function (e) {
+            e.preventDefault(); if (!cur) return;
+            var el = cur; setter.call(el, ''); el.dispatchEvent(new Event('input', { bubbles: true })); el.focus();
+          });
+        }
+        if (document.body) init(); else document.addEventListener('DOMContentLoaded', init);
+      })();
+      
       const PickerSelect = ({ children, value, onChange, className = "input-field", disabled, style, title, ...rest }) => {
         const [open, setOpen] = useState(false);
         const [q, setQ] = useState("");
