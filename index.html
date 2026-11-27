@@ -1664,6 +1664,9 @@
       const getLocalISODate = (d = new Date()) =>
         `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
+      const getLocalTimeHM = (d = new Date()) =>
+        `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+
       const dayStart = (d) => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; };
       const endOfToday = () => { const x = new Date(); x.setHours(23, 59, 59, 999); return x; };
 
@@ -1697,6 +1700,17 @@
         return d ? d.getTime() : 0;
       };
 
+      const formatTxTimeHM = (time) => {
+        if (!time || typeof time !== "string") return "";
+        const m = time.match(/^(\d{1,2}):(\d{2})/);
+        if (!m) return "";
+        try {
+          const d = new Date();
+          d.setHours(Number(m[1]), Number(m[2]), 0, 0);
+          return d.toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit" });
+        } catch { return time; }
+      };
+
       const formatTxTime = (createdAt) => {
         if (!createdAt) return "";
         try {
@@ -1710,6 +1724,9 @@
         const dA = parseISODate(a?.date)?.getTime() ?? 0;
         const dB = parseISODate(b?.date)?.getTime() ?? 0;
         if (dA !== dB) return dB - dA;
+        const tA = typeof a?.time === "string" ? a.time : "";
+        const tB = typeof b?.time === "string" ? b.time : "";
+        if (tA !== tB) return tB.localeCompare(tA);
         const cA = getTxTimestamp(a);
         const cB = getTxTimestamp(b);
         if (cA !== cB) return cB - cA;
@@ -1911,7 +1928,7 @@ const DEFAULT_CARDS = [
     limit: 99000, availableBalance: 99000, openingDebt: 0,
     openingDebtDate: null, openingDate: null, expiry: "09/28",
     holderName: "AHMED M. KHALIL", last4: "9982",
-    subCardLast4: [], dueDate: "25 من الشهر التالي",
+    subCardLast4: ["1186"], dueDate: "25 من الشهر التالي",
     statementDay: 1, dueDay: 25,
     cycleType: "next-month-due",
     type: "mastercard", theme: "tainum_gray", cashbackRate: 1,
@@ -1930,6 +1947,7 @@ const DEFAULT_CARDS = [
         3557: { method: "aaib_card", linkedCardId: 2, bank: "AAIB", kind: "subcard", label: "Signature فرعية 3557" },
         6015: { method: "cib_swype", linkedCardId: 3, bank: "CIB", kind: "card", label: "SWYPE" },
         9982: { method: "adib_card", linkedCardId: 4, bank: "ADIB", kind: "card", label: "Tainum" },
+        1186: { method: "adib_card", linkedCardId: 4, bank: "ADIB", kind: "subcard", label: "Tainum فرعية 1186" },
       };
 
       const DEFAULT_ACCOUNTS = {
@@ -3770,7 +3788,7 @@ const getCycleRange = (card, cycleKey) => {
             result.expiry = "09/28";
             result.dueDate = "25 من كل شهر";
             result.theme = "tainum_gray";
-            result.subCardLast4 = [];
+            result.subCardLast4 = Array.from(new Set([...(Array.isArray(result.subCardLast4) ? result.subCardLast4 : []), "1186"]));
             result.cashbackRate = result.cashbackRate !== undefined ? result.cashbackRate : 1;
             result.type = "mastercard";
           }
@@ -6718,8 +6736,8 @@ if (e.key >= "0" && e.key <= "9") handleDigit(e.key);
         return <span className={`badge ${m.bg} ${m.text} border ${m.border}`}>{m.name}</span>;
       });
 
-      const TxTimeChip = memo(({ createdAt }) => {
-        const time = formatTxTime(createdAt);
+      const TxTimeChip = memo(({ createdAt, time: txTime }) => {
+        const time = formatTxTimeHM(txTime) || formatTxTime(createdAt);
         if (!time) return null;
         return <span className="tx-time-chip"><Clock size={9} /> {time}</span>;
       });
@@ -6767,7 +6785,7 @@ if (e.key >= "0" && e.key <= "9") handleDigit(e.key);
             type: "SET_FORM_DATA",
             payload: {
               type, subType: type === "income" ? "deposit" : "withdrawal",
-              status: "pending", date: getLocalISODate(),
+              status: "pending", date: getLocalISODate(), time: getLocalTimeHM(),
               method: type === "income" ? "cib_savings" : "cash",
               category: category || "", amount: "", ...extra,
             },
@@ -7729,7 +7747,7 @@ if (e.key >= "0" && e.key <= "9") handleDigit(e.key);
                     {day.items.map((t) => {
                       const isPending = t.status !== "paid";
                       const dotColor = isPending ? "#D97706" : t.type === "income" ? "#10B981" : color;
-                      const time = formatTxTime(t.createdAt);
+                      const time = formatTxTimeHM(t.time) || formatTxTime(t.createdAt);
                       const member = getFamilyMember(t);
 
                       return (
@@ -8045,7 +8063,7 @@ if (e.key >= "0" && e.key <= "9") handleDigit(e.key);
             const ids = new Set((confirmState.items || []).map((t) => t.id));
             const total = (confirmState.items || []).reduce((s, t) => s + safeNumber(t.amount), 0);
             const next = transactions.map((t) =>
-              ids.has(t.id) ? { ...t, status: "paid", date, year: txYear, month: txMonth, monthIndex: d.getMonth() } : t,
+              ids.has(t.id) ? { ...t, status: "paid", date, year: txYear, month: txMonth, monthIndex: d.getMonth(), updatedAt: new Date().toISOString() } : t,
             );
             dispatch({ type: "UPDATE_TRANSACTIONS", payload: next });
             addNotification({
@@ -8057,7 +8075,7 @@ if (e.key >= "0" && e.key <= "9") handleDigit(e.key);
             const tx = confirmState.tx;
             if (!tx) { setConfirmState(null); return; }
             const next = transactions.map((t) =>
-              t.id === tx.id ? { ...t, status: "paid", date, year: txYear, month: txMonth, monthIndex: d.getMonth() } : t,
+              t.id === tx.id ? { ...t, status: "paid", date, year: txYear, month: txMonth, monthIndex: d.getMonth(), updatedAt: new Date().toISOString() } : t,
             );
             dispatch({ type: "UPDATE_TRANSACTIONS", payload: next });
             addNotification({
@@ -8073,7 +8091,7 @@ if (e.key >= "0" && e.key <= "9") handleDigit(e.key);
           if (isHanyPurchaseTx(tx) || isHanySettleTx(tx) || isHanyRefund(tx)) {
             if (isClosed) { addNotification({ type: "error", title: "محظور" }); return; }
             saveHistory();
-            const next = transactions.map((t) => t.id === tx.id ? { ...t, status: "paid" } : t);
+            const next = transactions.map((t) => t.id === tx.id ? { ...t, status: "paid", updatedAt: new Date().toISOString() } : t);
             dispatch({ type: "UPDATE_TRANSACTIONS", payload: next });
             addNotification({ type: "success", title: "تم اعتماد هاني", duration: 3000 });
             return;
@@ -8089,7 +8107,7 @@ if (e.key >= "0" && e.key <= "9") handleDigit(e.key);
           if (isClosed) { addNotification({ type: "error", title: "محظور" }); return; }
           saveHistory();
           const ids = new Set(hany.map((t) => t.id));
-          const next = transactions.map((t) => ids.has(t.id) ? { ...t, status: "paid" } : t);
+          const next = transactions.map((t) => ids.has(t.id) ? { ...t, status: "paid", updatedAt: new Date().toISOString() } : t);
           dispatch({ type: "UPDATE_TRANSACTIONS", payload: next });
           addNotification({ type: "success", title: `تم اعتماد ${ids.size} معلقة هاني`, duration: 3000 });
         }, [isClosed, transactions, saveHistory, dispatch, addNotification, openBulkConfirmDate]);
@@ -8097,7 +8115,7 @@ if (e.key >= "0" && e.key <= "9") handleDigit(e.key);
         const handleReopenOne = useCallback((t) => {
           if (isClosed) { addNotification({ type: "error", title: "محظور" }); return; }
           saveHistory();
-          const next = transactions.map((tr) => tr.id === t.id ? { ...tr, status: "pending" } : tr);
+          const next = transactions.map((tr) => tr.id === t.id ? { ...tr, status: "pending", updatedAt: new Date().toISOString() } : tr);
           dispatch({ type: "UPDATE_TRANSACTIONS", payload: next });
           addNotification({ type: "info", title: "تم إعادة التعليق", duration: 2500 });
         }, [isClosed, transactions, saveHistory, dispatch, addNotification]);
@@ -9095,7 +9113,7 @@ if (e.key >= "0" && e.key <= "9") handleDigit(e.key);
                             >
                               <div className="min-w-0 flex-1">
                                 <p className="font-bold text-xs truncate flex items-center gap-1 flex-wrap">
-                                  {getTxDisplayText(t)} <TxTimeChip createdAt={t.createdAt} />
+                                  {getTxDisplayText(t)} <TxTimeChip createdAt={t.createdAt} time={t.time} />
                                   <SmsBadge tx={t} /> <TeldaBadge tx={t} /> <TransferBadge tx={t} />
                                   <RecurringBadge tx={t} /> <CarryoverBadge tx={t} /> <ReconciliationBadge tx={t} />
                                   <HanyRefundBadge tx={t} />
@@ -11168,7 +11186,7 @@ if (e.key >= "0" && e.key <= "9") handleDigit(e.key);
             addNotification({ type: "error", title: "الشهر مغلق" });
             return;
           }
-          const next = transactions.map((t) => (t.id === tx.id ? { ...t, status: "paid" } : t));
+          const next = transactions.map((t) => (t.id === tx.id ? { ...t, status: "paid", updatedAt: new Date().toISOString() } : t));
           dispatch({ type: "UPDATE_TRANSACTIONS", payload: next });
           addNotification({ type: "success", title: "تم الاعتماد", duration: 2500 });
         };
@@ -11562,7 +11580,7 @@ if (e.key >= "0" && e.key <= "9") handleDigit(e.key);
                                                 <span>{t.category}</span>
                                                 {t.cardLast4 && <><span className="opacity-40">•</span><span className="font-mono">••••{t.cardLast4}</span></>}
                                                 <span className="opacity-40">•</span>
-                                                <span className="font-mono">{formatTxTime(t.createdAt)}</span>
+                                                <span className="font-mono">{formatTxTimeHM(t.time) || formatTxTime(t.createdAt)}</span>
                                               </div>
                                             </div>
                                           </div>
@@ -11799,7 +11817,7 @@ if (e.key >= "0" && e.key <= "9") handleDigit(e.key);
           saveHistory();
           if (sourceTx) {
             const updated = transactions.map((t) =>
-              t.id === sourceTx.id ? { ...t, status: "paid", date: getLocalISODateFn(d), sourceReceivableId: loan.id } : t,
+              t.id === sourceTx.id ? { ...t, status: "paid", date: getLocalISODateFn(d), sourceReceivableId: loan.id, updatedAt: new Date().toISOString() } : t,
             );
             dispatch({ type: "UPDATE_TRANSACTIONS", payload: updated });
             addNotification({ type: "success", title: "تم اعتماد القسط", message: fmt(sourceTx.amount) + " ج.م" });
@@ -13072,7 +13090,7 @@ if (e.key >= "0" && e.key <= "9") handleDigit(e.key);
               });
           filtered.forEach((t) => {
             if (t.method === HANY_TAB_METHOD || isCarryoverMarker(t) || isHanySettleTx(t) || isHanyRefund(t)) return;
-            const key = `${safeNumber(t.amount)}_${t.method}_${t.category}_${(t.date || "").slice(0, 10)}`;
+            const key = `${safeNumber(t.amount)}_${t.method}_${t.category}_${(t.date || "").slice(0, 10)}_${t.cardLast4 || t.linkedCardId || ""}`;
             if (!map[key]) map[key] = [];
             map[key].push(t);
           });
@@ -13121,7 +13139,7 @@ if (e.key >= "0" && e.key <= "9") handleDigit(e.key);
               <div className="flex items-start justify-between gap-3 flex-wrap">
                 <div>
                   <p className="text-[11px]" style={{ color: "var(--text-muted)" }}>
-                    {threshold}+ تكرار بنفس المبلغ والطريقة والتاريخ
+                    {threshold}+ تكرار بنفس المبلغ والطريقة والتاريخ والكارت
                   </p>
                 </div>
                 <button onClick={handleDeleteAll} disabled={duplicates.length === 0} className={`btn ${duplicates.length === 0 ? "btn-secondary" : "btn-primary"} text-xs`}>
@@ -13171,7 +13189,7 @@ if (e.key >= "0" && e.key <= "9") handleDigit(e.key);
                         <div key={item.id} className="flex justify-between items-center p-2.5 rounded-lg" style={{ background: "var(--bg-muted)" }}>
                           <div className="text-xs font-medium flex items-center gap-2 flex-wrap">
                             {item.date}
-                            {item.createdAt && <TxTimeChip createdAt={item.createdAt} />}
+                            {(item.createdAt || item.time) && <TxTimeChip createdAt={item.createdAt} time={item.time} />}
                             • {item.description || "بدون وصف"}
                             {idx === 0 && <span className="badge badge-success text-[9px]">الأحدث — محفوظ</span>}
                           </div>
@@ -14296,10 +14314,11 @@ if (e.key >= "0" && e.key <= "9") handleDigit(e.key);
         const [category, setCategory] = useState("");
         const [method, setMethod] = useState("cash");
         const [manualAmount, setManualAmount] = useState("");
+        const [manualDate, setManualDate] = useState("");
 
         useEffect(() => {
           if (!isOpen) {
-            setRawText(""); setParsed(null); setCategory(""); setMethod("cash"); setManualAmount("");
+            setRawText(""); setParsed(null); setCategory(""); setMethod("cash"); setManualAmount(""); setManualDate("");
           }
         }, [isOpen]);
 
@@ -14328,6 +14347,7 @@ if (e.key >= "0" && e.key <= "9") handleDigit(e.key);
             if (card) setMethod(getCardMethod(card));
           }
           if (res.amount > 0) setManualAmount(String(res.amount));
+          setManualDate(res.date || "");
           if (res.ok) {
             addNotification({ type: "success", title: `تم التحليل: ${fmt(res.amount)} ج.م`, message: `${res.type === "income" ? "دخل" : "مصروف"} • ${res.bank || "بنك"}`, duration: 5000 });
           } else {
@@ -14339,7 +14359,7 @@ if (e.key >= "0" && e.key <= "9") handleDigit(e.key);
           const amt = parseNumberInput(manualAmount);
           if (!amt || amt <= 0) { addNotification({ type: "error", title: "أدخل مبلغ صالح" }); return; }
           if (!category) { addNotification({ type: "error", title: "اختر الفئة" }); return; }
-          const d = parseISODate(parsed.date) || new Date();
+          const d = parseISODate(manualDate || parsed.date) || new Date();
           const year = d.getFullYear();
           const month = ALL_MONTHS[d.getMonth()];
           if (isMonthClosed(data, year, month)) { addNotification({ type: "error", title: `شهر ${month} ${year} مغلق` }); return; }
@@ -14348,10 +14368,11 @@ if (e.key >= "0" && e.key <= "9") handleDigit(e.key);
             id: getSafeId(), type: parsed.type, subType: parsed.subType,
             kind: KIND.OPERATIONAL, category: normalizeCategory(category),
             amount: roundMoney(amt), description: parsed.description || "SMS import",
-            method, date: parsed.date, month, year, monthIndex: d.getMonth(),
+            method, date: manualDate || parsed.date, month, year, monthIndex: d.getMonth(),
             status: "pending", source: "sms", smsRawText: parsed.rawText,
             smsBank: parsed.bank, linkedCardId: parsed.linkedCardId || undefined,
-            cardLast4: parsed.last4 || undefined, createdAt: new Date().toISOString(),
+            cardLast4: parsed.last4 || undefined, time: parsed.time || undefined,
+            createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
           };
           dispatch({ type: "UPDATE_TRANSACTIONS", payload: sortTransactions([newTx, ...(data.transactions || [])]) });
           addNotification({ type: "success", title: "تم الحفظ كمعلق", message: "راجعها واعتمدها من صفحة الحركات", duration: 5000 });
@@ -14374,7 +14395,7 @@ if (e.key >= "0" && e.key <= "9") handleDigit(e.key);
                   value={rawText} onChange={(e) => setRawText(e.target.value)} dir="auto"
                 />
                 <p className="text-[10px] mt-1.5 leading-relaxed" style={{ color: "var(--text-muted)" }}>
-                  💡 يدعم: 1016 (Titanium) • 9360/9352/2014 (Titanium فرعية) • 3391/3557 (Signature) • 6015 (SWYPE) • 9982 (Tainum ADIB) • 1809 (CIB) • 2106 (AAIB)
+                  💡 يدعم: 1016 (Titanium) • 9360/9352/2014 (Titanium فرعية) • 3391/3557 (Signature) • 6015 (SWYPE) • 9982/1186 (Tainum ADIB) • 1809 (CIB) • 2106 (AAIB)
                   <br />🛡️ يرفض رسائل OTP تلقائياً
                 </p>
               </div>
@@ -14395,7 +14416,7 @@ if (e.key >= "0" && e.key <= "9") handleDigit(e.key);
                       <div><span style={{ color: "var(--text-muted)" }}>النوع:</span>{" "}<strong>{parsed.type === "income" ? "دخل 💰" : "مصروف 💸"}</strong></div>
                       <div><span style={{ color: "var(--text-muted)" }}>البنك:</span>{" "}<strong>{parsed.bank || "—"}</strong></div>
                       <div><span style={{ color: "var(--text-muted)" }}>البطاقة:</span>{" "}<strong>{parsed.cardLabel || (parsed.last4 ? "••••" + parsed.last4 : "—")}</strong></div>
-                      <div><span style={{ color: "var(--text-muted)" }}>التاريخ:</span>{" "}<strong>{parsed.date}</strong></div>
+                      <div><span style={{ color: "var(--text-muted)" }}>الوقت:</span>{" "}<strong>{parsed.time || "—"}</strong></div>
                       {parsed.availableLimit && (<div><span style={{ color: "var(--text-muted)" }}>المتاح:</span>{" "}<strong className="money tabular">{fmt(parsed.availableLimit)}</strong></div>)}
                     </div>
                     {parsed.notes.length > 0 && (
@@ -14403,6 +14424,14 @@ if (e.key >= "0" && e.key <= "9") handleDigit(e.key);
                         {parsed.notes.map((n, i) => (<p key={i} className="text-[10px] leading-relaxed" style={{ color: "var(--text-secondary)" }}>• {n}</p>))}
                       </div>
                     )}
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-bold block mb-1" style={{ color: "var(--text-muted)" }}>التاريخ (راجعه وعدّله لو الرسالة قديمة) *</label>
+                    <SafeDateInput
+                      className="input-field text-xs py-2"
+                      value={manualDate}
+                      onChange={(v) => setManualDate(v)}
+                    />
                   </div>
                   <div>
                     <label className="text-[11px] font-bold block mb-1" style={{ color: "var(--text-muted)" }}>المبلغ (راجعه) *</label>
@@ -15962,6 +15991,7 @@ const handleToggleAutoReminders = useCallback((v) => {
         const currentTxRef = useRef([]);
         const dataRef = useRef(null);
         const budgetsRef = useRef({});
+        const budgetsStampRef = useRef(0);
         const saveQueueRef = useRef(Promise.resolve());
         const cloudSaveRetriesRef = useRef(0);
 
@@ -16034,8 +16064,14 @@ const handleToggleAutoReminders = useCallback((v) => {
                   const localTx = Array.isArray(newData.transactions) ? newData.transactions : [];
                   const permanentDeleted = new Set([...(newData.deletedTxIds || []), ...(remote.deletedTxIds || [])]);
                   const mergedMap = new Map();
+                  const txStamp = (t) => { const ts = Date.parse(t?.updatedAt || ""); return isNaN(ts) ? 0 : ts; };
                   remoteTx.forEach((t) => { if (t?.id && !permanentDeleted.has(t.id)) mergedMap.set(t.id, t); });
-                  localTx.forEach((t) => { if (t?.id && !permanentDeleted.has(t.id)) mergedMap.set(t.id, t); });
+                  // ═══ V92 — الأحدث (updatedAt) يكسب لكل قيد: جهاز قديم مش هيكتب فوق تعديل أحدث على السحابة ═══
+                  localTx.forEach((t) => {
+                    if (!t?.id || permanentDeleted.has(t.id)) return;
+                    const existing = mergedMap.get(t.id);
+                    if (!existing || txStamp(t) >= txStamp(existing)) mergedMap.set(t.id, t);
+                  });
 
                   finalData.transactions = sortTransactions(
                     Array.from(mergedMap.values()).filter((t) => !t?.id || !(finalData.deletedTxIds || []).includes(t.id)),
@@ -16043,7 +16079,16 @@ const handleToggleAutoReminders = useCallback((v) => {
                   finalData.deletedTxIds = Array.from(permanentDeleted).slice(-500);
 
                   if (remote.budgets && typeof remote.budgets === "object") {
-                    finalData.budgets = { ...remote.budgets, ...budgetsRef.current };
+                    // ═══ V92 — الأولوية للسحابة في الميزانيات، إلا لو التعديل المحلي أحدث (بختم وقت) ═══
+                    const remoteBudAt = safeNumber(remote.__budgetsUpdatedAt, 0);
+                    if (budgetsStampRef.current > 0 && budgetsStampRef.current >= remoteBudAt) {
+                      finalData.budgets = budgetsRef.current;
+                      finalData.__budgetsUpdatedAt = budgetsStampRef.current;
+                    } else {
+                      finalData.budgets = remote.budgets;
+                      if (remoteBudAt > 0) finalData.__budgetsUpdatedAt = remoteBudAt;
+                      if (remoteBudAt > budgetsStampRef.current) budgetsStampRef.current = remoteBudAt;
+                    }
                   }
                 }
 
@@ -16175,21 +16220,15 @@ const handleToggleAutoReminders = useCallback((v) => {
                 migrated.transactions = (migrated.transactions || [])
                   .filter((t) => !t?.id || !permanentDeleted.has(t.id));
 
-                // ═══ V91 FIX #3 — نافذة 15 ثانية فقط (بدل 5 دقائق) ═══
-                // لحماية القيود اللي المستخدم لسه منشئها على نفس الجهاز
+                // ═══ V92 FIX — أي قيد محلي مش على السحابة يترفع مهما كان عمره ═══
+                // إلغاء نافذة الـ 15 ثانية اللي كانت بتسقط القيود المحلية القديمة بصمت
                 const remoteIds = new Set(migrated.transactions.map((t) => t.id));
-                const localOnly = currentTxRef.current.filter(
+                const localOnlyToUpload = currentTxRef.current.filter(
                   (t) => t?.id && !remoteIds.has(t.id) && !permanentDeleted.has(t.id)
                 );
-                const now = Date.now();
-                const localOnlyToUpload = localOnly.filter((t) => {
-                  if (!t.createdAt) return false;
-                  const age = now - new Date(t.createdAt).getTime();
-                  return age >= 0 && age < 15000;
-                });
 
                 if (localOnlyToUpload.length > 0) {
-                  console.log(`📤 ${localOnlyToUpload.length} قيد محلي حديث (أقل من 15ث) — سيُرفع`);
+                  console.log(`📤 ${localOnlyToUpload.length} قيد محلي مش على السحابة — سيُرفع`);
                   migrated.transactions = sortTransactions([...migrated.transactions, ...localOnlyToUpload]);
                   setTimeout(() => queueCloudSave(migrated, { silent: true }), 500);
                 }
@@ -16202,6 +16241,7 @@ const handleToggleAutoReminders = useCallback((v) => {
                 lastRemoteRef.current = incoming;
 
                 if (raw.budgets && typeof raw.budgets === "object") {
+                  budgetsStampRef.current = Math.max(budgetsStampRef.current, safeNumber(raw.__budgetsUpdatedAt, 0));
                   dispatch({ type: "SET_BUDGETS", payload: raw.budgets });
                 }
 
@@ -16662,6 +16702,7 @@ useEffect(() => {
             const dup = transactions.find(
               (t) => t.status === "pending" && t.date === formData.date && t.type === formData.type &&
                 t.category === formData.category && t.method === formData.method &&
+                (t.cardLast4 || "") === (formData.cardLast4 || "") &&
                 Math.abs(safeNumber(t.amount) - amount) < 0.005,
             );
             if (dup) {
@@ -16717,7 +16758,9 @@ useEffect(() => {
                 cardLast4: syncCardLast4,
                 quantity: formData.quantity ? Number(formData.quantity) : undefined,
                 unitPrice: formData.unitPrice ? Number(formData.unitPrice) : undefined,
+                time: formData.time || undefined,
                 createdAt: formData.createdAt || new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
               };
 
               const next = formMode === "add"
@@ -17130,6 +17173,7 @@ useEffect(() => {
         const handleSaveBudget = useCallback(() => {
           saveHistory();
           const nb = { ...budgets, [editingBudgetCategory]: parseNumberInput(budgetAmount) };
+          budgetsStampRef.current = Date.now();
           dispatch({ type: "SET_BUDGETS", payload: nb });
           dispatch({ type: "SET_EDITING_BUDGET_CATEGORY", payload: null });
           dispatch({ type: "SET_BUDGET_AMOUNT", payload: "" });
@@ -17754,6 +17798,15 @@ useEffect(() => {
                                 {PAYMENT_METHODS.map((m) => (<option key={m.id} value={m.id}>{m.label}</option>))}
                               </select>
                             </div>
+                          </div>
+                          <div className="mt-2.5">
+                            <label className="block text-[11px] font-bold mb-1.5" style={{ color: "var(--text-muted)" }}>الوقت (اختياري)</label>
+                            <input
+                              type="time" dir="ltr"
+                              className="input-field text-[13px] font-bold py-2.5"
+                              value={formData.time || ""}
+                              onChange={(e) => dispatch({ type: "SET_FORM_DATA", payload: { ...formData, time: e.target.value } })}
+                            />
                           </div>
                         </div>
 
