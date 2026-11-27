@@ -1707,7 +1707,7 @@ const runFamilyImport = async notify => {
   try {
     do {
       famImportAgain = false;
-      const snap = await db.collection("family_ops").where("applied", "==", false).get();
+      const snap = await db.collection("finance_2026/family_inbox/ops").where("applied", "==", false).get();
       if (snap.empty) break;
       const ops = famSortOps(snap.docs.map(d => ({
         opId: d.id,
@@ -1718,7 +1718,7 @@ const runFamilyImport = async notify => {
         const mainDoc = await tr.get(mainRef);
         const fresh = [];
         for (const o of ops) {
-          const od = await tr.get(db.collection("family_ops").doc(o.opId));
+          const od = await tr.get(db.collection("finance_2026/family_inbox/ops").doc(o.opId));
           if (od.exists && od.data().applied === false) fresh.push({
             opId: od.id,
             ...od.data()
@@ -1747,7 +1747,7 @@ const runFamilyImport = async notify => {
           });
         }
         const now = Date.now();
-        for (const x of out) tr.update(db.collection("family_ops").doc(x.op.opId), {
+        for (const x of out) tr.update(db.collection("finance_2026/family_inbox/ops").doc(x.op.opId), {
           applied: true,
           appliedAt: now,
           result: x.result
@@ -1760,7 +1760,7 @@ const runFamilyImport = async notify => {
     } while (famImportAgain);
     if (!famPruned) {
       famPruned = true;
-      const old = await db.collection("family_ops").where("applied", "==", true).get();
+      const old = await db.collection("finance_2026/family_inbox/ops").where("applied", "==", true).get();
       const cutoff = Date.now() - 7 * 86400000;
       const batch = db.batch();
       let n = 0;
@@ -22490,7 +22490,7 @@ function App() {
         t = setTimeout(start, 1000);
         return;
       }
-      unsub = db.collection("family_ops").where("applied", "==", false).onSnapshot(() => {
+      unsub = db.collection("finance_2026/family_inbox/ops").where("applied", "==", false).onSnapshot(() => {
         runFamilyImport(notify);
       }, err => console.warn("family_ops listener:", err));
     };
