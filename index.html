@@ -1201,7 +1201,7 @@ import React, { useState, useMemo, useEffect, useCallback, useReducer, useRef, m
 import { createRoot } from "react-dom/client";
 import { createPortal } from "react-dom";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, AreaChart, Area } from "recharts";
-import { LayoutDashboard, Wallet, CreditCard, Banknote, Plus, Trash2, Repeat, TrendingUp, TrendingDown, Calendar, ArrowUpRight, Edit, X, Save, Layers, ArrowRight, Printer, ChevronDown, ChevronLeft, ArrowUp, Undo2, LogOut, Lock, Unlock, Moon, Sun, ShieldCheck, RefreshCcw, Menu, Search, FileSpreadsheet, Settings as SettingsIcon, Target, CalendarDays, BarChart3, Bell, Sparkles, AlertTriangle, Clock, CheckCircle2, Zap, Coins, Filter, Eye, EyeOff, ShieldAlert, Upload, Cloud, Signal, PiggyBank, Landmark as BuildingBank, ArrowDownCircle, ArrowUpCircle, Wifi, Store as StoreIcon, Users, Activity, Sliders, Table, RotateCcw, LineChart, Delete, Gift, Receipt, ArrowLeftRight, MessageSquare, PieChart as PieChartIcon, CloudOff, Copy, Send, Bot, ExternalLink, CircleDollarSign, Percent, Info, Home, User, MoreHorizontal, ArrowDown, Check, AlertCircle, MoreVertical, ChevronRight, Scale, User as UserIcon, Circle, Dot, History, FileText, Save as SaveIcon, Download, Database, FileDown, Share2, Printer as PrinterIcon, FileCheck, Building2, ShoppingBag } from "lucide-react";
+import { LayoutDashboard, Wallet, CreditCard, Banknote, Plus, Trash2, Repeat, TrendingUp, TrendingDown, Calendar, ArrowUpRight, Edit, X, Save, Layers, ArrowRight, Printer, ChevronDown, ChevronLeft, ArrowUp, Undo2, LogOut, Lock, Unlock, Moon, Sun, ShieldCheck, RefreshCcw, Menu, Search, FileSpreadsheet, Settings as SettingsIcon, Target, CalendarDays, BarChart3, Bell, Sparkles, AlertTriangle, Clock, CheckCircle2, Zap, Coins, Filter, Eye, EyeOff, ShieldAlert, Upload, Cloud, Signal, PiggyBank, Landmark as BuildingBank, ArrowDownCircle, ArrowUpCircle, Wifi, Store as StoreIcon, Users, Activity, Sliders, Table, RotateCcw, LineChart, Delete, Gift, Receipt, ArrowLeftRight, MessageSquare, PieChart as PieChartIcon, CloudOff, Copy, Send, Bot, ExternalLink, CircleDollarSign, Percent, Info, Home, User, MoreHorizontal, ArrowDown, Check, AlertCircle, MoreVertical, ChevronRight, Scale, User as UserIcon, Circle, Dot, History, FileText, Save as SaveIcon, Fingerprint, Download, Database, FileDown, Share2, Printer as PrinterIcon, FileCheck, Building2, ShoppingBag } from "lucide-react";
 const firebaseConfig = {
   apiKey: "AIzaSyCEq-Trf1oFsvPF5tlMvqU83ea_J2DLZjs",
   authDomain: "finance-app-2026-3e318.firebaseapp.com",
@@ -2413,6 +2413,86 @@ const verifyPin = async pin => {
     return false;
   }
 };
+const BIO = (() => {
+  const KEY = "app_bio_cred_v1";
+  const b64 = buf => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  const unb64 = s => Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/")), c => c.charCodeAt(0));
+  const rnd = n => crypto.getRandomValues(new Uint8Array(n));
+  return {
+    enabled: () => {
+      try {
+        return !!localStorage.getItem(KEY);
+      } catch (e) {
+        return false;
+      }
+    },
+    supported: async () => {
+      try {
+        return !!(window.isSecureContext && window.PublicKeyCredential && (await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()));
+      } catch (e) {
+        return false;
+      }
+    },
+    register: async label => {
+      const cred = await navigator.credentials.create({
+        publicKey: {
+          challenge: rnd(32),
+          rp: {
+            name: label
+          },
+          user: {
+            id: rnd(16),
+            name: "device-lock",
+            displayName: label
+          },
+          pubKeyCredParams: [{
+            type: "public-key",
+            alg: -7
+          }, {
+            type: "public-key",
+            alg: -257
+          }],
+          authenticatorSelection: {
+            authenticatorAttachment: "platform",
+            userVerification: "required",
+            residentKey: "discouraged"
+          },
+          timeout: 60000,
+          attestation: "none"
+        }
+      });
+      if (!cred) throw new Error("no credential");
+      localStorage.setItem(KEY, b64(cred.rawId));
+      return true;
+    },
+    verify: async () => {
+      const id = localStorage.getItem(KEY);
+      if (!id) return false;
+      try {
+        const a = await navigator.credentials.get({
+          publicKey: {
+            challenge: rnd(32),
+            timeout: 60000,
+            userVerification: "required",
+            allowCredentials: [{
+              type: "public-key",
+              id: unb64(id),
+              transports: ["internal"]
+            }]
+          }
+        });
+        return !!a;
+      } catch (e) {
+        return false;
+      }
+    },
+    disable: () => {
+      try {
+        localStorage.removeItem(KEY);
+      } catch (e) {}
+    }
+  };
+})();
 const PIN_SESSION_KEY = "pin_session_token_v90_1";
 const buildPinSessionToken = async pin => {
   try {
@@ -7852,6 +7932,21 @@ const PinLockScreen = ({
   const pressTimerRef = useRef(null);
   const clearTimerRef = useRef(null);
   const navTimerRef = useRef(null);
+  const [bioOn] = useState(() => BIO.enabled());
+  const [bioBusy, setBioBusy] = useState(false);
+  const tryBio = async () => {
+    if (bioBusy) return;
+    setBioBusy(true);
+    const ok = await BIO.verify();
+    setBioBusy(false);
+    if (ok) onSuccess(null);
+  };
+  useEffect(() => {
+    if (bioOn) {
+      const t = setTimeout(tryBio, 350);
+      return () => clearTimeout(t);
+    }
+  }, []);
   useEffect(() => () => {
     if (pressTimerRef.current) clearTimeout(pressTimerRef.current);
     if (clearTimerRef.current) clearTimeout(clearTimerRef.current);
@@ -7964,7 +8059,14 @@ const PinLockScreen = ({
     className: "aspect-square rounded-[1.2rem] flex items-center justify-center transition-all active:scale-90 bg-white/[0.02] hover:bg-red-500/10 hover:text-red-400 text-slate-400 border border-transparent hover:border-red-500/20"
   }, React.createElement(Delete, {
     size: 20
-  }))), React.createElement("div", {
+  }))), bioOn && React.createElement("button", {
+    type: "button",
+    onClick: tryBio,
+    disabled: bioBusy,
+    className: "w-full py-3 mt-3 rounded-xl text-sm font-black flex items-center justify-center gap-2 bg-[#635BFF] text-white active:scale-95 transition-all"
+  }, React.createElement(Fingerprint, {
+    size: 18
+  }), " فتح بالبصمة"), React.createElement("div", {
     className: "flex flex-col gap-2 w-full mt-2"
   }, React.createElement("button", {
     type: "button",
@@ -7983,6 +8085,64 @@ const PinLockScreen = ({
     },
     className: "w-full py-1.5 text-[10px] sm:text-xs font-bold text-slate-500 hover:text-slate-300 transition-colors"
   }, "نسيت الرمز؟ إعادة تعيين"))));
+};
+const BioLockCard = ({
+  addNotification
+}) => {
+  const [on, setOn] = useState(() => BIO.enabled());
+  const [ok, setOk] = useState(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    BIO.supported().then(setOk);
+  }, []);
+  const toggle = async () => {
+    if (on) {
+      BIO.disable();
+      setOn(false);
+      addNotification({
+        type: "success",
+        title: "اتقفل فتح البصمة"
+      });
+      return;
+    }
+    setBusy(true);
+    try {
+      await BIO.register("دفتري");
+      setOn(true);
+      addNotification({
+        type: "success",
+        title: "فتح البصمة اشتغل"
+      });
+    } catch (e) {
+      addNotification({
+        type: "error",
+        title: "ماقدرناش نفعّل البصمة على الجهاز ده"
+      });
+    }
+    setBusy(false);
+  };
+  return React.createElement("div", {
+    className: "card"
+  }, React.createElement("div", {
+    className: "flex items-center gap-2 mb-3"
+  }, React.createElement("div", {
+    className: "p-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600"
+  }, React.createElement(Fingerprint, {
+    size: 14
+  })), React.createElement("h3", {
+    className: "font-black text-sm"
+  }, "فتح التطبيق بالبصمة")), React.createElement("p", {
+    className: "text-[11px] mb-3",
+    style: {
+      color: "var(--text-muted)"
+    }
+  }, ok === false ? "الجهاز أو المتصفح ده مش بيدعم البصمة. الرمز شغال عادي." : "بيفتح التطبيق بالبصمة أو الوجه على الجهاز ده بس. الرمز (PIN) يفضل بديل دايمًا."), React.createElement("button", {
+    disabled: busy || ok === false && !on,
+    onClick: toggle,
+    className: "btn btn-secondary text-xs w-full"
+  }, React.createElement(Fingerprint, {
+    size: 12
+  }), " ", on ? "إيقاف البصمة" : "تفعيل البصمة"));
 };
 const PinChangeModal = ({
   onClose,
@@ -19673,7 +19833,9 @@ const SettingsView = memo(({
     className: "btn btn-secondary text-xs w-full"
   }, React.createElement(Lock, {
     size: 12
-  }), " تغيير الرمز")), React.createElement("div", {
+  }), " تغيير الرمز")), React.createElement(BioLockCard, {
+    addNotification: addNotification
+  }), React.createElement("div", {
     className: "card p-3",
     style: {
       background: "var(--bg-muted)"
@@ -22548,6 +22710,22 @@ function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
   const [pinVerified, setPinVerified] = useState(false);
+  useEffect(() => {
+    let hiddenAt = 0;
+    const onVis = () => {
+      if (document.hidden) {
+        hiddenAt = Date.now();
+        return;
+      }
+      if (hiddenAt && BIO.enabled() && Date.now() - hiddenAt > 60000) {
+        sessionStorage.removeItem(PIN_SESSION_KEY);
+        setPinVerified(false);
+      }
+      hiddenAt = 0;
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, []);
   const [cloudSyncStatus, setCloudSyncStatus] = useState("pending");
   const [isSaving, setIsSaving] = useState(false);
   const saveTimeoutRef = useRef(null);
