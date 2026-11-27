@@ -625,8 +625,9 @@ body.dark .item .star-btn{background:rgba(13,21,36,.85)}
 .feed-avatar.is-admin::after{content:'';position:absolute;bottom:-2px;left:-2px;width:14px;height:14px;background:linear-gradient(135deg,#FBBF24,#D97706);border-radius:50%;border:2px solid var(--bg-card)}
 .feed-body{flex:1;min-width:0}
 .feed-item{flex-wrap:wrap;row-gap:6px}
-.feed-badges{flex:0 0 100%;display:flex;flex-wrap:nowrap;align-items:center;gap:4px;overflow:hidden}
-.feed-badges>span{margin:0!important;font-size:9px!important;padding:1px 6px!important;gap:3px!important;line-height:1.5;white-space:nowrap}
+.feed-badges{flex:0 0 100%;display:flex;flex-wrap:wrap;align-items:center;gap:4px 4px}
+.feed-meta-txt{font-size:10px;color:var(--text-muted);font-weight:700;white-space:nowrap}
+.feed-badges>span:not(.feed-meta-txt){margin:0!important;font-size:9px!important;padding:1px 6px!important;gap:3px!important;line-height:1.5;white-space:nowrap}
 .feed-name{font-size:13px;font-weight:800;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:flex;align-items:center;flex-wrap:wrap;gap:4px}
 .feed-time{font-size:10.5px;color:var(--text-muted);font-weight:700;margin-top:3px}
 .feed-amount{font-size:14.5px;font-weight:900;color:var(--danger);white-space:nowrap;font-variant-numeric:tabular-nums}
@@ -3405,11 +3406,13 @@ function buildFeedItem(t){
         '<button class="feed-btn del" data-d="'+t.id+'" title="طلب حذف"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button></div>';
     }
   }
-  var badgeRow=(adminBadge+hanyBadge+statusBadge+editedBadge+pendingBadge)?'<div class="feed-badges">'+adminBadge+hanyBadge+statusBadge+editedBadge+pendingBadge+'</div>':'';
+  /* سطر واحد للمعلومات: الشارات + التصنيف + اسم المسجّل والوقت. العملية بدون مسجّل (اتسجلت من دفتري) تظهر باسم أحمد (التطبيق الرئيسي) — عرض فقط */
+  var who=u?u.name:(t.createdByName||'أحمد (التطبيق الرئيسي)');
+  var metaTxt='<span class="feed-meta-txt">'+esc(who)+' · '+displayTime+'</span>';
+  var badgeRow='<div class="feed-badges">'+adminBadge+hanyBadge+statusBadge+editedBadge+pendingBadge+catBadge+metaTxt+'</div>';
   return '<div class="feed-item" data-txid="'+t.id+'">'+badgeRow+
-    '<div class="feed-avatar av-'+(u?u.id:'ans')+(ownerIsAdmin?' is-admin':'')+'">'+(u?u.emoji:'؟')+'</div>'+
-    '<div class="feed-body"><div class="feed-name">'+catBadge+' '+esc(t.description||t.category)+'</div>'+
-    '<div class="feed-time">'+(u?u.name:(t.createdByName||'من التطبيق الرئيسي'))+' · '+displayTime+'</div></div>'+
+    '<div class="feed-avatar av-'+(u?u.id:'ahmed')+((ownerIsAdmin||!u)?' is-admin':'')+'">'+(u?u.emoji:'ح')+'</div>'+
+    '<div class="feed-body"><div class="feed-name">'+esc(t.description||t.category)+'</div></div>'+
     '<div class="feed-amount">- '+fmt(t.amount)+' ج.م</div>'+actionBtn+'</div>';
 }
 
