@@ -4732,7 +4732,32 @@ function renderAll(){
 /* ═══════════════════════════════════════════════════════════════
    TABS + EVENTS
    ═══════════════════════════════════════════════════════════════ */
+/* V93: back button = close modal, then previous tab, then "press again to exit" */
+var tabStack=[];var backNavFromPop=false;var backLastHint=0;
+function installBackNav(){
+  try{history.replaceState({dfBase:1},'');history.pushState({dfTop:1},'');}catch(e){return;}
+  function rearm(){try{history.pushState({dfTop:1},'');}catch(e){}}
+  window.addEventListener('popstate',function(ev){
+    if(!(ev.state&&ev.state.dfBase))return;
+    var layers=document.querySelectorAll('.modal-bg');
+    if(layers.length){
+      var top=layers[layers.length-1];
+      var cancel=top.querySelector('[data-a="cancel"]');
+      if(cancel)cancel.click();else top.click();
+      rearm();return;
+    }
+    if(tabStack.length){backNavFromPop=true;switchTab(tabStack.pop());backNavFromPop=false;rearm();return;}
+    if(currentTab!=='home'){backNavFromPop=true;switchTab('home');backNavFromPop=false;rearm();return;}
+    if(Date.now()-backLastHint<2000){history.back();return;}
+    backLastHint=Date.now();
+    toast('اضغط رجوع مرة تانية للخروج','warn');
+    rearm();
+  });
+}
+installBackNav();
+
 function switchTab(t){
+  if(t!==currentTab&&!backNavFromPop){tabStack.push(currentTab);if(tabStack.length>30)tabStack.shift();}
   currentTab=t;
   if(t==='history') histVisibleCount = HISTORY_PAGE_SIZE;
   document.querySelectorAll('.nav-btn').forEach(function(b){b.classList.toggle('active',b.dataset.t===t);});

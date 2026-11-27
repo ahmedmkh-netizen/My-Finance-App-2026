@@ -16050,6 +16050,64 @@ const handleToggleAutoReminders = useCallback((v) => {
           (notification) => dispatch({ type: "ADD_NOTIFICATION", payload: notification }),
           [],
         );
+
+        // ═══ V93 — زر الرجوع في الموبايل: يقفل النافذة/القائمة الأول، بعدين يرجع للتبويب السابق، وبعدين "اضغط مرة تانية للخروج" ═══
+        const backNavRef = useRef({ tab: activeTab, sidebar: isSidebarOpen, stack: [], fromBack: false, lastHint: 0 });
+        backNavRef.current.sidebar = isSidebarOpen;
+        useEffect(() => {
+          const n = backNavRef.current;
+          if (n.tab !== activeTab) {
+            if (!n.fromBack) { n.stack.push(n.tab); if (n.stack.length > 30) n.stack.shift(); }
+            n.fromBack = false;
+            n.tab = activeTab;
+          }
+        }, [activeTab]);
+        useEffect(() => {
+          const n = backNavRef.current;
+          try {
+            history.replaceState({ dfBase: 1 }, "");
+            history.pushState({ dfTop: 1 }, "");
+          } catch (e) { return undefined; }
+          const rearm = () => { try { history.pushState({ dfTop: 1 }, ""); } catch (e) {} };
+          const topLayer = () => {
+            const all = Array.from(document.querySelectorAll(".modal-backdrop, .sheet-backdrop"));
+            return all.length ? all[all.length - 1] : null;
+          };
+          const onPop = (ev) => {
+            if (!(ev.state && ev.state.dfBase)) return;
+            if (n.sidebar) { dispatch({ type: "SET_SIDEBAR_OPEN", payload: false }); rearm(); return; }
+            const layer = topLayer();
+            if (layer) {
+              layer.click();
+              setTimeout(() => {
+                if (document.body.contains(layer)) {
+                  const closeBtn = layer.querySelector('[aria-label*="close" i], [aria-label*="إغلاق"], button.btn-ghost');
+                  if (closeBtn) closeBtn.click();
+                }
+              }, 80);
+              rearm();
+              return;
+            }
+            if (n.stack.length) {
+              n.fromBack = true;
+              dispatch({ type: "SET_ACTIVE_TAB", payload: n.stack.pop() });
+              rearm();
+              return;
+            }
+            if (n.tab !== "dashboard") {
+              n.fromBack = true;
+              dispatch({ type: "SET_ACTIVE_TAB", payload: "dashboard" });
+              rearm();
+              return;
+            }
+            if (Date.now() - n.lastHint < 2000) { history.back(); return; }
+            n.lastHint = Date.now();
+            addNotification({ type: "info", title: "اضغط رجوع مرة تانية للخروج", duration: 2000 });
+            rearm();
+          };
+          window.addEventListener("popstate", onPop);
+          return () => window.removeEventListener("popstate", onPop);
+        }, []);
         const removeNotification = useCallback(
           (id) => dispatch({ type: "REMOVE_NOTIFICATION", payload: id }),
           [],
