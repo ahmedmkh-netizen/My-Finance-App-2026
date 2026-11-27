@@ -117,4 +117,14 @@ t("المتوقع عند تاريخ السداد = المديونية + مصرو
   assert.strictEqual(p.pendingPayments, 1500);
   assert.strictEqual(p.projectedAtDue, 5000 + 400 - 1500);
 });
+
+t("مدفوع بتاريخ مستقبلي: مش في مديونية النهارده، لكن في المتوقع", () => {
+  const card = mk({ statementDay: 1, dueDay: 25, openingDebt: 5000 });
+  const data = { cards: [card], cardInstallments: [], transactions: [
+    tx({ id: "f1", date: "2026-12-15", amount: 1000, linkedCardId: 1 }) ] };
+  const p = E.computeCardPaymentPrediction(data, card, D(2026, 11, 27));
+  assert.strictEqual(p.currentDebt, 5000);
+  assert.strictEqual(p.pendingCharges, 1000);
+  assert.strictEqual(p.projectedAtDue, 6000);
+});
 console.log(n + " tests passed");

@@ -3943,11 +3943,13 @@ const getCycleRange = (card, cycleKey) => {
           const cutP = cutISO ? parseISODate(cutISO) : null;
           const cutTs = cutP ? dayStart(cutP).getTime() : null;
           (data?.transactions || []).forEach((t) => {
-            if (!t || t.status !== "pending") return;
+            if (!t || (t.status !== "pending" && t.status !== "paid")) return;
             if (t.source === "void" || t.source === "carryover" || t.source === "card-forecast") return;
             if (isCarryoverMarker(t) || isHanyPurchaseTx(t) || isHanySettleTx(t) || t.method === HANY_TAB_METHOD) return;
             const d = parseISODate(t.date);
             if (!d || d.getTime() > horizonTs) return;
+            // مدفوع بتاريخ مستقبلي (مسجل مقدماً) مش في مديونية النهارده، فبيتحسب هنا في المتوقع. المدفوع بتاريخ النهارده أو قبله داخل المديونية أصلاً.
+            if (t.status === "paid" && d.getTime() <= endOfToday().getTime()) return;
             if (cutTs !== null && d.getTime() < cutTs) return;
             const explicit = t.linkedCardId !== undefined && t.linkedCardId !== null && t.linkedCardId !== "";
             let mine = false;
