@@ -282,6 +282,21 @@ body.light .ramadan-strip{background:linear-gradient(135deg,#1a2342 0%,#2a3a6a 4
   background:radial-gradient(circle,rgba(212,168,87,.15) 0%,transparent 60%);pointer-events:none;z-index:0;animation:glowPulse 5s infinite alternate}
 @keyframes glowPulse{0%{opacity:.5}100%{opacity:1}}
 
+
+/* V94 Ramadan additions */
+.ramadan-clock{font-size:30px!important;direction:ltr;display:inline-block;letter-spacing:1px;font-variant-numeric:tabular-nums}
+.ramadan-eid{font-size:22px;font-weight:900;color:#FCE7B3}
+.ramadan-imsakeya-item.next{background:rgba(212,168,87,.38);border-color:#E8C285;box-shadow:0 0 0 1px rgba(232,194,133,.4)}
+.ramadan-city-row{position:relative;z-index:4;align-items:center;gap:8px;margin-top:10px;font-size:11px;font-weight:800;color:rgba(255,255,255,.8)}
+.ramadan-city{background:rgba(212,168,87,.15);color:#FCE7B3;border:1px solid rgba(212,168,87,.4);border-radius:8px;padding:5px 8px;font-size:12px;font-weight:800;font-family:inherit;max-width:150px}
+.ramadan-city option{color:#111;background:#fff}
+.ramadan-strip.rm-paused *{animation-play-state:paused!important}
+.ramadan-strip.eid-mode{background:linear-gradient(135deg,#1f3a2a 0%,#2f5a3e 45%,#1f3a2a 100%)}
+.admin-rm-box{background:var(--bg-muted);border-radius:12px;padding:12px;margin-bottom:12px}
+.admin-rm-title{font-size:12.5px;font-weight:900;margin-bottom:6px}
+.admin-rm-info{font-size:11px;color:var(--text-muted);font-weight:700;margin-bottom:8px;line-height:1.6}
+.admin-rm-row{display:flex;gap:8px;margin-bottom:8px;align-items:center}
+@media (max-width:380px){.ramadan-clock{font-size:25px!important}}
 /* RAMADAN CANNON */
 .ramadan-cannon{position:absolute;left:10px;bottom:5px;width:130px;height:104px;z-index:3;
   filter:drop-shadow(0 10px 15px rgba(0,0,0,0.8));
@@ -1424,6 +1439,7 @@ button:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-off
       <div class="ramadan-title" id="ramadanTitle">باقي على رمضان</div>
       <div class="ramadan-days" id="ramadanDays">— <span>يوم</span></div>
       <div class="ramadan-imsakeya" id="ramadanImsakeya" style="display:none"></div>
+      <div class="ramadan-city-row" id="ramadanCityRow" style="display:none"><label for="ramadanCity">📍 المدينة</label><select id="ramadanCity" class="ramadan-city" aria-label="اختيار المدينة لمواقيت رمضان"></select></div>
     </div>
   </div>
 
@@ -1721,6 +1737,18 @@ button:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-off
         <div class="search-box">
           <span class="search-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M20.5 20.5l-4.4-4.4"/></svg></span>
           <input type="text" class="search-input" id="adminCatalogSearch" placeholder="ابحث عن منتج..." autocomplete="off">
+        </div>
+        <div class="admin-rm-box" id="adminRamadanBox">
+          <div class="admin-rm-title">🌙 بداية رمضان (تعديل المشرف)</div>
+          <div class="admin-rm-info" id="rmOverrideInfo"></div>
+          <div class="admin-rm-row">
+            <input type="date" id="rmOverrideDate" class="search-input" style="flex:1;min-width:0">
+            <select id="rmOverrideLen" class="search-input" style="width:90px"><option value="30">30 يوم</option><option value="29">29 يوم</option></select>
+          </div>
+          <div class="admin-rm-row">
+            <button class="admin-action-btn primary" id="rmOverrideSave" style="flex:1"><span>حفظ</span></button>
+            <button class="admin-action-btn danger" id="rmOverrideClear" style="flex:1"><span>رجوع للتلقائي</span></button>
+          </div>
         </div>
         <div class="admin-cat-tabs" id="adminCatTabs"></div>
         <div id="adminCatalogList" style="max-height:420px;overflow-y:auto"></div>
@@ -2430,22 +2458,64 @@ function getSunTimes(date, lat, lng, fajrAngle, ishaAngle) {
   };
 }
 
-function getActiveRamadan() {
-  var now = new Date(), mostRecent = null, nextFuture = null;
-  for (var i = 0; i < RAMADAN_DATES.length; i++) {
-    var d = new Date(RAMADAN_DATES[i].date + 'T00:00:00+02:00');
-    if (d.getTime() <= now.getTime()) mostRecent = { date: d, hijri: RAMADAN_DATES[i].hijri };
-    else if (!nextFuture) { nextFuture = { date: d, hijri: RAMADAN_DATES[i].hijri }; break; }
+/* ═══ V94 Ramadan core (same logic in family.html and index.html) ═══ */
+var RM_CITIES = {
+  cairo:{n:'القاهرة',lat:30.0444,lng:31.2357}, giza:{n:'الجيزة',lat:30.0131,lng:31.2089},
+  alex:{n:'الإسكندرية',lat:31.2001,lng:29.9187}, mansoura:{n:'المنصورة',lat:31.0409,lng:31.3785},
+  tanta:{n:'طنطا',lat:30.7865,lng:31.0004}, ismailia:{n:'الإسماعيلية',lat:30.5965,lng:32.2715},
+  portsaid:{n:'بورسعيد',lat:31.2653,lng:32.3019}, suez:{n:'السويس',lat:29.9668,lng:32.5498},
+  fayoum:{n:'الفيوم',lat:29.3084,lng:30.8428}, minya:{n:'المنيا',lat:28.1099,lng:30.7503},
+  assiut:{n:'أسيوط',lat:27.1809,lng:31.1837}, sohag:{n:'سوهاج',lat:26.5591,lng:31.6957},
+  luxor:{n:'الأقصر',lat:25.6872,lng:32.6396}, aswan:{n:'أسوان',lat:24.0889,lng:32.8998},
+  hurghada:{n:'الغردقة',lat:27.2579,lng:33.8116}, sharm:{n:'شرم الشيخ',lat:27.9158,lng:34.3300}
+};
+var RM_CITY_KEY = 'ramadan_city_v1';
+var RM_TABLE = [
+  { hijri: 1447, date: '2026-02-18' }, { hijri: 1448, date: '2027-02-08' },
+  { hijri: 1449, date: '2028-01-28' }, { hijri: 1450, date: '2029-01-16' },
+  { hijri: 1451, date: '2030-01-06' }
+];
+function rmGetCity(){ try{ var k = localStorage.getItem(RM_CITY_KEY); if(k && RM_CITIES[k]) return k; }catch(e){} return 'cairo'; }
+function rmSetCity(k){ if(RM_CITIES[k]){ try{ localStorage.setItem(RM_CITY_KEY, k); }catch(e){} } }
+function rmEntries(ov){
+  return RM_TABLE.map(function(e){
+    var date = e.date, len = 30;
+    if(ov && ov.date && Number(ov.hijri) === e.hijri && /^\d{4}-\d{2}-\d{2}$/.test(ov.date)){
+      date = ov.date; len = Number(ov.length) === 29 ? 29 : 30;
+    }
+    return { hijri: e.hijri, date: new Date(date + 'T00:00:00+02:00'), len: len };
+  });
+}
+/* phase: active (during Ramadan), eid (3 days after), before (countdown to the next one) */
+function rmState(now, ov){
+  var DAY = 86400000, es = rmEntries(ov), i, nowMs = now.getTime();
+  for(i = es.length - 1; i >= 0; i--){
+    var t = nowMs - es[i].date.getTime();
+    if(t < 0) continue;
+    var day = Math.floor(t / DAY) + 1;
+    if(day <= es[i].len) return { phase: 'active', hijri: es[i].hijri, day: day, len: es[i].len, start: es[i].date };
+    if(day <= es[i].len + 3) return { phase: 'eid', hijri: es[i].hijri, eidDay: day - es[i].len, start: es[i].date };
+    break;
   }
-  if (!nextFuture) {
-    var lastEntry = RAMADAN_DATES[RAMADAN_DATES.length - 1];
-    var lastDate = new Date(lastEntry.date + 'T00:00:00+02:00');
-    nextFuture = { date: new Date(lastDate.getTime() + 354 * 86400000), hijri: lastEntry.hijri + 1 };
+  for(i = 0; i < es.length; i++){
+    if(es[i].date.getTime() > nowMs) return { phase: 'before', hijri: es[i].hijri, start: es[i].date };
   }
-  if (mostRecent && (now.getTime() - mostRecent.date.getTime()) < 30 * 86400000) {
-    return { date: mostRecent.date, hijri: mostRecent.hijri, isActive: true };
-  }
-  return { date: nextFuture.date, hijri: nextFuture.hijri, isActive: false };
+  var last = es[es.length - 1];
+  return { phase: 'before', hijri: last.hijri + 1, start: new Date(last.date.getTime() + 354 * DAY), estimated: true };
+}
+/* next suhoor-end (fajr) or iftar (sunset) event for the chosen city */
+function rmNextEvent(now, cityKey){
+  var c = RM_CITIES[cityKey] || RM_CITIES.cairo, DAY = 86400000;
+  var t = getSunTimes(now, c.lat, c.lng), nowMs = now.getTime();
+  if(t.fajr && t.fajr.getTime() > nowMs) return { kind: 'fajr', at: t.fajr, times: t };
+  if(t.sunset && t.sunset.getTime() > nowMs) return { kind: 'iftar', at: t.sunset, times: t };
+  var t2 = getSunTimes(new Date(nowMs + DAY), c.lat, c.lng);
+  return { kind: 'fajr', at: t2.fajr || new Date(nowMs + DAY), times: t, tomorrow: true };
+}
+function rmClock(ms){
+  var s = Math.max(0, Math.floor(ms / 1000)), h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+  function p(n){ return (n < 10 ? '0' : '') + n; }
+  return p(h) + ':' + p(m) + ':' + p(sec);
 }
 
 function formatTimeAr(d) {
@@ -2454,45 +2524,131 @@ function formatTimeAr(d) {
   catch (e) { return d.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }); }
 }
 
+var RAMADAN_OVERRIDE = null;
+var ramadanTimer = null;
+var ramadanCityBuilt = false;
+
+function buildRamadanCitySelect(){
+  var sel = document.getElementById('ramadanCity');
+  if(!sel) return;
+  if(!ramadanCityBuilt){
+    sel.innerHTML = Object.keys(RM_CITIES).map(function(k){ return '<option value="' + k + '">' + RM_CITIES[k].n + '</option>'; }).join('');
+    sel.addEventListener('change', function(){ rmSetCity(sel.value); updateRamadanCountdown(); });
+    ramadanCityBuilt = true;
+  }
+  sel.value = rmGetCity();
+}
+
 function updateRamadanCountdown() {
   var strip = document.getElementById('ramadanStrip');
   if (!strip) return;
-  var r = getActiveRamadan();
-  if (!r.date) { strip.style.display = 'none'; return; }
   strip.style.display = 'flex';
+  buildRamadanCitySelect();
   var title = document.getElementById('ramadanTitle');
   var daysEl = document.getElementById('ramadanDays');
   var imsakeya = document.getElementById('ramadanImsakeya');
-  if (r.isActive) {
-    strip.classList.add('during-ramadan');
-    var ramadanDay = Math.floor((new Date().getTime() - r.date.getTime()) / 86400000) + 1;
-    if (title) title.textContent = 'رمضان كريم ' + r.hijri + ' هـ — اليوم';
-    if (daysEl) daysEl.innerHTML = '<strong>' + ramadanDay + '</strong> <span>من رمضان</span>';
+  var cityRow = document.getElementById('ramadanCityRow');
+  var now = new Date();
+  var st = rmState(now, RAMADAN_OVERRIDE);
+  strip.classList.toggle('during-ramadan', st.phase === 'active');
+  strip.classList.toggle('eid-mode', st.phase === 'eid');
+  if (st.phase === 'active') {
+    var cityKey = rmGetCity();
+    var ev = rmNextEvent(now, cityKey);
+    if (title) title.textContent = 'رمضان كريم ' + st.hijri + ' هـ — اليوم ' + st.day + ' من ' + st.len;
+    if (daysEl) daysEl.innerHTML = '<span>' + (ev.kind === 'iftar' ? 'باقي على الفطار' : 'باقي على الفجر') + '</span> <strong class="ramadan-clock">' + rmClock(ev.at.getTime() - now.getTime()) + '</strong>';
     if (imsakeya) {
       try {
-        var t = getSunTimes(new Date(), CAIRO_LAT, CAIRO_LNG);
-        var parts = [];
-        if (t.fajr) parts.push('<span class="ramadan-imsakeya-item">🌅 السحور <strong>' + formatTimeAr(t.fajr) + '</strong></span>');
-        if (t.sunset) parts.push('<span class="ramadan-imsakeya-item">🌇 الفطار <strong>' + formatTimeAr(t.sunset) + '</strong></span>');
+        var t = ev.times, parts = [];
+        if (t.fajr) parts.push('<span class="ramadan-imsakeya-item' + (ev.kind === 'fajr' && !ev.tomorrow ? ' next' : '') + '">🌅 الفجر <strong>' + formatTimeAr(t.fajr) + '</strong></span>');
+        if (t.sunset) parts.push('<span class="ramadan-imsakeya-item' + (ev.kind === 'iftar' ? ' next' : '') + '">🌇 الفطار <strong>' + formatTimeAr(t.sunset) + '</strong></span>');
         if (t.isha) parts.push('<span class="ramadan-imsakeya-item">🌙 العشاء <strong>' + formatTimeAr(t.isha) + '</strong></span>');
         imsakeya.innerHTML = parts.join('<span style="opacity:.3">·</span>');
         imsakeya.style.display = parts.length ? 'flex' : 'none';
       } catch (e) { imsakeya.style.display = 'none'; }
     }
+    if (cityRow) cityRow.style.display = 'flex';
+  } else if (st.phase === 'eid') {
+    if (title) title.textContent = 'عيد الفطر المبارك 🎉';
+    if (daysEl) daysEl.innerHTML = '<span class="ramadan-eid">كل عام وأنتم بخير</span>';
+    if (imsakeya) imsakeya.style.display = 'none';
+    if (cityRow) cityRow.style.display = 'none';
   } else {
-    strip.classList.remove('during-ramadan');
-    var diffMs = r.date.getTime() - new Date().getTime();
+    var diffMs = st.start.getTime() - now.getTime();
     var totalSecs = Math.max(0, Math.floor(diffMs / 1000));
     var d = Math.floor(totalSecs / 86400), h = Math.floor((totalSecs % 86400) / 3600), m = Math.floor((totalSecs % 3600) / 60);
-    if (title) title.textContent = 'باقي على رمضان ' + r.hijri + ' هـ';
+    if (title) title.textContent = 'باقي على رمضان ' + st.hijri + ' هـ' + (st.estimated ? ' (تقريبي)' : '');
     if (daysEl) daysEl.innerHTML = '<strong>' + d + '</strong> <span>يوم</span> <span class="ramadan-live-time">· ' + h + 'س ' + m + 'د</span>';
     if (imsakeya) imsakeya.style.display = 'none';
+    if (cityRow) cityRow.style.display = 'none';
   }
 }
-function startRamadanLiveUpdate() {
-  if (ramadanLiveInterval) clearInterval(ramadanLiveInterval);
+
+/* ticks every second only while Ramadan is active and the page is visible; otherwise every 30s; paused when hidden */
+function ramadanTick(){
+  if (ramadanTimer) { clearTimeout(ramadanTimer); ramadanTimer = null; }
+  if (document.hidden) return;
   updateRamadanCountdown();
-  ramadanLiveInterval = setInterval(updateRamadanCountdown, 30000);
+  var active = false;
+  try { active = rmState(new Date(), RAMADAN_OVERRIDE).phase === 'active'; } catch (e) {}
+  ramadanTimer = setTimeout(ramadanTick, active ? 1000 : 30000);
+}
+function startRamadanLiveUpdate() {
+  if (!startRamadanLiveUpdate.bound) {
+    startRamadanLiveUpdate.bound = true;
+    document.addEventListener('visibilitychange', function(){
+      var strip = document.getElementById('ramadanStrip');
+      if (document.hidden) {
+        if (ramadanTimer) { clearTimeout(ramadanTimer); ramadanTimer = null; }
+        if (strip) strip.classList.add('rm-paused');
+      } else {
+        if (strip) strip.classList.remove('rm-paused');
+        ramadanTick();
+      }
+    });
+  }
+  ramadanTick();
+}
+
+/* admin: override the start date of Ramadan (moon sighting) */
+function updateRamadanAdminInfo(){
+  var info = document.getElementById('rmOverrideInfo');
+  if (!info) return;
+  var st = rmState(new Date(), RAMADAN_OVERRIDE);
+  var auto = null; RM_TABLE.forEach(function(e){ if (e.hijri === st.hijri) auto = e.date; });
+  var dateIn = document.getElementById('rmOverrideDate'), lenIn = document.getElementById('rmOverrideLen');
+  if (RAMADAN_OVERRIDE && RAMADAN_OVERRIDE.date) {
+    info.textContent = 'مُعدّل يدوياً: رمضان ' + RAMADAN_OVERRIDE.hijri + ' يبدأ ' + RAMADAN_OVERRIDE.date + ' (' + (Number(RAMADAN_OVERRIDE.length) === 29 ? 29 : 30) + ' يوم)';
+    if (dateIn && document.activeElement !== dateIn) dateIn.value = RAMADAN_OVERRIDE.date;
+    if (lenIn) lenIn.value = String(Number(RAMADAN_OVERRIDE.length) === 29 ? 29 : 30);
+  } else {
+    info.textContent = 'تلقائي: رمضان ' + st.hijri + (auto ? ' يبدأ ' + auto : '');
+    if (dateIn && document.activeElement !== dateIn) dateIn.value = auto || '';
+  }
+}
+function saveRamadanOverride(){
+  if (!currentUser || !isAdmin(currentUser.id)) { toast('صلاحية المشرف فقط', 'err'); return; }
+  initCatalogDoc();
+  if (!catalogDocRef) { toast('التطبيق غير متصل', 'err'); return; }
+  var date = (document.getElementById('rmOverrideDate') || {}).value || '';
+  var len = Number((document.getElementById('rmOverrideLen') || {}).value) === 29 ? 29 : 30;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) { toast('اختر تاريخ بداية رمضان', 'err'); return; }
+  var st = rmState(new Date(), RAMADAN_OVERRIDE), base = null;
+  RM_TABLE.forEach(function(e){ if (e.hijri === st.hijri) base = e.date; });
+  if (!base) { toast('السنة دي مش في الجدول', 'err'); return; }
+  var diffDays = Math.abs(new Date(date + 'T00:00:00+02:00').getTime() - new Date(base + 'T00:00:00+02:00').getTime()) / 86400000;
+  if (isNaN(diffDays) || diffDays > 5) { toast('التاريخ بعيد عن الموعد المتوقع (' + base + ')', 'err'); return; }
+  catalogDocRef.set({ ramadanOverride: { hijri: st.hijri, date: date, length: len, by: currentUser.id, at: Date.now() } }, { merge: true })
+    .then(function(){ toast('تم حفظ بداية رمضان'); })
+    .catch(function(e){ console.error(e); toast('فشل الحفظ', 'err'); });
+}
+function clearRamadanOverride(){
+  if (!currentUser || !isAdmin(currentUser.id)) { toast('صلاحية المشرف فقط', 'err'); return; }
+  initCatalogDoc();
+  if (!catalogDocRef) { toast('التطبيق غير متصل', 'err'); return; }
+  catalogDocRef.set({ ramadanOverride: firebase.firestore.FieldValue.delete() }, { merge: true })
+    .then(function(){ toast('رجع للتاريخ التلقائي'); })
+    .catch(function(e){ console.error(e); toast('فشل', 'err'); });
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -2655,6 +2811,10 @@ function applyCatalogData(data){
     Object.assign(ITEM_LOGOS, data.logos);
   }
   if(Array.isArray(data.changeLog)) catalogChangeLog = data.changeLog;
+  if(data.categories && !data.__partial){
+    RAMADAN_OVERRIDE = (data.ramadanOverride && data.ramadanOverride.date) ? data.ramadanOverride : null;
+    try{ updateRamadanCountdown(); updateRamadanAdminInfo(); }catch(e){}
+  }
   if(data.updatedAt) catalogLastSync = data.updatedAt;
 }
 
@@ -2744,7 +2904,8 @@ function resetCatalogToDefaults(){
     applyCatalogData({
       categories: DEFAULT_CATEGORIES,
       prices: DEFAULT_ITEM_PRICES,
-      logos: DEFAULT_ITEM_LOGOS
+      logos: DEFAULT_ITEM_LOGOS,
+      __partial: true
     });
   });
 }
@@ -3586,6 +3747,7 @@ function renderAdminCatalog(){
   if(!card) return;
   if(!currentUser || !isAdmin(currentUser.id)){ card.style.display = 'none'; return; }
   card.style.display = 'block';
+  try{ updateRamadanAdminInfo(); }catch(e){}
   renderAdminCatTabs();
   renderAdminCatalogList();
   renderAdminChangeLog();
@@ -4963,6 +5125,10 @@ function bindEvents(){
   if(addCatBtn) addCatBtn.addEventListener('click', adminAddCategory);
   var resetBtn = document.getElementById('adminResetBtn');
   if(resetBtn) resetBtn.addEventListener('click', adminResetCatalog);
+  var rmSave = document.getElementById('rmOverrideSave');
+  if(rmSave) rmSave.addEventListener('click', saveRamadanOverride);
+  var rmClear = document.getElementById('rmOverrideClear');
+  if(rmClear) rmClear.addEventListener('click', clearRamadanOverride);
 
   /* ✨ v9.0: Mobile UX setup */
   setupMobileUX();
