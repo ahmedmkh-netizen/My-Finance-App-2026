@@ -5,6 +5,81 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no" />
     <title>دفترِي · Daftari — Personal Banking V90</title>
     <meta name="theme-color" content="#0A1628" />
+    <!-- APP_LIFECYCLE_START: يحمّل آخر نسخة تلقائياً ويقفل اتصالات فايربيز لما التطبيق يتساب. نفس الكود بالظبط في index.src.html و family.html -->
+    <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
+    <script>
+    (function () {
+      var PAGE = location.pathname + location.search;
+      var KEY = "app_reload_for:" + location.pathname;
+      var HIDE_RELEASE_MS = window.__lifecycleHideMs || 60000;   /* التطبيق متساب أكتر من كده: نقفل الاتصالات */
+      var HIDE_RECHECK_MS = window.__lifecycleRecheckMs || 30000; /* راجع على نسخة جديدة لو الغياب أكتر من كده */
+      var gate = null, hiddenAt = 0, hideTimer = null, released = false, reloading = false;
+      function themeBg() { var m = document.querySelector('meta[name="theme-color"]'); return (m && m.content) || "#0A1628"; }
+      function showGate() {
+        if (gate || !document.documentElement) return;
+        gate = document.createElement("div");
+        gate.id = "verGate";
+        gate.setAttribute("style", "position:fixed;top:0;left:0;right:0;bottom:0;z-index:2147483647;background:" + themeBg() + ";color:#cbd5e1;display:flex;align-items:center;justify-content:center;font:600 15px Cairo,system-ui,sans-serif;direction:rtl");
+        gate.textContent = "جاري التحقق من آخر نسخة…";
+        document.documentElement.appendChild(gate);
+      }
+      function hideGate() { if (gate && gate.parentNode) gate.parentNode.removeChild(gate); gate = null; }
+      function tag(r) { return (r.headers.get("etag") || "") + "|" + (r.headers.get("last-modified") || ""); }
+      /* النسخة اللي اتحمّلت (من الكاش) مقابل آخر نسخة على السيرفر: لو مختلفين يبقى فيه تحديث */
+      function newerTag() {
+        return fetch(PAGE, { cache: "force-cache" }).then(function (cur) {
+          return fetch(PAGE, { cache: "no-store" }).then(function (now) {
+            var a = tag(cur), b = tag(now);
+            if (a === "|" || b === "|" || a === b) return null;
+            return b;
+          });
+        });
+      }
+      function reloadNow() {
+        if (reloading) return; reloading = true;
+        var go = function () { location.reload(); };
+        fetch(PAGE, { cache: "reload" }).then(go, go); /* يحدّث كاش الصفحة بالنسخة الجديدة ثم يعيد التحميل */
+      }
+      function checkAndMaybeReload(done) {
+        var finished = false;
+        var finish = function () { if (finished) return; finished = true; hideGate(); if (done) done(); };
+        var timer = setTimeout(finish, 3000); /* أوفلاين أو بطيء: كمّل بالنسخة الحالية */
+        newerTag().then(function (b) {
+          clearTimeout(timer);
+          if (b) {
+            var last = null; try { last = sessionStorage.getItem(KEY); } catch (e) {}
+            if (last !== b) { try { sessionStorage.setItem(KEY, b); } catch (e) {} showGate(); reloadNow(); return; }
+          }
+          finish();
+        }).catch(function () { clearTimeout(timer); finish(); });
+      }
+      function release() {
+        if (released) return; released = true;
+        var d = window.__appDb || window.db;
+        if (!d || typeof d.terminate !== "function") return;
+        var wait = (typeof d.waitForPendingWrites === "function") ? d.waitForPendingWrites() : Promise.resolve();
+        Promise.race([wait, new Promise(function (r) { setTimeout(r, 4000); })]).catch(function () {})
+          .then(function () { return d.terminate(); }).catch(function () {});
+      }
+      window.__lifecycle = { release: release, check: checkAndMaybeReload };
+      showGate();
+      checkAndMaybeReload();
+      document.addEventListener("visibilitychange", function (e) {
+        if (document.hidden) {
+          hiddenAt = Date.now();
+          clearTimeout(hideTimer);
+          hideTimer = setTimeout(function () { if (document.hidden) release(); }, HIDE_RELEASE_MS);
+          return;
+        }
+        clearTimeout(hideTimer);
+        if (released) { e.stopImmediatePropagation(); showGate(); reloadNow(); return; } /* الاتصالات اتقفلت: ابدأ من أول وجديد */
+        if (Date.now() - hiddenAt > HIDE_RECHECK_MS) { showGate(); checkAndMaybeReload(); }
+      });
+      window.addEventListener("pagehide", function (e) { if (!e.persisted) release(); });
+      window.addEventListener("pageshow", function (e) { if (e.persisted) { showGate(); reloadNow(); } });
+    })();
+    </script>
+    <!-- APP_LIFECYCLE_END -->
     <link rel="manifest" href="manifest-daftari.webmanifest" />
     <link rel="icon" type="image/png" sizes="192x192" href="icons/daftari-192.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="icons/daftari-apple-180.png" />
@@ -1297,6 +1372,7 @@
       };
       if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
       const db = firebase.firestore();
+      window.__appDb = db; /* بيستخدمه كود قفل الاتصالات (APP_LIFECYCLE) */
       db.settings({ ignoreUndefinedProperties: true });
       db.enablePersistence({ synchronizeTabs: true }).catch((err) => {
         console.warn("Firestore persistence failed:", err.code);
