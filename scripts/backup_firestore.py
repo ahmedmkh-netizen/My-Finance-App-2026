@@ -11,8 +11,13 @@ def http(url, data=None, headers=None):
     return json.load(urllib.request.urlopen(req, timeout=60))
 
 def main():
-    tok = http(f"https://identitytoolkit.googleapis.com/v1/accounts:signUp?key={API_KEY}",
-               b'{"returnSecureToken":true}', {"Content-Type": "application/json"})["idToken"]
+    em, pw = os.environ.get("BACKUP_EMAIL", "").strip(), os.environ.get("BACKUP_PASSWORD", "")
+    if em and pw:  # dedicated backup account (needed once the database rules are locked down)
+        tok = http(f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={API_KEY}",
+                   json.dumps({"email": em, "password": pw, "returnSecureToken": True}).encode(), {"Content-Type": "application/json"})["idToken"]
+    else:
+        tok = http(f"https://identitytoolkit.googleapis.com/v1/accounts:signUp?key={API_KEY}",
+                   b'{"returnSecureToken":true}', {"Content-Type": "application/json"})["idToken"]
     out = {"takenAt": datetime.datetime.utcnow().isoformat() + "Z", "project": PROJECT, "docs": {}}
     for d in DOCS:
         out["docs"][d] = http(f"https://firestore.googleapis.com/v1/projects/{PROJECT}/databases/(default)/documents/{d}",
