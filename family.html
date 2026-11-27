@@ -3407,8 +3407,7 @@ function renderPendingDeletes(){
     var actions = '';
     if(canApprove){
       actions = '<div class="pending-actions">'+
-        '<button class="pending-btn approve" data-approve="'+r.id+'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>موافقة على الحذف</button>'+
-        '<button class="pending-btn reject" data-reject="'+r.id+'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>رفض</button></div>';
+                '<button class="pending-btn reject" data-reject="'+r.id+'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>رفض</button></div>';
     } else if(isRequester){
       actions = '<div class="pending-actions"><div style="flex:1;display:flex;align-items:center;justify-content:center"><span class="pending-status"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="M12 6v6l4 2"/></svg>قيد المراجعة</span></div>'+
         '<button class="pending-btn cancel-req" data-cancelreq="'+r.id+'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>سحب الطلب</button></div>';
@@ -3904,7 +3903,7 @@ function saveTx(){
     month:MONTHS_AR[txDateObj.getMonth()],year:txDateObj.getFullYear(),monthIndex:txDateObj.getMonth(),
     subType:'withdrawal',status:'pending',source:'family-app',
     createdBy:currentUser.id,createdByName:currentUser.name,
-    createdAt:new Date().toISOString(),txDateMode:selectedDateMode,autoPriced:amountAutoFilled,
+    createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),txDateMode:selectedDateMode,autoPriced:amountAutoFilled,
     __v: 1
   };
   var btn=document.getElementById('saveBtn');
@@ -3963,8 +3962,12 @@ function saveTx(){
           var txs = Array.isArray(data.transactions) ? data.transactions : [];
           var filtered = txs.filter(function(t){ return t.id !== result.tx.id; });
           var remoteV = Number(data.__docVersion || 0);
+          /* V93: tombstone so the main app can never bring the undone entry back */
+          var tomb = Array.isArray(data.deletedTxIds) ? data.deletedTxIds.slice() : [];
+          if(tomb.indexOf(result.tx.id) < 0) tomb.push(result.tx.id);
           tr.set(docRef, {
             transactions: filtered,
+            deletedTxIds: tomb.slice(-500),
             __docVersion: remoteV + 1,
             __lastWriteAt: Date.now(),
             __lastWriteBy: currentUser.id
@@ -4046,7 +4049,7 @@ function doDelete(id){
 function submitDeleteRequest(tx,reason){
   if(!isAuthReady||!docRef)return;
   var isAdminAction = isAdmin(currentUser.id) && tx.createdBy !== currentUser.id;
-  var request={id:getSafeId('delreq-'),txId:tx.id,txSnapshot:tx,reason:reason,requestedBy:currentUser.id,requestedByName:currentUser.name,requestedAt:Date.now(),status:'pending',source:'family-app',adminOverride:isAdminAction};
+  var request={id:getSafeId('delreq-'),txId:tx.id,txSnapshot:tx,reason:reason,requestedBy:currentUser.id,requestedByName:currentUser.name,requestedAt:Date.now(),updatedAt:new Date().toISOString(),status:'pending',source:'family-app',adminOverride:isAdminAction};
   db.runTransaction(function(transaction){
     return transaction.get(docRef).then(function(snap){
       var d=snap.exists?(snap.data()||{}):{};
@@ -4070,70 +4073,9 @@ function submitDeleteRequest(tx,reason){
   });
 }
 
+/* V93: الحذف الفعلي من الأدمن في تطبيق دفتري فقط. تطبيق العيلة بيرسل طلب حذف بس. */
 function approveDelete(reqId){
-  if(!isAdmin(currentUser.id)){toast('صلاحية المشرف فقط','err');return;}
-  var req = allDeleteRequests.find(function(r){return r.id===reqId;});
-  if(!req){toast('الطلب غير موجود','err');return;}
-  if(req.status!=='pending'){toast('تمت مراجعة الطلب','warn');return;}
-  /* ✨ v9.0: فحص الشهر المغلق */
-  var snapDate = req.txSnapshot && req.txSnapshot._isoDate;
-  if(snapDate && isMonthClosed(snapDate)){
-    toast('🚫 لا يمكن حذف عملية في شهر مغلق','err');
-    return;
-  }
-  modal({
-    title:'موافقة على الحذف',
-    message:'سيتم حذف العملية نهائياً:\n\n'+esc(req.txSnapshot.description||'')+'\n'+fmt(req.txSnapshot.amount)+' ج.م\n\nهل أنت متأكد؟',
-    danger:true,confirmText:'موافقة وحذف',cancelText:'رجوع',
-    onConfirm:function(){doApproveDelete(req);}
-  });
-}
-
-function doApproveDelete(req){
-  if(!isAuthReady||!docRef)return;
-  db.runTransaction(function(transaction){
-    return transaction.get(docRef).then(function(snap){
-      if(!snap.exists) throw new Error('doc_not_found');
-      var d = snap.data() || {};
-      var txs = Array.isArray(d.transactions) ? d.transactions : [];
-      var reqs = Array.isArray(d.deleteRequests) ? d.deleteRequests : [];
-      var now = Date.now();
-      var remoteV = Number(d.__docVersion || 0);
-
-      for(var i=0;i<txs.length;i++){
-        if(txs[i].id === req.txId){
-          txs[i].deleted = true;
-          txs[i].deletedAt = now;
-          txs[i].deletedBy = currentUser.id;
-          txs[i].deletedByName = currentUser.name;
-          txs[i].deleteReason = req.reason;
-          break;
-        }
-      }
-      for(var j=0;j<reqs.length;j++){
-        if(reqs[j].id === req.id){
-          reqs[j].status = 'approved';
-          reqs[j].approvedAt = now;
-          reqs[j].approvedBy = currentUser.id;
-          reqs[j].approvedByName = currentUser.name;
-          break;
-        }
-      }
-      transaction.set(docRef, {
-        transactions: txs,
-        deleteRequests: reqs,
-        __docVersion: remoteV + 1,
-        __lastWriteAt: now,
-        __lastWriteBy: currentUser.id
-      }, {merge:true});
-    });
-  }).then(function(){
-    toast('✓ تم حذف العملية');
-    sendTelegram('✅ <b>موافقة على حذف</b>\n👑 '+currentUser.name+'\n📦 '+(req.txSnapshot.description||'')+'\n💰 '+fmt(req.txSnapshot.amount)+' ج.م');
-  }).catch(function(e){
-    console.error('Approve error:', e);
-    toast('فشل الحذف','err');
-  });
+  toast('الحذف بيتم من تطبيق دفتري (الأدمن) فقط','warn');
 }
 
 function rejectDelete(reqId){
@@ -4164,6 +4106,7 @@ function doRejectDelete(req, reason){
         if(reqs[j].id === req.id){
           reqs[j].status = 'rejected';
           reqs[j].rejectedAt = now;
+          reqs[j].updatedAt = new Date().toISOString();
           reqs[j].rejectedBy = currentUser.id;
           reqs[j].rejectedByName = currentUser.name;
           if(reason) reqs[j].rejectionReason = reason;
@@ -4212,6 +4155,7 @@ function doCancelRequest(req){
         if(reqs[j].id === req.id){
           reqs[j].status = 'cancelled';
           reqs[j].cancelledAt = now;
+          reqs[j].updatedAt = new Date().toISOString();
           reqs[j].cancelledBy = currentUser.id;
           reqs[j].cancelledByName = currentUser.name;
           break;
@@ -4310,6 +4254,7 @@ function submitEdit(tx,newAmount,newNote,oldNote,reason){
           txs[i].amount=newAmount;
           txs[i].description=newDesc;
           txs[i].editedAt=Date.now();
+          txs[i].updatedAt=new Date().toISOString();
           txs[i].editedBy=currentUser.id;
           txs[i].editedByName=currentUser.name;
           txs[i].editReason=reason;
