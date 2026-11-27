@@ -18940,6 +18940,15 @@ const SmsParserModal = memo(({
       return;
     }
     const res = parseBankSms(rawText);
+    try {
+      if (res.ok && res.amount > 0) {
+        const dup = (data.transactions || []).find(t => t && Math.abs(safeNumber(t.amount) - res.amount) < 0.005 && t.date === res.date && (res.last4 && String(t.cardLast4 || "") === String(res.last4) || res.linkedCardId && t.linkedCardId === res.linkedCardId || t.smsRawText && t.smsRawText === rawText));
+        if (dup) {
+          res.duplicateOf = dup.id;
+          res.notes.unshift(`⚠️ عملية مشابهة موجودة بالفعل: "${dup.description || dup.category}" بنفس المبلغ والتاريخ. تأكد قبل الحفظ.`);
+        }
+      }
+    } catch (e) {}
     setParsed(res);
     if (res.linkedCardId) {
       const card = data.cards?.find(c => c.id === res.linkedCardId);
@@ -18947,7 +18956,14 @@ const SmsParserModal = memo(({
     }
     if (res.amount > 0) setManualAmount(String(res.amount));
     setManualDate(res.date || "");
-    if (res.ok) {
+    if (res.duplicateOf) {
+      addNotification({
+        type: "warning",
+        title: "⚠️ العملية دي موجودة بالفعل؟",
+        message: "فيه عملية بنفس المبلغ والتاريخ والكارت",
+        duration: 7000
+      });
+    } else if (res.ok) {
       addNotification({
         type: "success",
         title: `تم التحليل: ${fmt(res.amount)} ج.م`,
