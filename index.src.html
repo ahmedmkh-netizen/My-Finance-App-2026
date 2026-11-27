@@ -1219,7 +1219,7 @@
         ExternalLink, CircleDollarSign, Percent, Info, Home, User,
         MoreHorizontal, ArrowDown, Check, AlertCircle, MoreVertical,
         ChevronRight, Scale, User as UserIcon, Circle, Dot, History, FileText,
-        Save as SaveIcon, Download, Database, FileDown, Share2,
+        Save as SaveIcon, Fingerprint, Download, Database, FileDown, Share2,
         Printer as PrinterIcon, FileCheck, Building2, ShoppingBag,
       } from "lucide-react";
 
@@ -2083,6 +2083,41 @@
           return current === stored;
         } catch { return false; }
       };
+
+      const BIO = (() => {
+        const KEY = "app_bio_cred_v1";
+        const b64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+        const unb64 = (s) => Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0));
+        const rnd = (n) => crypto.getRandomValues(new Uint8Array(n));
+        return {
+          enabled: () => { try { return !!localStorage.getItem(KEY); } catch (e) { return false; } },
+          supported: async () => {
+            try { return !!(window.isSecureContext && window.PublicKeyCredential && await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()); } catch (e) { return false; }
+          },
+          register: async (label) => {
+            const cred = await navigator.credentials.create({ publicKey: {
+              challenge: rnd(32), rp: { name: label },
+              user: { id: rnd(16), name: "device-lock", displayName: label },
+              pubKeyCredParams: [{ type: "public-key", alg: -7 }, { type: "public-key", alg: -257 }],
+              authenticatorSelection: { authenticatorAttachment: "platform", userVerification: "required", residentKey: "discouraged" },
+              timeout: 60000, attestation: "none" } });
+            if (!cred) throw new Error("no credential");
+            localStorage.setItem(KEY, b64(cred.rawId));
+            return true;
+          },
+          verify: async () => {
+            const id = localStorage.getItem(KEY);
+            if (!id) return false;
+            try {
+              const a = await navigator.credentials.get({ publicKey: {
+                challenge: rnd(32), timeout: 60000, userVerification: "required",
+                allowCredentials: [{ type: "public-key", id: unb64(id), transports: ["internal"] }] } });
+              return !!a;
+            } catch (e) { return false; }
+          },
+          disable: () => { try { localStorage.removeItem(KEY); } catch (e) {} },
+        };
+      })();
 
       const PIN_SESSION_KEY = "pin_session_token_v90_1";
       const buildPinSessionToken = async (pin) => {
@@ -6993,6 +7028,16 @@ const getCycleRange = (card, cycleKey) => {
         const pressTimerRef = useRef(null);
         const clearTimerRef = useRef(null);
         const navTimerRef = useRef(null);
+        const [bioOn] = useState(() => BIO.enabled());
+        const [bioBusy, setBioBusy] = useState(false);
+        const tryBio = async () => {
+          if (bioBusy) return;
+          setBioBusy(true);
+          const ok = await BIO.verify();
+          setBioBusy(false);
+          if (ok) onSuccess(null);
+        };
+        useEffect(() => { if (bioOn) { const t = setTimeout(tryBio, 350); return () => clearTimeout(t); } }, []);
 
         useEffect(() => () => {
           if (pressTimerRef.current) clearTimeout(pressTimerRef.current);
@@ -7128,6 +7173,16 @@ if (e.key >= "0" && e.key <= "9") handleDigit(e.key);
                 </button>
               </div>
 
+              {bioOn && (
+                <button
+                  type="button"
+                  onClick={tryBio}
+                  disabled={bioBusy}
+                  className="w-full py-3 mt-3 rounded-xl text-sm font-black flex items-center justify-center gap-2 bg-[#635BFF] text-white active:scale-95 transition-all"
+                >
+                  <Fingerprint size={18} /> فتح بالبصمة
+                </button>
+              )}
               <div className="flex flex-col gap-2 w-full mt-2">
                 <button
                   type="button"
@@ -7151,6 +7206,34 @@ if (e.key >= "0" && e.key <= "9") handleDigit(e.key);
                 </button>
               </div>
             </div>
+          </div>
+        );
+      };
+
+      const BioLockCard = ({ addNotification }) => {
+        const [on, setOn] = useState(() => BIO.enabled());
+        const [ok, setOk] = useState(null);
+        const [busy, setBusy] = useState(false);
+        useEffect(() => { BIO.supported().then(setOk); }, []);
+        const toggle = async () => {
+          if (on) { BIO.disable(); setOn(false); addNotification({ type: "success", title: "اتقفل فتح البصمة" }); return; }
+          setBusy(true);
+          try { await BIO.register("دفتري"); setOn(true); addNotification({ type: "success", title: "فتح البصمة اشتغل" }); }
+          catch (e) { addNotification({ type: "error", title: "ماقدرناش نفعّل البصمة على الجهاز ده" }); }
+          setBusy(false);
+        };
+        return (
+          <div className="card">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="p-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600"><Fingerprint size={14} /></div>
+              <h3 className="font-black text-sm">فتح التطبيق بالبصمة</h3>
+            </div>
+            <p className="text-[11px] mb-3" style={{ color: "var(--text-muted)" }}>
+              {ok === false ? "الجهاز أو المتصفح ده مش بيدعم البصمة. الرمز شغال عادي." : "بيفتح التطبيق بالبصمة أو الوجه على الجهاز ده بس. الرمز (PIN) يفضل بديل دايمًا."}
+            </p>
+            <button disabled={busy || (ok === false && !on)} onClick={toggle} className="btn btn-secondary text-xs w-full">
+              <Fingerprint size={12} /> {on ? "إيقاف البصمة" : "تفعيل البصمة"}
+            </button>
           </div>
         );
       };
@@ -15156,6 +15239,8 @@ if (e.key >= "0" && e.key <= "9") handleDigit(e.key);
               </button>
             </div>
 
+            <BioLockCard addNotification={addNotification} />
+
             <div className="card p-3" style={{ background: "var(--bg-muted)" }}>
               <div className="flex items-start gap-2">
                 <Info size={14} className="text-blue-600 mt-0.5 flex-shrink-0" />
@@ -16944,6 +17029,19 @@ const handleToggleAutoReminders = useCallback((v) => {
         const [isAuthenticated, setIsAuthenticated] = useState(false);
         const [authLoading, setAuthLoading] = useState(true);
         const [pinVerified, setPinVerified] = useState(false);
+        useEffect(() => {
+          let hiddenAt = 0;
+          const onVis = () => {
+            if (document.hidden) { hiddenAt = Date.now(); return; }
+            if (hiddenAt && BIO.enabled() && Date.now() - hiddenAt > 60000) {
+              sessionStorage.removeItem(PIN_SESSION_KEY);
+              setPinVerified(false);
+            }
+            hiddenAt = 0;
+          };
+          document.addEventListener("visibilitychange", onVis);
+          return () => document.removeEventListener("visibilitychange", onVis);
+        }, []);
         const [cloudSyncStatus, setCloudSyncStatus] = useState("pending");
         const [isSaving, setIsSaving] = useState(false);
 

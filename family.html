@@ -1193,6 +1193,7 @@ button:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-off
       <button class="pin-btn" data-d="0">0</button>
       <button class="pin-btn" data-d="⌫">⌫</button>
     </div>
+    <button type="button" id="bioBtn" style="display:none;width:100%;margin-top:14px;padding:13px;border-radius:16px;border:0;background:#635BFF;color:#fff;font:900 14px inherit;align-items:center;justify-content:center;gap:8px;cursor:pointer">🔐 فتح بالبصمة</button>
     <div class="pin-err" id="pinErr"></div>
     <div class="pin-attempts-warn" id="pinAttemptsWarn" style="display:none"></div>
     <div class="pin-hint">
@@ -1702,6 +1703,7 @@ button:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-off
           إعدادات أخرى
         </div>
         <div class="setting-row"><div class="setting-label">تثبيت التطبيق</div><button class="setting-btn primary" id="installBtn">تثبيت</button></div>
+        <div class="setting-row" id="bioRow" style="display:none"><div class="setting-label">فتح بالبصمة</div><button class="setting-btn primary" id="bioToggleBtn">تفعيل</button></div>
         <div class="setting-row"><div class="setting-label">تسجيل الخروج</div><button class="setting-btn danger" id="logoutBtn2">خروج</button></div>
       </div>
 
@@ -3086,6 +3088,80 @@ function attachPinKeyboard(){
   };
   document.addEventListener('keydown', pinKeyHandler);
 }
+
+var BIO = (() => {
+  const KEY = "app_bio_cred_v1";
+  const b64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  const unb64 = (s) => Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0));
+  const rnd = (n) => crypto.getRandomValues(new Uint8Array(n));
+  return {
+    enabled: () => { try { return !!localStorage.getItem(KEY); } catch (e) { return false; } },
+    supported: async () => {
+      try { return !!(window.isSecureContext && window.PublicKeyCredential && await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()); } catch (e) { return false; }
+    },
+    register: async (label) => {
+      const cred = await navigator.credentials.create({ publicKey: {
+        challenge: rnd(32), rp: { name: label },
+        user: { id: rnd(16), name: "device-lock", displayName: label },
+        pubKeyCredParams: [{ type: "public-key", alg: -7 }, { type: "public-key", alg: -257 }],
+        authenticatorSelection: { authenticatorAttachment: "platform", userVerification: "required", residentKey: "discouraged" },
+        timeout: 60000, attestation: "none" } });
+      if (!cred) throw new Error("no credential");
+      localStorage.setItem(KEY, b64(cred.rawId));
+      return true;
+    },
+    verify: async () => {
+      const id = localStorage.getItem(KEY);
+      if (!id) return false;
+      try {
+        const a = await navigator.credentials.get({ publicKey: {
+          challenge: rnd(32), timeout: 60000, userVerification: "required",
+          allowCredentials: [{ type: "public-key", id: unb64(id), transports: ["internal"] }] } });
+        return !!a;
+      } catch (e) { return false; }
+    },
+    disable: () => { try { localStorage.removeItem(KEY); } catch (e) {} },
+  };
+})();
+
+var bioIdleAt=0;
+function bioUnlock(){
+  BIO.verify().then(function(ok){
+    if(!ok)return;
+    var uid=sessionStorage.getItem('hani_user_id');
+    if(uid){pinScreen.classList.remove('show');return;}
+    var sid=localStorage.getItem('app_bio_user_v1');
+    var found=null;Object.keys(USERS).forEach(function(k){if(USERS[k].id===sid)found=USERS[k];});
+    if(!found)return;
+    sessionStorage.setItem('hani_user_id',found.id);
+    currentUser=found;paintHeaderUser();
+    pinScreen.classList.remove('show');
+    init();
+  });
+}
+function bioToggle(){
+  if(BIO.enabled()){BIO.disable();localStorage.removeItem('app_bio_user_v1');paintBioBtn();toast('اتقفل فتح البصمة');return;}
+  var uid=sessionStorage.getItem('hani_user_id');if(!uid)return;
+  BIO.register('محل هاني').then(function(){
+    localStorage.setItem('app_bio_user_v1',uid);paintBioBtn();toast('فتح البصمة اشتغل');
+  }).catch(function(){toast('الجهاز ده مش بيدعم البصمة. الرمز شغال عادي','err');});
+}
+function bioLockNow(){
+  /* قفل سريع: يرجع شاشة الرمز، والبصمة أو الرمز يفتحوها */
+  currentPin='';updatePinDots();pinErr.textContent='';
+  pinScreen.classList.add('show');
+  attachPinKeyboard();
+  bioUnlock();
+}
+function paintBioBtn(){
+  var b=document.getElementById('bioBtn');if(b)b.style.display=BIO.enabled()?'flex':'none';
+  var t=document.getElementById('bioToggleBtn');if(t)t.textContent=BIO.enabled()?'إيقاف':'تفعيل';
+}
+document.addEventListener('visibilitychange',function(){
+  if(document.hidden){bioIdleAt=Date.now();return;}
+  if(bioIdleAt&&BIO.enabled()&&sessionStorage.getItem('hani_user_id')&&Date.now()-bioIdleAt>60000){bioLockNow();}
+  bioIdleAt=0;
+});
 
 function checkPin(){
   if(isPinLockedOut()){ showPinLockout(); return; }
@@ -5519,6 +5595,16 @@ function setBudgetModal(){
    ═══════════════════════════════════════════════════════════════ */
 function bootstrap(){
   console.log('🚀 Bootstrap V9.0 — محل هاني');
+  (function(){
+    var bb=document.getElementById('bioBtn'),tb=document.getElementById('bioToggleBtn');
+    if(bb)bb.addEventListener('click',bioUnlock);
+    if(tb)tb.addEventListener('click',bioToggle);
+    BIO.supported().then(function(ok){
+      var row=document.getElementById('bioRow');if(row&&(ok||BIO.enabled()))row.style.display='';
+    });
+    paintBioBtn();
+    if(BIO.enabled()&&!sessionStorage.getItem('hani_user_id'))setTimeout(bioUnlock,500);
+  })();
   setTimeout(function(){ var s=document.getElementById('splash'); if(s&&s.style.display!=='none')s.style.display='none'; },300);
 
   try{
