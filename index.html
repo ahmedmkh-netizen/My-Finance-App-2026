@@ -7433,9 +7433,10 @@ const ProfessionalHeader = memo(({
 const OVERDUE_BANNER_LS_KEY = "daftari_overdue_banner_dismissed";
 const OverdueBanner = memo(({
   data,
-  onOpen
+  dispatch
 }) => {
   const [tick, setTick] = useState(0);
+  const [sheetOpen, setSheetOpen] = useState(false);
   const items = useMemo(() => {
     const out = [];
     try {
@@ -7444,8 +7445,11 @@ const OverdueBanner = memo(({
         if (!pred || pred.totalMandatory <= 0.01 || pred.daysUntilDue === null || pred.daysUntilDue > 0) return;
         out.push({
           id: card.id,
+          card,
           overdue: pred.daysUntilDue < 0,
-          amount: pred.totalMandatory
+          daysLate: Math.abs(pred.daysUntilDue),
+          amount: pred.totalMandatory,
+          dueISO: pred.nextDueDateISO
         });
       });
     } catch (e) {}
@@ -7461,10 +7465,18 @@ const OverdueBanner = memo(({
   const overdueCount = items.filter(i => i.overdue).length;
   const total = items.reduce((sum, i) => sum + i.amount, 0);
   const label = overdueCount > 0 ? `⚠️ ${overdueCount === 1 ? "سداد بطاقة متأخر" : overdueCount + " سدادات بطاقات متأخرة"}` : `🔴 ${items.length === 1 ? "سداد بطاقة مستحق اليوم" : items.length + " سدادات مستحقة اليوم"}`;
-  return React.createElement("div", {
+  const openCard = card => {
+    setSheetOpen(false);
+    dispatch({
+      type: "SET_VIEWING_CARD_STATEMENT",
+      payload: card
+    });
+  };
+  const sorted = [...items].sort((x, y) => y.daysLate - x.daysLate);
+  return React.createElement(React.Fragment, null, React.createElement("div", {
     className: `overdue-banner no-print ${overdueCount > 0 ? "" : "due-today"}`,
     role: "alert",
-    onClick: onOpen
+    onClick: () => setSheetOpen(true)
   }, React.createElement("span", {
     className: "ob-text"
   }, label, " · ", React.createElement("span", {
@@ -7484,7 +7496,63 @@ const OverdueBanner = memo(({
     }
   }, React.createElement(X, {
     size: 13
-  })));
+  }))), React.createElement(BottomSheet, {
+    isOpen: sheetOpen,
+    onClose: () => setSheetOpen(false),
+    title: overdueCount > 0 ? "⚠️ بطاقات سدادها متأخر" : "🔴 بطاقات سدادها اليوم"
+  }, React.createElement("div", {
+    className: "space-y-2"
+  }, sorted.map(it => React.createElement("div", {
+    key: it.id,
+    className: "p-3 rounded-xl",
+    style: {
+      background: "var(--bg-muted)",
+      border: `1.5px solid ${it.overdue ? "#DC2626" : "#D97706"}`
+    }
+  }, React.createElement("div", {
+    className: "flex justify-between items-start gap-2"
+  }, React.createElement("div", {
+    className: "min-w-0"
+  }, React.createElement("p", {
+    className: "font-black text-sm"
+  }, it.card.bank, " ", it.card.name, " • ••••", it.card.last4), React.createElement("p", {
+    className: "text-[11px] font-bold mt-0.5",
+    style: {
+      color: it.overdue ? "#DC2626" : "#D97706"
+    }
+  }, it.overdue ? `متأخر ${it.daysLate} يوم` : "مستحق اليوم"), it.dueISO && React.createElement("p", {
+    className: "text-[10px] mt-0.5",
+    style: {
+      color: "var(--text-muted)"
+    }
+  }, "تاريخ الاستحقاق: ", React.createElement("span", {
+    className: "money tabular"
+  }, it.dueISO))), React.createElement("div", {
+    className: "text-left flex-shrink-0"
+  }, React.createElement("p", {
+    className: "text-[9px] font-bold",
+    style: {
+      color: "var(--text-muted)"
+    }
+  }, "المطلوب"), React.createElement("p", {
+    className: "font-black text-base money tabular"
+  }, fmt(it.amount), " ", React.createElement("span", {
+    className: "text-[10px]"
+  }, "ج.م")))), React.createElement("button", {
+    type: "button",
+    onClick: () => openCard(it.card),
+    className: "btn btn-secondary w-full mt-2.5 py-2 text-xs font-black"
+  }, "فتح البطاقة"))), React.createElement("button", {
+    type: "button",
+    onClick: () => {
+      setSheetOpen(false);
+      dispatch({
+        type: "SET_ACTIVE_TAB",
+        payload: "cards"
+      });
+    },
+    className: "btn btn-ghost w-full text-xs font-bold"
+  }, "كل الحسابات والبطاقات"))));
 });
 const Toast = ({
   notification,
@@ -24674,10 +24742,7 @@ function App() {
     className: "max-w-5xl mx-auto space-y-4 page-transition pb-24"
   }, React.createElement(OverdueBanner, {
     data: data,
-    onOpen: () => dispatch({
-      type: "SET_ACTIVE_TAB",
-      payload: "cards"
-    })
+    dispatch: dispatch
   }), React.createElement(ProfessionalHeader, {
     isDarkMode: isDarkMode,
     dispatch: dispatch,
