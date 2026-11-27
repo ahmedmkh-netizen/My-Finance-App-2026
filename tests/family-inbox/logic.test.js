@@ -31,7 +31,7 @@ function mkFamily(user,closedMonths){
  const src=famBlock+'\n'+`
  var FAMILY_VIEW_PATH={collection:'finance_2026',doc:'family_view'};
  var famOps=[], lastViewData=null;
- function famOpsCol(){return db.collection('family_ops');}
+ function famOpsCol(){return db.collection('finance_2026/family_inbox/ops');}
  function famSendOp(op){op.applied=false;op.ts=Date.now();op.by=currentUser.id;op.byName=currentUser.name;
   return famOpsCol().doc(op.opId).set(op).then(function(){return op;});}
  function famEffective(d){lastViewData=d;var gen=Number(d.generatedAt||0);
@@ -49,12 +49,12 @@ const mkTx=(id,amt,who,extra={})=>Object.assign({id,type:'expense',category:'م�
 const ANS={id:'ans',name:'أنس'},ABD={id:'abdelrahman',name:'عبد الرحمن'};
 let pass=0;const T=async(name,fn)=>{try{await fn();pass++;console.log('PASS',name);}catch(e){console.log('FAIL',name,e.message);process.exitCode=1;}};
 async function reset(){
- for(const col of ['family_ops']){const s=await db.collection(col).get();for(const d of s.docs)await d.ref.delete();}
+ for(const col of ['finance_2026/family_inbox/ops']){const s=await db.collection(col).get();for(const d of s.docs)await d.ref.delete();}
  await db.collection('finance_2026').doc('family_view').delete();
  await MAINREF().set(JSON.parse(JSON.stringify(main)));
 }
 const mainTx=async()=>(await MAINREF().get()).data().transactions;
-const opsAll=async()=>(await db.collection('family_ops').get()).docs.map(d=>({opId:d.id,...d.data()}));
+const opsAll=async()=>(await db.collection('finance_2026/family_inbox/ops').get()).docs.map(d=>({opId:d.id,...d.data()}));
 
 (async()=>{
  const base=main.transactions.length;
@@ -99,7 +99,7 @@ const opsAll=async()=>(await db.collection('family_ops').get()).docs.map(d=>({op
  });
  await T('S4 Daftari OPEN while Family adds: picked up live without restart',async()=>{
   await reset();const D=mkDaftari();let got=0;
-  const unsub=db.collection('family_ops').where('applied','==',false).onSnapshot(()=>{D.runFamilyImport(r=>{got+=D.famImportSummary(r).adds;});});
+  const unsub=db.collection('finance_2026/family_inbox/ops').where('applied','==',false).onSnapshot(()=>{D.runFamilyImport(r=>{got+=D.famImportSummary(r).adds;});});
   await sleep(500);const fam=mkFamily(ANS);fam.famEffective({transactions:[],deleteRequests:[],deletedTxIds:[],closedMonths:[]});
   await fam.famSaveCheck(mkTx('t-live1',11,ANS),'بسكويت');await sleep(1500);
   await fam.famSaveCheck(mkTx('t-live2',12,ANS),'بسكويت');await sleep(1500);
