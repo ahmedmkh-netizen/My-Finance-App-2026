@@ -1121,6 +1121,22 @@ button:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-off
   .stats{grid-template-columns:repeat(3,1fr)}
   .quick-stats{grid-template-columns:repeat(3,1fr)}
 }
+
+/* ══════ تقليل الزحمة (v9.6) ══════ */
+.ramadan-strip.rm-compact{padding:12px 14px;margin-bottom:10px;border-radius:18px}
+.ramadan-strip.rm-compact .rm-lanterns,.ramadan-strip.rm-compact .rm-stars,.ramadan-strip.rm-compact .rm-pattern,.ramadan-strip.rm-compact .rm-tiles,.ramadan-strip.rm-compact .rm-label,.ramadan-strip.rm-compact .rm-foot{display:none!important}
+.quote-card{padding:12px 16px;margin-bottom:10px}
+.quote-card .quote-text{font-size:13px;line-height:1.6}
+.quote-card .quote-author{display:none}
+.ramadan-strip.rm-compact .rm-greet{font-size:17px}
+.ramadan-strip.rm-compact .rm-moon{width:34px;height:34px}
+.family-strip{padding-bottom:8px}
+.sync-strip.ready{background:none;border:0;box-shadow:none;padding:0 4px;margin:0 16px 6px;font-size:10px;opacity:.75}
+.history-hero{padding:12px 18px 12px;margin-bottom:10px}
+.history-hero .hh-top{margin-bottom:4px}
+.history-hero .hh-value{margin-bottom:8px}
+.history-hero .hh-value .num{font-size:26px}
+.history-hero .hh-stats{padding-top:8px}
 </style>
 </head>
 <body class="dark" data-tab="home">
@@ -2437,6 +2453,7 @@ function updateRamadanCountdown() {
   var st = rmState(now, RAMADAN_OVERRIDE);
   strip.classList.toggle('during-ramadan', st.phase === 'active');
   strip.classList.toggle('eid-mode', st.phase === 'eid');
+  strip.classList.toggle('rm-compact', st.phase === 'before');
   var html = '';
   if (st.phase === 'active') {
     var ev = rmNextEvent(now, rmGetCity());
@@ -2463,7 +2480,7 @@ function updateRamadanCountdown() {
     var d = Math.floor(totalSecs / 86400), hh = Math.floor((totalSecs % 86400) / 3600), mm = Math.floor((totalSecs % 3600) / 60);
     var when = '';
     try { when = st.start.toLocaleDateString('ar-EG', { day: 'numeric', month: 'long', timeZone: 'Africa/Cairo' }); } catch (e) {}
-    html = '<div class="rm-head">' + RM_MOON + '<div><div class="rm-greet">باقي على رمضان</div><div class="rm-sub">' + st.hijri + ' هـ' + (when ? ' · يبدأ ' + (st.estimated ? 'تقريبًا ' : '') + when : '') + '</div></div></div>' +
+    html = '<div class="rm-head">' + RM_MOON + '<div><div class="rm-greet">باقي ' + d + ' يوم على رمضان</div><div class="rm-sub">' + st.hijri + ' هـ' + (when ? ' · يبدأ ' + (st.estimated ? 'تقريبًا ' : '') + when : '') + '</div></div></div>' +
       '<div class="rm-label">العد التنازلي لشهر رمضان المبارك</div>' +
       '<div class="rm-tiles">' + rmTile(d, 'يوم') + '<span class="rm-colon">:</span>' + rmTile(rmPad(hh), 'ساعة') + '<span class="rm-colon">:</span>' + rmTile(rmPad(mm), 'دقيقة') + '</div>';
     if (cityRow) cityRow.style.display = 'none';
@@ -2475,7 +2492,7 @@ function updateRamadanCountdown() {
       var ev2 = rmNextEvent(now, rmGetCity()), sc = Math.max(0, Math.floor((ev2.at.getTime() - now.getTime()) / 1000));
       txt = 'رمضان · يوم ' + st.day + ' · باقي ' + rmPad(Math.floor(sc / 3600)) + ':' + rmPad(Math.floor((sc % 3600) / 60)) + (ev2.kind === 'iftar' ? ' على الفطار' : ' على الفجر');
     } else if (st.phase === 'eid') { txt = 'عيد مبارك 🎉'; }
-    else { txt = 'باقي ' + Math.floor(Math.max(0, st.start.getTime() - now.getTime()) / 86400000) + ' يوم على رمضان'; }
+    else { txt = ''; }
     if (mt && mt.textContent !== txt) mt.textContent = txt;
     if (mini) mini.classList.toggle('has-text', !!txt);
   } catch (e) {}
