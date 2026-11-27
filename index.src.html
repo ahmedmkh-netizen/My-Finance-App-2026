@@ -406,6 +406,8 @@
         color: var(--text-primary); font-family: inherit; font-weight: 600; font-size: 15px;
         outline: none; transition: all 0.18s var(--ease);
       }
+      /* خانات الأرقام: أكبر وأسهل في اللمس (حد أدنى 48px وخط 16px) */
+      .input-field[type="number"], .input-field[inputmode="numeric"], .input-field[inputmode="decimal"] { min-height: 48px; font-size: 16px !important; padding-top: 12px !important; padding-bottom: 12px !important; }
       .input-field:focus { border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); }
       .input-field.error { border-color: var(--danger); box-shadow: 0 0 0 4px var(--danger-soft); }
       .input-field::placeholder { color: var(--text-muted); font-weight: 500; }
@@ -7388,11 +7390,25 @@ if (e.key >= "0" && e.key <= "9") handleDigit(e.key);
           };
           w.addEventListener("resize", upd); w.addEventListener("scroll", upd);
         }
+        /* Enter في نافذة إدخال ينقل للخانة اللي بعدها (آخر خانة: يقفل الكيبورد) */
+        document.addEventListener("keydown", (e) => {
+          if (e.key !== "Enter" || e.defaultPrevented || e.isComposing) return;
+          const el = e.target;
+          if (!el || el.tagName !== "INPUT" || !/^(text|number|search|tel|email|password)$/.test(el.type)) return;
+          const box = el.closest(".sheet-content, .generic-modal, .modal-backdrop");
+          if (!box) return;
+          const all = Array.from(box.querySelectorAll("input, select, textarea")).filter((x) => !x.disabled && x.type !== "hidden" && x.type !== "checkbox" && x.type !== "radio" && x.type !== "file" && x.offsetParent !== null);
+          const i = all.indexOf(el);
+          if (i < 0) return;
+          const nxt = all[i + 1];
+          if (nxt) { e.preventDefault(); nxt.focus(); }
+          else if (!el.form) { e.preventDefault(); el.blur(); }
+        });
         document.addEventListener("focusin", (e) => {
           const el = e.target;
           if (!el || !el.matches || !el.matches("input, textarea")) return;
           if (el.tagName === "INPUT" && /^(text|number|search|tel|email)$/.test(el.type) && !el.hasAttribute("enterkeyhint")) el.setAttribute("enterkeyhint", "done");
-          if (el.closest(".sheet-content, .generic-modal")) setTimeout(() => { try { el.scrollIntoView({ block: "center", behavior: "smooth" }); } catch (_) {} }, 320);
+          if (el.closest(".sheet-content, .generic-modal, .modal-backdrop")) setTimeout(() => { try { el.scrollIntoView({ block: "center", behavior: "smooth" }); } catch (_) {} }, 320);
         });
       })();
       const PickerSelect = ({ children, value, onChange, className = "input-field", disabled, style, title, ...rest }) => {
